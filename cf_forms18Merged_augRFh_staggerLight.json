@@ -1,10 +1,11 @@
 {
-    "name": "Forms18_staggerLight_retrain",
+    "name": "Forms18Merged_augRFh_staggerLight",
     "cuda": true,
     "gpu": 0,
     "super_computer":false,
     "save_mode": "state_dict",
     "override": true,
+    "split": "merged",
     "data_loader": {
         "data_set_name": "FormsBoxDetect",
         "data_dir": "../data/forms",
@@ -16,7 +17,9 @@
         "rescale_range": [0.4,0.65],
         "crop_params": {
             "crop_size":[652,1608],
-            "pad":0
+            "pad":0,
+            "flip_horz": true,
+            "rot_degree_std_dev": 0.7
         },
         "no_blanks": true,
         "swap_circle":true,
@@ -28,20 +31,12 @@
         "rotation": false
 
 
+
     },
     "validation": {
         "shuffle": false,
-        "crop_to_page":false,
-        "color":false,
         "rescale_range": [0.52,0.52],
-        "only_types": {
-            "boxes":true
-        },
-        "no_blanks": true,
-        "swap_circle":true,
-        "no_graphics":true,
-        "batch_size": 1,
-        "rotation": false
+        "crop_params": null
     },
 
     

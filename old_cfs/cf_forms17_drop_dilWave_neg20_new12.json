@@ -1,5 +1,5 @@
 {
-    "name": "Forms18_staggerLight_retrain",
+    "name": "Forms17_drop_dilWave_neg20_new12",
     "cuda": true,
     "gpu": 0,
     "super_computer":false,
@@ -65,7 +65,7 @@
     "metrics": [],
     "trainer": {
         "class": "BoxDetectTrainer",
-        "iterations": 250000,
+        "iterations": 300000,
         "save_dir": "saved/",
         "val_step": 10000,
         "save_step": 50000,
@@ -76,9 +76,7 @@
         "monitor_mode": "none",
         "warmup_steps": 1000,
         "thresh_conf":0.88,
-        "thresh_intersect":0.4,
-
-        "use_learning_schedule": "detector"
+        "thresh_intersect":0.4
     },
     "arch": "YoloBoxDetector", 
     "model": {
@@ -87,14 +85,10 @@
         "number_of_point_types": 0,
         "number_of_pixel_types": 0,
         "norm_type": "group_norm",
-        "dropout": true,
-        "down_layers_cfg": [1,"k5-32", "M", 
-                                64, 64,  "M", 
-                                "hd2-128", "vd1-128", "hd4-128", 128,  "M", 
-                                "hd4-256", "vd1-256", "hd8-256", 256,  "M", 
-                                "hd8-512","vd1-512","hd16-512",512, 512],
+        "dropout":true,
+        "down_layers_cfg": [1,"k5-64", "M", "d1-128", 128,  "M", "d2-256", 256,  "M", "d4-512", 512,  "M", "d8-1024",  1024,  1024],
         "up_layers_cfg":[],
-        "anchors_file": "anchors_noRot_new_25.json",
+        "anchors_file": "anchors_noRot_new_12.json",
         "rotation":false
     }
 }
