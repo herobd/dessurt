@@ -290,7 +290,8 @@ class PairingGraph(BaseModel):
 
         #self.pairer = GraphNet(config['graph_config'])
         self.pairer = eval(config['graph_config']['arch'])(config['graph_config'])
-
+        if 'max_graph_size' in config:
+            MAX_GRAPH_SIZE = config['max_graph_size']
 
         if 'DEBUG' in config:
             self.detector.setDEBUG()
@@ -341,6 +342,8 @@ class PairingGraph(BaseModel):
         #I'm assuming batch size of one
         assert(len(bbPredictions)==1)
         bbPredictions=bbPredictions[0]
+        if self.no_grad_feats:
+            bbPredictions=bbPredictions.detach()
         ##print('process boxes: {}'.format(timeit.default_timer()-tic))
         #bbPredictions should be switched for GT for training? Then we can easily use BCE loss. 
         #Otherwise we have to to alignment first
@@ -348,8 +351,8 @@ class PairingGraph(BaseModel):
             if bbPredictions.size(0)==0:
                 return bbPredictions, offsetPredictions, None, None, None
             useBBs = bbPredictions[:,1:] #remove confidence score
-            if self.no_grad_feats:
-                useBBs = useBBs.detach()
+        elif useGTBBs=='saved':
+            useBBs = gtBBs[:,1:]
         else:
             if gtBBs is None:
                 return bbPredictions, offsetPredictions, None, None, None
@@ -392,8 +395,9 @@ class PairingGraph(BaseModel):
                 bbOuts, relOuts = self.pairer(bbAndRel_features, adjacencyMatrix, numBBs)
                 bbOuts_B, relOuts_B = self.pairer(bbAndRel_features_B, adjacencyMatrix, numBBs)
                 #Average results together
-                bbOuts = (bbOuts+bbOuts_B)/2
-                relOuts = (relOuts+relOuts_B)/2
+                if bbOuts is not None:
+                    bbOuts = (bbOuts+bbOuts_B)/2
+                    relOuts = (relOuts+relOuts_B)/2
             #bbOuts = graphOut[:numBBs]
             #relOuts = graphOut[numBBs:]
             ##print('pairer: {}'.format(timeit.default_timer()-tic))
@@ -402,7 +406,17 @@ class PairingGraph(BaseModel):
             #for rel in relOuts:
             #    i,j,a=graphToDetectionsMap(
             if self.predNN:
-                bbOuts[:,0]+=1 #make pred range -1 (to pred o nieghbors)
+                if bbOuts.size(1)>1:
+                    #bbOuts[:,0]+=1 #make pred range -1 (to pred o nieghbors)
+                    bbOuts = torch.cat((bbOuts[:,0:1]+1,bbOuts[:,1:]),dim=1) #remove inplace operation?
+                else:
+                    bbOuts=bbOuts+1
+                if self.detector.predNumNeighbors and not useGTBBs:
+                    bbPredictions[:,6]=bbOuts[:,0]
+            if self.predClass:
+                startIndex = 6+self.detector.predNumNeighbors
+                if not useGTBBs:
+                    bbPredictions[:,startIndex:startIndex+self.numBBTypes] = torch.sigmoid(bbOuts[:,self.predNN:self.predNN+self.numBBTypes])
             return bbPredictions, offsetPredictions, relOuts, relIndexes, bbOuts
         else:
             return bbPredictions, offsetPredictions, None, None, None
@@ -553,6 +567,8 @@ class PairingGraph(BaseModel):
                 masks[i,1,rr,cc]=1
                 if self.expandedRelContext is not None:
                     cropArea = allMasks[round(rois[i,2].item()):round(rois[i,4].item())+1,round(rois[i,1].item()):round(rois[i,3].item())+1]
+                    if len(cropArea.shape)==0:
+                        raise ValueError("RoI is bad: {}:{},{}:{} for size {}".format(round(rois[i,2].item()),round(rois[i,4].item())+1,round(rois[i,1].item()),round(rois[i,3].item())+1,allMasks.shape))
                     masks[i,2] = F.upsample(cropArea[None,None,...], size=(self.pool2_h,self.pool2_w), mode='bilinear')[0,0]
                     #masks[i,2] = cv2.resize(cropArea,(stackedEdgeFeatWindows.size(2),stackedEdgeFeatWindows.size(3)))
                     if debug_image is not None:
@@ -1080,7 +1096,7 @@ class PairingGraph(BaseModel):
             if len(candidates)+numBoxes<MAX_GRAPH_SIZE and len(candidates)<MAX_CANDIDATES:
                 return list(candidates)
             else:
-                distMul*=0.75
+                distMul=distMul*0.8 - 0.05
         #This is a problem, we couldn't prune down enough
         print("ERROR: could not prune number of candidates down: {} (should be {})".format(len(candidates),MAX_GRAPH_SIZE-numBoxes))
         return list(candidates)[:MAX_GRAPH_SIZE-numBoxes]

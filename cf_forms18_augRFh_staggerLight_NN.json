@@ -1,5 +1,5 @@
 {
-    "name": "Forms18_staggerLight_retrain",
+    "name": "Forms18_augRFh_staggerLight_NN",
     "cuda": true,
     "gpu": 0,
     "super_computer":false,
@@ -16,7 +16,9 @@
         "rescale_range": [0.4,0.65],
         "crop_params": {
             "crop_size":[652,1608],
-            "pad":0
+            "pad":0,
+            "flip_horz": true,
+            "rot_degree_std_dev": 0.7
         },
         "no_blanks": true,
         "swap_circle":true,
@@ -83,6 +85,7 @@
     "arch": "YoloBoxDetector", 
     "model": {
         "color":false,
+        "pred_num_neighbors": true,
         "number_of_box_types": 2,
         "number_of_point_types": 0,
         "number_of_pixel_types": 0,
