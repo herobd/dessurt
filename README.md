@@ -6,6 +6,31 @@ based on victoresque pytorch template
 * PyTorch
 
 
+## Reproducability instructions
+
+### Pretraining detector network
+
+
+### Training pairing network
+
+
+### Evaluating
+
+#### Standard
+
+#### Perfect information experiments
+
+
+### Training baseline models
+
+#### Detector using regular convs
+
+#### Classifier using non-visual features
+
+### Evaluating baseline models
+
+
+
 ## Folder Structure
   ```
   
