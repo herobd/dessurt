@@ -82,9 +82,9 @@ if __name__ == "__main__":
         repeat=1
     data=FUNSDGraphPair(dirPath=dirPath,split='train',config={
         'color':False,
-        'rescale_range':[1,1],
+        'rescale_range':[0.8,1.2],
         'Xrescale_range':[0.4,0.65],
-        'crop_params':{"crop_size":[1000,1000],"pad":0}, 
+        'crop_params':{"crop_size":[800,800],"pad":60,"rot_degree_std_dev": 0.7}, 
         'rotation':False,
 })
 
