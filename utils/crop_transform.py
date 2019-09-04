@@ -449,12 +449,12 @@ class CropBoxTransform(object):
         #page_boundaries =
         pad_params = self.pad_params
         if org_img.shape[0]+pad_params[0][0]+pad_params[0][1] < self.crop_size[0]+1:
-            diff = self.crop_size[0]+1-(org_img.shape[0]+pad_params[0][0]+pad_params[0][1])
+            diff = self.crop_size[0]+1-(org_img.shape[0])#+pad_params[0][0]+pad_params[0][1])
             pad_byT = diff//2
             pad_byB = diff//2 + diff%2
             pad_params = ((pad_byT,pad_byB),)+pad_params[1:]
         if org_img.shape[1]+pad_params[1][0]+pad_params[1][1] < self.crop_size[1]+1:
-            diff = self.crop_size[1]+1-(org_img.shape[1]+pad_params[1][0]+pad_params[1][1])
+            diff = self.crop_size[1]+1-(org_img.shape[1])#+pad_params[1][0]+pad_params[1][1])
             pad_byL = diff//2
             pad_byR = diff//2 + diff%2
             pad_params = (pad_params[0],(pad_byL,pad_byR),pad_params[2])
