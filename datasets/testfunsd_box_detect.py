@@ -86,7 +86,7 @@ if __name__ == "__main__":
                         "flip_horz": True,
                         "flip_vert": True}, 
 })
-    #data.cluster(start,repeat,'anchors_rot_{}.json')
+    data.cluster(start,repeat,'FUNSD_anchors_rot_{}.json')
 
     dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False, num_workers=0, collate_fn=funsd_box_detect.collate)
     dataLoaderIter = iter(dataLoader)
