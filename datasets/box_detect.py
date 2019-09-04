@@ -119,7 +119,7 @@ def collate(batch):
 
     line_labels = {}
     for name,count in largest_line_label.items():
-        if count != 0:
+        if count > 0:
             line_labels[name] = torch.zeros(batch_size, count, line_dim)
         else:
             line_labels[name]=None
@@ -132,7 +132,7 @@ def collate(batch):
             line_labels[name][i, :line_label_sizes[name][i]] = gt
     point_labels = {}
     for name,count in largest_point_label.items():
-        if count != 0:
+        if count > 0:
             point_labels[name] = torch.zeros(batch_size, count, 2)
         else:
             point_labels[name]=None
