@@ -246,13 +246,8 @@ class FUNSDBoxDetect(BoxDetectDataset):
                 else:
                     s = np.random.uniform(self.rescale_range[0], self.rescale_range[1])
                 #partial_rescale = s/rescaled
-                bbs = getBBWithPoints(annotations['byId'].values(),s)
                 boxes = annotations['form']
-                #field_bbs = self.getBBGT(annotations['fieldBBs'],s,fields=True)
-                #bbs = np.concatenate([text_bbs,field_bbs],axis=1)
-                bbs = convertBBs(bbs,self.rotate,2).numpy()[0]
-                cos_rot = np.cos(bbs[:,2])
-                sin_rot = np.sin(bbs[:,2])
+                points=[]
                 for j,boxinfo in enumerate(boxes):
                     lX,tY,rX,bY = boxinfo['box']
                     w = rX-lX +1
@@ -274,7 +269,8 @@ class FUNSDBoxDetect(BoxDetectDataset):
         #all_widths = pointsAndRects[:,12]
         
         bestDistsFromMean=None
-        for attempt in range(20 if k>0 else 1):
+        num_attempts = 20 if k>0 else 1
+        for attempt in range(num_attempts):
             if k>0:
                 randomIndexes = np.random.randint(0,pointsAndRects.shape[0],(k))
                 means=pointsAndRects[randomIndexes]
@@ -335,7 +331,7 @@ class FUNSDBoxDetect(BoxDetectDataset):
             distsFromMean=None
             prevDistsFromMean=None
             for iteration in range(100000): #intended to break out
-                print('attempt:{}, bestDistsFromMean:{}, iteration:{}, bestDistsFromMean:{}'.format(attempt,bestDistsFromMean,iteration,prevDistsFromMean), end='\r')
+                print('attempt:{}/{}, bestDistsFromMean:{}, iteration:{}, bestDistsFromMean:{}'.format(attempt+1,num_attempts,bestDistsFromMean,iteration,prevDistsFromMean), end='\r')
                 #means_points = means[:,0:8]
                 #means_heights = means[:,11]
                 #means_widths = means[:,12]
