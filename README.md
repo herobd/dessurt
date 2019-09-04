@@ -35,6 +35,31 @@ python setup.py install
 # Install
 `python setup.py build develop`
 
+## Reproducability instructions
+
+### Pretraining detector network
+
+
+### Training pairing network
+
+
+### Evaluating
+
+#### Standard
+
+#### Perfect information experiments
+
+
+### Training baseline models
+
+#### Detector using regular convs
+
+#### Classifier using non-visual features
+
+### Evaluating baseline models
+
+
+
 ## Folder Structure
   ```
   
