@@ -11,7 +11,7 @@ from datasets import ai2d_box_detect
 from datasets import forms_graph_pair
 from datasets import forms_box_pair
 from datasets import funsd_graph_pair
-from datasets import funsd_box_pair
+from datasets import funsd_box_detect
 from datasets.forms_box_pair import FormsBoxPair
 from datasets.forms_feature_pair import FormsFeaturePair
 from datasets import forms_feature_pair
@@ -106,8 +106,8 @@ def getDataLoader(config,split):
             return withCollate(FormsBoxPair,forms_box_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='FormsGraphPair':
             return withCollate(forms_graph_pair.FormsGraphPair,forms_graph_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
-        elif data_set_name=='FUNSDBoxPair':
-            return withCollate(FUNSDBoxPair,funsd_box_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='FUNSDBoxDetect':
+            return withCollate(funsd_box_detect.FUNSDBoxDetect,funsd_box_detect.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='FUNSDGraphPair':
             return withCollate(funsd_graph_pair.FUNSDGraphPair,funsd_graph_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='FormsFeaturePair':
