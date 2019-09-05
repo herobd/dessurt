@@ -380,14 +380,20 @@ class PairingGraph(BaseModel):
         if not useGTBBs:
             if bbPredictions.size(0)==0:
                 return bbPredictions, offsetPredictions, None, None, None
-            useBBs = bbPredictions[:,1:] #remove confidence score
+            if self.include_bb_conf:
+                useBBs = bbPredictions
+            else:
+                useBBs = bbPredictions[:,1:] #remove confidence score
         elif useGTBBs=='saved':
-            useBBs = gtBBs[:,1:]
+            if self.include_bb_conf:
+                useBBs = gtBBs
+            else:
+                useBBs = gtBBs[:,1:]
         else:
             if gtBBs is None:
                 return bbPredictions, offsetPredictions, None, None, None
             useBBs = gtBBs[0,:,0:5]
-            if self.useShapeFeats:
+            if self.useShapeFeats or self.relationshipProposal=='feature_nn':
                 classes = gtBBs[0,:,13:]
                 #pos = random.uniform(0.51,0.99)
                 #neg = random.uniform(0.01,0.49)
@@ -401,6 +407,10 @@ class PairingGraph(BaseModel):
                     useBBs = torch.cat((useBBs,nns,classes),dim=1)
                 else:
                     useBBs = torch.cat((useBBs,classes),dim=1)
+            if self.include_bb_conf:
+                #fake some confifence values
+                conf = torch.rand(useBBs.size(0),1)*0.33 +0.66
+                useBBs = torch.cat((conf,useBBs),dim=1)
         if useBBs.size(0)>1:
             if self.text_rec is not None:
                 transcriptions = self.getTranscriptions(useBBs,image)
@@ -476,7 +486,10 @@ class PairingGraph(BaseModel):
         if text_emb is not None:
             raise NotImplemented('having appened text emb yet')
         ##tic=timeit.default_timer()
-        candidates = self.selectCandidateEdges(bbs,imageHeight,imageWidth)
+        if self.relationshipProposal == 'line_of_sight':
+            candidates = self.selectLineOfSightEdges(bbs.detach(),imageHeight,imageWidth)
+        elif self.relationshipProposal == 'feature_nn':
+            candidates = self.selectFeatureNNEdges(bbs.detach(),imageHeight,imageWidth)
         ##print('  candidate: {}'.format(timeit.default_timer()-tic))
         if len(candidates)==0:
             if self.useMetaGraph:
@@ -889,7 +902,114 @@ class PairingGraph(BaseModel):
 
 
 
-    def selectCandidateEdges(self,bbs,imageHeight,imageWidth):
+    def selectFeatureNNEdges(self,bbs,imageHeight,imageWidth):
+        if bbs.size(0)<2:
+            return []
+
+        #features: tlXDiff,trXDiff,brXDiff,blXDiff,tlYDiff,trYDiff,brYDiff,blYDiff, centerXDiff, centerYDiff, absX, absY, h1, w1, h2, w2, classpred1, classpred2, line of sight (binary)
+
+        #0: tlXDiff
+        #1: trXDiff
+        #2: brXDiff
+        #3: blXDiff
+        #4: centerXDiff
+        #5: w1
+        #6: w2
+        #7: tlYDiff
+        #8: trYDiff
+        #9: brYDiff
+        #10: blYDiff
+        #11: centerYDiff
+        #12: h1
+        #13: h2
+        #14: tlDist
+        #15: trDist
+        #16: brDist
+        #17: blDist
+        #18: centDist
+        #19: rel pos X1
+        #20: rel pos Y1
+        #21: rel pos X2
+        #22: rel pos Y2
+        #23: line of sight
+        #24: conf1
+        #25: conf2
+        #26-n: classpred1
+        #n+1-m: classpred2
+
+        conf = bbs[:,0]
+        x = bbs[:,1]
+        y = bbs[:,2]
+        r = bbs[:,3]
+        h = bbs[:,4]
+        w = bbs[:,5]
+        classes = bbs[:,6:]
+        numClasses = classes.size(1)
+        cos_r = torch.cos(r)
+        sin_r = torch.sin(r)
+        tlX = -w*cos_r + -h*sin_r +x
+        tlY =  w*sin_r + -h*cos_r +y
+        trX =  w*cos_r + -h*sin_r +x
+        trY = -w*sin_r + -h*cos_r +y
+        brX =  w*cos_r + h*sin_r +x
+        brY = -w*sin_r + h*cos_r +y
+        blX = -w*cos_r + h*sin_r +x
+        blY =  w*sin_r + h*cos_r +y
+
+        line_of_sight = self.selectLineOfSightEdges(bbs,imageHeight,imageWidth,return_all=True)
+        
+        features = torch.FloatTensor((bbs.size(0)*bbs.size(0) -bbs.size(0))/2,26+numClasses*2)
+
+        i=1
+        rels=[]
+        for index1 in range(bbs.size(0)):
+            for index2 in range(i1+1,bbs.size(0)):
+
+                features[i,0] = tlX[index1]-tlX[index2]
+                features[i,1] = trX[index1]-trX[index2]
+                features[i,2] = brX[index1]-brX[index2]
+                features[i,3] = blX[index1]-blX[index2]
+                features[i,4] = x[index1]-x[index2]
+                features[i,5] = w[index1]
+                features[i,6] = w[index2]
+                features[i,7] = tlY[index1]-tlY[index2]
+                features[i,8] = trY[index1]-trY[index2]
+                features[i,9] = brY[index1]-brY[index2]
+                features[i,10] = blY[index1]-blY[index2]
+                features[i,11] = y[index1]-y[index2]
+                features[i,12] = h[index1]
+                features[i,13] = h[index2]
+                features[i,14] = math.sqrt((tlY[index1]-tlY[index2])**2 + (tlX[index1]-tlX[index2])**2)
+                features[i,15] = math.sqrt((trY[index1]-trY[index2])**2 + (trX[index1]-trX[index2])**2)
+                features[i,16] = math.sqrt((brY[index1]-brY[index2])**2 + (brX[index1]-brX[index2])**2)
+                features[i,17] = math.sqrt((blY[index1]-blY[index2])**2 + (blX[index1]-blX[index2])**2)
+                features[i,18] = math.sqrt((y[index1]-y[index2])**2 + (x[index1]-x[index2])**2)
+                features[i,19] = x[index1]/imageWidth
+                features[i,20] = y[index1]/imageHeight
+                features[i,21] = x[index2]/imageWidth
+                features[i,22] = y[index2]/imageHeight
+                features[i,23] = 1 if (index1,index2) in line_of_sight else 0
+                features[i,24] = conf[index1]
+                features[i,25] = conf[index2]
+                features[i,26:26+numClasses] = classes[index1]
+                features[i,26+numClasses:] = classes[index2]
+                i+=1
+                rels.append( (index1,index2) )
+
+        rel_pred = self.rel_prop_nn(features,7,7,5)
+
+        rels_ordered = [ (rel_pred[i].item(),rels[i]) for i in range(len(rels)) ]
+
+        rels_ordered.sort(key=lambda x: x[0])
+
+        keep = self.percent_rel_to_keep*len(rels_ordered)
+        keep_rels = [r[1] for r in rels_ordered[:keep]]
+
+        return keep_rels, rel_pred
+
+
+
+    def selectLineOfSightEdges(self,bbs,imageHeight,imageWidth, return_all=False):
         if bbs.size(0)<2:
             return []
         #return list of index pairs
@@ -1168,7 +1288,7 @@ class PairingGraph(BaseModel):
             #print('candidates:{} ({})'.format(len(candidates),distMul))
             #if len(candidates)>1:
             #    drawIt()
-            if len(candidates)+numBoxes<MAX_GRAPH_SIZE and len(candidates)<MAX_CANDIDATES:
+            if (len(candidates)+numBoxes<MAX_GRAPH_SIZE and len(candidates)<MAX_CANDIDATES) or return_all:
                 return list(candidates)
             else:
                 if self.useOldDecay:
