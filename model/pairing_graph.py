@@ -301,6 +301,10 @@ class PairingGraph(BaseModel):
 
         self.useOldDecay = config['use_old_len_decay'] if 'use_old_len_decay' in config else False
 
+        self.relationshipProposal='line_of_sight'
+        self.include_bb_conf=False
+        if self.relationshipProposal=='feature_nn':
+            self.include_bb_conf=True
 
         #HWR stuff
         if 'text_rec' in config:
