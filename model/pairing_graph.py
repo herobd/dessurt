@@ -102,9 +102,8 @@ class PairingGraph(BaseModel):
         self.useShapeFeats= config['use_shape_feats'] if 'use_shape_feats' in config else False
         self.usePositionFeature = config['use_position_feats'] if 'use_position_feats' in config else False
         assert(not self.usePositionFeature or self.useShapeFeats)
-        #TODO HACK, fixed values
-        self.normalizeHorz=400
-        self.normalizeVert=50
+        self.normalizeHorz=config['normalize_horz'] if 'normalize_horz' in config else 400
+        self.normalizeVert=config['normalize_vert'] if 'normalize_vert' in config else 50
         self.normalizeDist=(self.normalizeHorz+self.normalizeVert)/2
 
         assert(self.detector.scale[0]==self.detector.scale[1])
@@ -493,7 +492,7 @@ class PairingGraph(BaseModel):
         if self.relationshipProposal == 'line_of_sight':
             candidates = self.selectLineOfSightEdges(bbs.detach(),imageHeight,imageWidth)
         elif self.relationshipProposal == 'feature_nn':
-            candidates = self.selectFeatureNNEdges(bbs.detach(),imageHeight,imageWidth)
+            candidates, rel_prop_scores = self.selectFeatureNNEdges(bbs.detach(),imageHeight,imageWidth)
         ##print('  candidate: {}'.format(timeit.default_timer()-tic))
         if len(candidates)==0:
             if self.useMetaGraph:
@@ -1000,13 +999,17 @@ class PairingGraph(BaseModel):
                 i+=1
                 rels.append( (index1,index2) )
 
-        rel_pred = self.rel_prop_nn(features,7,7,5)
+        #rel_pred = self.rel_prop_nn(features,7,7,5) #7 x, 7 y, 5 xy, for normalizing
+        features[:,0:7]/=self.normalizeHorz
+        features[:,7:14]/=self.normalizeVert
+        features[:,14:19]/=(self.normalizeVert+self.normalizeHorz)/2
+        rel_pred = self.rel_prop_nn(features)
 
         rels_ordered = [ (rel_pred[i].item(),rels[i]) for i in range(len(rels)) ]
 
         rels_ordered.sort(key=lambda x: x[0])
 
-        keep = self.percent_rel_to_keep*len(rels_ordered)
+        keep = math.ceil(self.percent_rel_to_keep*len(rels_ordered))
         keep_rels = [r[1] for r in rels_ordered[:keep]]
 
         return keep_rels, rel_pred
