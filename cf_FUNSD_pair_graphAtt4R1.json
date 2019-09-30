@@ -4,7 +4,7 @@
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
-    "super_computer":true,
+    "super_computer":false,
     "data_loader": {
         "data_set_name": "FUNSDGraphPair",
         "data_dir": "../data/FUNSD",
@@ -25,7 +25,7 @@
         "shuffle": false,
         "rescale_range": [1,1],
         "crop_params": null,
-        "batch_size": 4
+        "batch_size": 1
     },
 
     
@@ -57,8 +57,8 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 125000,
-        "save_dir": "saved/",
+        "iterations": 425000,
+        "save_dir": "../saved/",
         "val_step": 5000,
         "save_step": 25000,
         "save_step_minor": 250,
@@ -82,7 +82,7 @@
     },
     "arch": "PairingGraph", 
     "model": {
-        "detector_checkpoint": "saved/FUNSD_augRFh_staggerLighter_NN/checkpoint-iteration150000.pth.tar",
+        "detector_checkpoint": "../saved/FUNSD_augRFh_staggerLighter_NN/checkpoint-iteration150000.pth",
         "conf_thresh": 0.5,
         "start_frozen": true,
 	"use_rel_shape_feats": "corner",
@@ -110,7 +110,7 @@
         "graph_config": {
             "arch": "MetaGraphNet",
             "in_channels": 256,
-            "node_out": 2,
+            "node_out": 5,
             "edge_out": 1,
             "num_layers": 4,
             "num_heads": 4,
