@@ -300,10 +300,20 @@ class PairingGraph(BaseModel):
 
         self.useOldDecay = config['use_old_len_decay'] if 'use_old_len_decay' in config else False
 
-        self.relationshipProposal='line_of_sight'
+        self.relationshipProposal= config['relationship_proposal'] if 'relationship_proposal' in config else 'line_of_sight'
         self.include_bb_conf=False
         if self.relationshipProposal=='feature_nn':
             self.include_bb_conf=True
+            #num_classes = config['num_class']
+            num_bb_feat = config['graph_config']['bb_out']
+            self.rel_prop_nn = nn.Sequential(
+                                nn.Linear(26+2*num_bb_feat,64),
+                                nn.Dropout(0.25),
+                                nn.ReLU(True),
+                                nn.Linear(64,1)
+                                )
+            self.percent_rel_to_keep = config['percent_rel_to_keep'] if 'percent_rel_to_keep' in config else 0.2
+            self.max_rel_to_keep = config['max_rel_to_keep'] if 'max_rel_to_keep' in config else 3000
 
         #HWR stuff
         if 'text_rec' in config:
@@ -382,7 +392,7 @@ class PairingGraph(BaseModel):
         #Otherwise we have to to alignment first
         if not useGTBBs:
             if bbPredictions.size(0)==0:
-                return bbPredictions, offsetPredictions, None, None, None
+                return bbPredictions, offsetPredictions, None, None, None, None
             if self.include_bb_conf:
                 useBBs = bbPredictions
             else:
@@ -394,7 +404,7 @@ class PairingGraph(BaseModel):
                 useBBs = gtBBs[:,1:]
         else:
             if gtBBs is None:
-                return bbPredictions, offsetPredictions, None, None, None
+                return bbPredictions, offsetPredictions, None, None, None, None
             useBBs = gtBBs[0,:,0:5]
             if self.useShapeFeats or self.relationshipProposal=='feature_nn':
                 classes = gtBBs[0,:,13:]
@@ -413,7 +423,7 @@ class PairingGraph(BaseModel):
             if self.include_bb_conf:
                 #fake some confifence values
                 conf = torch.rand(useBBs.size(0),1)*0.33 +0.66
-                useBBs = torch.cat((conf,useBBs),dim=1)
+                useBBs = torch.cat((conf.to(useBBs.device),useBBs),dim=1)
         if useBBs.size(0)>1:
             if self.text_rec is not None:
                 transcriptions = self.getTranscriptions(useBBs,image)
@@ -421,9 +431,9 @@ class PairingGraph(BaseModel):
             else:
                 embeddings=None
             if self.useMetaGraph:
-                graph,relIndexes = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings)
+                graph,relIndexes,rel_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings)
                 if graph is None:
-                    return bbPredictions, offsetPredictions, None, None, None
+                    return bbPredictions, offsetPredictions, None, None, None, rel_prop_scores
                 bbOuts, relOuts = self.pairer(graph)
                 if self.fixBiDirection or not self.training:
                     relIndexes = relIndexes[:len(relIndexes)//2]
@@ -434,20 +444,20 @@ class PairingGraph(BaseModel):
                 if self.training: #0.3987808480 0.398469038200 not a big difference, but it's "the right" thing to do
                     if debug:
                         import pdb;pdb.set_trace()
-                    bbAndRel_features, adjacencyMatrix, numBBs, numRel, relIndexes = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings)# ,debug_image=image)
+                    bbAndRel_features, adjacencyMatrix, numBBs, numRel, relIndexes, rel_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings)# ,debug_image=image)
                     if bbAndRel_features is None:
-                        return bbPredictions, offsetPredictions, None, None, None
+                        return bbPredictions, offsetPredictions, None, None, None, rel_prop_scores
 
                     ##tic=timeit.default_timer()
                     #nodeOuts, relOuts = self.pairer(bb_features, adjacencyMatrix, rel_features)
                     bbOuts, relOuts = self.pairer(bbAndRel_features, adjacencyMatrix, numBBs)
                 else:
                     #If evaluating, force the masks of relationships to be the two ways and average
-                    bbAndRel_features, adjacencyMatrix, numBBs, numRel, relIndexes = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,flip=False)
+                    bbAndRel_features, adjacencyMatrix, numBBs, numRel, relIndexes, rel_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,flip=False)
                     if bbAndRel_features is None:
-                        return bbPredictions, offsetPredictions, None, None, None
+                        return bbPredictions, offsetPredictions, None, None, None, rel_prop_scores
 
-                    bbAndRel_features_B, adjacencyMatrix_B, numBBs_B, numRel_B, relIndexes_B = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,flip=True)
+                    bbAndRel_features_B, adjacencyMatrix_B, numBBs_B, numRel_B, relIndexes_B, rel_prop_scores_B = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,flip=True)
 
                     assert(numBBs==numBBs_B and numRel==numRel_B)
                     for i,(n1,n2) in enumerate(relIndexes):
@@ -481,9 +491,9 @@ class PairingGraph(BaseModel):
                 startIndex = 6+self.detector.predNumNeighbors
                 if not useGTBBs:
                     bbPredictions[:,startIndex:startIndex+self.numBBTypes] = torch.sigmoid(bbOuts[:,-1,self.predNN:self.predNN+self.numBBTypes].detach())
-            return bbPredictions, offsetPredictions, relOuts, relIndexes, bbOuts
+            return bbPredictions, offsetPredictions, relOuts, relIndexes, bbOuts, rel_prop_scores
         else:
-            return bbPredictions, offsetPredictions, None, None, None
+            return bbPredictions, offsetPredictions, None, None, None, None
 
     def createGraph(self,bbs,features,features2,imageHeight,imageWidth,text_emb=None,flip=None,debug_image=None):
         if text_emb is not None:
@@ -491,14 +501,16 @@ class PairingGraph(BaseModel):
         ##tic=timeit.default_timer()
         if self.relationshipProposal == 'line_of_sight':
             candidates = self.selectLineOfSightEdges(bbs.detach(),imageHeight,imageWidth)
+            rel_prop_scores = None
         elif self.relationshipProposal == 'feature_nn':
-            candidates, rel_prop_scores = self.selectFeatureNNEdges(bbs.detach(),imageHeight,imageWidth)
+            candidates, rel_prop_scores = self.selectFeatureNNEdges(bbs.detach(),imageHeight,imageWidth,features.device)
+            bbs=bbs[:,1:] #discard confidence, we kept it so the proposer could see them
         ##print('  candidate: {}'.format(timeit.default_timer()-tic))
         if len(candidates)==0:
             if self.useMetaGraph:
-                return None, None
+                return None, None, None
             else:
-                return None,None,None,None,None
+                return None,None,None,None,None, None
         ##tic=timeit.default_timer()
 
         #stackedEdgeFeatWindows = torch.FloatTensor((len(candidates),features.size(1)+2,self.relWindowSize,self.relWindowSize)).to(features.device())
@@ -852,7 +864,7 @@ class PairingGraph(BaseModel):
 
             #features
             universalFeatures=None
-            return (nodeFeatures, edgeIndexes, edgeFeatures, universalFeatures), relIndexes
+            return (nodeFeatures, edgeIndexes, edgeFeatures, universalFeatures), relIndexes, rel_prop_scores
         else:
             if bb_features is None:
                 numBB=0
@@ -902,12 +914,12 @@ class PairingGraph(BaseModel):
             #adjacencyMatrix = None
             ##print('create graph: {}'.format(timeit.default_timer()-tic))
             #return bb_features, adjacencyMatrix, rel_features
-            return bbAndRel_features, (adjacencyMatrix,numOfNeighbors), numBB, numRel, relIndexes
+            return bbAndRel_features, (adjacencyMatrix,numOfNeighbors), numBB, numRel, relIndexes, rel_prop_scores
 
 
 
 
-    def selectFeatureNNEdges(self,bbs,imageHeight,imageWidth):
+    def selectFeatureNNEdges(self,bbs,imageHeight,imageWidth,device):
         if bbs.size(0)<2:
             return []
 
@@ -948,8 +960,8 @@ class PairingGraph(BaseModel):
         r = bbs[:,3]
         h = bbs[:,4]
         w = bbs[:,5]
-        classes = bbs[:,6:]
-        numClasses = classes.size(1)
+        classFeat = bbs[:,6:]
+        numClassFeat = classFeat.size(1)
         cos_r = torch.cos(r)
         sin_r = torch.sin(r)
         tlX = -w*cos_r + -h*sin_r +x
@@ -963,12 +975,12 @@ class PairingGraph(BaseModel):
 
         line_of_sight = self.selectLineOfSightEdges(bbs,imageHeight,imageWidth,return_all=True)
         
-        features = torch.FloatTensor((bbs.size(0)*bbs.size(0) -bbs.size(0))/2,26+numClasses*2)
+        features = torch.FloatTensor((bbs.size(0)*bbs.size(0) -bbs.size(0))//2,26+numClassFeat*2)
 
-        i=1
+        i=0
         rels=[]
         for index1 in range(bbs.size(0)):
-            for index2 in range(i1+1,bbs.size(0)):
+            for index2 in range(index1+1,bbs.size(0)):
 
                 features[i,0] = tlX[index1]-tlX[index2]
                 features[i,1] = trX[index1]-trX[index2]
@@ -996,8 +1008,8 @@ class PairingGraph(BaseModel):
                 features[i,23] = 1 if (index1,index2) in line_of_sight else 0
                 features[i,24] = conf[index1]
                 features[i,25] = conf[index2]
-                features[i,26:26+numClasses] = classes[index1]
-                features[i,26+numClasses:] = classes[index2]
+                features[i,26:26+numClassFeat] = classFeat[index1]
+                features[i,26+numClassFeat:] = classFeat[index2]
                 i+=1
                 rels.append( (index1,index2) )
 
@@ -1005,16 +1017,22 @@ class PairingGraph(BaseModel):
         features[:,0:7]/=self.normalizeHorz
         features[:,7:14]/=self.normalizeVert
         features[:,14:19]/=(self.normalizeVert+self.normalizeHorz)/2
-        rel_pred = self.rel_prop_nn(features)
+        rel_pred = self.rel_prop_nn(features.to(device))
 
         rels_ordered = [ (rel_pred[i].item(),rels[i]) for i in range(len(rels)) ]
 
-        rels_ordered.sort(key=lambda x: x[0])
+        rels_ordered.sort(key=lambda x: x[0], reverse=True)
 
         keep = math.ceil(self.percent_rel_to_keep*len(rels_ordered))
+        keep = min(keep,self.max_rel_to_keep)
+        #print('keeping {} of {}'.format(keep,len(rels_ordered)))
         keep_rels = [r[1] for r in rels_ordered[:keep]]
+        if keep<len(rels_ordered):
+            implicit_threshold = rels_ordered[keep][0]
+        else:
+            implicit_threshold = rels_ordered[-1][0]-0.1 #We're taking everything
 
-        return keep_rels, rel_pred
+        return keep_rels, (rel_pred, rels, implicit_threshold)
 
 
 

@@ -755,7 +755,7 @@ class GraphPairTrainer(BaseTrainer):
     #    return toRet
 
 
-    def alignEdgePred(self,targetBoxes,adj,outputBoxes,relPred,relIndexes):
+    def alignEdgePred(self,targetBoxes,adj,outputBoxes,relPred,relIndexes,rel_prop_pred):
         if relPred is None or targetBoxes is None:
             if targetBoxes is None:
                 if relPred is not None and (relPred>self.thresh_rel).any():
@@ -776,7 +776,7 @@ class GraphPairTrainer(BaseTrainer):
                 prec=1
                 targIndex = None
 
-            return torch.tensor([]),torch.tensor([]),recall,prec,prec,ap, targIndex, torch.ones(outputBoxes.size(0))
+            return torch.tensor([]),torch.tensor([]),recall,prec,prec,ap, targIndex, torch.ones(outputBoxes.size(0)), None
         targetBoxes = targetBoxes.cpu()
         #decide which predicted boxes belong to which target boxes
         #should this be the same as AP_?
@@ -854,10 +854,74 @@ class GraphPairTrainer(BaseTrainer):
             fullPrec = truePred/(truePred+falsePred+badPred)
         else:
             fullPrec = 1
-        return predsPos,predsNeg, recall, prec ,fullPrec, computeAP(scores), targIndex, fullHit
 
 
-    def prealignedEdgePred(self,adj,relPred,relIndexes):
+        if rel_prop_pred is not None:
+            relPropScores,relPropIds, threshPropRel = rel_prop_pred
+            truePropPred=falsePropPred=badPropPred=0
+            propPredsPos=[]
+            propPredsNeg=[]
+            for i,(n0,n1) in enumerate(relPropIds):
+                t0 = targIndex[n0].item()
+                t1 = targIndex[n1].item()
+                if t0>=0 and t1>=0:
+                    if (min(t0,t1),max(t0,t1)) in adj:
+                        #if self.useBadBBPredForRelLoss!='fixed' or (fullHit[n0] and fullHit[n1]):
+                        if fullHit[n0] and fullHit[n1]:
+                            matches+=1
+                            propPredsPos.append(relPropScores[i])
+                            #scores.append( (sigPredsAll[i],True) )
+                            if relPropScores[i]>threshPropRel:
+                                truePropPred+=1
+                        #else:
+                        #    scores.append( (sigPredsAll[i],False) ) #for the sake of scoring, this is a bad relationship
+                    else:
+                        propPredsNeg.append(relPropScores[i])
+                        #scores.append( (sigPredsAll[i],False) )
+                        if relPropScores[i]>threshPropRel:
+                            falsePropPred+=1
+                else:
+                    if self.useBadBBPredForRelLoss:
+                        if self.useBadBBPredForRelLoss=='full' or np.random.rand()<self.useBadBBPredForRelLoss:
+                            propPredsNeg.append(relPropScores[i])
+                    #scores.append( (sigPredsAll[i],False) )
+                    if relPropScores[i]>threshPropRel:
+                        badPropPred+=1
+            #Add score 0 for instances we didn't predict
+            #for i in range(len(adj)-matches):
+            #    scores.append( (float('nan'),True) )
+        
+            if len(propPredsPos)>0:
+                propPredsPos = torch.stack(propPredsPos).to(relPred.device)
+            else:
+                propPredsPos = None
+            if len(propPredsNeg)>0:
+                propPredsNeg = torch.stack(propPredsNeg).to(relPred.device)
+            else:
+                propPredsNeg = None
+
+            if len(adj)>0:
+                propRecall = truePropPred/len(adj)
+            else:
+                propRecall = 1
+            #if falsePropPred>0:
+            #    propPrec = truePropPred/(truePropPred+falsePropPred)
+            #else:
+            #    propPrec = 1
+            if falsePropPred+badPropPred>0:
+                propFullPrec = truePropPred/(truePropPred+falsePropPred+badPropPred)
+            else:
+                propFullPrec = 1
+
+            proposedInfo = (propPredsPos,propPredsNeg, propRecall, propFullPrec)
+        else:
+            proposedInfo = None
+
+
+        return predsPos,predsNeg, recall, prec ,fullPrec, computeAP(scores), targIndex, fullHit, proposedInfo
+
+
+    def prealignedEdgePred(self,adj,relPred,relIndexes,rel_prop_pred):
         if relPred is None:
             #assert(adj is None or len(adj)==0) this is a failure of the heuristic pairing
             if adj is not None and len(adj)>0:
@@ -868,7 +932,7 @@ class GraphPairTrainer(BaseTrainer):
                 ap=1
             prec=1
 
-            return torch.tensor([]),torch.tensor([]),recall,prec,prec,ap
+            return torch.tensor([]),torch.tensor([]),recall,prec,prec,ap, None
         rels = relIndexes #relPred._indices().cpu().t()
         predsAll = relPred
         sigPredsAll = torch.sigmoid(predsAll[:,-1])
@@ -911,7 +975,54 @@ class GraphPairTrainer(BaseTrainer):
             prec = truePred/(truePred+falsePred)
         else:
             prec = 1
-        return predsPos,predsNeg, recall, prec, prec, computeAP(scores)
+
+
+        if rel_prop_pred is not None:
+            relPropScores,relPropIds, threshPropRel = rel_prop_pred
+            propPredsPos = []
+            propPredsNeg = []
+            scores = []
+            truePropPred=falsePropPred=0
+            for i,(n0,n1) in enumerate(rels):
+                #n0 = rels[i,0]
+                #n1 = rels[i,1]
+                #gt[i] = int((n0,n1) in adj) #(adjM[ n0, n1 ])
+                if (n0,n1) in adj:
+                    propPredsPos.append(relPropScores[i])
+                    #scores.append( (sigPredsAll[i],True) )
+                    if relPropScores[i]>threshPropRel:
+                        truePropPred+=1
+                else:
+                    propPredsNeg.append(relPropScores[i])
+                    #scores.append( (relPropScores[i],False) )
+                    if relPropScores[i]>threshPropRel:
+                        falsePropPred+=1
+        
+            #return gt.to(relPred.device), relPred._values().view(-1).view(-1)
+            #return gt.to(relPred[1].device), relPred[1].view(-1)
+            if len(propPredsPos)>0:
+                propPredsPos = torch.stack(propPredsPos).to(relPred.device)
+            else:
+                propPredsPos = None
+            if len(propPredsNeg)>0:
+                propPredsNeg = torch.stack(propPredsNeg).to(relPred.device)
+            else:
+                propPredsNeg = None
+            if len(adj)>0:
+                propRecall = truePropPred/len(adj)
+            else:
+                propRecall = 1
+            if falsePropPred>0:
+                propPrec = truePropPred/(truePropPred+falsePropPred)
+            else:
+                propPrec = 1
+            proposedInfo = (propPredsPos,propPredsNeg, propRecall, propPrec )
+        else:
+            proposedInfo = None
+
+
+        return predsPos,predsNeg, recall, prec, prec, computeAP(scores), proposedInfo
+
 
     def run(self,instance,useGT,threshIntur=None,get=[]):
         numClasses = self.model.numBBTypes
@@ -919,11 +1030,11 @@ class GraphPairTrainer(BaseTrainer):
             numClasses-=1
         image, targetBoxes, adj, target_num_neighbors = self._to_tensor(instance)
         if useGT:
-            outputBoxes, outputOffsets, relPred, relIndexes, bbPred = self.model(image,targetBoxes,target_num_neighbors,True,
+            outputBoxes, outputOffsets, relPred, relIndexes, bbPred, rel_prop_pred = self.model(image,targetBoxes,target_num_neighbors,True,
                     otherThresh=self.conf_thresh_init, otherThreshIntur=threshIntur, hard_detect_limit=self.train_hard_detect_limit)
             #_=None
             #gtPairing,predPairing = self.prealignedEdgePred(adj,relPred)
-            predPairingShouldBeTrue,predPairingShouldBeFalse, eRecall,ePrec,fullPrec,ap = self.prealignedEdgePred(adj,relPred,relIndexes)
+            predPairingShouldBeTrue,predPairingShouldBeFalse, eRecall,ePrec,fullPrec,ap,proposedInfo = self.prealignedEdgePred(adj,relPred,relIndexes,rel_prop_pred)
             if bbPred is not None:
                 if self.model.predNN or self.model.predClass:
                     if target_num_neighbors is not None:
@@ -940,10 +1051,10 @@ class GraphPairTrainer(BaseTrainer):
                 bbPredNN_use=None
                 bbPredClass_use=None
         else:
-            outputBoxes, outputOffsets, relPred, relIndexes, bbPred = self.model(image,
+            outputBoxes, outputOffsets, relPred, relIndexes, bbPred, rel_prop_pred = self.model(image,
                     otherThresh=self.conf_thresh_init, otherThreshIntur=threshIntur, hard_detect_limit=self.train_hard_detect_limit)
             #gtPairing,predPairing = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred)
-            predPairingShouldBeTrue,predPairingShouldBeFalse, eRecall,ePrec,fullPrec,ap, bbAlignment, bbFullHit = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred,relIndexes)
+            predPairingShouldBeTrue,predPairingShouldBeFalse, eRecall,ePrec,fullPrec,ap, bbAlignment, bbFullHit, proposedInfo = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred,relIndexes, rel_prop_pred)
             if bbPred is not None and bbPred.size(0)>0:
                 #create aligned GT
                 #this was wrong...
@@ -1028,6 +1139,23 @@ class GraphPairTrainer(BaseTrainer):
             #relLoss *= self.lossWeights['rel']
             losses['relLoss']=relLoss
 
+        if proposedInfo is not None:
+            propPredPairingShouldBeTrue,propPredPairingShouldBeFalse= proposedInfo[0:2]
+            propRelLoss = None
+            #seperating the loss into true and false portions is not only convienint, it balances the loss between true/false examples
+            if propPredPairingShouldBeTrue is not None and propPredPairingShouldBeTrue.size(0)>0:
+                ones = torch.ones_like(propPredPairingShouldBeTrue).to(image.device)
+                propRelLoss = self.loss['propRel'](propPredPairingShouldBeTrue,ones)
+            if propPredPairingShouldBeFalse is not None and propPredPairingShouldBeFalse.size(0)>0:
+                zeros = torch.zeros_like(propPredPairingShouldBeFalse).to(image.device)
+                propRelLossFalse = self.loss['propRel'](propPredPairingShouldBeFalse,zeros)
+                if propRelLoss is None:
+                    propRelLoss=propRelLossFalse
+                else:
+                    propRelLoss+=propRelLossFalse
+            if propRelLoss is not None:
+                losses['propRelLoss']=propRelLoss
+
 
 
         if not self.model.detector_frozen:
@@ -1078,10 +1206,11 @@ class GraphPairTrainer(BaseTrainer):
                 }
         if ap is not None:
             log['rel_AP']=ap
-        if 'nnFinalLoss' in losses:
-            log['nn loss improvement (neg is good)'] = losses['nnFinalLoss'].item()-nn_loss
-        if 'classFinalLoss' in losses:
-            log['class loss improvement (neg is good)'] = losses['classFinalLoss'].item()-class_loss
+        if not self.model.detector_frozen:
+            if 'nnFinalLoss' in losses:
+                log['nn loss improvement (neg is good)'] = losses['nnFinalLoss'].item()-nn_loss
+            if 'classFinalLoss' in losses:
+                log['class loss improvement (neg is good)'] = losses['classFinalLoss'].item()-class_loss
 
         if 'bb_stats' in get:
             outputBoxes=torch.cat((outputBoxes[:,0:6],outputBoxes[:,7:]),dim=1) #throw away NN pred
@@ -1108,5 +1237,10 @@ class GraphPairTrainer(BaseTrainer):
                 diffs=torch.abs(predNN_p-target_num_neighbors[0][bbAlignment].float())
                 nn_acc = (diffs<0.5).float().mean().item()
                 log['nn_acc']=nn_acc
+
+        if proposedInfo is not None:
+            propRecall,propPrec = proposedInfo[2:4]
+            log['prop_rel_recall'] = propRecall
+            log['prop_rel_prec'] = propPrec
 
         return losses, log
