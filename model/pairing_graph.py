@@ -601,6 +601,8 @@ class PairingGraph(BaseModel):
         else:
             extraPred=0
 
+
+        #make instance specific masks and make shape (spatial) features
         for i,(index1, index2) in enumerate(candidates):
             if self.useShapeFeats!='only':
                 #... or make it so index1 is always to top-left one

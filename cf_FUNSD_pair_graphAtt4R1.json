@@ -39,13 +39,13 @@
     "loss": {
         "box": "YoloLoss",
         "edge": "sigmoid_BCE_loss",
-        "nn": "MSE",
+        "nnFinal": "MSE",
         "class": "sigmoid_BCE_loss"
     },
     "loss_weights": {
         "box": 1.0,
         "edge": 0.5,
-        "nn": 0.25,
+        "nnFinal": 0.25,
         "class": 0.5
     },
     "loss_params": 
