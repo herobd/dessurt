@@ -817,6 +817,8 @@ class MetaGraphNet(nn.Module):
             edge_decider = None
         if soft_prune_edges=='last':
             soft_prune_edges_l = ([False]*(layerCount-1)) + [True]
+        elif type(soft_prune_edges) is int:
+            soft_prune_edges_l = ([True]*soft_prune_edges) + ([False]*(layerCount-1-soft_prune_edges))
         elif soft_prune_edges:
             soft_prune_edges_l = [True]*layerCount
         else:
