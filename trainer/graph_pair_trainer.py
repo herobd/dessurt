@@ -179,6 +179,10 @@ class GraphPairTrainer(BaseTrainer):
             losses[name] *= self.lossWeights[name[:-4]]
             loss += losses[name]
             losses[name] = losses[name].item()
+        loss.backward()
+
+        torch.nn.utils.clip_grad_value_(self.model.parameters(),1)
+        self.optimizer.step()
         meangrad=0
         count=0
         for m in self.model.parameters():
@@ -832,6 +836,14 @@ class GraphPairTrainer(BaseTrainer):
         #Add score 0 for instances we didn't predict
         for i in range(len(adj)-matches):
             scores.append( (float('nan'),True) )
+        if len(adj)>0:
+            final_prop_rel_recall = matches/len(adj)
+        else:
+            final_prop_rel_recall = 1
+        if len(rels)>0:
+            final_prop_rel_prec = matches/len(rels)
+        else:
+            final_prop_rel_prec = 1
     
         if len(predsPos)>0:
             predsPos = torch.stack(predsPos).to(relPred.device)
@@ -868,7 +880,7 @@ class GraphPairTrainer(BaseTrainer):
                     if (min(t0,t1),max(t0,t1)) in adj:
                         #if self.useBadBBPredForRelLoss!='fixed' or (fullHit[n0] and fullHit[n1]):
                         if fullHit[n0] and fullHit[n1]:
-                            matches+=1
+                            #matches+=1
                             propPredsPos.append(relPropScores[i])
                             #scores.append( (sigPredsAll[i],True) )
                             if relPropScores[i]>threshPropRel:
@@ -918,7 +930,7 @@ class GraphPairTrainer(BaseTrainer):
             proposedInfo = None
 
 
-        return predsPos,predsNeg, recall, prec ,fullPrec, computeAP(scores), targIndex, fullHit, proposedInfo
+        return predsPos,predsNeg, recall, prec ,fullPrec, computeAP(scores), targIndex, fullHit, proposedInfo, final_prop_rel_recall, final_prop_rel_prec
 
 
     def prealignedEdgePred(self,adj,relPred,relIndexes,rel_prop_pred):
@@ -1050,11 +1062,12 @@ class GraphPairTrainer(BaseTrainer):
             else:
                 bbPredNN_use=None
                 bbPredClass_use=None
+            final_prop_rel_recall = final_prop_rel_prec = None
         else:
             outputBoxes, outputOffsets, relPred, relIndexes, bbPred, rel_prop_pred = self.model(image,
                     otherThresh=self.conf_thresh_init, otherThreshIntur=threshIntur, hard_detect_limit=self.train_hard_detect_limit)
             #gtPairing,predPairing = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred)
-            predPairingShouldBeTrue,predPairingShouldBeFalse, eRecall,ePrec,fullPrec,ap, bbAlignment, bbFullHit, proposedInfo = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred,relIndexes, rel_prop_pred)
+            predPairingShouldBeTrue,predPairingShouldBeFalse, eRecall,ePrec,fullPrec,ap, bbAlignment, bbFullHit, proposedInfo, final_prop_rel_recall, final_prop_rel_prec = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred,relIndexes, rel_prop_pred)
             if bbPred is not None and bbPred.size(0)>0:
                 #create aligned GT
                 #this was wrong...
@@ -1242,5 +1255,9 @@ class GraphPairTrainer(BaseTrainer):
             propRecall,propPrec = proposedInfo[2:4]
             log['prop_rel_recall'] = propRecall
             log['prop_rel_prec'] = propPrec
+        if final_prop_rel_recall is not None:
+            log['final_prop_rel_recall']=final_prop_rel_recall
+        if final_prop_rel_prec is not None:
+            log['final_prop_rel_prec']=final_prop_rel_prec
 
         return losses, log
