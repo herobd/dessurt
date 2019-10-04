@@ -179,7 +179,8 @@ class GraphPairTrainer(BaseTrainer):
             losses[name] *= self.lossWeights[name[:-4]]
             loss += losses[name]
             losses[name] = losses[name].item()
-        loss.backward()
+        if len(losses)>0:
+            loss.backward()
 
         torch.nn.utils.clip_grad_value_(self.model.parameters(),1)
         self.optimizer.step()
