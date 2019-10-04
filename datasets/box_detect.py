@@ -119,7 +119,7 @@ def collate(batch):
 
     line_labels = {}
     for name,count in largest_line_label.items():
-        if count != 0:
+        if count > 0:
             line_labels[name] = torch.zeros(batch_size, count, line_dim)
         else:
             line_labels[name]=None
@@ -132,7 +132,7 @@ def collate(batch):
             line_labels[name][i, :line_label_sizes[name][i]] = gt
     point_labels = {}
     for name,count in largest_point_label.items():
-        if count != 0:
+        if count > 0:
             point_labels[name] = torch.zeros(batch_size, count, 2)
         else:
             point_labels[name]=None
@@ -190,14 +190,6 @@ class BoxDetectDataset(torch.utils.data.Dataset):
         self.rescale_range = config['rescale_range']
         if type(self.rescale_range) is float or type(self.rescale_range) is int:
             self.rescale_range = [self.rescale_range,self.rescale_range]
-        if self.rescale_range[0]==450:
-            self.rescale_range[0]=0.2
-        elif self.rescale_range[0]>1.0:
-            self.rescale_range[0]=0.27
-        if self.rescale_range[1]==800:
-            self.rescale_range[1]=0.33
-        elif self.rescale_range[1]>1.0:
-            self.rescale_range[1]=0.27
         if 'cache_resized_images' in config:
             self.cache_resized = config['cache_resized_images']
             if self.cache_resized:

@@ -1,10 +1,11 @@
 {
-    "name": "test_pair_binarySplitWP_staggerLight_NNP",
+    "name": "Simple19Merged_pair_binaryALR_moreContext_staggerLight_NNP",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
     "super_computer":false,
+    "split": "merged",
     "data_loader": {
         "data_set_name": "FormsGraphPair",
         "special_dataset": "simple",
@@ -40,7 +41,7 @@
  
     "optimizer_type": "Adam",
     "optimizer": {
-        "lr": 0.008,
+        "lr": 0.01,
         "weight_decay": 0
     },
     "loss": {
@@ -60,9 +61,9 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 200000,
+        "iterations": 300000,
         "save_dir": "saved/",
-        "val_step": 10000,
+        "val_step": 25000,
         "save_step": 50000,
         "save_step_minor": 250,
         "log_step": 250,
@@ -74,37 +75,32 @@
         "conf_thresh_change_iters": 5000,
         "retry_count":3,
 
-        "unfreeze_detector": 99999000,
+        "unfreeze_detector": 4000,
         "partial_from_gt": 8000,
         "stop_from_gt": 200000,
+        "use_bad_bb_pred_for_rel_loss": true,
 
-        "use_bad_bb_pred_for_rel_loss": true
+        "use_learning_schedule": true,
+        "adapt_lr": true
     },
     "arch": "PairingGraph", 
     "model": {
-        "Xdetector_checkpoint": "saved/Forms18_augRFh_staggerLight_NN/checkpoint-iteration200000.pth.tar",
-        "detector_checkpoint": "saved/Forms21_augRFh_staggerLighter_NN/checkpoint-iteration150000.pth.tar",
-        "conf_thresh": 0.92,
+        "detector_checkpoint": "saved/Simple18_staggerLight_NN/checkpoint-iteration100000.pth.tar",
+        "conf_thresh": 0.5,
         "start_frozen": true,
 	"use_rel_shape_feats": "corner",
-        "expand_rel_context": 100,
+        "expand_rel_context": 200,
         "use_detect_layer_feats": 16,
         "graph_config": {
             "arch": "BinaryPairReal",
             "in_channels": 256,
             "node_channels": 0,
             "edge_channels": 1,
-            "layers": ["FC256","FC256"],
-            "XXshape_layers": "saved/Simple19_pairNotGT_feat_wH/checkpoint-iteration6000.pth.tar",
-            "Xshape_layers": "saved/Simple18_pairNotGT_feat_wH/checkpoint-iteration8000.pth.tar",
-            "Xshape_layers": "saved/Simple18_pairNotGT_feat_retrain2/checkpoint-iteration6000.pth.tar",
-            "Xshape_layers": "saved/Simple21_pairNotGTNN_feat/checkpoint-iteration10000.pth.tar",
-            "shape_layers": "saved/What_pairNotGTNN_feat/checkpoint-iteration8000.pth.tar",
-            "weight_split": 0.0
+            "layers": ["FC256","FC256"]
         },
-        "featurizer_start_h": 10,
-        "featurizer_start_w": 10,
-        "featurizer_conv": [128,128,"M",256,240],
+        "featurizer_start_h": 20,
+        "featurizer_start_w": 20,
+        "featurizer_conv": [64,64,"M",128,"M",238],
         "featurizer_fc": null
     }
 }
