@@ -194,7 +194,8 @@ class GraphPairTrainer(BaseTrainer):
         if count!=0:
             meangrad/=count
         self.optimizer.step()
-        loss = loss.item()
+        if len(losses)>0:
+            loss = loss.item()
         log = {
             'mean grad': meangrad,
             'loss': loss,
