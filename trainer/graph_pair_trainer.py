@@ -194,7 +194,8 @@ class GraphPairTrainer(BaseTrainer):
         if count!=0:
             meangrad/=count
         self.optimizer.step()
-        loss = loss.item()
+        if len(losses)>0:
+            loss = loss.item()
         log = {
             'mean grad': meangrad,
             'loss': loss,
@@ -781,7 +782,7 @@ class GraphPairTrainer(BaseTrainer):
                 prec=1
                 targIndex = None
 
-            return torch.tensor([]),torch.tensor([]),recall,prec,prec,ap, targIndex, torch.ones(outputBoxes.size(0)), None
+            return torch.tensor([]),torch.tensor([]),recall,prec,prec,ap, targIndex, torch.ones(outputBoxes.size(0)), None, recall, prec
         targetBoxes = targetBoxes.cpu()
         #decide which predicted boxes belong to which target boxes
         #should this be the same as AP_?
