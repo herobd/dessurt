@@ -1,10 +1,10 @@
 {
-    "name": "Simple20_pair_graphTree2R4FERcrAvgEFixBD_F2A+16_predNNDS_moreGT_betterStaggerLightRFh_NN200000P",
+    "name": "Simple19_pair_binary_F1A+16_predNNClassDS_noGradFixedMasksBBUse_staggerLightRFh_NNP",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
-    "super_computer":true,
+    "super_computer":false,
     "data_loader": {
         "data_set_name": "FormsGraphPair",
         "special_dataset": "simple",
@@ -40,7 +40,7 @@
  
     "optimizer_type": "Adam",
     "optimizer": {
-        "lr": 0.0015,
+        "lr": 0.001,
         "weight_decay": 0
     },
     "loss": {
@@ -50,9 +50,10 @@
         "class": "sigmoid_BCE_loss"
     },
     "loss_weights": {
-        "box": 1.0,
-        "edge": 0.5,
-        "nn": 0.25
+        "box": 0.8,
+        "edge": 0.8,
+        "nn": 0.6,
+        "class": 0.6
     },
     "loss_params": 
         {
@@ -63,7 +64,7 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 100000,
+        "iterations": 60000,
         "save_dir": "saved/",
         "val_step": 5000,
         "save_step": 5000,
@@ -73,14 +74,13 @@
         "monitor": "loss",
         "monitor_mode": "none",
         "warmup_steps": 1000,
-        "conf_thresh_init": 0.5,
-        "conf_thresh_change_iters": 0,
-        "retry_count":1,
+        "conf_thresh_init": 0.9,
+        "conf_thresh_change_iters": 5000,
+        "retry_count":3,
 
-        "unfreeze_detector": 2000,
-        "partial_from_gt": 0,
-        "stop_from_gt": 20000,
-        "max_use_pred": 0.5,
+        "unfreeze_detector": 4000,
+        "partial_from_gt": 8000,
+        "stop_from_gt": 100000,
         "use_all_bb_pred_for_rel_loss": true,
 
         "use_learning_schedule": true,
@@ -88,14 +88,14 @@
     },
     "arch": "PairingGraph", 
     "model": {
-        "detector_checkpoint": "saved/Forms18_augRFh_staggerLight_NN/checkpoint-iteration200000.pth.tar",
+        "detector_checkpoint": "saved/Forms18_augRFh_staggerLight_NN/checkpoint-iteration100000.pth.tar",
         "conf_thresh": 0.5,
         "start_frozen": true,
 	"use_rel_shape_feats": "corner",
         "use_detect_layer_feats": 16,
         "use_2nd_detect_layer_feats": 0,
-        "use_2nd_detect_scale_feats": 2,
-        "use_2nd_detect_feats_size": 64,
+        "use_2nd_detect_scale_feats": 1,
+        "use_2nd_detect_feats_size": 32,
         "use_fixed_masks": true,
         "no_grad_feats": true,
 
@@ -106,26 +106,19 @@
         "featurizer_fc": null,
 
         "pred_nn": true,
-        "pred_class": false,
+        "pred_class": true,
         "expand_bb_context": 150,
         "featurizer_bb_start_h": 32,
         "featurizer_bb_start_w": 32,
-        "bb_featurizer_conv": ["sep64","M","sep64","sep64","M","sep128","sep128","M",250],
+        "bb_featurizer_conv": ["sep64","M","sep64","sep64","M","sep128","sep128","M",238],
 
-        "fix_bi_dir": true,
         "graph_config": {
-            "arch": "MetaGraphNet",
+            "arch": "BinaryPairReal",
             "in_channels": 256,
-            "node_out": 1,
-            "edge_out": 1,
-            "num_layers": 2,
-            "layer_type": "tree",
-            "repetitions": 4,
-            "use_repetition_res": true,
-            "encode_type": "tree",
-            "force_encoding": true,
-            "avg_edges": true,
-            "rcrhdn_size": 64
+            "bb_out": 3,
+            "rel_out": 1,
+            "layers": ["FC256","FC256"],
+            "layers_bb": ["FC256"]
         }
     }
 }

@@ -1,6 +1,6 @@
 -a validation=eval=True,data_loader=num_workers=0,validation=batch_size=1,data_loader=eval=True,data_loader=batch_size=1,optimize=True
 
-python eval.py -c saved/Mix18_staggerLight_NN/checkpoint-iteration200000.pth.tar -g 0 -n 10000 -a save_json=out_json/Mix18_staggerLight_NN,data_loader=batch_size=1,data_loader=num_workers=0,data_loader=rescale_range=0.52,data_loader=crop_params=
+python eval.py -c saved/Mix18_staggerLight_NN/checkpoint-iteration200000.pth.tar -g 0 -n 10000 -a save_json=out_json/Mix18_staggerLight_NN,data_loader=batch_size=1,data_loader=num_workers=0,data_loader=rescale_range=0.52,data_loader=crop_params=,validation=rescale_range=0.52,validation=crop_params=
 
 
 
@@ -34,3 +34,17 @@ Step sch, #40,000
 
 step only 30000
 1,fe,gru,lrn1,avgE,rr       0.94,0.88
+
+
+
+ File "train.py", line 113, in <module>
+    main(config, args.resume)
+  File "train.py", line 65, in main
+    trainer.train()
+  File "/home/ubuntu/brian/pairing/base/base_trainer.py", line 159, in train
+    result = self._train_iteration(self.iteration)
+  File "/home/ubuntu/brian/pairing/trainer/graph_pair_trainer.py", line 176, in _train_iteration
+    losses, run_log = self.run(thisInstance,useGT,threshIntur)
+  File "/home/ubuntu/brian/pairing/trainer/graph_pair_trainer.py", line 1052, in run
+    nn_loss_final = self.loss['nnFinal'](bbPredNN_use,alignedNN_use)
+KeyError: 'nnFinal'
