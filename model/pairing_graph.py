@@ -397,7 +397,8 @@ class PairingGraph(BaseModel):
                 classes = torch.where(classes==0,neg,pos)
                 if self.detector.predNumNeighbors:
                     nns = gtNNs.float()[0,:,None]
-                    nns += torch.rand_like(nns)/1.5
+                    #nns += torch.rand_like(nns)/1.5
+                    nns += (2*torch.rand_like(nns)-1)
                     useBBs = torch.cat((useBBs,nns,classes),dim=1)
                 else:
                     useBBs = torch.cat((useBBs,classes),dim=1)
