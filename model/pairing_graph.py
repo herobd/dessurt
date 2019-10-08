@@ -305,7 +305,10 @@ class PairingGraph(BaseModel):
         if self.relationshipProposal=='feature_nn':
             self.include_bb_conf=True
             #num_classes = config['num_class']
-            num_bb_feat = config['graph_config']['bb_out']
+            if 'bb_out' in config['graph_config']:
+                num_bb_feat = config['graph_config']['bb_out']
+            elif 'node_out' in config['graph_config']:
+                num_bb_feat = config['graph_config']['node_out']
             self.rel_prop_nn = nn.Sequential(
                                 nn.Linear(26+2*num_bb_feat,64),
                                 nn.Dropout(0.25),
