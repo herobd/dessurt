@@ -51,19 +51,20 @@
     "loss_params": {
         "box": {
             "ignore_thresh": 0.5,
-            "bad_conf_weight": 20.0
+            "bad_conf_weight": 20.0,
+            "multiclass":true
         }
     },
     "loss_weights":{"box":1.0},
     "metrics": [],
     "trainer": {
         "class": "BoxDetectTrainer",
-        "iterations": 250000,
+        "iterations": 200000,
         "save_dir": "saved/",
-        "val_step": 10000,
-        "save_step": 50000,
-        "save_step_minor": 500,
-        "log_step": 500,
+        "val_step": 5000,
+        "save_step": 25000,
+        "save_step_minor": 250,
+        "log_step": 250,
         "verbosity": 1,
         "monitor": "loss",
         "monitor_mode": "none",

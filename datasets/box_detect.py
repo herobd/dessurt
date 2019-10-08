@@ -32,6 +32,11 @@ def collate(batch):
     bb_sizes=[]
     bb_dim=None
     line_dim=None
+    if len(batch)==1:
+        pairs = batch[0]['pairs']
+    else:
+        pairs = None
+    
     for b in batch:
         if b is None:
             continue
@@ -101,17 +106,20 @@ def collate(batch):
 
     if largest_bb_count != 0:
         bbs = torch.zeros(batch_size, largest_bb_count, bb_dim)
+        numNeighbors = torch.zeros(batch_size, largest_bb_count)
+        for i, b in enumerate(batch):
+            gt = b['bb_gt']
+            if bb_sizes[i] == 0:
+                continue
+            bbs[i, :bb_sizes[i]] = gt
+            numNeighbors[i, :bb_sizes[i]] = b['num_neighbors']
     else:
         bbs=None
-    for i, b in enumerate(batch):
-        gt = b['bb_gt']
-        if bb_sizes[i] == 0:
-            continue
-        bbs[i, :bb_sizes[i]] = gt
+        numNeighbors=None
 
     line_labels = {}
     for name,count in largest_line_label.items():
-        if count != 0:
+        if count > 0:
             line_labels[name] = torch.zeros(batch_size, count, line_dim)
         else:
             line_labels[name]=None
@@ -124,7 +132,7 @@ def collate(batch):
             line_labels[name][i, :line_label_sizes[name][i]] = gt
     point_labels = {}
     for name,count in largest_point_label.items():
-        if count != 0:
+        if count > 0:
             point_labels[name] = torch.zeros(batch_size, count, 2)
         else:
             point_labels[name]=None
@@ -144,10 +152,12 @@ def collate(batch):
     else:
         pixel_gt = None
 
+
     ##print('collate: '+str(timeit.default_timer()-tic))
     return {
         'img': imgs,
         'bb_gt': bbs,
+        'num_neighbors':numNeighbors,
         "bb_sizes": bb_sizes,
         'line_gt': line_labels,
         "line_label_sizes": line_label_sizes,
@@ -155,7 +165,8 @@ def collate(batch):
         "point_label_sizes": point_label_sizes,
         'pixel_gt': pixel_gt,
         "imgName": imageNames,
-        "scale": scales
+        "scale": scales,
+        'pairs': pairs #this is only used to save a new json
     }
 
 
@@ -172,19 +183,13 @@ class BoxDetectDataset(torch.utils.data.Dataset):
         #    self.augmentation_params=None
         self.rotate = config['rotation'] if 'rotation' in config else True
         #patchSize=config['patch_size']
-        if 'crop_params' in config:
+        if 'crop_params' in config and config['crop_params']:
             self.transform = CropBoxTransform(config['crop_params'],self.rotate)
         else:
             self.transform = None
         self.rescale_range = config['rescale_range']
-        if self.rescale_range[0]==450:
-            self.rescale_range[0]=0.2
-        elif self.rescale_range[0]>1.0:
-            self.rescale_range[0]=0.27
-        if self.rescale_range[1]==800:
-            self.rescale_range[1]=0.33
-        elif self.rescale_range[1]>1.0:
-            self.rescale_range[1]=0.27
+        if type(self.rescale_range) is float or type(self.rescale_range) is int:
+            self.rescale_range = [self.rescale_range,self.rescale_range]
         if 'cache_resized_images' in config:
             self.cache_resized = config['cache_resized_images']
             if self.cache_resized:
@@ -197,6 +202,14 @@ class BoxDetectDataset(torch.utils.data.Dataset):
         self.max_dim_thresh = config['max_dim_thresh'] if 'max_dim_thresh' in config else 2700
         self.color = config['color'] if 'color' in config else True
 
+        if 'random_image_aug' in config and config['random_image_aug'] is not None:
+            self.useRandomAugProb = config['random_image_aug'] if type(config['random_image_aug']) is float else 0.05
+            self.randomImageTypes = config['random_image_types'] if 'random_image_types' in config else ['blank','uniform','gaussian']
+        else:
+            self.useRandomAugProb = None
+
+        self.coordConv = config['coord_conv'] if 'coord_conv' in config else False
+
 
 
 
@@ -206,6 +219,8 @@ class BoxDetectDataset(torch.utils.data.Dataset):
     def __getitem__(self,index):
         return self.getitem(index)
     def getitem(self,index,scaleP=None,cropPoint=None):
+        if self.useRandomAugProb is not None and np.random.rand()<self.useRandomAugProb and scaleP is None and cropPoint is None:
+            return self.getRandomImage()
         ##ticFull=timeit.default_timer()
         imagePath = self.images[index]['imagePath']
         imageName = self.images[index]['imageName']
@@ -254,13 +269,22 @@ class BoxDetectDataset(torch.utils.data.Dataset):
         ##print('resize: {}  [{}, {}]'.format(timeit.default_timer()-tic,np_img.shape[0],np_img.shape[1]))
         
 
-        bbs,line_gts,point_gts,pixel_gt,numClasses = self.parseAnn(np_img,annotations,s,imagePath)
+        bbs,line_gts,point_gts,pixel_gt,numClasses,numNeighbors,pairs = self.parseAnn(np_img,annotations,s,imagePath)
+
+        if self.coordConv: #add absolute position information
+            xs = 255*np.arange(np_img.shape[1])/(np_img.shape[1]) 
+            xs = np.repeat(xs[None,:,None],np_img.shape[0], axis=0)
+            ys = 255*np.arange(np_img.shape[0])/(np_img.shape[0]) 
+            ys = np.repeat(ys[:,None,None],np_img.shape[1], axis=1)
+            np_img = np.concatenate((np_img,xs.astype(np_img.dtype),ys.astype(np_img.dtype)), axis=2)
 
         ##ticTr=timeit.default_timer()
         if self.transform is not None:
+            pairs = None
             out, cropPoint = self.transform({
                 "img": np_img,
                 "bb_gt": bbs,
+                "bb_auxs": numNeighbors,
                 "line_gt": line_gts,
                 "point_gt": point_gts,
                 "pixel_gt": pixel_gt,
@@ -268,6 +292,7 @@ class BoxDetectDataset(torch.utils.data.Dataset):
             }, cropPoint)
             np_img = out['img']
             bbs = out['bb_gt']
+            numNeighbors = out['bb_auxs']
             #if 'table_points' in out['point_gt']:
             #    table_points = out['point_gt']['table_points']
             #else:
@@ -279,11 +304,11 @@ class BoxDetectDataset(torch.utils.data.Dataset):
             line_gts = out['line_gt']
 
             ##tic=timeit.default_timer()
-            if np_img.shape[2]==3:
-                np_img = augmentation.apply_random_color_rotation(np_img)
-                np_img = augmentation.apply_tensmeyer_brightness(np_img)
+            if self.color:
+                np_img[:,:,:3] = augmentation.apply_random_color_rotation(np_img[:,:,:3])
+                np_img[:,:,:3] = augmentation.apply_tensmeyer_brightness(np_img[:,:,:3])
             else:
-                np_img = augmentation.apply_tensmeyer_brightness(np_img)
+                np_img[:,:,0:1] = augmentation.apply_tensmeyer_brightness(np_img[:,:,0:1])
             ##print('augmentation: {}'.format(timeit.default_timer()-tic))
         ##print('transfrm: {}  [{}, {}]'.format(timeit.default_timer()-ticTr,org_img.shape[0],org_img.shape[1]))
 
@@ -307,7 +332,11 @@ class BoxDetectDataset(torch.utils.data.Dataset):
         #import pdb; pdb.set_trace()
         #bbs = None if bbs.shape[1] == 0 else torch.from_numpy(bbs)
         bbs = convertBBs(bbs,self.rotate,numClasses)
-        #start_of_line = convertLines(start_of_line,numClasses)
+        if len(numNeighbors)>0:
+            numNeighbors = torch.tensor(numNeighbors)[None,:] #add batch dim
+        else:
+            numNeighbors=None
+            #start_of_line = convertLines(start_of_line,numClasses)
         #end_of_line = convertLines(end_of_line,numClasses)
         for name in point_gts:
             #if table_points is not None:
@@ -320,12 +349,14 @@ class BoxDetectDataset(torch.utils.data.Dataset):
             return {
                 "img": img,
                 "bb_gt": bbs,
+                "num_neighbors": numNeighbors,
                 "line_gt": line_gts,
                 "point_gt": point_gts,
                 "pixel_gt": pixel_gt,
                 "imgName": imageName,
                 "scale": s,
-                "cropPoint": cropPoint
+                "cropPoint": cropPoint,
+                "pairs": pairs
                 }
         else:
             if 'boxes' not in self.only_types or not self.only_types['boxes']:
@@ -377,16 +408,53 @@ class BoxDetectDataset(torch.utils.data.Dataset):
             return {
                 "img": img,
                 "bb_gt": bbs,
+                "num_neighbors": numNeighbors,
                 "line_gt": line_gt,
                 "point_gt": point_gt,
                 "pixel_gt": pixel_gtR,
                 "imgName": imageName,
                 "scale": s,
-                "cropPoint": cropPoint
+                "cropPoint": cropPoint,
+                "pairs": pairs,
                 }
 
 
-
+    #this is a funny kind of augmentation where random images are show 
+    #simply to improve generalization. Also may help decrease false positives?
+    def getRandomImage(self):
+        assert(self.transform is not None)
+        w = self.transform.crop_size[1]
+        h= self.transform.crop_size[0]
+        if self.color:
+            shape = (3,h,w)
+        else:
+            shape = (1,h,w)
+        typ = np.random.choice(self.randomImageTypes)
+        center=np.random.uniform(-1,1)
+        if typ=='blank': #blank
+            image = torch.FloatTensor(*shape).fill_(center)
+        elif typ=='uniform': #uniform random
+            maxRange = 1-abs(center)
+            second = np.random.uniform(0,maxRange)
+            image = torch.FloatTensor(*shape).uniform_(center-maxRange,center+maxRange)
+        elif typ=='gaussian': #guassian
+            maxRange = 1-abs(center)
+            second = np.random.uniform(0,maxRange)
+            image = torch.FloatTensor(*shape).normal_(center,maxRange)
+        image = image[None,:,:]#add batch channel
+    
+        return {
+            "img": image,
+            "bb_gt": None,
+            "num_neighbors": None,
+            "line_gt": {},
+            "point_gt": {},
+            "pixel_gt": None,
+            "imgName": 'rand_'+typ,
+            "scale": 1.0,
+            "cropPoint": (0,0),
+            "pairs": None,
+            }
 
     def cluster(self,k,sample_count,outPath):
         def makePointsAndRects(h,w,r=None):

@@ -53,9 +53,6 @@ class BoxDetectTrainer(BaseTrainer):
         #self.log_step = int(np.sqrt(self.batch_size))
         #lr schedule from "Attention is all you need"
         #base_lr=config['optimizer']['lr']
-        warmup_steps = config['warmup_steps'] if 'warmup_steps' in config else 1000
-        lr_lambda = lambda step_num: min((step_num+1)**-0.3, (step_num+1)*warmup_steps**-1.3)
-        self.lr_schedule = torch.optim.lr_scheduler.LambdaLR(self.optimizer,lr_lambda)
 
         self.thresh_conf = config['thresh_conf'] if 'thresh_conf' in config else 0.92
         self.thresh_intersect = config['thresh_intersect'] if 'thresh_intersect' in config else 0.4
@@ -68,6 +65,10 @@ class BoxDetectTrainer(BaseTrainer):
         else:
             targetBoxes = None
             targetBoxes_sizes = []
+        if 'num_neighbors' in instance:
+            target_num_neighbors = instance['num_neighbors']
+        else:
+            target_num_neighbors = None
         if 'line_gt' in instance:
             targetLines = instance['line_gt']
             targetLines_sizes = instance['line_label_sizes']
@@ -106,7 +107,9 @@ class BoxDetectTrainer(BaseTrainer):
             targetPoints=sendToGPU(targetPoints)
             if targetPixels is not None:
                 targetPixels=targetPixels.to(self.gpu)
-        return data, targetBoxes, targetBoxes_sizes, targetLines, targetLines_sizes, targetPoints, targetPoints_sizes, targetPixels
+            if target_num_neighbors is not None:
+                target_num_neighbors=target_num_neighbors.to(self.gpu)
+        return data, targetBoxes, targetBoxes_sizes, targetLines, targetLines_sizes, targetPoints, targetPoints_sizes, targetPixels, target_num_neighbors
 
     def _eval_metrics(self, typ,name,output, target):
         if len(self.metrics[typ])>0:
@@ -142,7 +145,6 @@ class BoxDetectTrainer(BaseTrainer):
         self.model.train()
         #self.model.eval()
         #print('WARNING EVAL')
-        self.lr_schedule.step()
 
         ##tic=timeit.default_timer()
         batch_idx = (iteration-1) % len(self.data_loader)
@@ -151,6 +153,8 @@ class BoxDetectTrainer(BaseTrainer):
         except StopIteration:
             self.data_loader_iter = iter(self.data_loader)
             thisInstance = self.data_loader_iter.next()
+        if not self.model.predNumNeighbors:
+            del thisInstance['num_neighbors']
         ##toc=timeit.default_timer()
         ##print('data: '+str(toc-tic))
         
@@ -172,11 +176,11 @@ class BoxDetectTrainer(BaseTrainer):
         #    _,lossC=FormsBoxDetect_printer(None,thisInstance,self.model,self.gpu,self._eval_metrics,self.checkpoint_dir,self.iteration,self.loss['box'])
         #    this_loss, position_loss, conf_loss, class_loss, recall, precision = lossC
         #else:
-        data, targetBoxes, targetBoxes_sizes, targetLines, targetLines_sizes, targetPoints, targetPoints_sizes, targetPixels = self._to_tensor(thisInstance)
+        data, targetBoxes, targetBoxes_sizes, targetLines, targetLines_sizes, targetPoints, targetPoints_sizes, targetPixels,target_num_neighbors = self._to_tensor(thisInstance)
         outputBoxes, outputOffsets, outputLines, outputOffsetLines, outputPoints, outputPixels = self.model(data)
 
         if 'box' in self.loss:
-            this_loss, position_loss, conf_loss, class_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,targetBoxes_sizes)
+            this_loss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,targetBoxes_sizes,target_num_neighbors)
 
             this_loss*=self.loss_weight['box']
             loss+=this_loss
@@ -257,6 +261,7 @@ class BoxDetectTrainer(BaseTrainer):
             'position_loss':position_loss,
             'conf_loss':conf_loss,
             'class_loss':class_loss,
+            'num_neighbor_loss':nn_loss,
             #'minGrad':minGrad,
             #'maxGrad':maxGrad,
             #'cor_conf_loss':cor_conf_loss,
@@ -295,17 +300,27 @@ class BoxDetectTrainer(BaseTrainer):
         total_position_loss =0
         total_conf_loss =0
         tota_class_loss =0
+        tota_num_neighbor_loss =0
         total_val_metrics = np.zeros(len(self.metrics))
         losses={}
-        mAP = np.zeros(self.model.numBBTypes)
-        mRecall = np.zeros(self.model.numBBTypes)
-        mPrecision = np.zeros(self.model.numBBTypes)
+        mAP = 0
+        mAP_count = 0
+        numClasses = self.model.numBBTypes
+        if 'no_blanks' in self.config['validation'] and not self.config['data_loader']['no_blanks']:
+            numClasses-=1
+        if self.model.predNumNeighbors:
+            extraPreds=1
+        else:
+            extraPreds=0
+        mRecall = np.zeros(numClasses)
+        mPrecision = np.zeros(numClasses)
+
         with torch.no_grad():
             losses = defaultdict(lambda: 0)
             for batch_idx, instance in enumerate(self.valid_data_loader):
-                #if batch_idx>10:
-                #    break
-                data, targetBoxes, targetBoxes_sizes, targetLines, targetLines_sizes, targetPoints, targetPoints_sizes, targetPixels = self._to_tensor(instance)
+                if not self.model.predNumNeighbors:
+                    del instance['num_neighbors']
+                data, targetBoxes, targetBoxes_sizes, targetLines, targetLines_sizes, targetPoints, targetPoints_sizes, targetPixels,target_num_neighbors = self._to_tensor(instance)
                 batchSize = data.size(0)
                 #print('data: {}'.format(data.size()))
                 outputBoxes,outputOffsets, outputLines, outputOffsetsLines, outputPoints, outputPixels = self.model(data)
@@ -314,11 +329,12 @@ class BoxDetectTrainer(BaseTrainer):
                 index=0
                 
                 if 'box' in self.loss:
-                    this_loss, position_loss, conf_loss, class_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,targetBoxes_sizes)
+                    this_loss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,targetBoxes_sizes,target_num_neighbors)
                     loss+=this_loss*self.loss_weight['box']
                     total_position_loss+=position_loss
                     total_conf_loss+=conf_loss
                     tota_class_loss+=class_loss
+                    tota_num_neighbor_loss+=nn_loss
                     losses['val_box_loss']+=this_loss.item()
                 
                     threshConf = max(self.thresh_conf*outputBoxes[:,:,0].max().item(),0.5)
@@ -329,15 +345,22 @@ class BoxDetectTrainer(BaseTrainer):
                     if targetBoxes is not None:
                         targetBoxes = targetBoxes.cpu()
                     for b in range(batchSize):
+                        #if self.model.predNumNeighbors:
+                        #    useOutputBoxes=torch.cat((outputBoxes[b][:,0:6],outputBoxes[b][:,7:]),dim=1)
+                        #else:
+                        #    useOutputBoxes=outputBoxes[b]
                         if targetBoxes is not None:
                             target_for_b = targetBoxes[b,:targetBoxes_sizes[b],:]
                         else:
                             target_for_b = torch.empty(0)
+
                         if self.model.rotation:
-                            ap_5, prec_5, recall_5 =AP_dist(target_for_b,outputBoxes[b],0.9,self.model.numBBTypes)
+                            ap_5, prec_5, recall_5 =AP_dist(target_for_b,outputBoxes[b],0.9,numClasses,beforeCls=extraPreds)
                         else:
-                            ap_5, prec_5, recall_5 =AP_iou(target_for_b,outputBoxes[b],0.5,self.model.numBBTypes)
-                        mAP += np.array(ap_5,dtype=np.float)#/len(outputBoxes)
+                            ap_5, prec_5, recall_5 =AP_iou(target_for_b,outputBoxes[b],0.5,numClasses,beforeCls=extraPreds)
+                        if ap_5 is not None:
+                            mAP+=ap_5
+                            mAP_count+=1
                         mRecall += np.array(recall_5,dtype=np.float)#/len(outputBoxes)
                         mPrecision += np.array(prec_5,dtype=np.float)#/len(outputBoxes)
                 index=0
@@ -377,14 +400,18 @@ class BoxDetectTrainer(BaseTrainer):
                 #total_val_metrics += self._eval_metrics(output, target)
         for name in losses:
             losses[name]/=len(self.valid_data_loader)
+        if mAP_count==0:
+            mAP_count=1
         return {
             'val_loss': total_val_loss / len(self.valid_data_loader),
             'val_metrics': (total_val_metrics / len(self.valid_data_loader)).tolist(),
             'val_recall':(mRecall/(batchSize*len(self.valid_data_loader))).tolist(),
             'val_precision':(mPrecision/(batchSize*len(self.valid_data_loader))).tolist(),
-            'val_mAP':(mAP/(batchSize*len(self.valid_data_loader))).tolist(),
+            'val_Fm':(mPrecision.mean()+mRecall.mean())/(2*batchSize*len(self.valid_data_loader)),
+            'val_mAP':mAP/mAP_count,
             'val_position_loss':total_position_loss / len(self.valid_data_loader),
             'val_conf_loss':total_conf_loss / len(self.valid_data_loader),
             'val_class_loss':tota_class_loss / len(self.valid_data_loader),
+            'val_num_neighbor_loss':tota_num_neighbor_loss / len(self.valid_data_loader),
             **losses
         }

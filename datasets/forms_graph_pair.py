@@ -7,7 +7,7 @@ import json
 import os
 import math
 from collections import defaultdict, OrderedDict
-from utils.forms_annotations import fixAnnotations, convertBBs, getBBWithPoints, getStartEndGT
+from utils.forms_annotations import fixAnnotations, convertBBs, getBBWithPoints, getStartEndGT, getResponseBBIdList_
 import timeit
 from .graph_pair import GraphPairDataset
 
@@ -41,26 +41,36 @@ class FormsGraphPair(GraphPairDataset):
         else:
             self.swapCircle = False
 
-        self.simple_dataset = config['simple_dataset'] if 'simple_dataset' in config else False
+        self.special_dataset = config['special_dataset'] if 'special_dataset' in config else None
+        if 'simple_dataset' in config and config['simple_dataset']:
+            self.special_dataset='simple'
 
         if images is not None:
             self.images=images
         else:
-            if self.simple_dataset:
-                splitFile = 'simple_train_valid_test_split.json'
+            if self.special_dataset is not None:
+                splitFile = self.special_dataset+'_train_valid_test_split.json'
             else:
                 splitFile = 'train_valid_test_split.json'
             with open(os.path.join(dirPath,splitFile)) as f:
-                #if split=='valid' or split=='validation':
-                #    trainTest='train'
-                #else:
-                #    trainTest=split
-                groupsToUse = json.loads(f.read())[split]
+                readFile = json.loads(f.read())
+                if type(split) is str:
+                    groupsToUse = readFile[split]
+                elif type(split) is list:
+                    groupsToUse = {}
+                    for spstr in split:
+                        newGroups = readFile[spstr]
+                        groupsToUse.update(newGroups)
+                else:
+                    print("Error, unknown split {}".format(split))
+                    exit()
             self.images=[]
             groupNames = list(groupsToUse.keys())
             groupNames.sort()
+            
             for groupName in groupNames:
                 imageNames=groupsToUse[groupName]
+                
                 #print('{} {}'.format(groupName, imageNames))
                 #oneonly=False
                 if groupName in SKIP:
@@ -144,29 +154,22 @@ class FormsGraphPair(GraphPairDataset):
         fixAnnotations(self,annotations)
         bbsToUse=[]
         ids=[]
+        trans={}
         for id,bb in annotations['byId'].items():
             if not self.onlyFormStuff or ('paired' in bb and bb['paired']):
                 bbsToUse.append(bb)
                 ids.append(bb['id'])
+                if 'transcription' in annotations:
+                    trans[bb['id']] = annotations['transcription'][bb['id']]
 
 
         
         bbs = getBBWithPoints(bbsToUse,scale,useBlankClass=(not self.no_blanks),usePairedClass=self.use_paired_class)
         numClasses = bbs.shape[2]-16
-        return bbs,ids,numClasses
+        return bbs,ids,numClasses, trans
 
     def getResponseBBIdList(self,queryId,annotations):
-        responseBBList=[]
-        for pair in annotations['pairs']: #done already +annotations['samePairs']:
-            if queryId in pair:
-                if pair[0]==queryId:
-                    otherId=pair[1]
-                else:
-                    otherId=pair[0]
-                if otherId in annotations['byId'] and (not self.onlyFormStuff or ('paired' in bb and bb['paired'])):
-                    #responseBBList.append(annotations['byId'][otherId])
-                    responseBBList.append(otherId)
-        return responseBBList
+        return getResponseBBIdList_(self,queryId,annotations)
 
 
 def getWidthFromBB(bb):

@@ -30,19 +30,27 @@ def RandomDiffusionDataset_printer(config,instance, model, gpu, metrics, outDir=
 
     
     features, adj, gt, num = __to_tensor(instance,gpu)
-
-    output,_ = model(features,(adj,None),num)
+    if True:
+        output,_ = model((features,adj._indices(),None,None))
+        #print(output[:,0])
+        output=output[:num]
+        gts=gt[:,None,:].expand(num,output.size(1),gt.size(1))
+    else:
+        output,_ = model(features,(adj,None),num)
     if lossFunc is not None:
-        loss = lossFunc(output,gt)
+        loss = lossFunc(output,gts)
         loss = loss.item()
     else:
         loss=0
 
+    acc = ((torch.sigmoid(output[:,-1])>0.5).float()==gt).float().mean().item()
+
     #print(loss)
-    display(instance,torch.sigmoid(output.cpu()))
+    if 'score' not in config:
+        display(instance,torch.sigmoid(output[:,-1].cpu()))
 
     return (
-            {'loss':loss},
+            {'loss':loss, 'acc':acc},
              loss
             )
 

@@ -10,11 +10,16 @@ from datasets.forms_box_detect import FormsBoxDetect
 from datasets import ai2d_box_detect
 from datasets import forms_graph_pair
 from datasets import forms_box_pair
+from datasets import funsd_graph_pair
+from datasets import funsd_box_detect
 from datasets.forms_box_pair import FormsBoxPair
 from datasets.forms_feature_pair import FormsFeaturePair
 from datasets import forms_feature_pair
 from datasets.forms_pair import FormsPair
 from datasets.forms_lf import FormsLF
+from datasets import random_messages
+from datasets import random_diffusion
+from datasets import random_maxpairs
 #from torchvision import datasets, transforms
 from base import BaseDataLoader
 
@@ -66,6 +71,13 @@ def getDataLoader(config,split):
         data_dir = config['data_loader']['data_dir']
         batch_size = config['data_loader']['batch_size']
         valid_batch_size = config['validation']['batch_size'] if 'batch_size' in config['validation'] else batch_size
+
+        #copy info from main dataloader to validation (but don't overwrite)
+        #helps insure same data
+        for k,v in config['data_loader'].items():
+            if k not in config['validation']:
+                config['validation'][k]=v
+
         if 'augmentation_params' in config['data_loader']:
             aug_param = config['data_loader']['augmentation_params']
         else:
@@ -94,6 +106,10 @@ def getDataLoader(config,split):
             return withCollate(FormsBoxPair,forms_box_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='FormsGraphPair':
             return withCollate(forms_graph_pair.FormsGraphPair,forms_graph_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='FUNSDBoxDetect':
+            return withCollate(funsd_box_detect.FUNSDBoxDetect,funsd_box_detect.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='FUNSDGraphPair':
+            return withCollate(funsd_graph_pair.FUNSDGraphPair,funsd_graph_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='FormsFeaturePair':
             return withCollate(FormsFeaturePair,forms_feature_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='FormsPair':
@@ -108,6 +124,18 @@ def getDataLoader(config,split):
                 validData = CancerDataset(data_dir, train=False)
                 validLoader = torch.utils.data.DataLoader(validData, batch_size=batch_size, shuffle=shuffleValid, num_workers=numDataWorkers)
                 return trainLoader, validLoader
+        elif data_set_name=='RandomMessagesDataset':
+            data = random_messages.RandomMessagesDataset(config['data_loader'])
+            dataLoader = torch.utils.data.DataLoader(data,batch_size=batch_size, shuffle=shuffle, num_workers=numDataWorkers,collate_fn=random_messages.collate)
+            return dataLoader,dataLoader
+        elif data_set_name=='RandomDiffusionDataset':
+            data = random_diffusion.RandomDiffusionDataset(config)
+            dataLoader = torch.utils.data.DataLoader(data,batch_size=batch_size, shuffle=shuffle, num_workers=numDataWorkers,collate_fn=random_diffusion.collate)
+            return dataLoader,dataLoader
+        elif data_set_name=='RandomMaxPairsDataset':
+            data = random_maxpairs.RandomMaxPairsDataset(config)
+            dataLoader = torch.utils.data.DataLoader(data,batch_size=batch_size, shuffle=shuffle, num_workers=numDataWorkers,collate_fn=random_maxpairs.collate)
+            return dataLoader,dataLoader
         else:
             print('Error, no dataloader has no set for {}'.format(data_set_name))
             exit()
@@ -122,9 +150,14 @@ def basic(setObj,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers
         validLoader = torch.utils.data.DataLoader(validData, batch_size=valid_batch_size, shuffle=shuffleValid, num_workers=numDataWorkers)
         return trainLoader, validLoader
     elif split=='test':
-        testData = setObj(dirPath=data_dir, split='test', config=config['data_loader'])
+        testData = setObj(dirPath=data_dir, split='test', config=config['validation'])
         testLoader = torch.utils.data.DataLoader(testData, batch_size=valid_batch_size, shuffle=False, num_workers=numDataWorkers)
-        return testLoader, None
+    elif split=='merge' or split=='merged' or split=='train-valid' or split=='train+valid':
+        trainData = setObj(dirPath=data_dir, split=['train','valid'], config=config['data_loader'])
+        trainLoader = torch.utils.data.DataLoader(trainData, batch_size=batch_size, shuffle=shuffle, num_workers=numDataWorkers)
+        validData = setObj(dirPath=data_dir, split=['train','valid'], config=config['validation'])
+        validLoader = torch.utils.data.DataLoader(validData, batch_size=valid_batch_size, shuffle=shuffleValid, num_workers=numDataWorkers)
+        return trainLoader, validLoader
 def withCollate(setObj,collateFunc,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config):
     if split=='train':
         trainData = setObj(dirPath=data_dir, split='train', config=config['data_loader'])
@@ -133,8 +166,14 @@ def withCollate(setObj,collateFunc,batch_size,valid_batch_size,shuffle,shuffleVa
         validLoader = torch.utils.data.DataLoader(validData, batch_size=valid_batch_size, shuffle=shuffleValid, num_workers=numDataWorkers, collate_fn=collateFunc)
         return trainLoader, validLoader
     elif split=='test':
-        testData = setObj(dirPath=data_dir, split='test', config=config['data_loader'])
+        testData = setObj(dirPath=data_dir, split='test', config=config['validation'])
         testLoader = torch.utils.data.DataLoader(testData, batch_size=valid_batch_size, shuffle=False, num_workers=numDataWorkers, collate_fn=collateFunc)
         return testLoader, None
+    elif split=='merge' or split=='merged' or split=='train-valid' or split=='train+valid':
+        trainData = setObj(dirPath=data_dir, split=['train','valid'], config=config['data_loader'])
+        trainLoader = torch.utils.data.DataLoader(trainData, batch_size=batch_size, shuffle=shuffle, num_workers=numDataWorkers, collate_fn=collateFunc)
+        validData = setObj(dirPath=data_dir, split=['train','valid'], config=config['validation'])
+        validLoader = torch.utils.data.DataLoader(validData, batch_size=valid_batch_size, shuffle=shuffleValid, num_workers=numDataWorkers, collate_fn=collateFunc)
+        return trainLoader, validLoader
     
 

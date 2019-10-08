@@ -10,7 +10,7 @@ from utils.crop_transform import CropBoxTransform
 from utils import augmentation
 from collections import defaultdict, OrderedDict
 from .box_detect import BoxDetectDataset, collate
-from utils.forms_annotations import fixAnnotations, convertBBs, getBBWithPoints, getStartEndGT
+from utils.forms_annotations import fixAnnotations, convertBBs, getBBWithPoints, getStartEndGT, getResponseBBIdList_
 import timeit
 
 import cv2
@@ -107,13 +107,15 @@ class FormsBoxDetect(BoxDetectDataset):
         else:
             self.swapCircle = False
 
-        self.simple_dataset = config['simple_dataset'] if 'simple_dataset' in config else False
+        self.special_dataset = config['special_dataset'] if 'special_dataset' in config else None
+        if 'simple_dataset' in config and config['simple_dataset']:
+            self.special_dataset='simple'
 
         if images is not None:
             self.images=images
         else:
-            if self.simple_dataset:
-                splitFile = 'simple_train_valid_test_split.json'
+            if self.special_dataset is not None:
+                splitFile = self.special_dataset+'_train_valid_test_split.json'
             else:
                 splitFile = 'train_valid_test_split.json'
             with open(os.path.join(dirPath,splitFile)) as f:
@@ -121,7 +123,17 @@ class FormsBoxDetect(BoxDetectDataset):
                 #    trainTest='train'
                 #else:
                 #    trainTest=split
-                groupsToUse = json.loads(f.read())[split]
+                readFile = json.loads(f.read())
+                if type(split) is str:
+                    groupsToUse = readFile[split]
+                elif type(split) is list:
+                    groupsToUse = {}
+                    for spstr in split:
+                        newGroups = readFile[spstr]
+                        groupsToUse.update(newGroups)
+                else:
+                    print("Error, unknown split {}".format(split))
+                    exit()
             self.images=[]
             groupNames = list(groupsToUse.keys())
             groupNames.sort()
@@ -196,6 +208,7 @@ class FormsBoxDetect(BoxDetectDataset):
             self.no_print_fields = False
         self.no_graphics =  config['no_graphics'] if 'no_graphics' in config else False
         self.only_opposite_pairs = config['only_opposite_pairs'] if 'only_opposite_pairs' in config else False
+        self.onlyFormStuff = False
         self.errors=[]
 
 
@@ -203,22 +216,24 @@ class FormsBoxDetect(BoxDetectDataset):
         fieldBBs = annotations['fieldBBs']
         fixAnnotations(self,annotations)
 
-        bbs = getBBWithPoints(annotations['byId'].values(),s,useBlankClass=(not self.no_blanks),usePairedClass=self.use_paired_class)
+        full_bbs=annotations['byId'].values()
+
+        bbs = getBBWithPoints(full_bbs,s,useBlankClass=(not self.no_blanks),usePairedClass=self.use_paired_class)
         numClasses = bbs.shape[2]-16
         #field_bbs = getBBWithPoints(annotations['fieldBBs'],s)
         #bbs = np.concatenate([text_bbs,field_bbs],axis=1) #has batch dim
-        start_of_line, end_of_line = getStartEndGT(annotations['byId'].values(),s)
+        start_of_line, end_of_line = getStartEndGT(full_bbs,s)
         try:
             table_points, table_pixels = self.getTables(
                     fieldBBs,
                     s, 
                     np_img.shape[0], 
                     np_img.shape[1],
-                    annotations['samePairs'])
+                    annotations['pairs'])
         except Exception as inst:
+            table_points=None
+            table_pixels=None
             if imageName not in self.errors:
-                table_points=None
-                table_pixels=None
                 print(inst)
                 print('Table error on: '+imageName)
                 self.errors.append(imageName)
@@ -234,7 +249,28 @@ class FormsBoxDetect(BoxDetectDataset):
         point_gts = {
                         "table_points": table_points
                         }
-        return bbs,line_gts,point_gts,pixel_gt,numClasses
+        
+        numNeighbors=defaultdict(lambda:0)
+        for id,bb in annotations['byId'].items():
+            if not self.onlyFormStuff or ('paired' in bb and bb['paired']):
+                responseIds = getResponseBBIdList_(self,id,annotations)
+                for id2,bb2 in annotations['byId'].items():
+                    if id!=id2:
+                        pair = id2 in responseIds
+                        if pair:
+                            numNeighbors[id]+=1
+        numNeighbors = [numNeighbors[bb['id']] for bb in full_bbs]
+        #if self.pred_neighbors:
+        #    bbs = torch.cat(bbs,
+        idToIndex={}
+        for i,bb in enumerate(full_bbs):
+            idToIndex[bb['id']]=i
+        pairs=[ (idToIndex[id1],idToIndex[id2]) for id1,id2 in annotations['pairs'] ]
+            
+
+
+
+        return bbs,line_gts,point_gts,pixel_gt,numClasses,numNeighbors, pairs
 
 
 
