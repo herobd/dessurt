@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 import timeit
 import warnings
-import random
+import random, math
 
 def perform_crop(img, gt, crop):
     #csX,csY = crop['crop_size']
@@ -19,7 +19,7 @@ def perform_crop(img, gt, crop):
     return scaled_gt_img, scaled_gt
 
 
-def generate_random_crop(img, pixel_gt, line_gts, point_gts, params, bb_gt=None, bb_ids=None, query_bb=None,cropPoint=None):
+def generate_random_crop(img, pixel_gt, line_gts, point_gts, params, bb_gt=None, bb_auxs=None, query_bb=None,cropPoint=None):
     
     contains_label = np.random.random() < params['prob_label'] if 'prob_label' in params else None
     cs = params['crop_size']
@@ -262,12 +262,12 @@ def generate_random_crop(img, pixel_gt, line_gts, point_gts, params, bb_gt=None,
                         bb_gt[...,4:6] += mv_right
                         #bb_gt = bb_gt[np.where(bb_gt_candidate)]
 
-                        if bb_ids is not None:
-                            bb_ids = [id for ind,id in enumerate(bb_ids) if  bb_gt_candidate[0,ind]]
+                        if bb_auxs is not None:
+                            bb_auxs = [id for ind,id in enumerate(bb_auxs) if  bb_gt_candidate[0,ind]]
                 if point_gts is not None:
                     for name in point_gt_match:
                         point_gt_match[name] = np.where(point_gt_match[name]!=0)
-                return crop, cropped_gt_img, cropped_pixel_gt, line_gt_match, point_gt_match, bb_gt, bb_ids, (dim1,dim0)
+                return crop, cropped_gt_img, cropped_pixel_gt, line_gt_match, point_gt_match, bb_gt, bb_auxs, (dim1,dim0)
 
         cnt += 1
 
@@ -348,32 +348,67 @@ class CropBoxTransform(object):
         if type(self.crop_size) is int:
             self.crop_size = (self.crop_size,self.crop_size)
         self.random_crop_params = crop_params
-        self.rotate=rotate
         if 'pad' in crop_params:
             pad_by = crop_params['pad']
         else:
             pad_by = min(self.crop_size)//2
         self.pad_params = ((pad_by,pad_by),(pad_by,pad_by),(0,0))
         #self.all_bbs=all_bbs
-        if rotate:
+        if rotate or 'rot_degree_std_dev' in crop_params:
+            self.rotate=True
             if 'rot_degree_std_dev' in crop_params:
                 self.degree_std_dev = crop_params['rot_degree_std_dev']
             else:
                 self.degree_std_dev = 1
+        else:
+            self.rotate=False
+            self.degree_std_dev = 0 
+        self.flip_horz = crop_params['flip_horz'] if 'flip_horz' in crop_params else False
+        self.flip_vert = crop_params['flip_vert'] if 'flip_vert' in crop_params else False
+
 
     def __call__(self, sample,cropPoint=None):
         org_img = sample['img']
         bb_gt = sample['bb_gt']
-        bb_ids = sample['bb_ids'] if 'bb_ids' in sample else None
+        aux_str = 'bb_auxs'
+        if 'bb_ids' in sample:
+            aux_str = 'bb_ids'
+        bb_auxs = sample[aux_str] if aux_str in sample else None
         line_gts = sample['line_gt'] if 'line_gt' in sample else None
         point_gts = sample['point_gt'] if 'point_gt' in sample else None
         pixel_gt = sample['pixel_gt'] if 'pixel_gt' in sample else None
         query_bb = sample['query_bb'] if 'query_bb' in sample else None
 
         #rotation
-        if self.rotate:
+        if self.rotate or self.flip_horz or self.flip_vert:
             amount = np.random.normal(0,self.degree_std_dev)
-            M = cv2.getRotationMatrix2D((org_img.shape[1]/2,org_img.shape[0]/2),amount,1)
+            amount = math.pi*amount/180
+            #M = cv2.getRotationMatrix2D((org_img.shape[1]/2,org_img.shape[0]/2),amount,1)
+            rot = np.array([  [math.cos(amount), -math.sin(amount), 0],
+                            [math.sin(amount), math.cos(amount), 0],
+                            [0,0,1] ])
+            center = np.array([ [1,0,-org_img.shape[1]/2],
+                                [0,1,-org_img.shape[0]/2],
+                                [0,0,1] ])
+            #center = np.array([[1,0,-org_img.shape[1]/2],[0,1,-org_img.shape[0]/2]])
+            uncenter = np.array([   [1,0,org_img.shape[1]/2],
+                                    [0,1,org_img.shape[0]/2],
+                                    [0,0,1] ])
+            M = rot.dot(center)
+            #M=center
+            if self.flip_horz and np.random.uniform()<0.33:
+                flipH = np.array([  [-1,0,0],
+                                    [0,1,0],
+                                    [0,0,1] ])
+                M = flipH.dot(M)
+            if self.flip_vert and np.random.uniform()<0.33:
+                #M[0:2,1]*=-1
+                flipV = np.array([  [1,0,0],
+                                    [0,-1,0],
+                                    [0,0,1] ])
+                M = flipV.dot(M)
+            M = uncenter.dot(M)
+            M=M[:2]
             #rotate image
             org_img = cv2.warpAffine(org_img,M,(org_img.shape[1],org_img.shape[0]))
             if len(org_img.shape)==2:
@@ -414,12 +449,12 @@ class CropBoxTransform(object):
         #page_boundaries =
         pad_params = self.pad_params
         if org_img.shape[0]+pad_params[0][0]+pad_params[0][1] < self.crop_size[0]+1:
-            diff = self.crop_size[0]+1-(org_img.shape[0]+pad_params[0][0]+pad_params[0][1])
+            diff = self.crop_size[0]+1-(org_img.shape[0])#+pad_params[0][0]+pad_params[0][1])
             pad_byT = diff//2
             pad_byB = diff//2 + diff%2
             pad_params = ((pad_byT,pad_byB),)+pad_params[1:]
         if org_img.shape[1]+pad_params[1][0]+pad_params[1][1] < self.crop_size[1]+1:
-            diff = self.crop_size[1]+1-(org_img.shape[1]+pad_params[1][0]+pad_params[1][1])
+            diff = self.crop_size[1]+1-(org_img.shape[1])#+pad_params[1][0]+pad_params[1][1])
             pad_byL = diff//2
             pad_byR = diff//2 + diff%2
             pad_params = (pad_params[0],(pad_byL,pad_byR),pad_params[2])
@@ -483,7 +518,7 @@ class CropBoxTransform(object):
                     gt[:,:,3] = gt[:,:,3] + pad_params[0][0]
 
 
-        crop_params, org_img, pixel_gt, line_gt_match, point_gt_match, new_bb_gt, new_bb_ids, cropPoint = generate_random_crop(org_img, pixel_gt, line_gts, point_gts, self.random_crop_params, bb_gt=bb_gt, bb_ids=bb_ids, query_bb=query_bb, cropPoint=cropPoint)
+        crop_params, org_img, pixel_gt, line_gt_match, point_gt_match, new_bb_gt, new_bb_auxs, cropPoint = generate_random_crop(org_img, pixel_gt, line_gts, point_gts, self.random_crop_params, bb_gt=bb_gt, bb_auxs=bb_auxs, query_bb=query_bb, cropPoint=cropPoint)
         #print(crop_params)
         #print(gt_match)
         
@@ -526,7 +561,7 @@ class CropBoxTransform(object):
         return ({
             "img": org_img,
             "bb_gt": new_bb_gt,
-            "bb_ids": new_bb_ids,
+            aux_str: new_bb_auxs,
             "line_gt": new_line_gts,
             "point_gt": new_point_gts,
             "pixel_gt": pixel_gt

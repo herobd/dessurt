@@ -10,14 +10,15 @@ import math
 from utils.util import get_image_size
 from .box_detect import BoxDetectDataset, collate
 import random
-
+from collections import defaultdict
+from .ai2d_graph_pair import getResponseBBIdList_
 
 class AI2DBoxDetect(BoxDetectDataset):
     """
     Class for reading AI2D dataset and creating bb gt for detection
     """
 
-    def __getResponsePoly(self, neighborId,annotations):
+    def getResponsePoly(self, neighborId,annotations):
         if neighborId[0]=='T':
             rect=annotations['text'][neighborId]['rectangle']
             poly = [ rect[0], [rect[1][0],rect[0][1]], rect[1], [rect[0][0],rect[1][1]] ]#, rect[0] ]
@@ -78,17 +79,29 @@ class AI2DBoxDetect(BoxDetectDataset):
 
     def parseAnn(self,image,annotations,scale,imageName):
         bbs=[]
+        numNeighbors=[]#defaultdict(lambda:0)
         for blobId, blob in annotations['blobs'].items():
             bbs.append( self.transformBB(blob,scale,0) )
+            responseIds = getResponseBBIdList_(self,blobId,annotations)
+            numNeighbors.append(len(responseIds))
         for arrowId, arrow in annotations['arrows'].items():
             bbs.append( self.transformBB(arrow,scale,1) )
+            responseIds = getResponseBBIdList_(self,arrowId,annotations)
+            numNeighbors.append(len(responseIds))
         for headId, arrow in annotations['arrowHeads'].items():
             bbs.append( self.transformBB(arrow,scale,2) )
+            responseIds = getResponseBBIdList_(self,headId,annotations)
+            numNeighbors.append(len(responseIds))
         for textId, text in annotations['text'].items():
             bbs.append( self.transformBB(text,scale,3) )
+            responseIds = getResponseBBIdList_(self,textId,annotations)
+            numNeighbors.append(len(responseIds))
         
         bbs = np.array(bbs)[None,:,:] #add batch dim on front
-        return bbs,{},{},None,4
+
+
+
+        return bbs,{},{},None,4,numNeighbors, None
 
 
     def transformBB(self,item,scale,classNum):

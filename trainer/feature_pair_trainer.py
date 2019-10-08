@@ -1,12 +1,13 @@
 import numpy as np
 import torch
+from torch.nn import functional as F
 #from base import BaseTrainer
 from .trainer import Trainer
 import timeit
 from utils import util
 from collections import defaultdict
 from evaluators import FormsBoxDetect_printer
-from utils.yolo_tools import non_max_sup_iou, AP_iou
+from utils.yolo_tools import non_max_sup_iou, AP_iou, computeAP
 
 
 class FeaturePairTrainer(Trainer):
@@ -91,7 +92,19 @@ class FeaturePairTrainer(Trainer):
         #else:
         data,label = self._to_tensor(thisInstance['data'],thisInstance['label'])
         output = self.model(data)
-        loss = self.loss(output,label)
+        outputRel = output[:,0]
+        if output.size(1)==3:
+            outputNN = output[:,1:]
+            gtNN = self._to_tensor(thisInstance['numNeighbors'])
+            lossNN = F.mse_loss(outputNN,gtNN[0])
+        else:
+            lossNN=0
+        #import pdb;pdb.set_trace()
+        lossRel = self.loss(outputRel,label)
+        scoreTrue = (outputRel*label).sum()/label.sum()
+        scoreFalse = (outputRel*(1-label)).sum()/(1-label).sum()
+
+        loss = lossRel+lossNN
 
         ##toc=timeit.default_timer()
         ##print('loss: '+str(toc-tic))
@@ -123,6 +136,9 @@ class FeaturePairTrainer(Trainer):
 
         ##tic=timeit.default_timer()
         loss = loss.item()
+        lossRel=lossRel.item()
+        if type(lossNN) is not int:
+            lossNN=lossNN.item()
         ##toc=timeit.default_timer()
         ##print('item: '+str(toc-tic))
         #perAnchor={}
@@ -131,6 +147,10 @@ class FeaturePairTrainer(Trainer):
 
         log = {
             'loss': loss,
+            'lossRel':lossRel,
+            'lossNN':lossNN,
+            'scoreTrue': scoreTrue,
+            'scoreFalse': scoreFalse,
 
             **metrics,
             **losses
@@ -160,6 +180,8 @@ class FeaturePairTrainer(Trainer):
         """
         self.model.eval()
         total_val_loss = 0
+        total_val_lossRel = 0
+        total_val_lossNN = 0
         total_val_metrics = np.zeros(len(self.metrics))
 
         tp_image=defaultdict(lambda:0)
@@ -167,6 +189,7 @@ class FeaturePairTrainer(Trainer):
         tn_image=defaultdict(lambda:0)
         fn_image=defaultdict(lambda:0)
         images=set()
+        scores=defaultdict(list)
 
         with torch.no_grad():
             losses = defaultdict(lambda: 0)
@@ -176,13 +199,23 @@ class FeaturePairTrainer(Trainer):
 
                 data,label = self._to_tensor(instance['data'],instance['label'])
                 output = self.model(data)
-                loss = self.loss(output,label)
+                outputRel = output[:,0]
+                if output.size(1)==3:
+                    outputNN = output[:,1:]
+                    gtNN = self._to_tensor(instance['numNeighbors'])
+                    lossNN = F.mse_loss(outputNN,gtNN[0])
+                else:
+                    lossNN=0
+                lossRel = self.loss(outputRel,label)
+
+                loss = lossRel+lossNN
                 
                 
                 for b in range(len(output)):
                     image = instance['imgName'][b]
                     images.add(image)
-                    if output[b]<0:
+                    scores[image].append( (outputRel[b],label[b]) )
+                    if outputRel[b]<0.5:
                         if label[b]==0:
                             tn_image[image]+=1
                         else:
@@ -194,11 +227,21 @@ class FeaturePairTrainer(Trainer):
                             tp_image[image]+=1
 
                 total_val_loss += loss.item()
+                total_val_lossRel += lossRel.item()
+                if type(lossNN) is not int:
+                    lossNN=lossNN.item()
+                total_val_lossNN += lossNN
 
         mRecall=0
         mPrecision=0
+        mAP=0
+        mAP_count=0
         
         for image in images:
+            ap = computeAP(scores[image])
+            if ap is not None:
+                mAP+=ap
+                mAP_count+=1
             if tp_image[image]+fn_image[image]>0:
                 mRecall += tp_image[image]/(tp_image[image]+fn_image[image])
             else:
@@ -209,10 +252,15 @@ class FeaturePairTrainer(Trainer):
                 mPrecision += 1
         mRecall /= len(images)
         mPrecision /= len(images)
+        if mAP_count>0:
+            mAP /= mAP_count
 
         return {
             'val_loss': total_val_loss / len(self.valid_data_loader),
+            'val_lossRel': total_val_lossRel / len(self.valid_data_loader),
+            'val_lossNN': total_val_lossNN / len(self.valid_data_loader),
             'val_metrics': (total_val_metrics / len(self.valid_data_loader)).tolist(),
-            'val_recall':mRecall,
-            'val_precision':mPrecision,
+            'val_recall*':mRecall,
+            'val_precision*':mPrecision,
+            'val_mAP*': mAP
         }

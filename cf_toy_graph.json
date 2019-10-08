@@ -1,14 +1,16 @@
 {
     "name": "toy_graph",
     "cuda": true,
-    "gpu": 1,
+    "gpu": 0,
     "override": true,
     "data_loader": {
         "data_set_name": "RandomMessagesDataset",
         "data_dir": ".",
         "batch_size": 1,
         "shuffle": false,
-        "num_workers": 0
+        "num_workers": 0,
+        "max_pairs": 1,
+        "max_nodes": 4
     },
     "validation": {
     },
@@ -23,7 +25,7 @@
     "loss": "sigmoid_BCE_loss",
     "metrics": [],
     "trainer": {
-        "class": "ToyGraphTrainer",
+        "class": "ToyMetaGraphTrainer",
         "iterations": 50000,
         "save_dir": "saved/",
         "val_step": 500,
@@ -35,15 +37,17 @@
         "monitor_mode": "none",
         "adapt_lr": false
     },
-    "arch": "GraphNet", 
+    "arch": "MetaGraphNet", 
     "model": {
-        "in_channels": 100,
-        "bb_out": 10,
-        "rel_out": 0,
-        "num_trans": 3,
-        "num_heads": 1,
-        "num_ffnn_feats": 120,
-        "encoder": [12,"FC100"],
-        "random_reps": [1,20]
+        "in_channels": 256,
+        "layer_type": "attention",
+        "node_out": 10,
+        "edge_out": 0,
+        "num_layers": 2,
+        "repitions":3,
+        "num_heads": 4,
+        "encode_type": "fc",
+        "infeats": 12,
+        "dropout": null
     }
 }

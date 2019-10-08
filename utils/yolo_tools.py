@@ -199,13 +199,13 @@ def allBoxDistNeg(boxes1,boxes2):
     return dist*-1
  
 #input is tensors of shape [instance,(conf,x,y,rot,h,w)]
-def AP_iou(target,pred,iou_thresh,numClasses=2,ignoreClasses=False):
-    return AP_(target,pred,iou_thresh,numClasses,ignoreClasses,allIOU)
-def AP_dist(target,pred,dist_thresh,numClasses=2,ignoreClasses=False):
-    return AP_(target,pred,-dist_thresh,numClasses,ignoreClasses,allBoxDistNeg)
-def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,getLoc):
+def AP_iou(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeCls=0,getClassAP=False):
+    return AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,allIOU,getClassAP)
+def AP_dist(target,pred,dist_thresh,numClasses=2,ignoreClasses=False,beforeCls=0,getClassAP=False):
+    return AP_(target,pred,-dist_thresh,numClasses,ignoreClasses,beforeCls,allBoxDistNeg,getClassAP)
+def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClassAP):
     #mAP=0.0
-    aps=[]
+    #aps=[]
     precisions=[]
     recalls=[]
 
@@ -213,37 +213,99 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,getLoc):
     if ignoreClasses:
         numClasses=1
     if len(target.size())>1:
-        numClasses=target.size(1)-13
+        #numClasses=target.size(1)-13
+        pass
     elif len(pred.size())>1 and pred.size(0)>0:
         #if there are no targets, we shouldn't be pred anything
         if ignoreClasses:
-            aps.append(0)
+            #aps.append(0)
+            ap=0
             precisions.append(0)
             recalls.append(1)
         else:
-            numClasses=pred.size(1)-6
+            #numClasses=pred.size(1)-6
+            ap=0
+            class_ap=[]
             for cls in range(numClasses):
-                if (torch.argmax(pred[:,cls+6:],dim=1)==cls).any():
-                    aps.append(0) #but we did for this class :(
+                if (torch.argmax(pred[:,beforeCls+6:],dim=1)==cls).any():
+                    #aps.append(0) #but we did for this class :(
+                    ap+=0
                     precisions.append(0)
+                    class_ap.append(0)
                 else:
-                    aps.append(1) #we didn't for this class :)
+                    #aps.append(1) #we didn't for this class :)
+                    ap+=1
                     precisions.append(1)
+                    class_ap.append(1)
                 recalls.append(1)
-        return aps, precisions, recalls
+        if getClassAP:
+            return ap/numClasses, precisions, recalls, class_ap
+        else:
+            return ap/numClasses, precisions, recalls
     else:
-        return [1]*numClasses, [1]*numClasses, [1]*numClasses #we didn't for all classes :)
+        if getClassAP:
+            return 1, [1]*numClasses, [1]*numClasses, [1]*numClasses #we didn't for all classes :)
+        else:
+            return 1, [1]*numClasses, [1]*numClasses
+
+    allScores=[]
+    classScores=[[] for i in range(numClasses)]
+    if len(pred.size())>1 and pred.size(0)>0:
+        #This is an alternate metric that computes AP of all classes together
+        #Your only a hit if you have the same class
+        allIOUs = getLoc(target[:,0:],pred[:,1:])
+        allHits = allIOUs>iou_thresh
+        #evalute hits to see if they're valid (matching class)
+        targetClasses_index = torch.argmax(target[:,13:13+numClasses],dim=1)
+        predClasses = pred[:,beforeCls+6:beforeCls+6+numClasses]
+        if predClasses.size(0)==0 or predClasses.size(1)==0:
+            print('ERROR, zero sized predClasses: {}. pred is {}'.format(predClasses.size(),pred.size()))
+        predClasses_index = torch.argmax(predClasses,dim=1)
+        targetClasses_index_ex = targetClasses_index[:,None].expand(targetClasses_index.size(0),predClasses_index.size(0))
+        predClasses_index_ex = predClasses_index[None,:].expand(targetClasses_index.size(0),predClasses_index.size(0))
+        matchingClasses = targetClasses_index_ex==predClasses_index_ex
+        validHits = allHits*matchingClasses
+
+        #add all the preds that didn't have a hit
+        hasHit,_ = validHits.max(dim=0) #which preds have hits
+        notHitScores = pred[~hasHit,0]
+        notHitClass = predClasses_index[~hasHit]
+        for i in range(notHitScores.shape[0]):
+            allScores.append( (notHitScores[i].item(), False) )
+            cls = notHitClass[i]
+            classScores[cls].append( (notHitScores[i].item(), False) )
+
+        # if something has multiple hits, it gets paired to the closest (with matching class)
+        allIOUs[~validHits] -= 9999999 #Force these to be smaller
+        maxValidHitIndexes = torch.argmax(allIOUs,dim=0)
+        for i in range(maxValidHitIndexes.size(0)):
+            if validHits[maxValidHitIndexes[i],i]:
+                allScores.append( (pred[i,0].item(),True) )
+                #but now we've consumed this pred, so we'll zero its hit
+                validHits[maxValidHitIndexes[i],i]=0
+                cls = predClasses_index[i]
+                classScores[cls].append( (pred[i,0].item(),True) )
+
+        #add nan scores for missed targets
+        gotHit,gotHitIndex = torch.max(validHits,dim=1)
+        for i in range((gotHit==0).sum()):
+            allScores.append( (float('nan'),True) )
+            cls = targetClasses_index[i]
+            classScores[cls].append( (float('nan'),True) )
+    else:
+        allScores.append( (float('nan'),True) )
+        classScores=[[(float('nan'),True)]]*numClasses
+
 
     if ignoreClasses:
         numClasses=1
     #by class
     #import pdb; pdb.set_trace()
     for cls in range(numClasses):
-        scores=[]
         clsTargInd = target[:,cls+13]==1
         if len(pred.size())>1 and pred.size(0)>0:
             #print(pred.size())
-            clsPredInd = torch.argmax(pred[:,6:],dim=1)==cls
+            clsPredInd = torch.argmax(pred[:,beforeCls+6:beforeCls+6+numClasses],dim=1)==cls
         else:
             clsPredInd = torch.empty(0,dtype=torch.uint8)
         if (ignoreClasses and pred.size(0)>0) or (clsTargInd.any() and clsPredInd.any()):
@@ -264,33 +326,19 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,getLoc):
             for t in range(clsTarg.size(0)):
                 p=ps[t]
                 if hits[t,p]:
-                    scores.append( (clsPred[p,0],True) )
+                    #scores.append( (clsPred[p,0],True) )
                     #hits[t,p]=0
                     truePos+=1
-                else:
-                    scores.append( (0,True) )
+                #else:
+                    #scores.append( (float('nan'),True) )
             
             left_conf = clsPred[left_ps,0]
-            for i in range(left_conf.size(0)):
-                scores.append( (left_conf[i],False) )
+            #for i in range(left_conf.size(0)):
+                #scores.append( (left_conf[i],False) )
             
-            rank=[]
-            for conf,rel in scores:
-                if rel:
-                    better=0
-                    equal=-1 # as we'll iterate over this instance here
-                    for conf2,rel2 in scores:
-                        if conf2>conf:
-                            better+=1
-                        elif conf2==conf:
-                            equal+=1
-                    rank.append(better+math.floor(equal/2.0))
-            rank.sort()
-            ap=0.0
-            for i in range(len(rank)):
-                ap += float(i+1)/(rank[i]+1)
-            ap/=len(rank)
-            aps.append(ap)
+            #ap = computeAP(scores)
+            #if ap is not None:
+            #    aps.append(ap)
 
             precisions.append( truePos/max(clsPred.size(0),truePos) )
             if precisions[-1]>1:
@@ -298,11 +346,11 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,getLoc):
             recalls.append( truePos/clsTarg.size(0) )
         elif ignoreClasses:
             #no pred
-            aps.append(0)
+            #aps.append(0)
             precisions.append(0)
             recalls.append(0)
         elif clsPredInd.any() or clsTargInd.any():
-            aps.append(0)
+            #aps.append(0)
             if clsPredInd.any():
                 recalls.append(1)
                 precisions.append(0)
@@ -310,19 +358,27 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,getLoc):
                 precisions.append(0)
                 recalls.append(0)
         else:
-            aps.append(1)
+            #aps.append(1)
             precisions.append(1)
             recalls.append(1)
+    
+    if getClassAP:
+        classAPs=[computeAP(scores) for scores in classScores]
+        #for i in range(len(classAPs)):
+        #    if classAPs[i] is None:
+        #        classAPs[i]=1
+        return computeAP(allScores), precisions, recalls, classAPs
+    else:
+        return computeAP(allScores), precisions, recalls
 
-    return aps, precisions, recalls
 
+def getTargIndexForPreds_iou(target,pred,iou_thresh,numClasses,beforeCls=0,hard_thresh=True,fixed=True):
+    return getTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,allIOU,hard_thresh,fixed)
+def getTargIndexForPreds_dist(target,pred,iou_thresh,numClasses,beforeCls=0,hard_thresh=True,fixed=True):
+    raise NotImplemented('Checking if preds with no intersection not implemented for dist')
+    return getTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,allBoxDistNeg,hard_thresh,fixed)
 
-def getTargIndexForPreds_iou(target,pred,iou_thresh,numClasses):
-    return getTargIndexForPreds(target,pred,iou_thresh,numClasses,allIOU)
-def getTargIndexForPreds_dist(target,pred,iou_thresh,numClasses):
-    return getTargIndexForPreds(target,pred,iou_thresh,numClasses,allBoxDistNeg)
-
-def getTargIndexForPreds(target,pred,iou_thresh,numClasses,getLoc):
+def getTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,getLoc, hard_thresh,fixed):
     targIndex = torch.LongTensor((pred.size(0)))
     targIndex[:] = -1
     #mAP=0.0
@@ -331,7 +387,7 @@ def getTargIndexForPreds(target,pred,iou_thresh,numClasses,getLoc):
     recalls=[]
 
     if len(target.size())<=1:
-        return None
+        return None, None
 
     #by class
     #import pdb; pdb.set_trace()
@@ -342,7 +398,9 @@ def getTargIndexForPreds(target,pred,iou_thresh,numClasses,getLoc):
     predsWithNoIntersection=maxIOUsForPred==0
 
     hits = allIOUs>iou_thresh
-    allIOUs *= hits.float()
+    if hard_thresh:
+        allIOUs *= hits.float()
+
 
     for cls in range(numClasses):
         scores=[]
@@ -350,20 +408,63 @@ def getTargIndexForPreds(target,pred,iou_thresh,numClasses,getLoc):
         notClsTargInd = target[:,cls+13]!=1
         if len(pred.size())>1 and pred.size(0)>0:
             #print(pred.size())
-            clsPredInd = torch.argmax(pred[:,6:],dim=1)==cls
+            #clsPredInd = torch.argmax(pred[:,beforeCls+6:],dim=1)==cls
+            clsPredInd = torch.argmax(pred[:,-numClasses:],dim=1)==cls
         else:
             clsPredInd = torch.empty(0,dtype=torch.uint8)
         if  clsPredInd.any():
-            if notClsTargInd.any():
-                allIOUs[notClsTargInd][:,clsPredInd]=0 #set IOU for instances that are from different class than predicted to 0 (different class so no intersection)
-            #targIndexes = targIndex[clsPredInd]
+            if notClsTargInd.any() and fixed:
+                notClsTargIndX = notClsTargInd[:,None].expand(allIOUs.size())
+                clsPredIndX = clsPredInd[None,:].expand(allIOUs.size())
+                allIOUs[notClsTargIndX*clsPredIndX]=0 #set IOU for instances that are from different class than predicted to 0 (different class so no intersection)
+                #allIOUs[notClsTargInd][:,clsPredInd]=0 this doesn't work for some reason
             val,targIndexes = torch.max(allIOUs[:,clsPredInd],dim=0)
             #targIndexes has the target indexes for the predictions of cls
 
             #assign -1 index to places that don't really have a match
             #targIndexes[:] = torch.where(val==0,-torch.ones_like(targIndexes),targIndexes)
             targIndexes[val==0] = -1
+            #targIndexes[notClsTargInd] = -1
+            #assert(notClsTargInd[targIndexes].sum()==0)
             targIndex[clsPredInd] =  targIndexes
+
+    #debug
+    #for i in range(targIndex.size(0)):
+        #if targIndex[i]>=0:
+    #         assert(torch.argmax(pred[i,-numClasses:],dim=0) == torch.argmax(target[targIndex[i],-numClasses:],dim=0))
             
     #import pdb;pdb.set_trace()
-    return targIndex, predsWithNoIntersection
+    if hard_thresh:
+        return targIndex, predsWithNoIntersection
+    else:
+        hits,_ = hits.max(dim=0) #since we always take max pred
+        return targIndex, hits
+
+def computeAP(scores):
+    rank=[]
+    missed=0
+    for conf,rel in scores:
+        if rel:
+            if math.isnan(conf):
+                missed+=1
+            else:
+                better=0
+                equal=-1 # as we'll iterate over this instance here
+                for conf2,rel2 in scores:
+                    if conf2>conf:
+                        better+=1
+                    elif conf2==conf:
+                        equal+=1
+                rank.append(better+math.ceil(equal/2.0))
+    if len(rank)==0:
+        if missed>0:
+            return 0
+        return None
+    rank.sort()
+    ap=0.0
+    for i in range(len(rank)):
+        ap += float(i+1)/(rank[i]+1)
+    ap/=(len(rank)+missed)
+    if ap>1.0001:
+        raise ValueError('ap greater than 1({}), from {}'.format(ap,scores))
+    return ap
