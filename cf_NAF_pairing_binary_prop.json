@@ -96,7 +96,7 @@
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
         "percent_rel_to_keep": 0.4,
-        "max_rel_to_keep": 320,
+        "max_rel_to_keep": 640,
 
 	"use_rel_shape_feats": "corner",
         "use_detect_layer_feats": 16,
