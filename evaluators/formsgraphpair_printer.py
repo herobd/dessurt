@@ -63,7 +63,7 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
         rel_thresholds = np.arange(0,20.0,1)
     if ('sweep_threshold_small' in config and config['sweep_threshold_small']) or ('sweep_thresholds_small' in config and config['sweep_thresholds_small']):
         rel_thresholds = np.arange(0,0.1,0.01)
-    draw_rel_thresh = config['draw_thresh'] if 'draw_thresh' in config else rel_thresholds[0]
+    draw_rel_thresh_over = config['draw_thresh'] if 'draw_thresh' in config else rel_thresholds[0]
     #print(type(instance['pixel_gt']))
     #if type(instance['pixel_gt']) == list:
     #    print(instance)
@@ -323,16 +323,16 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
                             if id1 not in idMap:
                                 idMap[id1]=newId
                                 if not usePredNN:
-                                    numNeighbors.append(target_num_neighbors[0,bbAlignment[id1]])
+                                    numNeighbors.append(target_num_neighbors[0,bbAlignment[id1]].item())
                                 else:
-                                    numNeighbors.append(predNN[id1])
+                                    numNeighbors.append(predNN[id1].item())
                                 newId+=1
                             if id2 not in idMap:
                                 idMap[id2]=newId
                                 if not usePredNN:
-                                    numNeighbors.append(target_num_neighbors[0,bbAlignment[id2]])
+                                    numNeighbors.append(target_num_neighbors[0,bbAlignment[id2]].item())
                                 else:
-                                    numNeighbors.append(predNN[id2])
+                                    numNeighbors.append(predNN[id2].item())
                                 newId+=1
                             newRelCand.append( [idMap[id1],idMap[id2]] )            
 
@@ -340,7 +340,7 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
                     #if not usePredNN:
                         #    decision = optimizeRelationships(newRelPred,newRelCand,numNeighbors,penalty)
                     #else:
-                    decision= optimizeRelationshipsSoft(newRelPred,newRelCand,numNeighbors,penalty, rel_threshold)
+                    decision= optimizeRelationshipsSoft(newRelPred.cpu(),newRelCand,numNeighbors,penalty, rel_threshold)
                     decision= torch.from_numpy( np.round_(decision).astype(int) )
                     decision=decision.to(relPred.device)
                     relPred[keep] = torch.where(0==decision,relPred[keep]-1,relPred[keep])
@@ -435,8 +435,17 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
             i=0
             numMissedByHeur=0
             targGotHit=set()
+            truePred_len=[]
+            falsePred_len=[]
+            falseRej_len=[]
+            trueRej_len=[]
             #print('debug relPred: {}'.format(relPred.shape))
             for i,(n0,n1) in enumerate(relCand):
+                x1 = outputBoxes[n0,1].item()
+                y1 = outputBoxes[n0,2].item()
+                x2 = outputBoxes[n1,1].item()
+                y2 = outputBoxes[n1,2].item()
+                rel_length = math.sqrt((x1-x2)**2 + (y1-y2)**2)
                 t0 = bbAlignment[n0].item()
                 t1 = bbAlignment[n1].item()
                 if t0>=0 and bbFullHit[n0]:
@@ -449,14 +458,23 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
                         gtRel=True
                         if relPred[i]>rel_threshold_use:
                             truePred+=1
+                            truePred_len.append(rel_length)
+                        else:
+                            falseRej_len.append(rel_length)
                     else:
                         gtRel=False
                         if relPred[i]>rel_threshold_use:
                             falsePred+=1
+                            falsePred_len.append(rel_length)
+                        else:
+                            trueRej_len.append(rel_length)
                 else:
                     gtRel=False
                     if relPred[i]>rel_threshold_use:
                         badPred+=1
+                        falsePred_len.append(rel_length)
+                    else:
+                        trueRej_len.append(rel_length)
                 scores.append( (relPred[i],gtRel) )
                 if len(relPred_otherTimes.size())>1:
                     for t in range(relPred_otherTimes.size(1)):
@@ -503,6 +521,10 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
             else:
                 toRet['F-M@{}'.format(rel_threshold)]=0
             toRet['rel_AP@{}'.format(rel_threshold)]=rel_ap
+            toRet['rel_truePred_len@{}'.format(rel_threshold)]=truePred_len
+            toRet['rel_trueRej_len@{}'.format(rel_threshold)]=trueRej_len
+            toRet['rel_falseRej_len@{}'.format(rel_threshold)]=falseRej_len
+            toRet['rel_falsePred_len@{}'.format(rel_threshold)]=falsePred_len
             #precisionHistory[precision]=(draw_rel_thresh,stepSize)
             #if targetPrecision is not None:
             #    if abs(precision-targetPrecision)<0.001:
@@ -675,10 +697,25 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
         #    #print(rad)
         #    cv2.circle(image,mid,rad,(1,0,1),1)
 
-        draw_rel_thresh = relPred.max() * draw_rel_thresh
 
+        #Draw GT pairings
+        if not pretty:
+            gtcolor=(0.5,0,0.5)
+            wth=3
+        else:
+            #gtcolor=(1,0,0.6)
+            gtcolor=(1,0.6,0)
+            wth=3
+        for aId,(i,j) in enumerate(adjacency):
+            if not pretty or not hits[aId]:
+                x1 = round(targetBoxes[0,i,0].item())
+                y1 = round(targetBoxes[0,i,1].item())
+                x2 = round(targetBoxes[0,j,0].item())
+                y2 = round(targetBoxes[0,j,1].item())
+                cv2.line(image,(x1,y1),(x2,y2),gtcolor,wth)
 
         #Draw pred pairings
+        draw_rel_thresh = relPred.max() * draw_rel_thresh_over
         numrelpred=0
         hits = [False]*len(adjacency)
         for i in range(len(relCand)):
@@ -699,8 +736,17 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
                 #if pretty=='light':
                 #    lineWidth=3
             else:
-                lineWidth=1
-            if relPred[i]>draw_rel_thresh or (pretty and score>draw_rel_thresh):
+                if relPred[i]>0:
+                    score = relPred[i]
+                    pruned=False
+                    lineWidth=2
+                else:
+                    score = relPred[i]+1
+                    pruned=True
+                    lineWidth=1
+
+            
+            if score>draw_rel_thresh:
                 ind1 = relCand[i][0]
                 ind2 = relCand[i][1]
                 x1 = round(bbs[ind1,1])
@@ -739,10 +785,31 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
                     #else:
                     #    cv2.putText(image,'{:.2}'.format(score),(x,y), cv2.FONT_HERSHEY_PLAIN,1.1,color.tolist(),1)
                 else:
-                    shade = (relPred[i].item()-draw_rel_thresh)/(1-draw_rel_thresh)
+                    targ1 = bbAlignment[ind1].item()
+                    targ2 = bbAlignment[ind2].item()
+                    aId=None
+                    if bbFullHit[ind1] and bbFullHit[ind2]:
+                        if (targ1,targ2) in adjacency:
+                            aId = adjacency.index((targ1,targ2))
+                        elif (targ2,targ1) in adjacency:
+                            aId = adjacency.index((targ2,targ1))
+                    shade = ((score-draw_rel_thresh)/(1-draw_rel_thresh)).item()
 
                     #print('draw {} {} {} {} '.format(x1,y1,x2,y2))
-                    cv2.line(image,(x1,y1),(x2,y2),(0,shade,0),lineWidth)
+                    if pruned :
+                        color = (shade,shade,0)
+                    elif aId is not None:
+                        color = (0,shade,0)
+                    else:
+                        color = (shade,0,0)
+                        #if imageName == '100572410_00026':
+                        #    print(targ1)
+                        #    print(bbFullHit[ind1])
+                        #    print(targ2)
+                        #    print(bbFullHit[ind2])
+                        #    print('{}, {}   {}, {}'.format(x1,y1,x2,y2))
+                        #    import pdb;pdb.set_trace()
+                    cv2.line(image,(x1,y1),(x2,y2),color,lineWidth)
                 numrelpred+=1
         if pretty and pretty!="light" and pretty!="clean":
             for i in range(len(relCand)):
@@ -781,21 +848,6 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
                     else:
                         cv2.putText(image,'{:.2}'.format(score),(x,y), cv2.FONT_HERSHEY_PLAIN,1.1,color.tolist(),1)
         #print('number of pred rels: {}'.format(numrelpred))
-        #Draw GT pairings
-        if not pretty:
-            gtcolor=(0.25,0,0.25)
-            wth=3
-        else:
-            #gtcolor=(1,0,0.6)
-            gtcolor=(1,0.6,0)
-            wth=2
-        for aId,(i,j) in enumerate(adjacency):
-            if not pretty or not hits[aId]:
-                x1 = round(targetBoxes[0,i,0].item())
-                y1 = round(targetBoxes[0,i,1].item())
-                x2 = round(targetBoxes[0,j,0].item())
-                y2 = round(targetBoxes[0,j,1].item())
-                cv2.line(image,(x1,y1),(x2,y2),gtcolor,wth)
 
         #Draw alginment between gt and pred bbs
         if not pretty:
@@ -813,9 +865,9 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
                     cv2.line(image,(x1-5,y1-5),(x1+5,y1+5),(.1,0,.1),1)
                     cv2.line(image,(x1+5,y1-5),(x1-5,y1+5),(.1,0,.1),1)
 
+    
 
-
-        saveName = '{}_boxes_prec:{:.2f},{:.2f}_recall:{:.2f},{:.2f}_rels_AP:{:.3f}'.format(imageName,prec_5[0],prec_5[1],recall_5[0],recall_5[1],rel_ap)
+        saveName = '{}_boxes_prec:{:.2f},{:.2f}_recall:{:.2f},{:.2f}_rels_AP:{:.3f}'.format(imageName,prec_5[0],prec_5[1],recall_5[0],recall_5[1],rel_ap if rel_ap is not None else -1)
         #for j in range(metricsOut.shape[1]):
         #    saveName+='_m:{0:.3f}'.format(metricsOut[i,j])
         saveName+='.png'

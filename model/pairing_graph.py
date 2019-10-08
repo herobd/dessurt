@@ -305,10 +305,7 @@ class PairingGraph(BaseModel):
         if self.relationshipProposal=='feature_nn':
             self.include_bb_conf=True
             #num_classes = config['num_class']
-            if 'bb_out' in config['graph_config']:
-                num_bb_feat = config['graph_config']['bb_out']
-            elif 'node_out' in config['graph_config']:
-                num_bb_feat = config['graph_config']['node_out']
+            num_bb_feat = self.numBBTypes + (1 if self.detector.predNumNeighbors else 0) #config['graph_config']['bb_out']
             self.rel_prop_nn = nn.Sequential(
                                 nn.Linear(26+2*num_bb_feat,64),
                                 nn.Dropout(0.25),
@@ -419,7 +416,8 @@ class PairingGraph(BaseModel):
                 classes = torch.where(classes==0,neg,pos)
                 if self.detector.predNumNeighbors:
                     nns = gtNNs.float()[0,:,None]
-                    nns += torch.rand_like(nns)/1.5
+                    #nns += torch.rand_like(nns)/1.5
+                    nns += (2*torch.rand_like(nns)-1)
                     useBBs = torch.cat((useBBs,nns,classes),dim=1)
                 else:
                     useBBs = torch.cat((useBBs,classes),dim=1)
