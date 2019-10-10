@@ -18,5 +18,6 @@ from evaluators.randomdiffusion_printer import RandomDiffusionDataset_printer
 from evaluators.randommaxpairs_printer import RandomMaxPairsDataset_printer
 
 
+from evaluators.funsdgraphpair_eval import FUNSDGraphPair_eval
 #def FormsPair_printer(config,instance, model, gpu, metrics, outDir=None, startIndex=None):
 #    return AI2D_printer(config,instance, model, gpu, metrics, outDir, startIndex)

@@ -173,7 +173,7 @@ class GraphPairTrainer(BaseTrainer):
         else:
             threshIntur = None
         useGT = self.useGT(iteration)
-        losses, run_log = self.run(thisInstance,useGT,threshIntur)
+        losses, run_log, out = self.run(thisInstance,useGT,threshIntur)
         loss=0
         for name in losses.keys():
             losses[name] *= self.lossWeights[name[:-4]]
@@ -528,7 +528,7 @@ class GraphPairTrainer(BaseTrainer):
                     instance['num_neighbors']=None
                 if not self.logged:
                     print('iter:{} valid batch: {}/{}'.format(self.iteration,batch_idx,len(self.valid_data_loader)), end='\r')
-                losses,log_run = self.run(instance,False,get=['bb_stats','nn_acc'])
+                losses,log_run, out = self.run(instance,False,get=['bb_stats','nn_acc'])
 
                 for name,value in log_run.items():
                     if value is not None:
@@ -1262,4 +1262,20 @@ class GraphPairTrainer(BaseTrainer):
         if final_prop_rel_prec is not None:
             log['final_prop_rel_prec']=final_prop_rel_prec
 
-        return losses, log
+        got={}#outputBoxes, outputOffsets, relPred, relIndexes, bbPred, rel_prop_pred
+        for name in get:
+            if name=='relPred':
+                got['relPred'] = relPred.detach().cpu()
+            elif name=='outputBoxes':
+                if useGT:
+                    got['outputBoxes'] = targetBoxes.cpu()
+                else:
+                    got['outputBoxes'] = outputBoxes.detach().cpu()
+            elif name=='outputOffsets':
+                got['outputOffsets'] = outputOffsets.detach().cpu()
+            elif name=='relIndexes':
+                got['relIndexes'] = relIndexes
+            elif name=='bbPred':
+                got['bbPred'] = bbPred.detach().cpu()
+
+        return losses, log, got
