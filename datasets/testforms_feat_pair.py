@@ -34,56 +34,71 @@ def plotRect(img,color,xyrhw):
         cv2.line(img,br,bl,(0,255,255),1)
         #cv2.line(img,bl,tl,(255,0,255),1)
 
-def display(instance):
-    imagePath = instance['imgPath']
-    qXY = instance['qXY']
-    iXY = instance['iXY']
-    label = instance['label']
-    relNodeIds = instance['nodeIds']
-    gtNumNeighbors=instance['numNeighbors']+1
-    missedRels = instance['missedRels']
-    data = instance['data'][0]
-    batchSize=data.size(0)
+#def display(instance):
+#    imagePath = instance['imgPath']
+#    qXY = instance['qXY']
+#    iXY = instance['iXY']
+#    label = instance['label']
+#    relNodeIds = instance['nodeIds']
+#    gtNumNeighbors=instance['numNeighbors']+1
+#    missedRels = instance['missedRels']
+#    data = instance['data'][0]
+#    batchSize=data.size(0)
+def display(data):
+    b=0
+    return data['data'].numpy()
+    if False:
+        #print (data['img'].size())
+        #img = (data['img'][0].permute(1,2,0)+1)/2.0
+        img =  cv2.imread(data['imgPath'])
+        #print(img.shape)
+        #print(data['pixel_gt']['table_pixels'].shape)
+        print(data['imgName'])
 
-    #print (data['img'].size())
-    #img = (data['img'][0].permute(1,2,0)+1)/2.0
-    image = cv2.imread(imagePath) #read as color
-    #print(img.shape)
-    #print(data['pixel_gt']['table_pixels'].shape)
-    print(instance['imgName'])
 
 
+        fig = plt.figure()
+        #gs = gridspec.GridSpec(1, 3)
 
+        ax_im = plt.subplot()
+        ax_im.set_axis_off()
+        ax_im.imshow(img[:,:,0])
 
-    #print('num bb:{}'.format(data['bb_sizes'][b]))
-    for b in range(batchSize):
-        x,y = qXY[b]
-        r = data[b,2].item()*math.pi
-        h = data[b,0].item()*50/2
-        w = data[b,1].item()*400/2
-        plotRect(image,(0,0,255),(x,y,r,h,w))
-        x2,y2 = iXY[b]
-        r = data[b,6+ex].item()*math.pi
-        h = data[b,4+ex].item()*50/2
-        w = data[b,5+ex].item()*400/2
-        plotRect(image,(0,0,255),(x2,y2,r,h,w))
+        colors = {  'text_start_gt':'g-',
+                    'text_end_gt':'b-',
+                    'field_start_gt':'r-',
+                    'field_end_gt':'y-',
+                    'table_points':'co'
+                    }
+        #print('num bb:{}'.format(data['bb_sizes'][b]))
+        for i in range(data['bb_gt'].size(1)):
+            xc=data['bb_gt'][b,i,0]
+            yc=data['bb_gt'][b,i,1]
+            rot=data['bb_gt'][b,i,2]
+            h=data['bb_gt'][b,i,3]
+            w=data['bb_gt'][b,i,4]
+            text=data['bb_gt'][b,i,13]
+            field=data['bb_gt'][b,i,14]
+            if text>0:
+                color = 'b-'
+            else:
+                color = 'r-'
+            tr = (math.cos(rot)*w-math.sin(rot)*h +xc, math.sin(rot)*w+math.cos(rot)*h +yc)
+            tl = (math.cos(rot)*-w-math.sin(rot)*h +xc, math.sin(rot)*-w+math.cos(rot)*h +yc)
+            br = (math.cos(rot)*w-math.sin(rot)*-h +xc, math.sin(rot)*w+math.cos(rot)*-h +yc)
+            bl = (math.cos(rot)*-w-math.sin(rot)*-h +xc, math.sin(rot)*-w+math.cos(rot)*-h +yc)
+            #print([tr,tl,br,bl])
 
-        #r = data[b,2].item()
-        #h = data[b,0].item()
-        #w = data[b,1].item()
-        #plotRect(image,(1,0,0),(x,y,r,h,w))
+            ax_im.plot([tr[0],tl[0],bl[0],br[0],tr[0]],[tr[1],tl[1],bl[1],br[1],tr[1]],color)
+        for ind1,ind2 in data['adj']:
+            x1=data['bb_gt'][b,ind1,0]
+            y1=data['bb_gt'][b,ind1,1]
+            x2=data['bb_gt'][b,ind2,0]
+            y2=data['bb_gt'][b,ind2,1]
 
-        if label[b].item()> 0:
-           cv2.line(image,(int(x),int(y)),(int(x2),int(y2)),(0,255,0),1)
-
-    fig = plt.figure()
-    #gs = gridspec.GridSpec(1, 3)
-
-    ax_im = plt.subplot()
-    ax_im.set_axis_off()
-    ax_im.imshow(image)#[:,:,0])
-    ax_im.text(5, 5, 'missed:{}'.format(missedRels))
-    plt.show()
+            ax_im.plot([x1,x2],[y1,y2],'g-')
+            #print('{} to {}, {} - {}'.format(ind1,ind2,(x1,y1),(x2,y2)))
+        plt.show()
 
 
 if __name__ == "__main__":
@@ -96,11 +111,10 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=FormsFeaturePair(dirPath=dirPath,split='valid',config={
+    data=FormsFeaturePair(dirPath=dirPath,split='train',config={
         "data_set_name": "FormsFeaturePair",
-        "eval": True,
-        "special_dataset": "simple",
-        "alternate_json_dir": "out_json/Simple18_staggerLight_NN_new",
+        "simple_dataset": True,
+        "alternate_json_dir": "out_json/Forms21_augRFh_staggerLighter_NN",
         "data_dir": "../data/forms",
         "batch_size": 1,
         "shuffle": False,
@@ -108,13 +122,13 @@ if __name__ == "__main__":
         "no_blanks": True,
         "swap_circle":True,
         "no_graphics":True,
-        "cache_resized_images": False,
+        "cache_resized_images": True,
         "rotation": False,
-        "balance": False,
+        "balance": True,
         "only_opposite_pairs": True,
         "corners":True
-}
-)
+        #"only_types": ["text_start_gt"]
+})
 
     dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False, num_workers=0, collate_fn=forms_feature_pair.collate)
     dataLoaderIter = iter(dataLoader)
@@ -125,9 +139,20 @@ if __name__ == "__main__":
         print(i)
         dataLoaderIter.next()
         #display(data[i])
+    datas=[]
     try:
         while True:
             #print('?')
-            display(dataLoaderIter.next())
+            data = display(dataLoaderIter.next())
+            datas.append(data)
     except StopIteration:
         print('done')
+
+    data = np.concatenate(datas,axis=0)
+    
+    #print(data.mean(axis=0))
+    #print(data.std(axis=0))
+    #toprint = ['']*data.shape[1]
+    print('feat:\tmean:\tstddev:')
+    for i in range(data.shape[1]):
+        print('{}:\t{:.3}\t{:.3}'.format(i,data[:,i].mean(),data[:,i].std()))

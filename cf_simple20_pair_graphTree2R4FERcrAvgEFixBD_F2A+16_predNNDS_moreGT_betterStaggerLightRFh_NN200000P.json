@@ -1,5 +1,5 @@
 {
-    "name": "Simple20_pair_graphTree2R4FERcrAvgEFixBD_F1A+16_predNNDS_moreGT_betterStaggerLightRFh_NN200000P",
+    "name": "Simple20_pair_graphTree2R4FERcrAvgEFixBD_F2A+16_predNNDS_moreGT_betterStaggerLightRFh_NN200000P",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",

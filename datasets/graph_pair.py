@@ -41,14 +41,6 @@ class GraphPairDataset(torch.utils.data.Dataset):
         self.rescale_range = config['rescale_range']
         if type(self.rescale_range) is float:
             self.rescale_range = [self.rescale_range,self.rescale_range]
-        if self.rescale_range[0]==450:
-            self.rescale_range[0]=0.2
-        elif self.rescale_range[0]>1.0:
-            self.rescale_range[0]=0.27
-        if self.rescale_range[1]==800:
-            self.rescale_range[1]=0.33
-        elif self.rescale_range[1]>1.0:
-            self.rescale_range[1]=0.27
         if 'cache_resized_images' in config:
             self.cache_resized = config['cache_resized_images']
             if self.cache_resized:
@@ -219,7 +211,7 @@ class GraphPairDataset(torch.utils.data.Dataset):
                 "imgName": imageName,
                 "scale": s,
                 "cropPoint": cropPoint,
-                "transcription": [trans[id] for id in ids]
+                "transcription": [trans[id] for id in ids if id in trans]
                 }
 
 
