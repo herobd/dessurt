@@ -65,7 +65,7 @@
     "metrics": [],
     "trainer": {
         "class": "BoxDetectTrainer",
-        "iterations": 300000,
+        "iterations": 200000,
         "save_dir": "saved/",
         "val_step": 10000,
         "save_step": 50000,
@@ -76,9 +76,7 @@
         "monitor_mode": "none",
         "warmup_steps": 1000,
         "thresh_conf":0.88,
-        "thresh_intersect":0.4,
-
-        "use_learning_schedule": "detector"
+        "thresh_intersect":0.4
     },
     "arch": "YoloBoxDetector", 
     "model": {
@@ -88,9 +86,9 @@
         "number_of_pixel_types": 0,
         "norm_type": "group_norm",
         "dropout":true,
-        "down_layers_cfg": [1,"C7-32", "M", "R64", "R64", "wave1,2-64",  "D128",
+        "down_layers_cfg": [1,"k7-32", "M", "R64", "R64", "wave1,2-64",  "D128",
                                 "wave1,2-128", "R128", "wave1,4-128", "D256",
-                                "wave1,4-256", "R256", "wave1,8-256", "D512",
+                                "wave1,4-128", "R128", "wave1,8-128", "D512",
                                 "wave1,8-512", "R512", "wave1,16-512", "R512", "R512"],
         "up_layers_cfg":[],
         "anchors_file": "anchors_noRot_new_25.json",

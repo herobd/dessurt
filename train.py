@@ -11,6 +11,22 @@ from model.metric import *
 from data_loader import getDataLoader
 from trainer import *
 from logger import Logger
+import requests
+
+def update_status(name,message,supercomputer):
+    if supercomputer:
+        return
+    name = '{}: {}'.format(socket.gethostname(),name)
+    try:
+        proxies = {
+                  "http": None,
+                    "https": None,
+                    }
+        #print('http://sensei-status.herokuapp.com/sensei-update/{}?message={}'.format(name,message))
+        r = requests.get('http://sensei-status.herokuapp.com/sensei-update/{}?message={}'.format(name,message),proxies=proxies)
+    except requests.exceptions.ConnectionError:
+        pass
+    pass
 
 logging.basicConfig(level=logging.INFO, format='')
 def set_procname(newname):
@@ -56,8 +72,11 @@ def main(config, resume):
                       valid_data_loader=valid_data_loader,
                       train_logger=train_logger)
 
+    name=config['name']
+    supercomputer = config['super_computer'] if 'super_computer' in config else False
     def handleSIGINT(sig, frame):
         trainer.save()
+        update_status(name,'stopped!',supercomputer)
         sys.exit(0)
     signal.signal(signal.SIGINT, handleSIGINT)
 
@@ -103,13 +122,28 @@ if __name__ == '__main__':
                 if filename!='config.json': 
                     assert False, "Path {} already used!".format(path)
 
+    supercomputer = config['super_computer'] if 'super_computer' in config else False
+    name=config['name']
+    file_name = args.config[3:-5]
+    if name!=file_name:
+        raise Exception('ERROR, name and file name do not match, {} != {} ({})'.format(name,file_name,args.config))
+
     assert config is not None
 
     if args.gpu is not None:
         config['gpu']=args.gpu
         print('override gpu to '+str(config['gpu']))
-    if config['cuda']:
-        with torch.cuda.device(config['gpu']):
+
+    try: 
+        if config['cuda']:
+            with torch.cuda.device(config['gpu']):
+                main(config, args.resume)
+        else:
             main(config, args.resume)
+    except Exception as er:
+
+        #urllib.request.urlopen(url
+        update_status(name,er,supercomputer)
+        raise er
     else:
-        main(config, args.resume)
+        update_status(name,'DONE!',supercomputer)
