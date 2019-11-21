@@ -159,7 +159,10 @@ class FormsGraphPair(GraphPairDataset):
             if not self.onlyFormStuff or ('paired' in bb and bb['paired']):
                 bbsToUse.append(bb)
                 ids.append(bb['id'])
-                trans[bb['id']] = annotations['transcription'][bb['id']]
+                if 'transcriptions' in annotations:
+                    trans[bb['id']] = annotations['transcriptions'][bb['id']]
+                else:
+                    trans[bb['id']] =None
 
 
         
