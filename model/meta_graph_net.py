@@ -963,7 +963,7 @@ class MetaGraphNet(nn.Module):
         else:
             out_nodes = None
         if len(out_edges)>0:
-            out_edges = torch.stack(out_edges,dim=1) #we introduce a 'time' dimension
+            out_edges = torch.stack(out_edges,dim=1) #we introduce a 'time' dimension, indexXtimeXclass
         else:
             out_edges = None
 

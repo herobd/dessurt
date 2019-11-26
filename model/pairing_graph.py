@@ -470,8 +470,8 @@ class PairingGraph(BaseModel):
                         bbOuts = (bbOuts+bbOuts_B)/2
                     relOuts = (relOuts+relOuts_B)/2
                 if bbOuts is not None:
-                    bbOuts = bbOuts[:,None,:]
-                relOuts = relOuts[:,None,:]
+                    bbOuts = bbOuts[:,None,:] #introduce "time/rep" dimension
+                relOuts = relOuts[:,None,:] #introduce "time/rep" dimension
                 #bbOuts = graphOut[:numBBs]
                 #relOuts = graphOut[numBBs:]
                 ##print('pairer: {}'.format(timeit.default_timer()-tic))

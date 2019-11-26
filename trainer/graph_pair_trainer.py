@@ -1695,7 +1695,7 @@ class GraphPairTrainer(BaseTrainer):
                         ts=?
                         for tId in ts:
                             if tId>=0:
-                                clas=targetBoxes[0][tId][
+                                clas=targetBoxes[0][tId,13:13+self.model.]
 
                     #We really don't care about the class of non-overlapping instances
                     if targetBoxes is not None:

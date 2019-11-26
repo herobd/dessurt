@@ -137,6 +137,40 @@ def allIOU(boxes1,boxes2, boxes1XYWH=[0,1,4,3]):
     iou = inter_area / (b1_area + b2_area - inter_area + 1e-16)
     return iou
 
+def allIOU_andClip(boxesT,boxesP, boxesTXYWH=[0,1,4,3]):
+    bP_x1, bP_x2 = boxesP[:,boxesPXYWH[0]]-boxesP[:,boxesPXYWH[2]], boxesP[:,boxesPXYWH[0]]+boxesP[:,boxesPXYWH[2]]
+    bP_y1, bP_y2 = boxesP[:,boxesPXYWH[1]]-boxesP[:,boxesPXYWH[3]], boxesP[:,boxesPXYWH[1]]+boxesP[:,boxesPXYWH[3]]
+    bT_x1, bT_x2 = boxesT[:,0]-boxesT[:,4], boxesT[:,0]+boxesT[:,4]
+    bT_y1, bT_y2 = boxesT[:,1]-boxesT[:,3], boxesT[:,1]+boxesT[:,3]
+
+    #expand to make two dimensional, allowing every instance of boxesP
+    #to be compared with every intsance of boxesT
+    bP_x1 = bP_x1[:,None].expand(boxesP.size(0), boxesT.size(0))
+    bP_y1 = bP_y1[:,None].expand(boxesP.size(0), boxesT.size(0))
+    bP_x2 = bP_x2[:,None].expand(boxesP.size(0), boxesT.size(0))
+    bP_y2 = bP_y2[:,None].expand(boxesP.size(0), boxesT.size(0))
+    bT_x1 = bT_x1[None,:].expand(boxesP.size(0), boxesT.size(0))
+    bT_y1 = bT_y1[None,:].expand(boxesP.size(0), boxesT.size(0))
+    bT_x2 = bT_x2[None,:].expand(boxesP.size(0), boxesT.size(0))
+    bT_y2 = bT_y2[None,:].expand(boxesP.size(0), boxesT.size(0))
+
+    inter_rect_x1 = torch.max(bP_x1, bT_x1)
+    inter_rect_x2 = torch.min(bP_x2, bT_x2)
+    inter_rect_y1 = torch.max(bP_y1, bT_y1)
+    inter_rect_y2 = torch.min(bP_y2, bT_y2)
+
+    inter_area = torch.clamp(inter_rect_x2 - inter_rect_x1 + 1, min=0) * torch.clamp(
+            inter_rect_y2 - inter_rect_y1 + 1, min=0 )
+
+    bP_area = (bP_x2 - bP_x1 + 1) * (bP_y2 - bP_y1 + 1)
+    bT_area = (bT_x2 - bT_x1 + 1) * (bT_y2 - bT_y1 + 1)
+    #clip target region by pred region
+    bT_clippedArea = (min(bT_x2,bP_x2) - max(bT_x1,bP_x1) + 1) * (bT_y2 - bT_y1 + 1)
+
+    iou = inter_area / (bP_area + bT_area - inter_area + 1e-16)
+    io_clipped_u = inter_area / (bP_area + bT_clippedArea - inter_area + 1e-16)
+    return iou, io_clipped_u
+
 def allDist(boxes1,boxes2):
     b1_x = boxes1[:,0]
     b1_y = boxes1[:,1]
@@ -439,6 +473,65 @@ def getTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,getLoc, har
     else:
         hits,_ = hits.max(dim=0) #since we always take max pred
         return targIndex, hits
+
+def newGetTargIndexForPreds_iou(target,pred,iou_thresh,numClasses,beforeCls=0,hard_thresh=True,fixed=True):
+    return newGetTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,allIOU_andClip,hard_thresh,fixed)
+
+#This also returns which pred BBs are oversegmentations of targets (horizontall)
+def newGetTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,getLoc, hard_thresh,fixed):
+    targIndex = torch.LongTensor((pred.size(0)))
+    targIndex[:] = -1
+    #mAP=0.0
+    aps=[]
+    precisions=[]
+    recalls=[]
+
+    if len(target.size())<=1:
+        return None, None
+
+    #by class
+    #import pdb; pdb.set_trace()
+    #first get all IOUs, then process by class
+    allIOUs, allIO_clippedU = getLoc(target[:,0:],pred[:,1:]) #clippedUnion, target is clipped horizontally to match pred
+    #This isn't going to work of dist as 0 is perfect
+    maxIOUsForPred,_ = allIOUs.max(dim=0)
+    predsWithNoIntersection=maxIOUsForPred==0
+
+    hits = allIOUs>iou_thresh
+    overSegmented= (allIO_clippedU>overSeg_thresh) and not hits
+    if hard_thresh:
+        allIOUs *= hits.float()
+
+
+    for cls in range(numClasses):
+        scores=[]
+        clsTargInd = target[:,cls+13]==1
+        notClsTargInd = target[:,cls+13]!=1
+        if len(pred.size())>1 and pred.size(0)>0:
+            #print(pred.size())
+            #clsPredInd = torch.argmax(pred[:,beforeCls+6:],dim=1)==cls
+            clsPredInd = torch.argmax(pred[:,-numClasses:],dim=1)==cls
+        else:
+            clsPredInd = torch.empty(0,dtype=torch.uint8)
+        if  clsPredInd.any():
+            if notClsTargInd.any() and fixed:
+                notClsTargIndX = notClsTargInd[:,None].expand(allIOUs.size())
+                clsPredIndX = clsPredInd[None,:].expand(allIOUs.size())
+                allIOUs[notClsTargIndX*clsPredIndX]=0 #set IOU for instances that are from different class than predicted to 0 (different class so no intersection)
+                #allIOUs[notClsTargInd][:,clsPredInd]=0 this doesn't work for some reason
+            val,targIndexes = torch.max(allIOUs[:,clsPredInd],dim=0)
+            #targIndexes has the target indexes for the predictions of cls
+
+            #assign -1 index to places that don't really have a match
+            targIndexes[val==0] = -1
+            targIndex[clsPredInd] =  targIndexes
+
+    if hard_thresh:
+        return targIndex, predsWithNoIntersection
+    else:
+        hits,_ = hits.max(dim=0) #since we always take max pred
+        return targIndex, hits, overSegmented
+
 
 def computeAP(scores):
     rank=[]
