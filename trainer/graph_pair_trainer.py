@@ -1195,7 +1195,6 @@ class GraphPairTrainer(BaseTrainer):
         predsGTYes = torch.stack((predsPos,predsGTOverSeg,predsGTGroup,predsGTError),dim=-1)
         predsGTNo = torch.stack((predsNeg,predsGTNotOverSeg,predsGTNoGroup,predsGTNoError),dim=-1)
 
-        #TODO scoring
         recallRel = truePosRel/(truePosRel+falseNegRel)
         precRel = truePosRel/(truePosRel+falsePosRel)
         recallOverSeg = truePosOverSeg/(truePosOverSeg+falseNegOverSeg)
@@ -1205,14 +1204,18 @@ class GraphPairTrainer(BaseTrainer):
         recallError = truePosError/(truePosError+falseNegError)
         precError = truePosError/(truePosError+falsePosError)
         log = {
-            'recallRel' = recallRel, 
-            'precRel' = precRel, 
-            'recallOverSeg' = recallOverSeg,
-            'precOverSeg' = precOverSeg,
-            'recallGroup' = recallGroup,
-            'precGroup' = precGroup, 
-            'recallError' = recallError,
-            'precError' = precError
+            'recallRel' : recallRel, 
+            'precRel' : precRel, 
+            'FmRel' : 2*(precRel*recallRel)/(recallRel+precRel) if recallRel+precRel>0 else 0
+            'recallOverSeg' : recallOverSeg,
+            'precOverSeg' : precOverSeg,
+            'FmOverSeg' : 2*(precOverSeg*recallOverSeg)/(recallOverSeg+precOverSeg) if recallOverSeg+precOverSeg>0 else 0
+            'recallGroup' : recallGroup,
+            'precGroup' : precGroup, 
+            'FmGroup' : 2*(precGroup*recallGroup)/(recallGroup+precGroup) if recallGroup+precGroup>0 else 0
+            'recallError' : recallError,
+            'precError' : precError
+            'FmError' : 2*(precError*recallError)/(recallError+precError) if recallError+precError>0 else 0
             }
 
         if rel_prop_pred is not None:
@@ -1582,6 +1585,241 @@ class GraphPairTrainer(BaseTrainer):
                 }
         if ap is not None:
             log['rel_AP']=ap
+        if not self.model.detector_frozen:
+            if 'nnFinalLoss' in losses:
+                log['nn loss improvement (neg is good)'] = losses['nnFinalLoss'].item()-nn_loss
+            if 'classFinalLoss' in losses:
+                log['class loss improvement (neg is good)'] = losses['classFinalLoss'].item()-class_loss
+
+        if 'bb_stats' in get:
+            outputBoxes=torch.cat((outputBoxes[:,0:6],outputBoxes[:,7:]),dim=1) #throw away NN pred
+            if targetBoxes is not None:
+                targetBoxes = targetBoxes.cpu()
+            if targetBoxes is not None:
+                target_for_b = targetBoxes[0]
+            else:
+                target_for_b = torch.empty(0)
+            if self.model.rotation:
+                ap_5, prec_5, recall_5 =AP_dist(target_for_b,outputBoxes,0.9,numClasses)
+            else:
+                ap_5, prec_5, recall_5 =AP_iou(target_for_b,outputBoxes,0.5,numClasses)
+            prec_5 = np.array(prec_5)
+            recall_5 = np.array(recall_5)
+            log['bb_AP']=ap_5
+            log['bb_prec']=prec_5
+            log['bb_recall']=recall_5
+            log['bb_Fm_avg']=(2*(prec_5*recall_5)/(prec_5+recall_5)).mean()
+
+        if 'nn_acc' in get:
+            if self.model.predNN and bbPred is not None:
+                predNN_p=bbPred[:,-1,0]
+                diffs=torch.abs(predNN_p-target_num_neighbors[0][bbAlignment].float())
+                nn_acc = (diffs<0.5).float().mean().item()
+                log['nn_acc']=nn_acc
+
+        if proposedInfo is not None:
+            propRecall,propPrec = proposedInfo[2:4]
+            log['prop_rel_recall'] = propRecall
+            log['prop_rel_prec'] = propPrec
+        if final_prop_rel_recall is not None:
+            log['final_prop_rel_recall']=final_prop_rel_recall
+        if final_prop_rel_prec is not None:
+            log['final_prop_rel_prec']=final_prop_rel_prec
+
+        got={}#outputBoxes, outputOffsets, relPred, relIndexes, bbPred, rel_prop_pred
+        for name in get:
+            if name=='relPred':
+                got['relPred'] = relPred.detach().cpu()
+            elif name=='outputBoxes':
+                if useGT:
+                    got['outputBoxes'] = targetBoxes.cpu()
+                else:
+                    got['outputBoxes'] = outputBoxes.detach().cpu()
+            elif name=='outputOffsets':
+                got['outputOffsets'] = outputOffsets.detach().cpu()
+            elif name=='relIndexes':
+                got['relIndexes'] = relIndexes
+            elif name=='bbPred':
+                got['bbPred'] = bbPred.detach().cpu()
+
+        return losses, log, got
+
+
+
+
+
+
+    def newRun(self,instance,useGT,threshIntur=None,get=[]):
+        numClasses = self.model.numBBTypes
+        if 'no_blanks' in self.config['validation'] and not self.config['data_loader']['no_blanks']:
+            numClasses-=1
+        image, targetBoxes, adj, target_num_neighbors = self._to_tensor(instance)
+        if useGT:
+            outputBoxes, outputOffsets, relPred, relIndexes, bbPred, rel_prop_pred = self.model(image,targetBoxes,target_num_neighbors,True,
+                    otherThresh=self.conf_thresh_init, otherThreshIntur=threshIntur, hard_detect_limit=self.train_hard_detect_limit)
+            #TODO
+            predPairingShouldBeTrue,predPairingShouldBeFalse, eRecall,ePrec,fullPrec,ap,proposedInfo = self.prealignedEdgePred(adj,relPred,relIndexes,rel_prop_pred)
+            if bbPred is not None:
+                if self.model.predNN or self.model.predClass:
+                    if target_num_neighbors is not None:
+                        alignedNN_use = target_num_neighbors[0]
+                    bbPredNN_use = bbPred[:,:,0]
+                    start=1
+                else:
+                    start=0
+                if self.model.predClass:
+                    if targetBoxes is not None:
+                        alignedClass_use =  targetBoxes[0,:,13:13+self.model.numBBTypes]
+                    bbPredClass_use = bbPred[:,:,start:start+self.model.numBBTypes]
+            else:
+                bbPredNN_use=None
+                bbPredClass_use=None
+            final_prop_rel_recall = final_prop_rel_prec = None
+        else:
+            outputBoxes, outputOffsets, relPred, relIndexes, bbPred, rel_prop_pred = self.model(image,
+                    otherThresh=self.conf_thresh_init, otherThreshIntur=threshIntur, hard_detect_limit=self.train_hard_detect_limit)
+            #gtPairing,predPairing = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred)
+            predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, bbFullHit, proposedInfo, log = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred,relIndexes, rel_prop_pred)
+            if bbPred is not None and bbPred.size(0)>0:
+                #create aligned GT
+                #this was wrong...
+                    #first, remove unmatched predicitons that didn't overlap (weren't close) to any targets
+                    #toKeep = 1-((bbNoIntersections==1) * (bbAlignment==-1))
+                #remove predictions that overlapped with GT, but not enough
+                #toKeep = 1-((bbFullHit==0) * (bbAlignment!=-1)) #toKeep = not (incomplete_overlap and did_overlap)
+                #bbAlignment_use = bbAlignment[toKeep]
+                assert(not self.model.predNN)
+                start=0
+                if self.model.predClass:
+                    for predGroup in predGroups:
+                        ts=?
+                        for tId in ts:
+                            if tId>=0:
+                                clas=targetBoxes[0][tId][
+
+                    #We really don't care about the class of non-overlapping instances
+                    if targetBoxes is not None:
+                        toKeep = bbFullHit==1
+                        if toKeep.any():
+                            bbPredClass_use = bbPred[toKeep][:,:,start:start+self.model.numBBTypes]
+                            bbAlignment_use = bbAlignment[toKeep]
+                            alignedClass_use =  targetBoxes[0][bbAlignment_use.long()][:,13:13+self.model.numBBTypes] #There should be no -1 indexes in hereS
+                        else:
+                            alignedClass_use = None
+                            bbPredClass_use = None
+                    else:
+                        alignedClass_use = None
+                        bbPredClass_use = None
+            else:
+                bbPredNN_use = None
+                bbPredClass_use = None
+        if relPred is not None:
+            numEdgePred = relPred.size(0)
+            if predPairingShouldBeTrue is not None:
+                lenTrue = predPairingShouldBeTrue.size(0)
+            else:
+                lenTrue = 0
+            if predPairingShouldBeFalse is not None:
+                lenFalse = predPairingShouldBeFalse.size(0)
+            else:
+                lenFalse = 0
+        else:
+            numEdgePred = lenTrue = lenFalse = 0
+        numBoxPred = outputBoxes.size(0)
+        #if iteration>25:
+        #    import pdb;pdb.set_trace()
+        #if len(predPairing.size())>0 and predPairing.size(0)>0:
+        #    relLoss = self.loss['rel'](predPairing,gtPairing)
+        #else:
+        #    relLoss = torch.tensor(0.0,requires_grad=True).to(image.device)
+        #relLoss = torch.tensor(0.0).to(image.device)
+        relLoss = None
+        #seperating the loss into true and false portions is not only convienint, it balances the loss between true/false examples
+        if predPairingShouldBeTrue is not None and predPairingShouldBeTrue.size(0)>0:
+            ones = torch.ones_like(predPairingShouldBeTrue).to(image.device)
+            relLoss = self.loss['rel'](predPairingShouldBeTrue,ones)
+            debug_avg_relTrue = predPairingShouldBeTrue.mean().item()
+        else:
+            debug_avg_relTrue =0 
+        if predPairingShouldBeFalse is not None and predPairingShouldBeFalse.size(0)>0:
+            zeros = torch.zeros_like(predPairingShouldBeFalse).to(image.device)
+            relLossFalse = self.loss['rel'](predPairingShouldBeFalse,zeros)
+            if relLoss is None:
+                relLoss=relLossFalse
+            else:
+                relLoss+=relLossFalse
+            debug_avg_relFalse = predPairingShouldBeFalse.mean().item()
+        else:
+            debug_avg_relFalse = 0
+        losses={}
+        if relLoss is not None:
+            #relLoss *= self.lossWeights['rel']
+            losses['relLoss']=relLoss
+
+        if proposedInfo is not None:
+            propPredPairingShouldBeTrue,propPredPairingShouldBeFalse= proposedInfo[0:2]
+            propRelLoss = None
+            #seperating the loss into true and false portions is not only convienint, it balances the loss between true/false examples
+            if propPredPairingShouldBeTrue is not None and propPredPairingShouldBeTrue.size(0)>0:
+                ones = torch.ones_like(propPredPairingShouldBeTrue).to(image.device)
+                propRelLoss = self.loss['propRel'](propPredPairingShouldBeTrue,ones)
+            if propPredPairingShouldBeFalse is not None and propPredPairingShouldBeFalse.size(0)>0:
+                zeros = torch.zeros_like(propPredPairingShouldBeFalse).to(image.device)
+                propRelLossFalse = self.loss['propRel'](propPredPairingShouldBeFalse,zeros)
+                if propRelLoss is None:
+                    propRelLoss=propRelLossFalse
+                else:
+                    propRelLoss+=propRelLossFalse
+            if propRelLoss is not None:
+                losses['propRelLoss']=propRelLoss
+
+
+
+        if not self.model.detector_frozen:
+            if targetBoxes is not None:
+                targSize = targetBoxes.size(1)
+            else:
+                targSize =0 
+            #import pdb;pdb.set_trace()
+            boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
+            losses['boxLoss'] = boxLoss
+            #boxLoss *= self.lossWeights['box']
+            #if relLoss is not None:
+            #    loss = relLoss + boxLoss
+            #else:
+            #    loss = boxLoss
+        #else:
+        #    loss = relLoss
+
+
+        if self.model.predNN and bbPredNN_use is not None and bbPredNN_use.size(0)>0:
+            alignedNN_use = alignedNN_use[:,None] #introduce "time" dimension to broadcast
+            nn_loss_final = self.loss['nnFinal'](bbPredNN_use,alignedNN_use)
+            losses['nnFinalLoss']=nn_loss_final
+            #nn_loss_final *= self.lossWeights['nn']
+            
+            #if loss is not None:
+            #    loss += nn_loss_final
+            #else:
+            #    loss = nn_loss_final
+            #nn_loss_final = nn_loss_final.item()
+        #else:
+            #nn_loss_final=0
+
+        if self.model.predClass and bbPredClass_use is not None and bbPredClass_use.size(0)>0:
+            alignedClass_use = alignedClass_use[:,None] #introduce "time" dimension to broadcast
+            class_loss_final = self.loss['classFinal'](bbPredClass_use,alignedClass_use)
+            losses['classFinalLoss'] = class_loss_final
+            #class_loss_final *= self.lossWeights['class']
+            #loss += class_loss_final
+            #class_loss_final = class_loss_final.item()
+        #else:
+            #class_loss_final = 0
+        
+        #log['rel_prec']= fullPrec
+        #log['rel_recall']= eRecall
+        #log['rel_Fm']= 2*(fullPrec*eRecall)/(eRecall+fullPrec) if eRecall+fullPrec>0 else 0
+
         if not self.model.detector_frozen:
             if 'nnFinalLoss' in losses:
                 log['nn loss improvement (neg is good)'] = losses['nnFinalLoss'].item()-nn_loss
