@@ -5,7 +5,8 @@ import timeit
 from utils import util
 from collections import defaultdict
 from evaluators import FormsBoxDetect_printer
-from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist, getTargIndexForPreds_iou, getTargIndexForPreds_dist, computeAP
+from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist, getTargIndexForPreds_iou, newGetTargIndexForPreds_iou, getTargIndexForPreds_dist, computeAP
+from utils.group_pairing import getGTGroup, pure
 from datasets.testforms_graph_pair import display
 import random
 
@@ -827,6 +828,7 @@ class GraphPairTrainer(BaseTrainer):
                     scores.append( (sigPredsAll[i],False) )
                     if sigPredsAll[i]>self.thresh_rel:
                         falsePred+=1
+
             else:
                 #if self.useBadBBPredForRelLoss=='fixed' or (self.useBadBBPredForRelLoss and (predsWithNoIntersection[n0] or predsWithNoIntersection[n1])):
                 if self.useBadBBPredForRelLoss:
@@ -933,6 +935,365 @@ class GraphPairTrainer(BaseTrainer):
 
 
         return predsPos,predsNeg, recall, prec ,fullPrec, computeAP(scores), targIndex, fullHit, proposedInfo, final_prop_rel_recall, final_prop_rel_prec
+
+    def newAlignEdgePred(self,targetBoxes,adj,outputBoxes,edgePred,edgeIndexes,rel_prop_pred):
+        if edgePred is None or targetBoxes is None:
+            from utils.group_pairing import getGTGroup, pure
+            if targetBoxes is None:
+                if edgePred is not None and (edgePred>self.thresh_rel).any():
+                    prec=0
+                    ap=0
+                else:
+                    prec=1
+                    ap=1
+                recall=1
+                targIndex = -torch.ones(outputBoxes.size(0)).int()
+            elif edgePred is None:
+                if targetBoxes is not None:
+                    recall=0
+                    ap=0
+                else:
+                    recall=1
+                    ap=1
+                prec=1
+                targIndex = None
+
+            return torch.tensor([]),torch.tensor([]),recall,prec,prec,ap, targIndex, torch.ones(outputBoxes.size(0)), None, recall, prec
+        targetBoxes = targetBoxes.cpu()
+        #decide which predicted boxes belong to which target boxes
+        #should this be the same as AP_?
+        numClasses = 2
+
+        if self.model.rotation:
+            targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
+        else:
+            targIndex, fullHit, overSegmented = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,hard_thresh=False,fixed=self.fixedAlign)
+
+        #Create gt vector to match edgePred.values()
+
+        predsRel = edgePred[...,0] 
+        predsOverSeg = edgePred[...,1] 
+        predsGroup = edgePred[...,2] 
+        predsError = edgePred[...,3] 
+        sigPredsAll = torch.sigmoid(predsRel[:,-1])
+        predsPos = []
+        predsNeg = []
+        predsGTOverSeg = []
+        predsGTNotOverSeg = []
+        predsGTGroup = []
+        predsGTNoGroup = []
+        predsGTNoError = []
+        predsGTError = []
+
+        scores = []
+        matches=0
+        badPred=0
+        goodEdge=0
+        truePosRel=falsePosRel=trueNegRel=falseNegRel=0
+        truePosOverSeg=falsePosOverSeg=trueNegOverSeg=falseNegOverSeg=0
+        truePosGroup=falsePosGroup=trueNegGroup=falseNegGroup=0
+        truePosError=falsePosError=trueNegError=falseNegError=0
+        predGroups={}
+        predToGTGroup={}
+        for node in range(num_nodes):
+            predGroupsT[node] = [targIndex[bb].item() for bb in predGroups[node] if targIndex[bb].item()>=0 and (fullHit[bb] or overSegmented[bb])]
+            predGroupsTNear[node] = [targIndex[bb].item() for bb in predGroups[node] if targIndex[bb].item()>=0 and not (fullHit[bb] or overSegmented[bb])]
+
+        for i,(n0,n1) in enumerate(edgeIndexes):
+            wasRel=None
+            wasOverSeg=None
+            wasError=None
+            wasGroup=None
+            ts0=predGroupsT[n0]
+            ts1=predGroupsT[n1]
+            ts0near=predGroupsT[n0]
+            ts1near=predGroupsT[n1]
+            #t1 = targIndexes[n1].item()
+            gtGroup0 = getGTGroup(ts0,gtGroups)
+            gtGroup1 = getGTGroup(ts1,gtGroups)
+            if gtGroup1==-1:
+                gtGroup1=-2 #so gtGroup0!=gtGroup1
+            if len(ts0+ts0near)>0 and len(ts1+ts1near)>0:
+                #if len(ts0)==1 and overSegmented[ts0[0]] and len(ts1)==1 and overSegmented[ts1[0]]:S
+                if len(predGroups[n0])==1 and overSegmented[predGroups[n0][0]] and len(predGroups[n1])==1 and overSegmented[predGroups[n1][0]] and ts0[0]==ts1[0]:
+                    wasOverSeg=True
+                    wasError=False
+                else:
+                    wasOverSeg=False
+                    gtLinked=False
+                    gtLinkedNear=False
+                
+                    #if not( (len(ts0)==1 and overSegmented[ts0[0]]) or (len(ts1)==1 and overSegmented[ts1[0]]) ):
+                    if not (len(predGroups[n0])==1 and overSegmented[predGroups[n0][0]]) and not (len(predGroups[n1])==1 and overSegmented[predGroups[n1][0]])
+                        for t0 in ts0:
+                            for t1 in ts1:
+                                if (min(t0,t1),max(t0,t1)) in adj:
+                                    gtLinked=True
+                                    break
+                            if gtLinked:
+                            break
+                    #else we default to a "near" link, don't suppress and don't support
+
+                    gtLinkedNear=gtLinked
+                    for t0 in ts0+ts0near:
+                        if gtLinkedNear:
+                            break
+                        for t1 in ts1+ts1near:
+                            if (min(t0,t1),max(t0,t1)) in adj:
+                                gtLinkedNear=True
+                                break
+            
+                    if gtLinked:
+                        if pure(ts0,gtGroups) and pure(ts1,gtGroups):
+                            matches+=1
+                            wasRel=True
+                            wasError=False
+                            matches+=1
+                            scores.append( (sigPredsAll[i],True) )
+
+                            if gtGroup0==gtGroup1:
+                                wasGroup=True
+                            else:
+                                wasGroup=False
+                        else:
+                            wasError=True
+                            scores.append( (sigPredsAll[i],False) ) #for the sake of scoring, this is a bad relationship
+                            if gtGroup0!=gtGroup1:
+                                wasGroup=False
+
+                    elif gtLinkedNear:
+                        scores.append( (sigPredsAll[i],False) ) #for the sake of scoring, this is a bad relationship
+                        if gtGroup0==gtGroup1 and pure(ts0,gtGroups) and pure(ts1,gtGroups):
+                            wasGroup=True
+                    else:
+                        if ((min(gtGroup0,gtGroup1),max(gtGroup0,gtGroup1)) in gtGroupAdj) or gtGroup0==gtGroup1:
+                            if gtGroup0==gtGroup1 and pure(ts0,gtGroups) and pure(ts1,gtGroups):
+                                wasGroup=True
+                                wasError=False
+                            elif gtGroup0!=gtGroup1:
+                                wasGroup=False
+                                wasError=False
+                        else:
+                            wasRel=False
+                            wasError=False
+                            wasGroup=False
+                            scores.append( (sigPredsAll[i],False) )
+
+            else:
+                #if self.useBadBBPredForRelLoss=='fixed' or (self.useBadBBPredForRelLoss and (predsWithNoIntersection[n0] or predsWithNoIntersection[n1])):
+                if self.useBadBBPredForRelLoss=='full' or np.random.rand()<self.useBadBBPredForRelLoss:
+                    wasRel=False
+                    predsNeg.append(predsRel[i])
+                elif sigPredsAll[i]>self.thresh_rel:
+                    badPred+=1
+                wasError=True
+                scores.append( (sigPredsAll[i],False) )
+
+
+
+            if wasRel is not None:
+                if wasRel:
+                    predsGTRel.append(predsRel[i])
+                else
+                    predsGTNoRel.append(predsRel[i])
+                if torch.sigmoid(predsRel[i])>self.thresh_rel:
+                    if wasRel:
+                        truePosRel+=1
+                    else:
+                        falsePosRel+=1
+                else:
+                    if wasRel:
+                        falseNegRel+=1
+                    else:
+                        trueNegRel+=1
+            if wasOverSeg is not None:
+                if wasOverSeg:
+                    predsGTOverSeg.append(predsOverSeg[i])
+                else
+                    predsGTNotOverSeg.append(predsOverSeg[i])
+                if torch.sigmoid(predsOverSeg[i])>self.thresh_overSeg:
+                    if wasOverSeg:
+                        truePosOverSeg+=1
+                    else:
+                        falsePosOverSeg+=1
+                else:
+                    if wasOverSeg:
+                        falseNegOverSeg+=1
+                    else:
+                        trueNegOverSeg+=1
+            if wasGroup is not None:
+                if wasGroup:
+                    predsGTGroup.append(predsGroup[i])
+                else
+                    predsGTNoGroup.append(predsGroup[i])
+                if torch.sigmoid(predsGroup[i])>self.thresh_group:
+                    if wasGroup:
+                        truePosGroup+=1
+                        successfulEdge=True
+                    else:
+                        falsePosGroup+=1
+                else:
+                    if wasGroup:
+                        falseNegGroup+=1
+                    else:
+                        trueNegGroup+=1
+            if wasError is not None:
+                if wasError:
+                    predsGTError.append(predsError[i])
+                else
+                    predsGTNoError.append(predsError[i])
+                if torch.sigmoid(predsError[i])>self.thresh_error:
+                    if wasError:
+                        truePosError+=1
+                    else:
+                        falsePosError+=1
+                else:
+                    if wasError:
+                        falseNegError+=1
+                    else:
+                        trueNegError+=1
+
+
+
+        for i in range(len(adj)-matches):
+            scores.append( (float('nan'),True) )
+    
+        #stack all label divisions into tensors
+        if len(predsPos)>0:
+            predsPos = torch.stack(predsPos).to(relPred.device)
+        else:
+            predsPos = None
+        if len(predsNeg)>0:
+            predsNeg = torch.stack(predsNeg).to(relPred.device)
+        else:
+            predsNeg = None
+        if len(predsGTOverSeg)>0:
+            predsGTOverSeg = torch.stack(predsGTOverSeg).to(relPred.device)
+        else:
+            predsGTOverSeg = None
+        if len(predsGTNotOverSeg)>0:
+            predsGTNotOverSeg = torch.stack(predsGTNotOverSeg).to(relPred.device)
+        else:
+            predsGTNotOverSeg = None
+        if len(predsGTGroup)>0:
+            predsGTGroup = torch.stack(predsGTGroup).to(relPred.device)
+        else:
+            predsGTGroup = None
+        if len(predsGTNoGroup)>0:
+            predsGTNoGroup = torch.stack(predsGTNoGroup).to(relPred.device)
+        else:
+            predsGTNoGroup = None
+        if len(predsGTError)>0:
+            predsGTError = torch.stack(predsGTError).to(relPred.device)
+        else:
+            predsGTError = None
+        if len(predsGTNoError)>0:
+            predsGTNoError = torch.stack(predsGTNoError).to(relPred.device)
+        else:
+            predsGTNoError = None
+
+        predsGTYes = torch.stack((predsPos,predsGTOverSeg,predsGTGroup,predsGTError),dim=-1)
+        predsGTNo = torch.stack((predsNeg,predsGTNotOverSeg,predsGTNoGroup,predsGTNoError),dim=-1)
+
+        #TODO scoring
+        recallRel = truePosRel/(truePosRel+falseNegRel)
+        precRel = truePosRel/(truePosRel+falsePosRel)
+        recallOverSeg = truePosOverSeg/(truePosOverSeg+falseNegOverSeg)
+        precOverSeg = truePosOverSeg/(truePosOverSeg+falsePosOverSeg)
+        recallGroup = truePosGroup/(truePosGroup+falseNegGroup)
+        precGroup = truePosGroup/(truePosGroup+falsePosGroup)
+        recallError = truePosError/(truePosError+falseNegError)
+        precError = truePosError/(truePosError+falsePosError)
+        log = {
+            'recallRel' = recallRel, 
+            'precRel' = precRel, 
+            'recallOverSeg' = recallOverSeg,
+            'precOverSeg' = precOverSeg,
+            'recallGroup' = recallGroup,
+            'precGroup' = precGroup, 
+            'recallError' = recallError,
+            'precError' = precError
+            }
+
+        if rel_prop_pred is not None:
+            if len(adj)>0:
+                final_prop_rel_recall = matches/len(adj)
+            else:
+                final_prop_rel_recall = 1
+            if len(rels)>0:
+                final_prop_rel_prec = matches/len(rels)
+            else:
+                final_prop_rel_prec = 1
+            log['final_prop_rel_recall']=final_prop_rel_recall
+            log['final_prop_rel_prec']=final_prop_rel_prec
+
+            relPropScores,relPropIds, threshPropRel = rel_prop_pred
+            truePropPred=falsePropPred=badPropPred=0
+            propPredsPos=[]
+            propPredsNeg=[]
+            for i,(n0,n1) in enumerate(relPropIds):
+                t0 = targIndex[n0].item()
+                t1 = targIndex[n1].item()
+                ts0=predGroupsT[n0]
+                ts1=predGroupsT[n1]
+                gtGroup0 = getGTGroup(ts0,gtGroups)
+                gtGroup1 = getGTGroup(ts1,gtGroups)
+                if t0>=0 and t1>=0:
+                    if (min(t0,t1),max(t0,t1)) in adj:
+                        #if self.useBadBBPredForRelLoss!='fixed' or (fullHit[n0] and fullHit[n1]):
+                        if fullHit[n0] and fullHit[n1]:
+                            #matches+=1
+                            propPredsPos.append(relPropScores[i])
+                            #scores.append( (sigPredsAll[i],True) )
+                            if relPropScores[i]>threshPropRel:
+                                truePropPred+=1
+                        #else:
+                        #    scores.append( (sigPredsAll[i],False) ) #for the sake of scoring, this is a bad relationship
+                    elif gtGroup0!=gtGroup1:
+                        propPredsNeg.append(relPropScores[i])
+                        #scores.append( (sigPredsAll[i],False) )
+                        if relPropScores[i]>threshPropRel:
+                            falsePropPred+=1
+                else:
+                    if self.useBadBBPredForRelLoss:
+                        if self.useBadBBPredForRelLoss=='full' or np.random.rand()<self.useBadBBPredForRelLoss:
+                            propPredsNeg.append(relPropScores[i])
+                    #scores.append( (sigPredsAll[i],False) )
+                    if relPropScores[i]>threshPropRel:
+                        badPropPred+=1
+            #Add score 0 for instances we didn't predict
+            #for i in range(len(adj)-matches):
+            #    scores.append( (float('nan'),True) )
+        
+            if len(propPredsPos)>0:
+                propPredsPos = torch.stack(propPredsPos).to(relPred.device)
+            else:
+                propPredsPos = None
+            if len(propPredsNeg)>0:
+                propPredsNeg = torch.stack(propPredsNeg).to(relPred.device)
+            else:
+                propPredsNeg = None
+
+            if len(adj)>0:
+                propRecall = truePropPred/len(adj)
+            else:
+                propRecall = 1
+            #if falsePropPred>0:
+            #    propPrec = truePropPred/(truePropPred+falsePropPred)
+            #else:
+            #    propPrec = 1
+            if falsePropPred+badPropPred>0:
+                propFullPrec = truePropPred/(truePropPred+falsePropPred+badPropPred)
+            else:
+                propFullPrec = 1
+            log['propRecall']=propRecall
+            log['propFullPrec']=propFullPrec
+
+            proposedInfo = (propPredsPos,propPredsNeg, propRecall, propFullPrec)
+        else:
+            proposedInfo = None
+
+        return predsGTYes, predsGTNo, recall, prec ,fullPrec, computeAP(scores), targIndex, fullHit, proposedInfo, final_prop_rel_recall, final_prop_rel_prec
 
 
     def prealignedEdgePred(self,adj,relPred,relIndexes,rel_prop_pred):
