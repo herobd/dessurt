@@ -389,7 +389,7 @@ def fixAnnotations(this,annotations):
 
     return numPairsWithoutBB
 
-def getBBWithPoints(useBBs,s,useBlankClass=False,usePairedClass=False):
+def getBBWithPoints(useBBs,s,useBlankClass=False,usePairedClass=False, useAllClass=[]):
 
     numClasses=2
     if useBlankClass:
@@ -437,6 +437,10 @@ def getBBWithPoints(useBBs,s,useBlankClass=False,usePairedClass=False):
             bbs[:,j,16]=1 if text else 0
             bbs[:,j,17]=1 if field else 0
         index = 18
+        if len(useAllClass)>0:
+            for clas in useAllClass:
+                bbs[:,j,index]=bb['type']==clas
+                index+=1
         if useBlankClass:
             if bb['type']=='detectorPrediction':
                 bbs[:,j,index]=bb['blankPred']
