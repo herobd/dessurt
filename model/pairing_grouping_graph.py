@@ -319,12 +319,12 @@ class PairingGroupingGraph(BaseModel):
         if 'text_rec' in config:
             if config['text_rec']['model'] == 'CRNN':
                 self.hw_channels=config['text_rec']['num_channels']
-                self.text_rec = [CRNN(config['text_rec']['cnn_out_size'],config['text_rec']['num_channels'],config['text_rec']['num_outputs'],512)]
-                print('WARNING, text_rec is wrapped to prevent training')
-                self.text_rec[0].eval()
-                self.text_rec[0] = self.text_rec[0].cuda()
+                self.text_rec = CRNN(config['text_rec']['cnn_out_size'],config['text_rec']['num_channels'],config['text_rec']['num_outputs'],512)
+                print('WARNING, is text_rec set to frozen?')
+                self.text_rec.eval()
+                self.text_rec = self.text_rec.cuda()
                 state=torch.load(config['text_rec']['file'])['state_dict']
-                self.text_rec[0].load_state_dict(state)
+                self.text_rec.load_state_dict(state)
                 self.hw_input_height = config['text_rec']['input_height']
                 with open(config['text_rec']['char_set']) as f:
                     char_set = json.load(f)
@@ -485,8 +485,26 @@ class PairingGroupingGraph(BaseModel):
         else:
             return bbPredictions, offsetPredictions, None, None, None, None
 
+    def mergeBB(self,bb0,bb1):
+        #Get encompassing rectangle for actual bb
+        #REctify curved line for ATR
+        scale = self.hw_input_height/crop.size(2)
+        scaled_w = int(crop.size(3)*scale)
+        line[i,:,:,0:scaled_w] = F.interpolate(crop, size=(self.hw_input_height,scaled_w), mode='bilinear')#.to(crop.device)
+        imm[i] = line[i].cpu().numpy().transpose([1,2,0])
+        imm[i] = 256*(2-imm[i])/2
+
+
+
+        if line.size(1)==1 and self.hw_channels==3:
+            line = lines.expand(-1,3,-1,-1)
+        return bb,line
+
+        #resBatch = self.text_rec(lines)
+
     def mergeAndGroup(self,edgeOuts,nodeOuts):
         newBBs=[]
+        newBBs_line=[]
         mergedBBIndexes={}
         oldIdToNew = {i:i for i in range(nodeOuts.size(0))}
         newGroups=defaultdict(list) #map new node id->bbIds
@@ -497,13 +515,14 @@ class PairingGroupingGraph(BaseModel):
             groupPred = edgeOuts[i,-1,2]
             
             if torch.sigmoid(mergePred)>self.mergeThresh and GT?:
-                if len(pnewGroups[n0])==1 and len(pnewGroups[n1])==1:
-                    bb0 = pnewGroups[n0][0]
-                    bb1 = pnewGroups[n1][0]
-                    newBB= self.mergeBB(bbs[bb0],bb[bb1])
+                if len(newGroups[n0])==1 and len(newGroups[n1])==1:
+                    bb0 = newGroups[n0][0]
+                    bb1 = newGroups[n1][0]
+                    newBB,line= self.mergeBB(bbs[bb0],bb[bb1])
                     mergedBBIndexes[bb0]=len(newBBs)
                     mergedBBIndexes[bb1]=len(newBBs)
                     newBBs.append(newBB)
+                    newBBs_line.append(line)
             elif torch.sigmoid(groupPred)>self.groupThresh:
                 newGroups[newId] = newGroups[n0id]+newGroups[n1id]
 
@@ -522,6 +541,8 @@ class PairingGroupingGraph(BaseModel):
 
 
         #Actually rewrite bbs
+        #run text_rec on newBBs_line
+
         #Create new graph
         #(nodeFeatures, edgeIndexes, edgeFeatures, universalFeatures)
         newIdToOld=defaultdict(list)
@@ -1445,34 +1466,35 @@ class PairingGroupingGraph(BaseModel):
 
         scale = self.hw_input_height/h
         scaled_w = ((w+1)*scale).int()
-        max_w = scaled_w.max().item()
 
-        #scale = scale.cpu().detach()
-        #scaled_w = scaled_w.cpu().detach()
-        #r = r.cpu().detach()
-        #h = h.cpu().detach()
-        #w = w.cpu().detach()
+        res=[]
+        for index in range(0,bbs.size(0),self.atr_batch_size):
+            num = min(self.atr_batch_size,bbs.size(0)-index)
+            max_w = scaled_w.max().item()
 
-        lines = torch.FloatTensor(bbs.size(0),image.size(1),self.hw_input_height,max_w).fill_(0).to(image.device)
-        imm = [None]*bbs.size(0)
-        for i in range(bbs.size(0)):
-            
-            if self.rotation:
-                crop = rotate(image[0,:,y1[i]:y2[i]+1,x1[i]:x2[i]+1],r[i],(h[i],w[i]))
-            else:
-                crop = image[...,y1[i]:y2[i]+1,x1[i]:x2[i]+1]
-            scale = self.hw_input_height/crop.size(2)
-            scaled_w = int(crop.size(3)*scale)
-            lines[i,:,:,0:scaled_w] = F.interpolate(crop, size=(self.hw_input_height,scaled_w), mode='bilinear')#.to(crop.device)
-            imm[i] = lines[i].cpu().numpy().transpose([1,2,0])
-            imm[i] = 256*(2-imm[i])/2
-
+        
+            lines = torch.FloatTensor(num,image.size(1),self.hw_input_height,max_w).fill_(0).to(image.device)
+            imm = [None]*num
+            for i in range(index,index+num):
+                
+                if self.rotation:
+                    crop = rotate(image[0,:,y1[i]:y2[i]+1,x1[i]:x2[i]+1],r[i],(h[i],w[i]))
+                else:
+                    crop = image[...,y1[i]:y2[i]+1,x1[i]:x2[i]+1]
+                scale = self.hw_input_height/crop.size(2)
+                scaled_w = int(crop.size(3)*scale)
+                lines[i,:,:,0:scaled_w] = F.interpolate(crop, size=(self.hw_input_height,scaled_w), mode='bilinear')#.to(crop.device)
+                imm[i] = lines[i].cpu().numpy().transpose([1,2,0])
+                imm[i] = 256*(2-imm[i])/2
 
 
-        if lines.size(1)==1 and self.hw_channels==3:
-            lines = lines.expand(-1,3,-1,-1)
 
-        res = self.text_rec[0](lines)
+            if lines.size(1)==1 and self.hw_channels==3:
+                lines = lines.expand(-1,3,-1,-1)
+
+            resBatch = self.text_rec(lines)
+            res.append(resBatch)
+        res = torch.cat(res,dim=0)
 
         #Debug
         resN=res.data.cpu().numpy()
