@@ -774,6 +774,8 @@ class MetaGraphNet(nn.Module):
         self.repetitions = config['repetitions'] if 'repetitions' in config else 1 
         self.randomReps = False
 
+        self.undirected = (not config['directed']) if 'directed' in config else True
+
         ch = config['in_channels']
         layerType = config['layer_type'] if 'layer_type' in config else 'attention'
         layerCount = config['num_layers'] if 'num_layers' in config else 3
@@ -967,8 +969,11 @@ class MetaGraphNet(nn.Module):
         else:
             out_edges = None
 
+        if self.undirected:
+            out_edges = (out_edges[:out_edges.size(0)//2] + out_edges[out_edges.size(0)//2:])/2
+            edge_features = (edge_features[:edge_features.size(0)//2] + edge_features[edge_features.size(0)//2:])/2
 
-        return out_nodes, out_edges
+        return out_nodes, out_edges, node_features, edge_features, u_features
 
 
 
