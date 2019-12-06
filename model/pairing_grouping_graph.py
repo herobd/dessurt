@@ -292,8 +292,14 @@ class PairingGroupingGraph(BaseModel):
 
 
         #self.pairer = GraphNet(config['graph_config'])
-        self.pairer = eval(config['graph_config']['arch'])(config['graph_config'])
-        self.useMetaGraph = type(self.pairer) is MetaGraphNet
+        if type(config['graph_config']) is list:
+            self.useMetaGraph = True
+            self.graphnets=nn.ModuleList()
+            for graphconfig in config['graph_config']:
+                self.graphnets.append( eval(graphconfig['arch'])(graphconfig) )
+        else:
+            self.pairer = eval(config['graph_config']['arch'])(config['graph_config'])
+            self.useMetaGraph = type(self.pairer) is MetaGraphNet
         self.fixBiDirection= config['fix_bi_dir'] if 'fix_bi_dir' in config else False
         if 'max_graph_size' in config:
             MAX_GRAPH_SIZE = config['max_graph_size']
@@ -435,34 +441,29 @@ class PairingGroupingGraph(BaseModel):
                 allRelIndexes=[]
                 allNodeOuts=[]
                 allEdgeOuts=[]
-                graph,relIndexes,rel_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings)
+                graph,edgeIndexes,rel_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings)
+                #undirected
+                #edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
                 if graph is None:
                     return bbPredictions, offsetPredictions, None, None, None, rel_prop_scores
 
-                nodeOuts, edgeOuts = self.graphnet1(graph)
+                nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = self.graphnets[0](graph)
+                #edgeOuts = (edgeOuts[:edgeOuts.size(0)//2] + edgeOuts[edgeOuts.size(0)//2:])/2 #average two directions of edge
+                #edgeFeats = (edgeFeats[:edgeFeats.size(0)//2] + edgeFeats[edgeFeats.size(0)//2:])/2 #average two directions of edge
                 allNodeOuts.append(nodeOuts)
                 allEdgeOuts.append(edgeOuts)
                 allGroups.append([[i] for i in range(numBBs)])
-                allRelIndexes.append(relIndexes)
+                allEdgeIndexes.append(edgeIndexes)
+                
+                for graphnet in self.graphnets[1:]:
+                    useBBs,graph,groups,edgeIndexes=self.mergeAndGroup(edgeIndexes,relOuts,groups,nodeFeats,edgeFeats,uniFeats,useBBs)
+                    nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = graphnet(graph)
+                    allNodeOuts.append(nodeOuts)
+                    allEdgeOuts.append(edgeOuts)
+                    allGroups.append(groups)
+                    allEdgeIndexes.append(edgeIndexes)
 
-                graph,groups,relIndexes=self.mergeAndGroup(relOuts,bbOuts,...)
-                bbOuts, relOuts = self.graphnet2(graph)
-                allNodeOuts.append(nodeOuts)
-                allEdgeOuts.append(edgeOuts)
-                allGroups.append(groups)
-                allRelIndexes.append(relIndexes)
 
-                graph,groups,relIndexes=self.mergeAndGroup(relOuts,bbOuts,...)
-                bbOuts, relOuts = self.graphnet3(graph)
-                allNodeOuts.append(nodeOuts)
-                allEdgeOuts.append(edgeOuts)
-                allGroups.append(groups)
-                allRelIndexes.append(relIndexes)
-
-                if self.fixBiDirection or not self.training:
-                    relIndexes = relIndexes[:len(relIndexes)//2]
-                if self.fixBiDirection:
-                    relOuts = (relOuts[:relOuts.size(0)//2] + relOuts[relOuts.size(0)//2:])/2 #average two directions of edge
             else:
                 raise NotImplementedError('Simple pairing not implemented for new grouping stuff')
             #adjacencyMatrix = torch.zeros((bbPredictions.size(1),bbPredictions.size(1)))
@@ -481,7 +482,7 @@ class PairingGroupingGraph(BaseModel):
                 startIndex = 6+self.detector.predNumNeighbors
                 if not useGTBBs:
                     bbPredictions[:,startIndex:startIndex+self.numBBTypes] = torch.sigmoid(bbOuts[:,-1,self.predNN:self.predNN+self.numBBTypes].detach())
-            return bbPredictions, offsetPredictions, addEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores
+            return bbPredictions, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores
         else:
             return bbPredictions, offsetPredictions, None, None, None, None
 
@@ -526,13 +527,13 @@ class PairingGroupingGraph(BaseModel):
 
         #resBatch = self.text_rec(lines)
 
-    def mergeAndGroup(self,edgeOuts,nodeOuts):
+    def mergeAndGroup(self,oldEdgeIndexes,edgePreds,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs):
         newBBs={}
         newBBs_line={}
         newBBIdCounter=0
         oldToNewBBIndexes={}
         for i,(n0,n1) in enumerate(edgeIndexes):
-            mergePred = edgeOuts[i,-1,1]
+            mergePred = edgePreds[i,-1,1]
             
             if torch.sigmoid(mergePred)>self.mergeThresh and GT?:
                 if len(oldGroups[n0])==1 and len(oldGroups[n1])==1:
@@ -655,7 +656,7 @@ class PairingGroupingGraph(BaseModel):
         newGroups = deep copy oldGroups?
         newGroups=defaultdict(list) #map new node id->bbIds (new bbs)
         for i,(n0,n1) in enumerate(edgeIndexes):
-            groupPred = edgeOuts[i,-1,2]
+            groupPred = edgePreds[i,-1,2]
             if torch.sigmoid(groupPred)>self.groupThresh:
                 n0Id=oldIdToNew[n0]
                 n1Id=oldIdToNew[n1]
@@ -694,7 +695,7 @@ class PairingGroupingGraph(BaseModel):
         for i,(n0,n1) in enumerate(oldEdgeIndexes):
             n0Id=newNodeIdToPos[oldIdToNew[n0]]
             n1Id=newNodeIdToPos[oldIdToNew[n1]]
-            if n0Id!=n1Id:
+            if n0Id!=newIdToPosn1Id:
                 pair = (min(n0Id,n1Id),max(n0Id,n1Id))
                 oldEdgeIds[pair].append(i)
                 #newEdges.add(min(n0Id,n1Id),max(n0Id,n1Id))
@@ -709,13 +710,14 @@ class PairingGroupingGraph(BaseModel):
                 newEdgeFeat = oldEdgeFeatures[oldIds[0]]
             newEdgeFeats.append(newEdgeFeat)
         newEdgeFeats = torch.stack(newEdgeFeats,dim=0)
-
-        newEdges += [(y,x) for x,y in newEdges] #add backward edges for undirected graph
+        edges = newEdges
+        newEdges = list(newEdges) + [(y,x) for x,y in newEdges] #add reverse edges so undirected/bidirectional
         newEdgeIndexes = torch.LongTensor(newEdges).t().to(relFeats.device)
         newEdgeFeats = newEdgeFeats.repeat(2,1)
 
+        newGraph = (newNodeFeats, newEdgeIndexes, newEdgeFeats, oldUniversalFeats)
 
-        return newBBs, newGraph, newGroups
+        return bbs, newGraph, newGroups, edges
 
 
                 
