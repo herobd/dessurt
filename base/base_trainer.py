@@ -41,8 +41,37 @@ class BaseTrainer:
 
         self.train_logger = train_logger
         if config['optimizer_type']!="none":
-            self.optimizer = getattr(optim, config['optimizer_type'])(model.parameters(),
+            main_params=[]
+            slow_params=[]
+            slow_param_names = config['trainer']['slow_param_names'] if 'slow_param_names' in config else []
+            freeze_param_names = config['trainer']['freeze_param_names'] if 'freeze_param_names' in config else []
+            only_params = config['trainer']['only_params'] if 'only_params' in config['trainer'] else None
+            for name,param in model.named_parameters():
+                if only_params is None or any([p in name for p in only_params]):
+                    goSlow=False
+                    freeze=False
+                    for sp in slow_param_names:
+                        if sp in name:
+                            goSlow=True
+                            break
+                    for fp in freeze_param_names:
+                        if fp in name:
+                            freeze=True
+                            break
+                    if freeze:
+                        pass
+                    elif goSlow:
+                        slow_params.append(param)
+                    elif ('hwr' in name and self.hwr_frozen) or ('style_extractor' in name and self.style_frozen):
+                        pass
+                    elif 'style_extractor' in name and self.curriculum.need_style_in_disc:
+                        discriminator_params.append(param)
+                    else:
+                        main_params.append(param)
+            to_opt = [{'params': main_params}, {'params': slow_params, 'lr': config['optimizer']['lr']*0.1}]
+            self.optimizer = getattr(optim, config['optimizer_type'])(to_opt,
                                                                       **config['optimizer'])
+                    #self.optimizer = getattr(optim, config['optimizer_type'])(model.parameters(),
         self.useLearningSchedule = config['trainer']['use_learning_schedule'] if 'use_learning_schedule' in config['trainer'] else False
         if self.useLearningSchedule=='LR_test':
             start_lr=0.000001
