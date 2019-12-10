@@ -937,7 +937,7 @@ class GraphPairTrainer(BaseTrainer):
         return predsPos,predsNeg, recall, prec ,fullPrec, computeAP(scores), targIndex, fullHit, proposedInfo, final_prop_rel_recall, final_prop_rel_prec
 
 
-    def newAlignEdgePred(self,targetBoxes,adj,outputBoxes,edgePred,edgeIndexes,predGroups,rel_prop_pred):
+    def newAlignEdgePred(self,targetBoxes,adj,gtGroups,outputBoxes,edgePred,edgeIndexes,predGroups,rel_prop_pred):
         if edgePred is None:
             if targetBoxes is None:
                 prec=1
@@ -1676,6 +1676,7 @@ class GraphPairTrainer(BaseTrainer):
         if 'no_blanks' in self.config['validation'] and not self.config['data_loader']['no_blanks']:
             numClasses-=1
         image, targetBoxes, adj, target_num_neighbors = self._to_tensor(instance)
+        gtGroups = instance['gt_groups']
         if useGT:
             outputBoxes, outputOffsets, relPred, relIndexes, bbPred, rel_prop_pred = self.model(image,targetBoxes,target_num_neighbors,True,
                     otherThresh=self.conf_thresh_init, otherThreshIntur=threshIntur, hard_detect_limit=self.train_hard_detect_limit)
@@ -1713,7 +1714,7 @@ class GraphPairTrainer(BaseTrainer):
             edgeIndexes=allEdgeIndexes[graphIteration]
             predGroups=allPredGroups[graphIteration]
 
-            predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, bbFullHit, proposedInfo, logIter = self.newAlignEdgePred(targetBoxes,adj,outputBoxes,edgePred,edgeIndexes,predGroups, rel_prop_pred)
+            predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, bbFullHit, proposedInfo, logIter = self.newAlignEdgePred(targetBoxes,adj,gtGroups,outputBoxes,edgePred,edgeIndexes,predGroups, rel_prop_pred)
             if bbPred is not None and bbPred.size(0)>0:
                 #create aligned GT
                 #this was wrong...
@@ -1803,20 +1804,20 @@ class GraphPairTrainer(BaseTrainer):
             #relLoss = torch.tensor(0.0).to(image.device)
             relLoss = None
             #seperating the loss into true and false portions is not only convienint, it balances the loss between true/false examples
-            if predPairingShouldBeTrue is not None and predPairingShouldBeTrue.size(0)>0:
-                ones = torch.ones_like(predPairingShouldBeTrue).to(image.device)
-                relLoss = self.loss['rel'](predPairingShouldBeTrue,ones)
-                debug_avg_relTrue = predPairingShouldBeTrue.mean().item()
+            if predEdgeShouldBeTrue is not None and predEdgeShouldBeTrue.size(0)>0:
+                ones = torch.ones_like(predEdgeShouldBeTrue).to(image.device)
+                relLoss = self.loss['rel'](predEdgeShouldBeTrue,ones)
+                debug_avg_relTrue = predEdgeShouldBeTrue.mean().item()
             else:
                 debug_avg_relTrue =0 
-            if predPairingShouldBeFalse is not None and predPairingShouldBeFalse.size(0)>0:
-                zeros = torch.zeros_like(predPairingShouldBeFalse).to(image.device)
-                relLossFalse = self.loss['rel'](predPairingShouldBeFalse,zeros)
+            if predEdgeShouldBeFalse is not None and predEdgeShouldBeFalse.size(0)>0:
+                zeros = torch.zeros_like(predEdgeShouldBeFalse).to(image.device)
+                relLossFalse = self.loss['rel'](predEdgeShouldBeFalse,zeros)
                 if relLoss is None:
                     relLoss=relLossFalse
                 else:
                     relLoss+=relLossFalse
-                debug_avg_relFalse = predPairingShouldBeFalse.mean().item()
+                debug_avg_relFalse = predEdgeShouldBeFalse.mean().item()
             else:
                 debug_avg_relFalse = 0
             if relLoss is not None:
