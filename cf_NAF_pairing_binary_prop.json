@@ -66,7 +66,7 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 125000,
+        "iterations": 225000,
         "save_dir": "saved/",
         "val_step": 5000,
         "save_step": 25000,
@@ -96,7 +96,7 @@
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
         "percent_rel_to_keep": 0.4,
-        "max_rel_to_keep": 320,
+        "max_rel_to_keep": 260,
 
 	"use_rel_shape_feats": "corner",
         "use_detect_layer_feats": 16,
