@@ -1,6 +1,6 @@
 from datasets.forms_feature_pair import FormsFeaturePair
 from datasets import forms_feature_pair
-import math
+import math, cv2
 import sys
 from matplotlib import pyplot as plt
 from matplotlib import gridspec
@@ -8,6 +8,42 @@ from matplotlib.patches import Polygon
 import numpy as np
 import torch
 
+ex=1
+
+def plotRect(img,color,xyrhw):
+        xc=xyrhw[0]
+        yc=xyrhw[1]
+        rot=xyrhw[2]
+        h=xyrhw[3]
+        w=xyrhw[4]
+        h = min(30000,h)
+        w = min(30000,w)
+        if h ==0:
+            h=2
+        tr = ( int(w*math.cos(rot)-h*math.sin(rot) + xc),  int(-w*math.sin(rot)-h*math.cos(rot) + yc) )
+        tl = ( int(-w*math.cos(rot)-h*math.sin(rot) + xc), int(w*math.sin(rot)-h*math.cos(rot) + yc) )
+        br = ( int(w*math.cos(rot)+h*math.sin(rot) + xc),  int(-w*math.sin(rot)+h*math.cos(rot) + yc) )
+        bl = ( int(-w*math.cos(rot)+h*math.sin(rot) + xc), int(w*math.sin(rot)+h*math.cos(rot) + yc) )
+
+        #cv2.line(img,tl,tr,color,1)
+        #cv2.line(img,tr,br,color,1)
+        #cv2.line(img,br,bl,color,1)
+        #cv2.line(img,bl,tl,color,1)
+        cv2.line(img,tl,tr,(255,0,0),1)
+        cv2.line(img,tr,br,(255,255,0),1)
+        cv2.line(img,br,bl,(0,255,255),1)
+        #cv2.line(img,bl,tl,(255,0,255),1)
+
+#def display(instance):
+#    imagePath = instance['imgPath']
+#    qXY = instance['qXY']
+#    iXY = instance['iXY']
+#    label = instance['label']
+#    relNodeIds = instance['nodeIds']
+#    gtNumNeighbors=instance['numNeighbors']+1
+#    missedRels = instance['missedRels']
+#    data = instance['data'][0]
+#    batchSize=data.size(0)
 def display(data):
     b=0
     return data['data'].numpy()
