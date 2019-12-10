@@ -140,7 +140,7 @@ class FUNSDGraphPair(GraphPairDataset):
 
 
         #self.pairs=list(pairs)
-        return bbs, list(range(len(boxes))), numClasses, trans
+        return bbs, list(range(len(boxes))), numClasses, trans, groups
 
 
     def getResponseBBIdList(self,queryId,annotations):
