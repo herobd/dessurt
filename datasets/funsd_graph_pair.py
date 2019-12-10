@@ -99,44 +99,110 @@ class FUNSDGraphPair(GraphPairDataset):
         #    numClasses+=1
         #if usePairedClass:
         #    numClasses+=1
+        if self.split_to_lines:
+            idToIndex={}
+            index=0
+            for j,boxinfo in enumerate(boxes):
+                prev=False
+                line=[]
+                lineTrans=[]
+                for word in boxinfo['words']:
+                    lX,tY,rX,bY = word['box']
+                    if len(line)==0:
+                        line.append(word['box']+[(lX+rX)/2,(tY+bY)/2])
+                        lineTrans.append(word['text'])
+                    else:
+                        difX = lX-line[-1][2]
+                        difY = (tY+bY)/2 - line[-1][5]
+                        pW = lX-line[-1][2]-lX-line[-1][0]
+                        pH = lX-line[-1][3]-lX-line[-1][1]
+                        if difX<-pW*0.25 or difY>pH*0.75:
+                            bb = np.empty(8+8+numClasses, dtype=np.float32)
+                            lX = max([w[0] for w in line])
+                            rX = max([w[2] for w in line])
+                            tY = max([w[1] for w in line])
+                            bY = max([w[3] for w in line])
+                            bb[0]=lX*s
+                            bb[1]=tY*s
+                            bb[2]=rX*s
+                            bb[3]=tY*s
+                            bb[4]=rX*s
+                            bb[5]=bY*s
+                            bb[6]=lX*s
+                            bb[7]=bY*s
+                            #we add these for conveince to crop BBs within window
+                            bb[8]=s*lX
+                            bb[9]=s*(tY+bY)/2.0
+                            bb[10]=s*rX
+                            bb[11]=s*(tY+bY)/2.0
+                            bb[12]=s*(lX+rX)/2.0
+                            bb[13]=s*tY
+                            bb[14]=s*(rX+lX)/2.0
+                            bb[15]=s*bY
+                            
+                            bb[16:]=0
+                            if boxinfo['label']=='header':
+                                bb[16]=1
+                            elif boxinfo['label']=='question':
+                                bb[17]=1
+                            elif boxinfo['label']=='answer':
+                                bb[18]=1
+                            elif boxinfo['label']=='other':
+                                bb[19]=1
+                            bbs.append(bb)
+                            trans.append(' '.join(lineTrans))
+                            nex = j<len(boxes)-1
+                            numNeighbors.append(len(boxinfo['linking'])+(1 if prev else 0)+(1 if nex else 0))
+                            prev=True
+                            index+=1
 
-        bbs = np.empty((1,len(boxes), 8+8+numClasses), dtype=np.float32) #2x4 corners, 2x4 cross-points, n classes
-        #pairs=set()
-        numNeighbors=[]
-        trans=[]
-        for j,boxinfo in enumerate(boxes):
-            lX,tY,rX,bY = boxinfo['box']
-            bbs[:,j,0]=lX*s
-            bbs[:,j,1]=tY*s
-            bbs[:,j,2]=rX*s
-            bbs[:,j,3]=tY*s
-            bbs[:,j,4]=rX*s
-            bbs[:,j,5]=bY*s
-            bbs[:,j,6]=lX*s
-            bbs[:,j,7]=bY*s
-            #we add these for conveince to crop BBs within window
-            bbs[:,j,8]=s*lX
-            bbs[:,j,9]=s*(tY+bY)/2.0
-            bbs[:,j,10]=s*rX
-            bbs[:,j,11]=s*(tY+bY)/2.0
-            bbs[:,j,12]=s*(lX+rX)/2.0
-            bbs[:,j,13]=s*tY
-            bbs[:,j,14]=s*(rX+lX)/2.0
-            bbs[:,j,15]=s*bY
-            
-            bbs[:,j,16:]=0
-            if boxinfo['label']=='header':
-                bbs[:,j,16]=1
-            elif boxinfo['label']=='question':
-                bbs[:,j,17]=1
-            elif boxinfo['label']=='answer':
-                bbs[:,j,18]=1
-            elif boxinfo['label']=='other':
-                bbs[:,j,19]=1
-            #for id1,id2 in boxinfo['linking']:
-            #    pairs.add((min(id1,id2),max(id1,id2)))
-            trans.append(boxinfo['text'])
-            numNeighbors.append(len(boxinfo['linking']))
+                            #new line
+                            line=[]
+                            lineTrans=[]
+                        else:
+                            line.append(word['box']+[(lX+rX)/2,(tY+bY)/2])
+                            lineTrans.append(word['text'])
+
+            annotations['linking']=defaultdict(list)
+
+        else:
+            bbs = np.empty((1,len(boxes), 8+8+numClasses), dtype=np.float32) #2x4 corners, 2x4 cross-points, n classes
+            #pairs=set()
+            numNeighbors=[]
+            trans=[]
+            for j,boxinfo in enumerate(boxes):
+                lX,tY,rX,bY = boxinfo['box']
+                bbs[:,j,0]=lX*s
+                bbs[:,j,1]=tY*s
+                bbs[:,j,2]=rX*s
+                bbs[:,j,3]=tY*s
+                bbs[:,j,4]=rX*s
+                bbs[:,j,5]=bY*s
+                bbs[:,j,6]=lX*s
+                bbs[:,j,7]=bY*s
+                #we add these for conveince to crop BBs within window
+                bbs[:,j,8]=s*lX
+                bbs[:,j,9]=s*(tY+bY)/2.0
+                bbs[:,j,10]=s*rX
+                bbs[:,j,11]=s*(tY+bY)/2.0
+                bbs[:,j,12]=s*(lX+rX)/2.0
+                bbs[:,j,13]=s*tY
+                bbs[:,j,14]=s*(rX+lX)/2.0
+                bbs[:,j,15]=s*bY
+                
+                bbs[:,j,16:]=0
+                if boxinfo['label']=='header':
+                    bbs[:,j,16]=1
+                elif boxinfo['label']=='question':
+                    bbs[:,j,17]=1
+                elif boxinfo['label']=='answer':
+                    bbs[:,j,18]=1
+                elif boxinfo['label']=='other':
+                    bbs[:,j,19]=1
+                #for id1,id2 in boxinfo['linking']:
+                #    pairs.add((min(id1,id2),max(id1,id2)))
+                trans.append(boxinfo['text'])
+                numNeighbors.append(len(boxinfo['linking']))
 
 
         #self.pairs=list(pairs)
@@ -144,15 +210,18 @@ class FUNSDGraphPair(GraphPairDataset):
 
 
     def getResponseBBIdList(self,queryId,annotations):
-        boxes=annotations['form']
-        cto=[]
-        boxinfo = boxes[queryId]
-        for id1,id2 in boxinfo['linking']:
-            if id1==queryId:
-                cto.append(id2)
-            else:
-                cto.append(id1)
-        return cto
+        if self.split_to_lines:
+            return annotations['linking'][queryId]
+        else:
+            boxes=annotations['form']
+            cto=[]
+            boxinfo = boxes[queryId]
+            for id1,id2 in boxinfo['linking']:
+                if id1==queryId:
+                    cto.append(id2)
+                else:
+                    cto.append(id1)
+            return cto
 
 
 
