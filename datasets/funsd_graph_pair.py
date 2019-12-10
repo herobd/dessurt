@@ -99,13 +99,63 @@ class FUNSDGraphPair(GraphPairDataset):
         #    numClasses+=1
         #if usePairedClass:
         #    numClasses+=1
+
         if self.split_to_lines:
-            idToIndex={}
+            origIdToIndexes={}
+            annotations['linking']=defaultdict(list)
             index=0
+            groups=[]
+            bbs=[]
+            line=[]
+            lineTrans=[]
+            def combineLine():
+                bb = np.empty(8+8+numClasses, dtype=np.float32)
+                lXL = max([w[0] for w in line])
+                rXL = max([w[2] for w in line])
+                tYL = max([w[1] for w in line])
+                bYL = max([w[3] for w in line])
+                bb[0]=lXL*s
+                bb[1]=tYL*s
+                bb[2]=rXL*s
+                bb[3]=tYL*s
+                bb[4]=rXL*s
+                bb[5]=bYL*s
+                bb[6]=lXL*s
+                bb[7]=bYL*s
+                #we add these for conveince to crop BBs within window
+                bb[8]=s*lXL
+                bb[9]=s*(tYL+bYL)/2.0
+                bb[10]=s*rXL
+                bb[11]=s*(tYL+bYL)/2.0
+                bb[12]=s*(lXL+rXL)/2.0
+                bb[13]=s*tYL
+                bb[14]=s*(rXL+lXL)/2.0
+                bb[15]=s*bYL
+                
+                bb[16:]=0
+                if boxinfo['label']=='header':
+                    bb[16]=1
+                elif boxinfo['label']=='question':
+                    bb[17]=1
+                elif boxinfo['label']=='answer':
+                    bb[18]=1
+                elif boxinfo['label']=='other':
+                    bb[19]=1
+                bbs.append(bb)
+                trans.append(' '.join(lineTrans))
+                nex = j<len(boxes)-1
+                numNeighbors.append(len(boxinfo['linking'])+(1 if prev else 0)+(1 if nex else 0))
+                prev=True
+                index+=1
+
+            #new line
+            line=[]
+            lineTrans=[]
             for j,boxinfo in enumerate(boxes):
                 prev=False
                 line=[]
                 lineTrans=[]
+                startIdx=len(bbs)
                 for word in boxinfo['words']:
                     lX,tY,rX,bY = word['box']
                     if len(line)==0:
@@ -117,53 +167,43 @@ class FUNSDGraphPair(GraphPairDataset):
                         pW = lX-line[-1][2]-lX-line[-1][0]
                         pH = lX-line[-1][3]-lX-line[-1][1]
                         if difX<-pW*0.25 or difY>pH*0.75:
-                            bb = np.empty(8+8+numClasses, dtype=np.float32)
-                            lX = max([w[0] for w in line])
-                            rX = max([w[2] for w in line])
-                            tY = max([w[1] for w in line])
-                            bY = max([w[3] for w in line])
-                            bb[0]=lX*s
-                            bb[1]=tY*s
-                            bb[2]=rX*s
-                            bb[3]=tY*s
-                            bb[4]=rX*s
-                            bb[5]=bY*s
-                            bb[6]=lX*s
-                            bb[7]=bY*s
-                            #we add these for conveince to crop BBs within window
-                            bb[8]=s*lX
-                            bb[9]=s*(tY+bY)/2.0
-                            bb[10]=s*rX
-                            bb[11]=s*(tY+bY)/2.0
-                            bb[12]=s*(lX+rX)/2.0
-                            bb[13]=s*tY
-                            bb[14]=s*(rX+lX)/2.0
-                            bb[15]=s*bY
-                            
-                            bb[16:]=0
-                            if boxinfo['label']=='header':
-                                bb[16]=1
-                            elif boxinfo['label']=='question':
-                                bb[17]=1
-                            elif boxinfo['label']=='answer':
-                                bb[18]=1
-                            elif boxinfo['label']=='other':
-                                bb[19]=1
-                            bbs.append(bb)
-                            trans.append(' '.join(lineTrans))
-                            nex = j<len(boxes)-1
-                            numNeighbors.append(len(boxinfo['linking'])+(1 if prev else 0)+(1 if nex else 0))
-                            prev=True
-                            index+=1
+                            combineLine()
+                        line.append(word['box']+[(lX+rX)/2,(tY+bY)/2])
+                        lineTrans.append(word['text'])
+                combineLine()
+                endIdx=len(bbs)
+                groups.append(list(range(startIdx,endIdx)))
+                for idx in range(startIdx,endIdx-1):
+                    annotations['linking'][idx].append(idx+1) #we link them in read order. The group supervises dense connections. Read order is how the NAF dataset is labeled.
+                origIdToIndexes[j]=(startIdx,endIdx)
 
-                            #new line
-                            line=[]
-                            lineTrans=[]
-                        else:
-                            line.append(word['box']+[(lX+rX)/2,(tY+bY)/2])
-                            lineTrans.append(word['text'])
+            for j,boxinfo in enumerate(boxes):
+                for linkId in boxinfo['linking']:
+                    j_first_x = np.mean(bbs[origIdToIndexes[j][0]][0:8:2])
+                    j_first_y = np.mean(bbs[origIdToIndexes[j][0]][1:8:2])
+                    link_first_x = np.mean(bbs[origIdToIndexes[linkId][0]][0:8:2])
+                    link_first_y = np.mean(bbs[origIdToIndexeslinkIdj][0]][1:8:2])
+                    j_last_x = np.mean(bbs[origIdToIndexes[j][1]][0:8:2])
+                    j_last_y = np.mean(bbs[origIdToIndexes[j][1]][1:8:2])
+                    link_last_x = np.mean(bbs[origIdToIndexes[linkId][1]][0:8:2])
+                    link_last_y = np.mean(bbs[origIdToIndexeslinkIdj][1]][1:8:2])
 
-            annotations['linking']=defaultdict(list)
+                    above = link_last_y<j_first_y
+                    below = link_first_y>j_last_y
+                    left = left_last_x<j_first_x
+                    right = link_first_x>j_last_x
+                    if above or left:
+                        annotations['linking'][origIdToIndexes[j][0]].append(origIdToIndexes[linkId][1])
+                    elif below or right:
+                        annotations['linking'][origIdToIndexes[j][1]].append(origIdToIndexes[linkId][0])
+                    else:
+                        print("!!!!!!!!")
+                        print("Print odd para align, unhandeled case.")
+                        import pdb;pdb.set_trace()
+            bbs = np.stack(bbs,axis=0)
+            bbs = bbs[None,...] #add batch dim
+
+
 
         else:
             bbs = np.empty((1,len(boxes), 8+8+numClasses), dtype=np.float32) #2x4 corners, 2x4 cross-points, n classes
@@ -203,6 +243,7 @@ class FUNSDGraphPair(GraphPairDataset):
                 #    pairs.add((min(id1,id2),max(id1,id2)))
                 trans.append(boxinfo['text'])
                 numNeighbors.append(len(boxinfo['linking']))
+            groups = [[n] for n in range(len(boxes))]
 
 
         #self.pairs=list(pairs)
