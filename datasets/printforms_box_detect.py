@@ -6,7 +6,7 @@ import os, cv2
 import numpy as np
 import torch
 
-def saveBoxes(data,dest):
+def saveBoxes(data,dest,allTrans):
     batchSize = data['img'].size(0)
     for b in range(batchSize):
         #print (data['img'].size())
@@ -40,9 +40,10 @@ def saveBoxes(data,dest):
             #print([tr,tl,br,bl])
             assert(rot==0)
             crop = img[int(tl[1]):int(br[1])+1,int(tl[0]):int(br[0])+1]
-            path = os.path.join(dest,sub,'{}_b{}.png'.format(imgName,i))
+            name = '{}_b{}.png'.format(imgName,i)
+            path = os.path.join(dest,sub,name)
             cv2.imwrite(path,crop)
-
+            #addTrans[name]=data['trans']
 
 
 

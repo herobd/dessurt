@@ -26,9 +26,9 @@ MAX_CANDIDATES=325 #450
 MAX_GRAPH_SIZE=370
 #max seen 428, so why'd it crash on 375?
 
-class PairingGraph(BaseModel):
+class PairingGroupingGraph(BaseModel):
     def __init__(self, config):
-        super(PairingGraph, self).__init__(config)
+        super(PairingGroupingGraph, self).__init__(config)
 
         if 'detector_checkpoint' in config:
             checkpoint = torch.load(config['detector_checkpoint'])
@@ -292,8 +292,14 @@ class PairingGraph(BaseModel):
 
 
         #self.pairer = GraphNet(config['graph_config'])
-        self.pairer = eval(config['graph_config']['arch'])(config['graph_config'])
-        self.useMetaGraph = type(self.pairer) is MetaGraphNet
+        if type(config['graph_config']) is list:
+            self.useMetaGraph = True
+            self.graphnets=nn.ModuleList()
+            for graphconfig in config['graph_config']:
+                self.graphnets.append( eval(graphconfig['arch'])(graphconfig) )
+        else:
+            self.pairer = eval(config['graph_config']['arch'])(config['graph_config'])
+            self.useMetaGraph = type(self.pairer) is MetaGraphNet
         self.fixBiDirection= config['fix_bi_dir'] if 'fix_bi_dir' in config else False
         if 'max_graph_size' in config:
             MAX_GRAPH_SIZE = config['max_graph_size']
@@ -319,12 +325,12 @@ class PairingGraph(BaseModel):
         if 'text_rec' in config:
             if config['text_rec']['model'] == 'CRNN':
                 self.hw_channels=config['text_rec']['num_channels']
-                self.text_rec = [CRNN(config['text_rec']['cnn_out_size'],config['text_rec']['num_channels'],config['text_rec']['num_outputs'],512)]
-                print('WARNING, text_rec is wrapped to prevent training')
-                self.text_rec[0].eval()
-                self.text_rec[0] = self.text_rec[0].cuda()
+                self.text_rec = CRNN(config['text_rec']['cnn_out_size'],config['text_rec']['num_channels'],config['text_rec']['num_outputs'],512)
+                print('WARNING, is text_rec set to frozen?')
+                self.text_rec.eval()
+                self.text_rec = self.text_rec.cuda()
                 state=torch.load(config['text_rec']['file'])['state_dict']
-                self.text_rec[0].load_state_dict(state)
+                self.text_rec.load_state_dict(state)
                 self.hw_input_height = config['text_rec']['input_height']
                 with open(config['text_rec']['char_set']) as f:
                     char_set = json.load(f)
@@ -432,50 +438,34 @@ class PairingGraph(BaseModel):
             else:
                 embeddings=None
             if self.useMetaGraph:
-                graph,relIndexes,rel_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings)
+                allRelIndexes=[]
+                allNodeOuts=[]
+                allEdgeOuts=[]
+                graph,edgeIndexes,rel_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings)
+                #undirected
+                #edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
                 if graph is None:
                     return bbPredictions, offsetPredictions, None, None, None, rel_prop_scores
-                bbOuts, relOuts = self.pairer(graph)
-                if self.fixBiDirection or not self.training:
-                    relIndexes = relIndexes[:len(relIndexes)//2]
-                if self.fixBiDirection:
-                    relOuts = (relOuts[:relOuts.size(0)//2] + relOuts[relOuts.size(0)//2:])/2 #average two directions of edge
+
+                nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = self.graphnets[0](graph)
+                #edgeOuts = (edgeOuts[:edgeOuts.size(0)//2] + edgeOuts[edgeOuts.size(0)//2:])/2 #average two directions of edge
+                #edgeFeats = (edgeFeats[:edgeFeats.size(0)//2] + edgeFeats[edgeFeats.size(0)//2:])/2 #average two directions of edge
+                allNodeOuts.append(nodeOuts)
+                allEdgeOuts.append(edgeOuts)
+                allGroups.append([[i] for i in range(numBBs)])
+                allEdgeIndexes.append(edgeIndexes)
+                
+                for graphnet in self.graphnets[1:]:
+                    useBBs,graph,groups,edgeIndexes=self.mergeAndGroup(edgeIndexes,relOuts,groups,nodeFeats,edgeFeats,uniFeats,useBBs)
+                    nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = graphnet(graph)
+                    allNodeOuts.append(nodeOuts)
+                    allEdgeOuts.append(edgeOuts)
+                    allGroups.append(groups)
+                    allEdgeIndexes.append(edgeIndexes)
+
+
             else:
-                #bb_features, adjacencyMatrix, rel_features = self.createGraph(useBBs,final_features)
-                if self.training: #0.3987808480 0.398469038200 not a big difference, but it's "the right" thing to do
-                    if debug:
-                        import pdb;pdb.set_trace()
-                    bbAndRel_features, adjacencyMatrix, numBBs, numRel, relIndexes, rel_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings)# ,debug_image=image)
-                    if bbAndRel_features is None:
-                        return bbPredictions, offsetPredictions, None, None, None, rel_prop_scores
-
-                    ##tic=timeit.default_timer()
-                    #nodeOuts, relOuts = self.pairer(bb_features, adjacencyMatrix, rel_features)
-                    bbOuts, relOuts = self.pairer(bbAndRel_features, adjacencyMatrix, numBBs)
-                else:
-                    #If evaluating, force the masks of relationships to be the two ways and average
-                    bbAndRel_features, adjacencyMatrix, numBBs, numRel, relIndexes, rel_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,flip=False)
-                    if bbAndRel_features is None:
-                        return bbPredictions, offsetPredictions, None, None, None, rel_prop_scores
-
-                    bbAndRel_features_B, adjacencyMatrix_B, numBBs_B, numRel_B, relIndexes_B, rel_prop_scores_B = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,flip=True)
-
-                    assert(numBBs==numBBs_B and numRel==numRel_B)
-                    for i,(n1,n2) in enumerate(relIndexes):
-                        assert(relIndexes_B[i][0]==n1 and relIndexes_B[i][1]==n2)
-                    bbOuts, relOuts = self.pairer(bbAndRel_features, adjacencyMatrix, numBBs)
-                    bbOuts_B, relOuts_B = self.pairer(bbAndRel_features_B, adjacencyMatrix, numBBs)
-                    #Average results together
-                    if bbOuts is not None:
-                        bbOuts = (bbOuts+bbOuts_B)/2
-                    relOuts = (relOuts+relOuts_B)/2
-                if bbOuts is not None:
-                    bbOuts = bbOuts[:,None,:] #introduce "time/rep" dimension
-                relOuts = relOuts[:,None,:] #introduce "time/rep" dimension
-                #bbOuts = graphOut[:numBBs]
-                #relOuts = graphOut[numBBs:]
-                ##print('pairer: {}'.format(timeit.default_timer()-tic))
-
+                raise NotImplementedError('Simple pairing not implemented for new grouping stuff')
             #adjacencyMatrix = torch.zeros((bbPredictions.size(1),bbPredictions.size(1)))
             #for rel in relOuts:
             #    i,j,a=graphToDetectionsMap(
@@ -492,9 +482,247 @@ class PairingGraph(BaseModel):
                 startIndex = 6+self.detector.predNumNeighbors
                 if not useGTBBs:
                     bbPredictions[:,startIndex:startIndex+self.numBBTypes] = torch.sigmoid(bbOuts[:,-1,self.predNN:self.predNN+self.numBBTypes].detach())
-            return bbPredictions, offsetPredictions, relOuts, relIndexes, bbOuts, rel_prop_scores
+            return bbPredictions, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores
         else:
             return bbPredictions, offsetPredictions, None, None, None, None
+
+    def mergeBB(self,bb0,bb1):
+        #Get encompassing rectangle for actual bb
+        #REctify curved line for ATR
+        #scale = self.hw_input_height/crop.size(2)
+        #scaled_w = int(crop.size(3)*scale)
+        #line[i,:,:,0:scaled_w] = F.interpolate(crop, size=(self.hw_input_height,scaled_w), mode='bilinear')#.to(crop.device)
+        #imm[i] = line[i].cpu().numpy().transpose([1,2,0])
+        #imm[i] = 256*(2-imm[i])/2
+
+
+        if line.size(1)==1 and self.hw_channels==3:
+            line = lines.expand(-1,3,-1,-1)
+
+        if self.rotate:
+            raise NotImplementedError('Rotation not implemented for merging bounding boxes')
+        else:
+            x0,y0,r0,h0,w0 = bb0[:5]
+            x1,y1,r1,h1,w1 = bb1[:5]
+            minX = min(x0-w0,x1-w1)
+            maxX = max(x0+w0,x1+w1)
+            minY = min(y0-h0,y1-h1)
+            maxY = max(y0+h0,y1+h1)
+
+            newW = (maxX-minX)/2
+            newH = (maxY-minY)/2
+            newX = (maxX+minX)/2
+            newY = (maxY+minY)/2
+
+            newClass = (bb0[5:]+bb1[5:])/2
+
+            loc = torch.FloatTensor([newX,newY,0,newH,newW])
+
+            bb = torch.cat((loc,newClass),dim=0)
+            crop = image[:,:,minY:maxY+1,minX:maxX+1]
+            scale = self.hw_input_height/crop.size(2)
+            line = F.interpolate(crop,scale=scale,mode='bilinear')
+
+        return bb,line
+
+        #resBatch = self.text_rec(lines)
+
+    def mergeAndGroup(self,oldEdgeIndexes,edgePreds,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs):
+        newBBs={}
+        newBBs_line={}
+        newBBIdCounter=0
+        oldToNewBBIndexes={}
+        for i,(n0,n1) in enumerate(edgeIndexes):
+            mergePred = edgePreds[i,-1,1]
+            
+            if torch.sigmoid(mergePred)>self.mergeThresh and GT?:
+                if len(oldGroups[n0])==1 and len(oldGroups[n1])==1:
+                    bbId0 = oldGroups[n0][0]
+                    bbId1 = oldGroups[n1][0]
+                    if bbId0 in oldToNewBBIndexes:
+                        mergeNewId0 = oldToNewBBIndexes[bbId0]
+                        bb0 = newBBs[mergeNewId0]
+                    else:
+                        mergeNewId0 = None
+                        bb0 = oldBBs[bbId0].cpu()
+                    if bbId1 in oldToNewBBIndexes:
+                        mergeNewId1 = oldToNewBBIndexes[bbId1]
+                        bb1 = newBBs[mergeNewId1]
+                    else:
+                        mergeNewId1 = None
+                        bb1 = oldBBs[bbId1].cpu()
+
+                    newBB,line= self.mergeBB(bb0,bb1)
+
+                    if mergeNewId0 is None and mergeNewId1 is None:
+                        oldToNewBBIndexes[bbId0]=newBBIdCounter
+                        oldToNewBBIndexes[bbId1]=newBBIdCounter
+                        newBBIdCounter+=1
+                        newBBs.append(newBB)
+                        newBBs_line.append(line)
+                    elif: mergeNewId0 is None:
+                        oldToNewBBIndexes[bbId0]=mergeNewId1
+                        newBBs[mergeNewId1]=newBB
+                        newBBs_line[mergeNewId1]=line
+                    elif mergeNewId1 is None:
+                        oldToNewBBIndexes[bbId1]=mergeNewId10
+                        newBBs[mergeNewId0]=newBB
+                        newBBs_line[mergeNewId0]=line
+                    else:
+                        #merge two merged bbs
+                        oldToNewBBIndexes[bbId1]=mergeNewId10
+                        for old,new in oldToNewBBIndexes.items():
+                            if new == mergeNewId1:
+                                oldToNewBBIndexes[old]=mergeNewId10
+                        newBBs[mergeNewId0]=newBB
+                        newBBs_line[mergeNewId0]=line
+                        del newBBs[mergeNewId1]
+                        del newBBs_line[mergeNewId1]
+
+
+
+
+        #Actually rewrite bbs
+        bbs=[]
+        oldBBIdToNew={}
+        for i in range(oldBBs.size(1)):
+            if i not in oldToNewBBIndexes:
+                oldBBIdToNew[i]=len(bbs)
+                bbs.append(oldBBs[i])
+        for id,bb in newBBs.items():
+            for old,new in oldToNewBBIndexes.items():
+                if new==id:
+                    oldBBIdToNew[old]=len(bbs)
+            bbs.append(bb)
+        bbs=torch.stack(bbs,dim=0)
+                
+
+        #TODO run text_rec on newBBs_line
+
+
+        #rewrite groups with merged instances
+        assignedGroup={} #this will allow us to remove merged instances
+        oldGroupToNew={}
+        workGroups = {i:v for i,v in enumerate(oldGroups)
+        for id,bbIds in emumerate(oldGroups):
+            newGroup = [oldBBIdToNew[oldId] for oldId in bbIds]
+            if len(newGroup)==1 and newGroup[0] in alreadyInGroup:
+                oldGroupToNew[id]=assignedGroup[newGroup[0]]
+                del workGroups[id]
+            else:
+                workGroups[id] = newGroup
+                alreadyInGroup.update(newGroup)
+                for bbId in bbIds:
+                    assignedGroup[bbId]=id
+    
+
+        #rewrite the graph to reflect merged instances
+        newNodeFeats=[]
+        oldGroups=[]
+        newIdToPos={}
+        newGroupToOld=reverse
+        for id,group in workGroups:
+            newIdToPos[id]=len(oldGroups)
+            oldGroups.append(group)
+            if id in newGroupToOld:
+                oldNodes = newGroupToOld[id]+[id]
+                random.shuffle(oldNodes) #TODO something other than random
+                newNodeFeat = self.groupNodeFunc(oldNodeFeatures[oldNodes[0]],oldNodeFeatures[oldNodes[1]])
+                for oldNode in oldNodes[2:]:
+                    newNodeFeat = self.groupNodeFunc(newNodeFeat,oldNodeFeatures[oldNode])
+                newNodeFeats.append(newNodeFeat)
+            else:
+                newNodeFeats.append(oldNodeFeats[id])
+        oldNodeFeatures = torch.stack(newNodeFeats,dim=0)
+
+        temp = oldEdgeIndexes
+        oldEdgeIndexes = []
+        for n0,n1 in oldEdgeIndexes:
+            if n0 in oldGroupToNew:
+                n0=newIdToPos[oldGroupToNew[n0]]
+            if n1 in oldGroupToNew:
+                n1=newIdToPos[oldGroupToNew[n1]]
+            #if n0!=n1:
+            oldEdgeIndexes.append((n0,n1)) #I prune out edges between the same nodes later
+            #else:
+            #    ?
+            
+
+
+
+        #Find nodes that should be grouped
+
+        oldIdToNew = {i:i for i in range(nodeOuts.size(0))}
+        newGroups = deep copy oldGroups?
+        newGroups=defaultdict(list) #map new node id->bbIds (new bbs)
+        for i,(n0,n1) in enumerate(edgeIndexes):
+            groupPred = edgePreds[i,-1,2]
+            if torch.sigmoid(groupPred)>self.groupThresh:
+                n0Id=oldIdToNew[n0]
+                n1Id=oldIdToNew[n1]
+                if n0Id!=n1Id:
+                    if len(newGroups[n0Id])>=len(newGroups[n1Id]):
+                        newGroups[n0Id] += newGroups[n1Id]
+                        del newGroups[n1Id]
+                        oldIdToNew[n1]=n0Id
+                        #mergedOrder[n0Id].append(n1)
+                    else:
+                        newGroups[n1Id] += newGroups[n0Id]
+                        del newGroups[n0Id]
+                        oldIdToNew[n0]=n1Id
+
+
+
+        #Create new graph
+        #(nodeFeatures, edgeIndexes, edgeFeatures, universalFeatures)
+        newIdToOld=defaultdict(list)
+        for old,new in oldIdToNew.items():
+            newIdToOld[new].append(old)
+        newNodeIdToPos={}
+        for newNode,oldNodes in newIdToOld.items():
+            if len(oldNodes)>1:
+                random.shuffle(oldNodes) #TODO something other than random
+                newNodeFeat = self.groupNodeFunc(oldNodeFeatures[oldNodes[0]],oldNodeFeatures[oldNodes[1]])
+                for oldNode in oldNodes[2:]:
+                    newNodeFeat = self.groupNodeFunc(newNodeFeat,oldNodeFeatures[oldNode])
+            else:
+                newNodeFeat = oldNodeFeatures[oldNodes[0]]
+            newNodeIdToPos[newNode]=len(newNodeFeats)
+            newNodeFeats.append(newNodeFeat)
+
+        newEdges=[]
+        oldEdgeIds=defaultdict(list)
+        for i,(n0,n1) in enumerate(oldEdgeIndexes):
+            n0Id=newNodeIdToPos[oldIdToNew[n0]]
+            n1Id=newNodeIdToPos[oldIdToNew[n1]]
+            if n0Id!=newIdToPosn1Id:
+                pair = (min(n0Id,n1Id),max(n0Id,n1Id))
+                oldEdgeIds[pair].append(i)
+                #newEdges.add(min(n0Id,n1Id),max(n0Id,n1Id))
+        for newEdge,oldIds in oldEdgeIds:
+            newEdges.append(newEdge)
+            if len(oldIds)>1:
+                random.shuffle(oldIds) #TODO something other than random
+                newEdgeFeat = self.groupEdgeFunc(oldEdgeFeatures[oldIds[0]],oldEdgeFeatures[oldIds[1]])
+                for oldEdge in oldIds[2:]:
+                    newEdgeFeat = self.groupEdgeFunc(newEdgeFeat,oldEdgeFeatures[oldEdge])
+            else:
+                newEdgeFeat = oldEdgeFeatures[oldIds[0]]
+            newEdgeFeats.append(newEdgeFeat)
+        newEdgeFeats = torch.stack(newEdgeFeats,dim=0)
+        edges = newEdges
+        newEdges = list(newEdges) + [(y,x) for x,y in newEdges] #add reverse edges so undirected/bidirectional
+        newEdgeIndexes = torch.LongTensor(newEdges).t().to(relFeats.device)
+        newEdgeFeats = newEdgeFeats.repeat(2,1)
+
+        newGraph = (newNodeFeats, newEdgeIndexes, newEdgeFeats, oldUniversalFeats)
+
+        return bbs, newGraph, newGroups, edges
+
+
+                
+
+
 
     def createGraph(self,bbs,features,features2,imageHeight,imageWidth,text_emb=None,flip=None,debug_image=None):
         if text_emb is not None:
@@ -1369,34 +1597,35 @@ class PairingGraph(BaseModel):
 
         scale = self.hw_input_height/h
         scaled_w = ((w+1)*scale).int()
-        max_w = scaled_w.max().item()
 
-        #scale = scale.cpu().detach()
-        #scaled_w = scaled_w.cpu().detach()
-        #r = r.cpu().detach()
-        #h = h.cpu().detach()
-        #w = w.cpu().detach()
+        res=[]
+        for index in range(0,bbs.size(0),self.atr_batch_size):
+            num = min(self.atr_batch_size,bbs.size(0)-index)
+            max_w = scaled_w.max().item()
 
-        lines = torch.FloatTensor(bbs.size(0),image.size(1),self.hw_input_height,max_w).fill_(0).to(image.device)
-        imm = [None]*bbs.size(0)
-        for i in range(bbs.size(0)):
-            
-            if self.rotation:
-                crop = rotate(image[0,:,y1[i]:y2[i]+1,x1[i]:x2[i]+1],r[i],(h[i],w[i]))
-            else:
-                crop = image[...,y1[i]:y2[i]+1,x1[i]:x2[i]+1]
-            scale = self.hw_input_height/crop.size(2)
-            scaled_w = int(crop.size(3)*scale)
-            lines[i,:,:,0:scaled_w] = F.interpolate(crop, size=(self.hw_input_height,scaled_w), mode='bilinear')#.to(crop.device)
-            imm[i] = lines[i].cpu().numpy().transpose([1,2,0])
-            imm[i] = 256*(2-imm[i])/2
-
+        
+            lines = torch.FloatTensor(num,image.size(1),self.hw_input_height,max_w).fill_(0).to(image.device)
+            imm = [None]*num
+            for i in range(index,index+num):
+                
+                if self.rotation:
+                    crop = rotate(image[0,:,y1[i]:y2[i]+1,x1[i]:x2[i]+1],r[i],(h[i],w[i]))
+                else:
+                    crop = image[...,y1[i]:y2[i]+1,x1[i]:x2[i]+1]
+                scale = self.hw_input_height/crop.size(2)
+                scaled_w = int(crop.size(3)*scale)
+                lines[i,:,:,0:scaled_w] = F.interpolate(crop, size=(self.hw_input_height,scaled_w), mode='bilinear')#.to(crop.device)
+                imm[i] = lines[i].cpu().numpy().transpose([1,2,0])
+                imm[i] = 256*(2-imm[i])/2
 
 
-        if lines.size(1)==1 and self.hw_channels==3:
-            lines = lines.expand(-1,3,-1,-1)
 
-        res = self.text_rec[0](lines)
+            if lines.size(1)==1 and self.hw_channels==3:
+                lines = lines.expand(-1,3,-1,-1)
+
+            resBatch = self.text_rec(lines)
+            res.append(resBatch)
+        res = torch.cat(res,dim=0)
 
         #Debug
         resN=res.data.cpu().numpy()
