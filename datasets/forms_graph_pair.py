@@ -143,6 +143,17 @@ class FormsGraphPair(GraphPairDataset):
         self.onlyFormStuff = False
         self.errors=[]
 
+        self.useClasses = config['use_classes'] if 'use_classes' in config else []
+        self.classMap={
+                'textGeneric':16,
+                'fieldGeneric':17,
+                }
+        for i,clas in enumerate(self.useClasses):
+            self.classMap[clas]=i+18
+        if not self.no_blanks:
+            self.classMap['blank']=18+len(self.useClasses)
+        if self.use_paired_class:
+            self.classMap['paired']=18+len(self.useClasses) + (0 self.no_blanks else 1)
 
 
 
@@ -159,13 +170,16 @@ class FormsGraphPair(GraphPairDataset):
             if not self.onlyFormStuff or ('paired' in bb and bb['paired']):
                 bbsToUse.append(bb)
                 ids.append(bb['id'])
-                if 'transcription' in annotations:
-                    trans[bb['id']] = annotations['transcription'][bb['id']]
+                if 'transcriptions' in annotations:
+                    trans[bb['id']] = annotations['transcriptions'][bb['id']]
+                else:
+                    trans[bb['id']] =None
 
 
         
-        bbs = getBBWithPoints(bbsToUse,scale,useBlankClass=(not self.no_blanks),usePairedClass=self.use_paired_class)
-        numClasses = bbs.shape[2]-16
+        bbs = getBBWithPoints(bbsToUse,scale,useBlankClass=(not self.no_blanks),usePairedClass=self.use_paired_class,self.useClasses)
+        #numClasses = bbs.shape[2]-16
+        numClasses = len(self.classMap)
         return bbs,ids,numClasses, trans
 
     def getResponseBBIdList(self,queryId,annotations):
