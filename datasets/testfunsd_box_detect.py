@@ -79,8 +79,9 @@ if __name__ == "__main__":
     else:
         repeat=1
     data=FUNSDBoxDetect(dirPath=dirPath,split='train',config={
+        "split_to_lines": True,
         'rescale_range':[1,1],
-        'crop_params':{ "crop_size":[652,1608], 
+        'xxxcrop_params':{ "crop_size":[652,1608], 
                         "pad":0, 
                         "rot_degree_std_dev":1.5,
                         "flip_horz": True,

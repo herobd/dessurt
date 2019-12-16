@@ -11,7 +11,7 @@ from model.metric import *
 from data_loader import getDataLoader
 from trainer import *
 from logger import Logger
-import requests
+import requests, socket
 
 def update_status(name,message,supercomputer):
     if supercomputer:

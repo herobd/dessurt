@@ -193,7 +193,6 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
     valid_iter = iter(valid_data_loader)
 
     with torch.no_grad():
-
         if index is None:
 
 
@@ -281,6 +280,8 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
 
             startBatch = config['startBatch'] if 'startBatch' in config else 0
             numberOfBatches = numberOfImages//batchSize
+            if numberOfBatches==0 and numberOfImages>1:
+                numberOfBatches = 1
 
             #for index in range(startIndex,numberOfImages,step*batchSize):
             batch = startBatch

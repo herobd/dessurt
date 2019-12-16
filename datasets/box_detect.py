@@ -52,25 +52,29 @@ def collate(batch):
         else:
             bb_sizes.append(gt.size(1)) 
             bb_dim=gt.size(2)
-        for name,gt in b['line_gt'].items():
-            if gt is None:
-                line_label_sizes[name].append(0)
-            else:
-                line_label_sizes[name].append(gt.size(1)) 
-                line_dim = gt.size(2)
-        for name,gt in b['point_gt'].items():
-            if gt is None:
-                point_label_sizes[name].append(0)
-            else:
-                point_label_sizes[name].append(gt.size(1)) 
+        if b['line_gt'] is not None:
+            for name,gt in b['line_gt'].items():
+                if gt is None:
+                    line_label_sizes[name].append(0)
+                else:
+                    line_label_sizes[name].append(gt.size(1)) 
+                    line_dim = gt.size(2)
+        if b['point_gt'] is not None:
+            for name,gt in b['point_gt'].items():
+                if gt is None:
+                    point_label_sizes[name].append(0)
+                else:
+                    point_label_sizes[name].append(gt.size(1)) 
     if len(imgs) == 0:
         return None
 
     largest_bb_count = max(bb_sizes)
-    for name in b['point_gt']:
-        largest_point_label[name] = max(point_label_sizes[name])
-    for name in b['line_gt']:
-        largest_line_label[name] = max(line_label_sizes[name])
+    if b['point_gt'] is not None:
+        for name in b['point_gt']:
+            largest_point_label[name] = max(point_label_sizes[name])
+    if b['line_gt'] is not None:
+        for name in b['line_gt']:
+            largest_line_label[name] = max(line_label_sizes[name])
 
     ##print(' col channels: {}'.format(len(imgs[0].size())))
     batch_size = len(imgs)
@@ -124,12 +128,13 @@ def collate(batch):
         else:
             line_labels[name]=None
     for i, b in enumerate(batch):
-        for name,gt in b['line_gt'].items():
-            if line_label_sizes[name][i] == 0:
-                continue
-            #print(line_label_sizes[name][i])
-            #print(gt.shape)
-            line_labels[name][i, :line_label_sizes[name][i]] = gt
+        if b['line_gt'] is not None:
+            for name,gt in b['line_gt'].items():
+                if line_label_sizes[name][i] == 0:
+                    continue
+                #print(line_label_sizes[name][i])
+                #print(gt.shape)
+                line_labels[name][i, :line_label_sizes[name][i]] = gt
     point_labels = {}
     for name,count in largest_point_label.items():
         if count > 0:
@@ -137,12 +142,13 @@ def collate(batch):
         else:
             point_labels[name]=None
     for i, b in enumerate(batch):
-        for name,gt in b['point_gt'].items():
-            if point_label_sizes[name][i] == 0:
-                continue
-            #print(point_label_sizes[name][i])
-            #print(gt.shape)
-            point_labels[name][i, :point_label_sizes[name][i]] = gt
+        if b['point_gt'] is not None:
+            for name,gt in b['point_gt'].items():
+                if point_label_sizes[name][i] == 0:
+                    continue
+                #print(point_label_sizes[name][i])
+                #print(gt.shape)
+                point_labels[name][i, :point_label_sizes[name][i]] = gt
 
     imgs = torch.cat(resized_imgs)
     if len(resized_pixel_gt)==1:
@@ -326,8 +332,9 @@ class BoxDetectDataset(torch.utils.data.Dataset):
 
         #start_of_line = None if start_of_line is None or start_of_line.shape[1] == 0 else torch.from_numpy(start_of_line)
         #end_of_line = None if end_of_line is None or end_of_line.shape[1] == 0 else torch.from_numpy(end_of_line)
-        for name in line_gts:
-            line_gts[name] = None if line_gts[name] is None or line_gts[name].shape[1] == 0 else torch.from_numpy(line_gts[name])
+        if line_gts is not None:
+            for name in line_gts:
+                line_gts[name] = None if line_gts[name] is None or line_gts[name].shape[1] == 0 else torch.from_numpy(line_gts[name])
         
         #import pdb; pdb.set_trace()
         #bbs = None if bbs.shape[1] == 0 else torch.from_numpy(bbs)
@@ -338,11 +345,12 @@ class BoxDetectDataset(torch.utils.data.Dataset):
             numNeighbors=None
             #start_of_line = convertLines(start_of_line,numClasses)
         #end_of_line = convertLines(end_of_line,numClasses)
-        for name in point_gts:
-            #if table_points is not None:
-            #table_points = None if table_points.shape[1] == 0 else torch.from_numpy(table_points)
-            if point_gts[name] is not None:
-                point_gts[name] = None if point_gts[name].shape[1] == 0 else torch.from_numpy(point_gts[name])
+        if point_gts is not None:
+            for name in point_gts:
+                #if table_points is not None:
+                #table_points = None if table_points.shape[1] == 0 else torch.from_numpy(table_points)
+                if point_gts[name] is not None:
+                    point_gts[name] = None if point_gts[name].shape[1] == 0 else torch.from_numpy(point_gts[name])
 
         ##print('__getitem__: '+str(timeit.default_timer()-ticFull))
         if self.only_types is None:

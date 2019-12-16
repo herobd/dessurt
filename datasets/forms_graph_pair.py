@@ -153,7 +153,7 @@ class FormsGraphPair(GraphPairDataset):
         if not self.no_blanks:
             self.classMap['blank']=18+len(self.useClasses)
         if self.use_paired_class:
-            self.classMap['paired']=18+len(self.useClasses) + (0 self.no_blanks else 1)
+            self.classMap['paired']=18+len(self.useClasses) + (0 if self.no_blanks else 1)
 
 
 
@@ -177,7 +177,7 @@ class FormsGraphPair(GraphPairDataset):
 
 
         
-        bbs = getBBWithPoints(bbsToUse,scale,useBlankClass=(not self.no_blanks),usePairedClass=self.use_paired_class,self.useClasses)
+        bbs = getBBWithPoints(bbsToUse,scale,useBlankClass=(not self.no_blanks),usePairedClass=self.use_paired_class,useAllClass=self.useClasses)
         #numClasses = bbs.shape[2]-16
         numClasses = len(self.classMap)
         return bbs,ids,numClasses, trans
