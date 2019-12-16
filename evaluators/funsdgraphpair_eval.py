@@ -84,7 +84,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
     confThresh = config['conf_thresh'] if 'conf_thresh' in config else None
 
 
-    numClasses=4 #TODO no hard code
+    numClasses=len(traner.classMap)
 
     resultsDirName='results'
     #if outDir is not None and resultsDirName is not None:

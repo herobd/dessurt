@@ -10,7 +10,7 @@ from utils.crop_transform import CropBoxTransform
 from utils import augmentation
 from collections import defaultdict, OrderedDict
 from .box_detect import BoxDetectDataset, collate
-from utils.forms_annotations import fixAnnotations, convertBBs, getBBWithPoints, getStartEndGT, getResponseBBIdList_
+from utils.funsd_annotations import createLines
 import timeit
 
 import cv2
@@ -97,6 +97,7 @@ class FUNSDBoxDetect(BoxDetectDataset):
         #    self.augmentation_params=config['augmentation_params']
         #else:
         #    self.augmentation_params=None
+        self.split_to_lines = config['split_to_lines']
         if images is not None:
             self.images=images
         else:
@@ -150,53 +151,65 @@ class FUNSDBoxDetect(BoxDetectDataset):
         self.only_types=None
         self.errors=[]
 
+        self.classMap={
+                'header':16,
+                'question':17,
+                'answer': 18,
+                'other': 19
+                }
+
 
     def parseAnn(self,np_img,annotations,s,imageName):
-        boxes = annotations['form']
-        numClasses=4
-        #if useBlankClass:
-        #    numClasses+=1
-        #if usePairedClass:
-        #    numClasses+=1
+        if self.split_to_lines:
+            bbs, numNeighbors = createLines(annotations,self.classMap,s)
+            numClasses = len(self.classMap)
+            pairs=None
+        else:
+            boxes = annotations['form']
+            numClasses=4
+            #if useBlankClass:
+            #    numClasses+=1
+            #if usePairedClass:
+            #    numClasses+=1
 
-        bbs = np.empty((1,len(boxes), 8+8+numClasses), dtype=np.float32) #2x4 corners, 2x4 cross-points, n classes
-        pairs=set()
-        numNeighbors=[]
-        for j,boxinfo in enumerate(boxes):
-            lX,tY,rX,bY = boxinfo['box']
-            bbs[:,j,0]=lX*s
-            bbs[:,j,1]=tY*s
-            bbs[:,j,2]=rX*s
-            bbs[:,j,3]=tY*s
-            bbs[:,j,4]=rX*s
-            bbs[:,j,5]=bY*s
-            bbs[:,j,6]=lX*s
-            bbs[:,j,7]=bY*s
-            #we add these for conveince to crop BBs within window
-            bbs[:,j,8]=s*lX
-            bbs[:,j,9]=s*(tY+bY)/2.0
-            bbs[:,j,10]=s*rX
-            bbs[:,j,11]=s*(tY+bY)/2.0
-            bbs[:,j,12]=s*(lX+rX)/2.0
-            bbs[:,j,13]=s*tY
-            bbs[:,j,14]=s*(rX+lX)/2.0
-            bbs[:,j,15]=s*bY
-            
-            bbs[:,j,16:]=0
-            if boxinfo['label']=='header':
-                bbs[:,j,16]=1
-            elif boxinfo['label']=='question':
-                bbs[:,j,17]=1
-            elif boxinfo['label']=='answer':
-                bbs[:,j,18]=1
-            elif boxinfo['label']=='other':
-                bbs[:,j,19]=1
-            for id1,id2 in boxinfo['linking']:
-                pairs.add((min(id1,id2),max(id1,id2)))
-            numNeighbors.append(len(boxinfo['linking']))
+            bbs = np.empty((1,len(boxes), 8+8+numClasses), dtype=np.float32) #2x4 corners, 2x4 cross-points, n classes
+            pairs=set()
+            numNeighbors=[]
+            for j,boxinfo in enumerate(boxes):
+                lX,tY,rX,bY = boxinfo['box']
+                bbs[:,j,0]=lX*s
+                bbs[:,j,1]=tY*s
+                bbs[:,j,2]=rX*s
+                bbs[:,j,3]=tY*s
+                bbs[:,j,4]=rX*s
+                bbs[:,j,5]=bY*s
+                bbs[:,j,6]=lX*s
+                bbs[:,j,7]=bY*s
+                #we add these for conveince to crop BBs within window
+                bbs[:,j,8]=s*lX
+                bbs[:,j,9]=s*(tY+bY)/2.0
+                bbs[:,j,10]=s*rX
+                bbs[:,j,11]=s*(tY+bY)/2.0
+                bbs[:,j,12]=s*(lX+rX)/2.0
+                bbs[:,j,13]=s*tY
+                bbs[:,j,14]=s*(rX+lX)/2.0
+                bbs[:,j,15]=s*bY
+                
+                bbs[:,j,16:]=0
+                if boxinfo['label']=='header':
+                    bbs[:,j,16]=1
+                elif boxinfo['label']=='question':
+                    bbs[:,j,17]=1
+                elif boxinfo['label']=='answer':
+                    bbs[:,j,18]=1
+                elif boxinfo['label']=='other':
+                    bbs[:,j,19]=1
+                for id1,id2 in boxinfo['linking']:
+                    pairs.add((min(id1,id2),max(id1,id2)))
+                numNeighbors.append(len(boxinfo['linking']))
 
 
-        pairs=list(pairs)
+            pairs=list(pairs)
             
 
         pixel_gt = None

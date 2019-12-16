@@ -137,7 +137,7 @@ def allIOU(boxes1,boxes2, boxes1XYWH=[0,1,4,3]):
     iou = inter_area / (b1_area + b2_area - inter_area + 1e-16)
     return iou
 
-def allIOU_andClip(boxesT,boxesP, boxesTXYWH=[0,1,4,3]):
+def allIOU_andClip(boxesT,boxesP, boxesPXYWH=[0,1,4,3]):
     bP_x1, bP_x2 = boxesP[:,boxesPXYWH[0]]-boxesP[:,boxesPXYWH[2]], boxesP[:,boxesPXYWH[0]]+boxesP[:,boxesPXYWH[2]]
     bP_y1, bP_y2 = boxesP[:,boxesPXYWH[1]]-boxesP[:,boxesPXYWH[3]], boxesP[:,boxesPXYWH[1]]+boxesP[:,boxesPXYWH[3]]
     bT_x1, bT_x2 = boxesT[:,0]-boxesT[:,4], boxesT[:,0]+boxesT[:,4]

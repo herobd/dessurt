@@ -162,67 +162,18 @@ class BoxDetectTrainer(BaseTrainer):
 
         self.optimizer.zero_grad()
 
+        losses, run_log, out = self.run(thisInstance)
+
+        loss=0
+        for name in losses.keys():
+            losses[name] *= self.lossWeights[name[:-4]]
+            loss += losses[name]
+            losses[name] = losses[name].item()
+        if len(losses)>0:
+            loss.backward()
         ##toc=timeit.default_timer()
         ##print('for: '+str(toc-tic))
         #loss = self.loss(output, target)
-        loss = 0
-        index=0
-        losses={}
-        ##tic=timeit.default_timer()
-        #predictions = util.pt_xyrs_2_xyxy(outputBoxes)
-        #if self.iteration % self.save_step == 0:
-        #    targetPoints={}
-        #    targetPixels=None
-        #    _,lossC=FormsBoxDetect_printer(None,thisInstance,self.model,self.gpu,self._eval_metrics,self.checkpoint_dir,self.iteration,self.loss['box'])
-        #    this_loss, position_loss, conf_loss, class_loss, recall, precision = lossC
-        #else:
-        data, targetBoxes, targetBoxes_sizes, targetLines, targetLines_sizes, targetPoints, targetPoints_sizes, targetPixels,target_num_neighbors = self._to_tensor(thisInstance)
-        outputBoxes, outputOffsets, outputLines, outputOffsetLines, outputPoints, outputPixels = self.model(data)
-
-        if 'box' in self.loss:
-            this_loss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,targetBoxes_sizes,target_num_neighbors)
-
-            this_loss*=self.loss_weight['box']
-            loss+=this_loss
-            losses['box_loss']=this_loss.item()
-            #print('boxLoss:{}'.format(this_loss))
-            #display(thisInstance)
-        else:
-            position_loss=0
-            conf_loss=0
-            class_loss=0
-
-        index=0
-        for name, target in targetLines.items():
-            #print('line')
-            predictions = outputOffsetLines[index]
-            this_loss, line_pos_loss, line_conf_loss, line_class_loss = self.loss['line'](predictions,target,targetLines_sizes[name])
-            this_loss*=self.loss_weight['line']
-            loss+=this_loss
-            losses[name+'_loss']=this_loss.item()
-            losses[name+'_pos_loss']=line_pos_loss
-            losses[name+'_conf_loss']=line_conf_loss
-            losses[name+'_class_loss']=line_class_loss
-            index+=1
-        index=0
-        for name, target in targetPoints.items():
-            #print('point')
-            predictions = outputPoints[index]
-            this_loss, this_position_loss, this_conf_loss, this_class_loss = self.loss['point'](predictions,target,targetPoints_sizes[name], **self.loss_params['point'])
-            this_loss*=self.loss_weight['point']
-            loss+=this_loss
-            losses[name+'_loss']=this_loss.item()
-            index+=1
-        if targetPixels is not None:
-            #print('pixel')
-            this_loss = self.loss['pixel'](outputPixels,targetPixels, **self.loss_params['pixel'])
-            this_loss*=self.loss_weight['pixel']
-            loss+=this_loss
-            losses['pixel_loss']=this_loss.item()
-        ##toc=timeit.default_timer()
-        ##print('loss: '+str(toc-tic))
-        ##tic=timeit.default_timer()
-        loss.backward()
         #what is grads?
         #minGrad=9999999999
         #maxGrad=-9999999999
@@ -231,7 +182,7 @@ class BoxDetectTrainer(BaseTrainer):
         #    maxGrad = max(maxGrad,p.max())
         torch.nn.utils.clip_grad_value_(self.model.parameters(),1)
         self.optimizer.step()
-
+        
         ##toc=timeit.default_timer()
         ##print('bac: '+str(toc-tic))
 
@@ -256,22 +207,10 @@ class BoxDetectTrainer(BaseTrainer):
 
         log = {
             'loss': loss,
-            #'recall':recall,
-            #'precision':precision,
-            'position_loss':position_loss,
-            'conf_loss':conf_loss,
-            'class_loss':class_loss,
-            'num_neighbor_loss':nn_loss,
-            #'minGrad':minGrad,
-            #'maxGrad':maxGrad,
-            #'cor_conf_loss':cor_conf_loss,
-            #'conf_loss':conf_loss,
-            #'conf':confs.mean(),
-            #'bad_conf':bad_confs.mean(),
-            #**perAnchor,
 
             **metrics,
-            **losses
+            **losses,
+            **run_log
         }
 
 
@@ -323,19 +262,21 @@ class BoxDetectTrainer(BaseTrainer):
                 data, targetBoxes, targetBoxes_sizes, targetLines, targetLines_sizes, targetPoints, targetPoints_sizes, targetPixels,target_num_neighbors = self._to_tensor(instance)
                 batchSize = data.size(0)
                 #print('data: {}'.format(data.size()))
-                outputBoxes,outputOffsets, outputLines, outputOffsetsLines, outputPoints, outputPixels = self.model(data)
+                #outputBoxes,outputOffsets, outputLines, outputOffsetsLines, outputPoints, outputPixels = self.model(data)
+                losses,run_log,got = self.run(instance,get=['bbs'])
                 #loss = self.loss(output, target)
                 loss = 0
                 index=0
                 
                 if 'box' in self.loss:
-                    this_loss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,targetBoxes_sizes,target_num_neighbors)
-                    loss+=this_loss*self.loss_weight['box']
-                    total_position_loss+=position_loss
-                    total_conf_loss+=conf_loss
-                    tota_class_loss+=class_loss
-                    tota_num_neighbor_loss+=nn_loss
-                    losses['val_box_loss']+=this_loss.item()
+                    #this_loss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,targetBoxes_sizes,target_num_neighbors)
+                    #loss+=this_loss*self.loss_weight['box']
+                    #total_position_loss+=position_loss
+                    #total_conf_loss+=conf_loss
+                    #tota_class_loss+=class_loss
+                    #tota_num_neighbor_loss+=nn_loss
+                    #losses['val_box_loss']+=this_loss.item()
+                    outputBoxes = got['bbs']
                 
                     threshConf = max(self.thresh_conf*outputBoxes[:,:,0].max().item(),0.5)
                     if self.model.rotation:
@@ -415,3 +356,74 @@ class BoxDetectTrainer(BaseTrainer):
             'val_num_neighbor_loss':tota_num_neighbor_loss / len(self.valid_data_loader),
             **losses
         }
+
+
+
+
+
+    def run(self,instance,get=[]):
+        loss = 0
+        index=0
+        losses={}
+        log={}
+        ##tic=timeit.default_timer()
+        #predictions = util.pt_xyrs_2_xyxy(outputBoxes)
+        #if self.iteration % self.save_step == 0:
+        #    targetPoints={}
+        #    targetPixels=None
+        #    _,lossC=FormsBoxDetect_printer(None,instance,self.model,self.gpu,self._eval_metrics,self.checkpoint_dir,self.iteration,self.loss['box'])
+        #    this_loss, position_loss, conf_loss, class_loss, recall, precision = lossC
+        #else:
+        data, targetBoxes, targetBoxes_sizes, targetLines, targetLines_sizes, targetPoints, targetPoints_sizes, targetPixels,target_num_neighbors = self._to_tensor(instance)
+        outputBoxes, outputOffsets, outputLines, outputOffsetLines, outputPoints, outputPixels = self.model(data)
+
+        if 'box' in self.loss:
+            this_loss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,targetBoxes_sizes,target_num_neighbors)
+
+            this_loss*=self.loss_weight['box']
+            loss+=this_loss
+            losses['box_loss']=this_loss.item()
+            #print('boxLoss:{}'.format(this_loss))
+            #display(instance)
+        else:
+            position_loss=0
+            conf_loss=0
+            class_loss=0
+
+        index=0
+        for name, target in targetLines.items():
+            #print('line')
+            predictions = outputOffsetLines[index]
+            this_loss, line_pos_loss, line_conf_loss, line_class_loss = self.loss['line'](predictions,target,targetLines_sizes[name])
+            this_loss*=self.loss_weight['line']
+            loss+=this_loss
+            losses[name+'_loss']=this_loss.item()
+            losses[name+'_pos_loss']=line_pos_loss
+            losses[name+'_conf_loss']=line_conf_loss
+            losses[name+'_class_loss']=line_class_loss
+            index+=1
+        index=0
+        for name, target in targetPoints.items():
+            #print('point')
+            predictions = outputPoints[index]
+            this_loss, this_position_loss, this_conf_loss, this_class_loss = self.loss['point'](predictions,target,targetPoints_sizes[name], **self.loss_params['point'])
+            this_loss*=self.loss_weight['point']
+            loss+=this_loss
+            losses[name+'_loss']=this_loss.item()
+            index+=1
+        if targetPixels is not None:
+            #print('pixel')
+            this_loss = self.loss['pixel'](outputPixels,targetPixels, **self.loss_params['pixel'])
+            this_loss*=self.loss_weight['pixel']
+            loss+=this_loss
+            losses['pixel_loss']=this_loss.item()
+        ##toc=timeit.default_timer()
+        ##print('loss: '+str(toc-tic))
+        ##tic=timeit.default_timer()
+
+        got={}
+        for name in get:
+            if name=='bbs':
+                got[name] = outputBoxes
+
+        return losses, log, got
