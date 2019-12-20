@@ -42,7 +42,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         return acc_metrics
 
     if toEval is None:
-        toEval = ['relPred','relIndexes','bbPred','outputBoxes']
+        toEval = ['edgePred','edgeIndexes','nodePred','outputBoxes']
 
     rel_thresholds = [config['THRESH']] if 'THRESH' in config else [0.5]
     if ('sweep_threshold' in config and config['sweep_threshold']) or ('sweep_thresholds' in config and config['sweep_thresholds']):
