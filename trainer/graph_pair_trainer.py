@@ -4,7 +4,7 @@ from base import BaseTrainer
 import timeit
 from utils import util
 from collections import defaultdict
-from evaluators import FormsBoxDetect_printer
+from evaluators.draw_graph import draw_graph
 from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist, getTargIndexForPreds_iou, newGetTargIndexForPreds_iou, getTargIndexForPreds_dist, computeAP
 from utils.group_pairing import getGTGroup, pure
 from datasets.testforms_graph_pair import display
@@ -54,6 +54,9 @@ class GraphPairTrainer(BaseTrainer):
         self.thresh_conf = config['trainer']['thresh_conf'] if 'thresh_conf' in config['trainer'] else 0.92
         self.thresh_intersect = config['trainer']['thresh_intersect'] if 'thresh_intersect' in config['trainer'] else 0.4
         self.thresh_rel = config['trainer']['thresh_rel'] if 'thresh_rel' in config['trainer'] else 0.5
+        self.thresh_overSeg = self.model.mergeThresh
+        self.thresh_group = self.model.groupThresh
+        self.thresh_error = config['trainer']['thresh_error'] if 'thresh_error' in config['trainer'] else 0.5
 
         #we iniailly train the pairing using GT BBs, but eventually need to fine-tune the pairing using the networks performance
         self.stop_from_gt = config['trainer']['stop_from_gt'] if 'stop_from_gt' in config['trainer'] else None
@@ -75,6 +78,11 @@ class GraphPairTrainer(BaseTrainer):
         self.adaptLR_ep = config['trainer']['adapt_lr_ep'] if 'adapt_lr_ep' in config['trainer'] else 15
 
         self.fixedAlign = config['trainer']['fixed_align'] if 'fixed_align' in config['trainer'] else False
+
+        self.num_node_error_class = 0
+        self.final_class_bad_alignment = False
+        self.final_class_bad_alignment = False
+        self.final_class_inpure_group = False
 
         self.debug = 'DEBUG' in  config['trainer']
 
@@ -944,7 +952,7 @@ class GraphPairTrainer(BaseTrainer):
         return predsPos,predsNeg, recall, prec ,fullPrec, computeAP(scores), targIndex, fullHit, proposedInfo, final_prop_rel_recall, final_prop_rel_prec
 
 
-    def newAlignEdgePred(self,targetBoxes,adj,gtGroups,outputBoxes,edgePred,edgeIndexes,predGroups,rel_prop_pred):
+    def newAlignEdgePred(self,targetBoxes,adj,gtGroups,gtGroupAdj,outputBoxes,edgePred,edgeIndexes,predGroups,rel_prop_pred):
         if edgePred is None:
             if targetBoxes is None:
                 prec=1
@@ -977,6 +985,7 @@ class GraphPairTrainer(BaseTrainer):
             predsGTNo = torch.tensor([])
             fullHit = None
             matches=0
+            predTypes = None
         else:
 
             #decide which predicted boxes belong to which target boxes
@@ -997,14 +1006,14 @@ class GraphPairTrainer(BaseTrainer):
 
 
             #Create gt vector to match edgePred.values()
-
+            num_internal_iters = edgePred.size(-2)
             predsRel = edgePred[...,0] 
             predsOverSeg = edgePred[...,1] 
             predsGroup = edgePred[...,2] 
             predsError = edgePred[...,3] 
             sigPredsAll = torch.sigmoid(predsRel[:,-1])
-            predsPos = []
-            predsNeg = []
+            predsGTRel = []
+            predsGTNoRel = []
             predsGTOverSeg = []
             predsGTNotOverSeg = []
             predsGTGroup = []
@@ -1020,9 +1029,15 @@ class GraphPairTrainer(BaseTrainer):
             truePosOverSeg=falsePosOverSeg=trueNegOverSeg=falseNegOverSeg=0
             truePosGroup=falsePosGroup=trueNegGroup=falseNegGroup=0
             truePosError=falsePosError=trueNegError=falseNegError=0
+
+            saveRelPred={}
+            saveOverSegPred={}
+            saveGroupPred={}
+            saveErrorPred={}
+
             predGroupsT={}
             predGroupsTNear={}
-            for node in range(num_nodes):
+            for node in range(len(predGroups)):
                 predGroupsT[node] = [targIndex[bb].item() for bb in predGroups[node] if targIndex[bb].item()>=0 and (fullHit[bb] or overSegmented[bb])]
                 predGroupsTNear[node] = [targIndex[bb].item() for bb in predGroups[node] if targIndex[bb].item()>=0 and not (fullHit[bb] or overSegmented[bb])]
 
@@ -1110,7 +1125,7 @@ class GraphPairTrainer(BaseTrainer):
                     #if self.useBadBBPredForRelLoss=='fixed' or (self.useBadBBPredForRelLoss and (predsWithNoIntersection[n0] or predsWithNoIntersection[n1])):
                     if self.useBadBBPredForRelLoss=='full' or np.random.rand()<self.useBadBBPredForRelLoss:
                         wasRel=False
-                        predsNeg.append(predsRel[i])
+                        #predsGTNoRel.append(predsRel[i])
                     elif sigPredsAll[i]>self.thresh_rel:
                         badPred+=1
                     wasError=True
@@ -1126,13 +1141,22 @@ class GraphPairTrainer(BaseTrainer):
                     if torch.sigmoid(predsRel[i])>self.thresh_rel:
                         if wasRel:
                             truePosRel+=1
+                            saveRelPred[i]='TP'
                         else:
                             falsePosRel+=1
+                            saveRelPred[i]='FP'
                     else:
                         if wasRel:
                             falseNegRel+=1
+                            saveRelPred[i]='FN'
                         else:
                             trueNegRel+=1
+                            saveRelPred[i]='TN'
+                else:
+                    if torch.sigmoid(predsRel[i])>self.thresh_rel:
+                        saveRelPred[i]='UP'
+                    else:
+                        saveRelPred[i]='UN'
                 if wasOverSeg is not None:
                     if wasOverSeg:
                         predsGTOverSeg.append(predsOverSeg[i])
@@ -1141,13 +1165,22 @@ class GraphPairTrainer(BaseTrainer):
                     if torch.sigmoid(predsOverSeg[i])>self.thresh_overSeg:
                         if wasOverSeg:
                             truePosOverSeg+=1
+                            saveOverSegPred[i]='TP'
                         else:
                             falsePosOverSeg+=1
+                            saveOverSegPred[i]='FP'
                     else:
                         if wasOverSeg:
                             falseNegOverSeg+=1
+                            saveOverSegPred[i]='FN'
                         else:
                             trueNegOverSeg+=1
+                            saveOverSegPred[i]='TN'
+                else:
+                    if torch.sigmoid(predsOverSeg[i])>self.thresh_overSeg:
+                        saveOverSegPred[i]='UP'
+                    else:
+                        saveOverSegPred[i]='UN'
                 if wasGroup is not None:
                     if wasGroup:
                         predsGTGroup.append(predsGroup[i])
@@ -1156,14 +1189,23 @@ class GraphPairTrainer(BaseTrainer):
                     if torch.sigmoid(predsGroup[i])>self.thresh_group:
                         if wasGroup:
                             truePosGroup+=1
+                            saveGroupPred[i]='TP'
                             successfulEdge=True
                         else:
                             falsePosGroup+=1
+                            saveGroupPred[i]='FP'
                     else:
                         if wasGroup:
                             falseNegGroup+=1
+                            saveGroupPred[i]='FN'
                         else:
                             trueNegGroup+=1
+                            saveGroupPred[i]='TN'
+                else:
+                    if torch.sigmoid(predsGroup[i])>self.thresh_group:
+                        saveGroupPred[i]='UP'
+                    else:
+                        saveGroupPred[i]='UN'
                 if wasError is not None:
                     if wasError:
                         predsGTError.append(predsError[i])
@@ -1172,13 +1214,22 @@ class GraphPairTrainer(BaseTrainer):
                     if torch.sigmoid(predsError[i])>self.thresh_error:
                         if wasError:
                             truePosError+=1
+                            saveErrorPred[i]='TP'
                         else:
                             falsePosError+=1
+                            saveErrorPred[i]='FP'
                     else:
                         if wasError:
                             falseNegError+=1
+                            saveErrorPred[i]='FN'
                         else:
                             trueNegError+=1
+                            saveErrorPred[i]='TN'
+                else:
+                    if torch.sigmoid(predsError[i])>self.thresh_error:
+                        saveErrorPred[i]='UP'
+                    else:
+                        saveErrorPred[i]='UN'
 
 
 
@@ -1186,50 +1237,50 @@ class GraphPairTrainer(BaseTrainer):
                 scores.append( (float('nan'),True) )
         
             #stack all label divisions into tensors
-            if len(predsPos)>0:
-                predsPos = torch.stack(predsPos).to(relPred.device)
+            if len(predsGTRel)>0:
+                predsGTRel = torch.stack(predsGTRel,dim=1).to(edgePred.device)
             else:
-                predsPos = None
-            if len(predsNeg)>0:
-                predsNeg = torch.stack(predsNeg).to(relPred.device)
+                predsGTRel = torch.FloatTensor(num_internal_iters,0).to(edgePred.device)
+            if len(predsGTNoRel)>0:
+                predsGTNoRel = torch.stack(predsGTNoRel,dim=1).to(edgePred.device)
             else:
-                predsNeg = None
+                predsGTNoRel = torch.FloatTensor(num_internal_iters,0).to(edgePred.device)
             if len(predsGTOverSeg)>0:
-                predsGTOverSeg = torch.stack(predsGTOverSeg).to(relPred.device)
+                predsGTOverSeg = torch.stack(predsGTOverSeg,dim=1).to(edgePred.device)
             else:
-                predsGTOverSeg = None
+                predsGTOverSeg = torch.FloatTensor(num_internal_iters,0).to(edgePred.device)
             if len(predsGTNotOverSeg)>0:
-                predsGTNotOverSeg = torch.stack(predsGTNotOverSeg).to(relPred.device)
+                predsGTNotOverSeg = torch.stack(predsGTNotOverSeg,dim=1).to(edgePred.device)
             else:
-                predsGTNotOverSeg = None
+                predsGTNotOverSeg = torch.FloatTensor(num_internal_iters,0).to(edgePred.device)
             if len(predsGTGroup)>0:
-                predsGTGroup = torch.stack(predsGTGroup).to(relPred.device)
+                predsGTGroup = torch.stack(predsGTGroup,dim=1).to(edgePred.device)
             else:
-                predsGTGroup = None
+                predsGTGroup = torch.FloatTensor(num_internal_iters,0).to(edgePred.device)
             if len(predsGTNoGroup)>0:
-                predsGTNoGroup = torch.stack(predsGTNoGroup).to(relPred.device)
+                predsGTNoGroup = torch.stack(predsGTNoGroup,dim=1).to(edgePred.device)
             else:
-                predsGTNoGroup = None
+                predsGTNoGroup = torch.FloatTensor(num_internal_iters,0).to(edgePred.device)
             if len(predsGTError)>0:
-                predsGTError = torch.stack(predsGTError).to(relPred.device)
+                predsGTError = torch.stack(predsGTError,dim=1).to(edgePred.device)
             else:
-                predsGTError = None
+                predsGTError = torch.FloatTensor(num_internal_iters,0).to(edgePred.device)
             if len(predsGTNoError)>0:
-                predsGTNoError = torch.stack(predsGTNoError).to(relPred.device)
+                predsGTNoError = torch.stack(predsGTNoError,dim=1).to(edgePred.device)
             else:
-                predsGTNoError = None
+                predsGTNoError = torch.FloatTensor(num_internal_iters,0).to(edgePred.device)
 
-            predsGTYes = torch.stack((predsPos,predsGTOverSeg,predsGTGroup,predsGTError),dim=-1)
-            predsGTNo = torch.stack((predsNeg,predsGTNotOverSeg,predsGTNoGroup,predsGTNoError),dim=-1)
+            predsGTYes = torch.cat((predsGTRel,predsGTOverSeg,predsGTGroup,predsGTError),dim=1)
+            predsGTNo = torch.cat((predsGTNoRel,predsGTNotOverSeg,predsGTNoGroup,predsGTNoError),dim=1)
 
-            recallRel = truePosRel/(truePosRel+falseNegRel)
-            precRel = truePosRel/(truePosRel+falsePosRel)
-            recallOverSeg = truePosOverSeg/(truePosOverSeg+falseNegOverSeg)
-            precOverSeg = truePosOverSeg/(truePosOverSeg+falsePosOverSeg)
-            recallGroup = truePosGroup/(truePosGroup+falseNegGroup)
-            precGroup = truePosGroup/(truePosGroup+falsePosGroup)
-            recallError = truePosError/(truePosError+falseNegError)
-            precError = truePosError/(truePosError+falsePosError)
+            recallRel = truePosRel/(truePosRel+falseNegRel) if truePosRel+falseNegRel>0 else 1
+            precRel = truePosRel/(truePosRel+falsePosRel) if truePosRel+falsePosRel>0 else 1
+            recallOverSeg = truePosOverSeg/(truePosOverSeg+falseNegOverSeg) if truePosOverSeg+falseNegOverSeg>0 else 1
+            precOverSeg = truePosOverSeg/(truePosOverSeg+falsePosOverSeg) if truePosOverSeg+falsePosOverSeg>0 else 1
+            recallGroup = truePosGroup/(truePosGroup+falseNegGroup) if truePosGroup+falseNegGroup>0 else 1
+            precGroup = truePosGroup/(truePosGroup+falsePosGroup) if truePosGroup+falsePosGroup>0 else 1
+            recallError = truePosError/(truePosError+falseNegError) if truePosError+falseNegError>0 else 1
+            precError = truePosError/(truePosError+falsePosError) if truePosError+falsePosError>0 else 1
             log = {
                 'recallRel' : recallRel, 
                 'precRel' : precRel, 
@@ -1244,6 +1295,7 @@ class GraphPairTrainer(BaseTrainer):
                 'precError' : precError,
                 'FmError' : 2*(precError*recallError)/(recallError+precError) if recallError+precError>0 else 0,
                 }
+            predTypes = [saveRelPred,saveOverSegPred,saveGroupPred,saveErrorPred]
 
         if rel_prop_pred is not None:
             if len(adj)>0:
@@ -1296,11 +1348,11 @@ class GraphPairTrainer(BaseTrainer):
             #    scores.append( (float('nan'),True) )
         
             if len(propPredsPos)>0:
-                propPredsPos = torch.stack(propPredsPos).to(relPred.device)
+                propPredsPos = torch.stack(propPredsPos).to(relPropScores.device)
             else:
                 propPredsPos = None
             if len(propPredsNeg)>0:
-                propPredsNeg = torch.stack(propPredsNeg).to(relPred.device)
+                propPredsNeg = torch.stack(propPredsNeg).to(relPropScores.device)
             else:
                 propPredsNeg = None
 
@@ -1323,7 +1375,7 @@ class GraphPairTrainer(BaseTrainer):
         else:
             proposedInfo = None
 
-        return predsGTYes, predsGTNo, targIndex, fullHit, proposedInfo, log
+        return predsGTYes, predsGTNo, targIndex, fullHit, proposedInfo, log, predTypes
 
 
     def prealignedEdgePred(self,adj,relPred,relIndexes,rel_prop_pred):
@@ -1682,8 +1734,9 @@ class GraphPairTrainer(BaseTrainer):
             numClasses-=1
         image, targetBoxes, adj, target_num_neighbors = self._to_tensor(instance)
         gtGroups = instance['gt_groups']
+        gtGroupAdj = instance['gt_groups_adj']
         if useGT:
-            outputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred = self.model(
+            allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred = self.model(
                                     image,
                                     targetBoxes,
                                     target_num_neighbors,
@@ -1713,112 +1766,108 @@ class GraphPairTrainer(BaseTrainer):
             #outputBoxes, outputOffsets: one, predicted at the begining
             #relPred, relIndexes, bbPred, predGroups: multiple, for each step in graph prediction. relIndexes indexes into predGroups, which indexes to outputBoxes
             #rel_prop_pred: if we use prop, one for begining
-            outputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred = self.model(image,
+            allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred = self.model(image,
                     otherThresh=self.conf_thresh_init, otherThreshIntur=threshIntur, hard_detect_limit=self.train_hard_detect_limit)
             #gtPairing,predPairing = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred)
         ### TODO code prealigned
         losses=defaultdict(lambda:0)
         log={}
         #for graphIteration in range(len(allEdgePred)):
-        for graphIteration,(edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
+        for graphIteration,(outputBoxes,edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allOutputBoxes,allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
             #edgePred=allEdgePred[graphIteration]
             #nodePred=allNodePred[graphIteration]
             #edgeIndexes=allEdgeIndexes[graphIteration]
             #predGroups=allPredGroups[graphIteration]
 
-            predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, bbFullHit, proposedInfo, logIter = self.newAlignEdgePred(targetBoxes,adj,gtGroups,outputBoxes,edgePred,edgeIndexes,predGroups, rel_prop_pred)
-            if bbPred is not None and bbPred.size(0)>0:
-                #create aligned GT
-                #this was wrong...
-                    #first, remove unmatched predicitons that didn't overlap (weren't close) to any targets
-                    #toKeep = 1-((bbNoIntersections==1) * (bbAlignment==-1))
-                #remove predictions that overlapped with GT, but not enough
-                #toKeep = 1-((bbFullHit==0) * (bbAlignment!=-1)) #toKeep = not (incomplete_overlap and did_overlap)
-                #bbAlignment_use = bbAlignment[toKeep]
-                assert(not self.model.predNN)
-                if self.model.predClass:
-                    node_pred_use_index=[]
-                    node_gt_use_class_indexes=[]
-                    node_pred_use_index_sp=[]
-                    alignedClass_use_sp=[]
+            predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, bbFullHit, proposedInfo, logIter, edgePredTypes = self.newAlignEdgePred(targetBoxes,adj,gtGroups,gtGroupAdj,outputBoxes,edgePred,edgeIndexes,predGroups, rel_prop_pred if graphIteration==0 else None)
+            #create aligned GT
+            #this was wrong...
+                #first, remove unmatched predicitons that didn't overlap (weren't close) to any targets
+                #toKeep = 1-((bbNoIntersections==1) * (bbAlignment==-1))
+            #remove predictions that overlapped with GT, but not enough
+            #toKeep = 1-((bbFullHit==0) * (bbAlignment!=-1)) #toKeep = not (incomplete_overlap and did_overlap)
+            #bbAlignment_use = bbAlignment[toKeep]
+            assert(not self.model.predNN)
+            if self.model.predClass:
+                node_pred_use_index=[]
+                node_gt_use_class_indexes=[]
+                node_pred_use_index_sp=[]
+                alignedClass_use_sp=[]
 
-                    node_conf_use_index=[]
-                    node_conf_gt=[]#torch.FloatTensor(len(predGroups))
+                node_conf_use_index=[]
+                node_conf_gt=[]#torch.FloatTensor(len(predGroups))
 
-                    for i,predGroup in predGroups:
-                        ts=[bbAlignment[pId] for pId in predGroup]
-                        classes=defaultdict(lambda:0)
-                        classesIndexes={-2:-2}
-                        hits=misses=0
-                        for tId in ts:
-                            if tId>=0:
-                                #this is unfortunate. It's here since we use multiple classes
-                                clsRep = ','.join([str(int(targetBoxes[0][tId,13+clasI])) for clasI in range(len(self.classMap))])
-                                classes[clsRep] += 1
-                                classesIndexes[clsRep] = tId
-                                hits+=1
-                            else:
-                                classes[-1]+=1
-                                classesIndexes[-1]=-1
-                                misses+=1
-                        targetClass=-2
-                        for cls,count in classes:
-                            if count/len(ts)>0.8:
-                                targetClass = cls
-                                break
+                for i,predGroup in enumerate(predGroups):
+                    ts=[bbAlignment[pId] for pId in predGroup]
+                    classes=defaultdict(lambda:0)
+                    classesIndexes={-2:-2}
+                    hits=misses=0
+                    for tId in ts:
+                        if tId>=0:
+                            #this is unfortunate. It's here since we use multiple classes
+                            clsRep = ','.join([str(int(targetBoxes[0][tId,13+clasI])) for clasI in range(len(self.classMap))])
+                            classes[clsRep] += 1
+                            classesIndexes[clsRep] = tId
+                            hits+=1
+                        else:
+                            classes[-1]+=1
+                            classesIndexes[-1]=-1
+                            misses+=1
+                    targetClass=-2
+                    for cls,count in classes.items():
+                        if count/len(ts)>0.8:
+                            targetClass = cls
+                            break
 
-                        if targetClass>=0:
-                            node_pred_use_index.append(i)
-                            node_gt_use_class_indexes.append(classesIndexes[targetClass])
-                        elif targetClass==-1 and self.final_class_bad_alignment:
-                            node_pred_use_index_sp.append(i)
-                            error_class = torch.FloatTensor(1,len(self.classMap)+self.num_node_error_class)
-                            error_class[0,self.final_class_bad_alignment_index]=1
-                            alignedClass_use_sp.append(error_class)
-                        elif targetClass==-2 and self.final_class_inpure_group:
-                            node_pred_use_index_sp.append(i)
-                            error_class = torch.FloatTensor(1,len(self.classMap)+self.num_node_error_class)
-                            error_class[0,self.final_class_inpure_group_index]=1
-                            alignedClass_use_sp.append(error_class)
+                    if type(targetClass) is str:
+                        node_pred_use_index.append(i)
+                        node_gt_use_class_indexes.append(classesIndexes[targetClass])
+                    elif targetClass==-1 and self.final_class_bad_alignment:
+                        node_pred_use_index_sp.append(i)
+                        error_class = torch.FloatTensor(1,len(self.classMap)+self.num_node_error_class).zero_()
+                        error_class[0,self.final_class_bad_alignment_index]=1
+                        alignedClass_use_sp.append(error_class)
+                    elif targetClass==-2 and self.final_class_inpure_group:
+                        node_pred_use_index_sp.append(i)
+                        error_class = torch.FloatTensor(1,len(self.classMap)+self.num_node_error_class).zero_()
+                        error_class[0,self.final_class_inpure_group_index]=1
+                        alignedClass_use_sp.append(error_class)
 
-                        if hits==0:
-                            node_conf_use_index.append(i)
-                            node_conf_gt.append(0)
-                        elif hits/misses>0.5:
-                            node_conf_use_index.append(i)
-                            node_conf_gt.append(1)
+                    if hits==0:
+                        node_conf_use_index.append(i)
+                        node_conf_gt.append(0)
+                    elif misses==0 or hits/misses>0.5:
+                        node_conf_use_index.append(i)
+                        node_conf_gt.append(1)
 
-                    node_pred_use_index += node_pred_use_index_sp
-                    if len(bb_pred_use_index)>0:
-                        nodePredClass_use = nodePred[node_pred_use_index][:,:,self.model.nodeIdxClass:self.model.nodeIdxClassEnd]
-                        alignedClass_use = targetBoxes[0][node_gt_use_class_indexes,13:13+len(self.classMap)]
-                        if self.num_bb_error_class>0:
-                            alignedClass_use = torch.cat((alignedClass_use,torch.FloatTensor(alignedClass_use.size(0),self.num_bb_error_class).zero_().to(alignedClass_use.device)),dim=1)
-                            if len(alignedClass_use_sp)>0:
-                                alignedClass_use_sp = torch.cat(alignedClass_use_sp,dim=0).to(alignedClass_use.device)
-                                alignedClass_use = torch.cat((alignedClass_use,alignedClass_use_sp),dim=0)
-                    else:
-                        bbPredClass_use = None
-                        alignedClass_use = None
+                node_pred_use_index += node_pred_use_index_sp
+                if len(node_pred_use_index)>0:
+                    nodePredClass_use = nodePred[node_pred_use_index][:,:,self.model.nodeIdxClass:self.model.nodeIdxClassEnd]
+                    alignedClass_use = targetBoxes[0][node_gt_use_class_indexes,13:13+len(self.classMap)]
+                    if self.num_node_error_class>0:
+                        alignedClass_use = torch.cat((alignedClass_use,torch.FloatTensor(alignedClass_use.size(0),self.num_bb_error_class).zero_().to(alignedClass_use.device)),dim=1)
+                        if len(alignedClass_use_sp)>0:
+                            alignedClass_use_sp = torch.cat(alignedClass_use_sp,dim=0).to(alignedClass_use.device)
+                            alignedClass_use = torch.cat((alignedClass_use,alignedClass_use_sp),dim=0)
+                else:
+                    nodePredClass_use = None
+                    alignedClass_use = None
 
-                    if len(node_conf_use_index)>0:
-                        nodePredConf_use = nodePred[node_conf_use_index][:,:,self.model.nodeIdxConf]
-                        nodeGTConf_use = torch.FloatTensor(node_conf_gt).to(nodePred.device)
+                if len(node_conf_use_index)>0:
+                    nodePredConf_use = nodePred[node_conf_use_index][:,:,self.model.nodeIdxConf]
+                    nodeGTConf_use = torch.FloatTensor(node_conf_gt).to(nodePred.device)
 
-            else:
-                nodePredNN_use = None
-                nodePredClass_use = None
             ####
 
 
-            if relPred is not None:
-                numEdgePred = relPred.size(0)
-                if predPairingShouldBeTrue is not None:
-                    lenTrue = predPairingShouldBeTrue.size(0)
+            if edgePred is not None:
+                numEdgePred = edgePred.size(0)
+                if predEdgeShouldBeTrue is not None:
+                    lenTrue = predEdgeShouldBeTrue.size(0)
                 else:
                     lenTrue = 0
-                if predPairingShouldBeFalse is not None:
-                    lenFalse = predPairingShouldBeFalse.size(0)
+                if predEdgeShouldBeFalse is not None:
+                    lenFalse = predEdgeShouldBeFalse.size(0)
                 else:
                     lenFalse = 0
             else:
@@ -1913,6 +1962,10 @@ class GraphPairTrainer(BaseTrainer):
 
             for name,stat in logIter.items():
                 log['{}_{}'.format(name,graphIteration)]=stat
+
+            if self.save_images_every>0 and self.iteration%self.save_images_every==0:
+                path = os.path.join(self.save_images_dir,'{}_{}.png'.format(instance['name'],graphIteration))
+                draw_graph(outputBoxes,torch.Sigmoid(nodePred).cpu().detach(),torch.Sigmoid(edgePred).cpu().detach(),edgeIndexes,predGroups,image,predTypes,targetBoxes,self.model,path)
         
         #log['rel_prec']= fullPrec
         #log['rel_recall']= eRecall
@@ -1954,15 +2007,15 @@ class GraphPairTrainer(BaseTrainer):
             propRecall,propPrec = proposedInfo[2:4]
             log['prop_rel_recall'] = propRecall
             log['prop_rel_prec'] = propPrec
-        if final_prop_rel_recall is not None:
-            log['final_prop_rel_recall']=final_prop_rel_recall
-        if final_prop_rel_prec is not None:
-            log['final_prop_rel_prec']=final_prop_rel_prec
+        #if final_prop_rel_recall is not None:
+        #    log['final_prop_rel_recall']=final_prop_rel_recall
+        #if final_prop_rel_prec is not None:
+        #    log['final_prop_rel_prec']=final_prop_rel_prec
 
         got={}#outputBoxes, outputOffsets, relPred, relIndexes, bbPred, rel_prop_pred
         for name in get:
-            if name=='relPred':
-                got['relPred'] = relPred.detach().cpu()
+            if name=='edgePred':
+                got['edgePred'] = edgePred.detach().cpu()
             elif name=='outputBoxes':
                 if useGT:
                     got['outputBoxes'] = targetBoxes.cpu()
@@ -1970,9 +2023,18 @@ class GraphPairTrainer(BaseTrainer):
                     got['outputBoxes'] = outputBoxes.detach().cpu()
             elif name=='outputOffsets':
                 got['outputOffsets'] = outputOffsets.detach().cpu()
-            elif name=='relIndexes':
-                got['relIndexes'] = relIndexes
-            elif name=='bbPred':
-                got['bbPred'] = bbPred.detach().cpu()
-
+            elif name=='edgeIndexes':
+                got['edgeIndexes'] = edgeIndexes
+            elif name=='nodePred':
+                 got['nodePred'] = nodePred.detach().cpu()
+            elif name=='allNodePred':
+                 got[name] = [n.detach().cpu() for n in allNodePred]
+            elif name=='allEdgePred':
+                 got[name] = [n.detach().cpu() for n in allEdgePred]
+            elif name=='allEdgeIndexes':
+                 got[name] = allEdgeIndexes
+            elif name=='allPredGroups':
+                 got[name] = allPredGroups
+            elif name=='allOutputBoxes':
+                 got[name] = allOutputBoxes
         return losses, log, got

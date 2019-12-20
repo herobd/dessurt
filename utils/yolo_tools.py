@@ -145,14 +145,14 @@ def allIOU_andClip(boxesT,boxesP, boxesPXYWH=[0,1,4,3]):
 
     #expand to make two dimensional, allowing every instance of boxesP
     #to be compared with every intsance of boxesT
-    bP_x1 = bP_x1[:,None].expand(boxesP.size(0), boxesT.size(0))
-    bP_y1 = bP_y1[:,None].expand(boxesP.size(0), boxesT.size(0))
-    bP_x2 = bP_x2[:,None].expand(boxesP.size(0), boxesT.size(0))
-    bP_y2 = bP_y2[:,None].expand(boxesP.size(0), boxesT.size(0))
-    bT_x1 = bT_x1[None,:].expand(boxesP.size(0), boxesT.size(0))
-    bT_y1 = bT_y1[None,:].expand(boxesP.size(0), boxesT.size(0))
-    bT_x2 = bT_x2[None,:].expand(boxesP.size(0), boxesT.size(0))
-    bT_y2 = bT_y2[None,:].expand(boxesP.size(0), boxesT.size(0))
+    bT_x1 = bT_x1[:,None].expand(boxesT.size(0), boxesP.size(0))
+    bT_y1 = bT_y1[:,None].expand(boxesT.size(0), boxesP.size(0))
+    bT_x2 = bT_x2[:,None].expand(boxesT.size(0), boxesP.size(0))
+    bT_y2 = bT_y2[:,None].expand(boxesT.size(0), boxesP.size(0))
+    bP_x1 = bP_x1[None,:].expand(boxesT.size(0), boxesP.size(0))
+    bP_y1 = bP_y1[None,:].expand(boxesT.size(0), boxesP.size(0))
+    bP_x2 = bP_x2[None,:].expand(boxesT.size(0), boxesP.size(0))
+    bP_y2 = bP_y2[None,:].expand(boxesT.size(0), boxesP.size(0))
 
     inter_rect_x1 = torch.max(bP_x1, bT_x1)
     inter_rect_x2 = torch.min(bP_x2, bT_x2)
@@ -165,7 +165,8 @@ def allIOU_andClip(boxesT,boxesP, boxesPXYWH=[0,1,4,3]):
     bP_area = (bP_x2 - bP_x1 + 1) * (bP_y2 - bP_y1 + 1)
     bT_area = (bT_x2 - bT_x1 + 1) * (bT_y2 - bT_y1 + 1)
     #clip target region by pred region
-    bT_clippedArea = (min(bT_x2,bP_x2) - max(bT_x1,bP_x1) + 1) * (bT_y2 - bT_y1 + 1)
+    #bT_clippedArea = (torch.min(bT_x2,bP_x2) - torch.max(bT_x1,bP_x1) + 1) * (bT_y2 - bT_y1 + 1)
+    bT_clippedArea = (inter_rect_x2 - inter_rect_x1 + 1) * (bT_y2 - bT_y1 + 1)
 
     iou = inter_area / (bP_area + bT_area - inter_area + 1e-16)
     io_clipped_u = inter_area / (bP_area + bT_clippedArea - inter_area + 1e-16)
@@ -498,7 +499,8 @@ def newGetTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,getLoc, 
     predsWithNoIntersection=maxIOUsForPred==0
 
     hits = allIOUs>iou_thresh
-    overSegmented= (allIO_clippedU>overSeg_thresh) and not hits
+    overSeg_thresh = iou_thresh*1.05
+    overSegmented= (allIO_clippedU>overSeg_thresh) & ~hits
     if hard_thresh:
         allIOUs *= hits.float()
 
@@ -530,6 +532,7 @@ def newGetTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,getLoc, 
         return targIndex, predsWithNoIntersection
     else:
         hits,_ = hits.max(dim=0) #since we always take max pred
+        overSegmented,_ = overSegmented.max(dim=0)
         return targIndex, hits, overSegmented
 
 
