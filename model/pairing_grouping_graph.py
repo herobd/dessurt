@@ -425,7 +425,7 @@ class PairingGroupingGraph(BaseModel):
         #Otherwise we have to to alignment first
         if not useGTBBs:
             if bbPredictions.size(0)==0:
-                return bbPredictions, offsetPredictions, None, None, None, None
+                return [bbPredictions], offsetPredictions, None, None, None, None, None
             if self.include_bb_conf:
                 useBBs = bbPredictions
             else:
@@ -437,7 +437,7 @@ class PairingGroupingGraph(BaseModel):
                 useBBs = gtBBs[:,1:]
         else:
             if gtBBs is None:
-                return bbPredictions, offsetPredictions, None, None, None, None
+                return [bbPredictions], offsetPredictions, None, None, None, None, None
             useBBs = gtBBs[0,:,0:5]
             if self.useShapeFeats or self.relationshipProposal=='feature_nn':
                 classes = gtBBs[0,:,13:]
@@ -476,7 +476,7 @@ class PairingGroupingGraph(BaseModel):
                 #undirected
                 #edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
                 if graph is None:
-                    return bbPredictions, offsetPredictions, None, None, None, rel_prop_scores
+                    return [bbPredictions], offsetPredictions, None, None, None, None, rel_prop_scores
 
                 nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = self.graphnets[0](graph)
                 edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
@@ -490,12 +490,12 @@ class PairingGroupingGraph(BaseModel):
                 allGroups.append(groups)
                 allEdgeIndexes.append(edgeIndexes)
 
-                print('graph 0:   bbs:{}, nodes:{}, edges:{}'.format(useBBs.size(0),nodeOuts.size(0),edgeOuts.size(0)))
+                #print('graph 0:   bbs:{}, nodes:{}, edges:{}'.format(useBBs.size(0),nodeOuts.size(0),edgeOuts.size(0)))
                 
                 
                 for graphnet in self.graphnets[1:]:
                     useBBs,graph,groups,edgeIndexes=self.mergeAndGroup(edgeIndexes,edgeOuts,groups,nodeFeats,edgeFeats,uniFeats,useBBs,image)
-                    print('graph 1-:   bbs:{}, nodes:{}, edges:{}'.format(useBBs.size(0),len(groups),len(edgeIndexes)))
+                    #print('graph 1-:   bbs:{}, nodes:{}, edges:{}'.format(useBBs.size(0),len(groups),len(edgeIndexes)))
                     if len(edgeIndexes)==0:
                         break #we have no graph, so we can just end here
                     nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = graphnet(graph)
@@ -516,7 +516,7 @@ class PairingGroupingGraph(BaseModel):
 
             return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores
         else:
-            return bbPredictions, offsetPredictions, None, None, None, None
+            return [bbPredictions], offsetPredictions, None, None, None, None, None
 
     #This rewrites the confidence and class predictions based on the (re)predictions from the graph network
     def updateBBs(self,bbs,groups,nodeOuts):
@@ -731,8 +731,13 @@ class PairingGroupingGraph(BaseModel):
             for n0,n1 in temp:
                 if n0 in oldGroupToNew:
                     n0=newIdToPos[oldGroupToNew[n0]]
+                else:
+                    n0 = newIdToPos[n0]
                 if n1 in oldGroupToNew:
                     n1=newIdToPos[oldGroupToNew[n1]]
+                else:
+                    n1 = newIdToPos[n1]
+                assert(n0<bbs.size(0) and n1<bbs.size(0))
                 #if n0!=n1:
                 oldEdgeIndexes.append((n0,n1)) #I prune out edges between the same nodes later
                 #else:
@@ -744,6 +749,8 @@ class PairingGroupingGraph(BaseModel):
 
 
         #Find nodes that should be grouped
+        #TODO by vote!
+
         #import pdb;pdb.set_trace()
         oldIdToNew = {i:i for i in range(bbs.size(0))}
         #newIdToOld=defaultdict(list)

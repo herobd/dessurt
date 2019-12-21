@@ -152,6 +152,13 @@ class GraphPairDataset(torch.utils.data.Dataset):
             bbs = out['bb_gt']
             ids= out['bb_auxs']
 
+            newGroups = []
+            for group in groups:
+                newGroup=[ids.index(bbId) for bbId in group if bbId in ids]
+                if len(newGroup)>0:
+                    newGroups.append(newGroup)
+            groups=newGroups
+
 
             ##tic=timeit.default_timer()
             if np_img.shape[2]==3:
@@ -211,6 +218,9 @@ class GraphPairDataset(torch.utils.data.Dataset):
                     g1=i
             if g0!=g1:
                 groups_adj.append((min(g0,g1),max(g0,g1)))
+        for group in groups:
+            for i in group:
+                assert(i<bbs.shape[1])
         return {
                 "img": img,
                 "bb_gt": bbs,

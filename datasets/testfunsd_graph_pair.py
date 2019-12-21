@@ -67,6 +67,30 @@ def display(data):
 
         ax_im.plot([x1,x2],[y1,y2],'m-')
         #print('{} to {}, {} - {}'.format(ind1,ind2,(x1,y1),(x2,y2)))
+
+    groupCenters=[]
+    for group in data['gt_groups']:
+        maxX=maxY=0
+        minX=minY=999999999
+        for i in group:
+            xc=data['bb_gt'][b,i,0]
+            yc=data['bb_gt'][b,i,1]
+            rot=data['bb_gt'][b,i,2]
+            assert(rot==0)
+            h=data['bb_gt'][b,i,3]
+            w=data['bb_gt'][b,i,4]
+            maxX=max(maxX,xc+w)
+            maxY=max(maxY,yc+h)
+            minX=min(minX,xc-w)
+            minY=min(minY,yc-h)
+        ax_im.plot([minX,maxX,maxX,minX,minX],[minY,minY,maxY,maxY,minY],'c:')
+        groupCenters.append(((minX+maxX)//2, (minY+minY)//2) )
+
+    for g1,g2 in data['gt_groups_adj']:
+        x1,y1 = groupCenters[g1]
+        x2,y2 = groupCenters[g2]
+        ax_im.plot([x1,x2],[y1,y2],'c-')
+
     plt.show()
 
 
@@ -86,6 +110,8 @@ if __name__ == "__main__":
         'Xrescale_range':[0.4,0.65],
         'crop_params':{"crop_size":[800,800],"pad":60,"rot_degree_std_dev": 0.7}, 
         'rotation':False,
+        'split_to_lines': True,
+        'overfit': True
 })
 
     dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False, num_workers=0, collate_fn=funsd_graph_pair.collate)

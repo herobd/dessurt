@@ -38,8 +38,10 @@ class FUNSDGraphPair(GraphPairDataset):
         if images is not None:
             self.images=images
         else:
-            splitFile = 'train_valid_test_split.json'
-            splitFile = 'train_valid_test_split.json'
+            if 'overfit' in config and config['overfit']:
+                splitFile = 'overfit_split.json'
+            else:
+                splitFile = 'train_valid_test_split.json'
             with open(os.path.join(dirPath,splitFile)) as f:
                 #if split=='valid' or split=='validation':
                 #    trainTest='train'
