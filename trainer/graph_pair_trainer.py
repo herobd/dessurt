@@ -8,7 +8,7 @@ from evaluators.draw_graph import draw_graph
 from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist, getTargIndexForPreds_iou, newGetTargIndexForPreds_iou, getTargIndexForPreds_dist, computeAP
 from utils.group_pairing import getGTGroup, pure
 from datasets.testforms_graph_pair import display
-import random
+import random, os
 
 
 class GraphPairTrainer(BaseTrainer):
@@ -85,6 +85,9 @@ class GraphPairTrainer(BaseTrainer):
         self.final_class_inpure_group = False
 
         self.debug = 'DEBUG' in  config['trainer']
+        self.save_images_every = 50
+        self.save_images_dir = 'train_out'
+        util.ensure_dir(self.save_images_dir)
 
         #Name change
         if 'edge' in self.lossWeights:
@@ -1875,15 +1878,17 @@ class GraphPairTrainer(BaseTrainer):
 
             relLoss = None
             #separating the loss into true and false portions is not only convienint, it balances the loss between true/false examples
-            if predEdgeShouldBeTrue is not None and predEdgeShouldBeTrue.size(0)>0:
+            if predEdgeShouldBeTrue is not None and predEdgeShouldBeTrue.size(0)>0 and predEdgeShouldBeTrue.size(1)>0:
                 ones = torch.ones_like(predEdgeShouldBeTrue).to(image.device)
                 relLoss = self.loss['rel'](predEdgeShouldBeTrue,ones)
+                assert(not torch.isnan(relLoss))
                 debug_avg_relTrue = predEdgeShouldBeTrue.mean().item()
             else:
                 debug_avg_relTrue =0 
-            if predEdgeShouldBeFalse is not None and predEdgeShouldBeFalse.size(0)>0:
+            if predEdgeShouldBeFalse is not None and predEdgeShouldBeFalse.size(0)>0 and predEdgeShouldBeFalse.size(1)>0:
                 zeros = torch.zeros_like(predEdgeShouldBeFalse).to(image.device)
                 relLossFalse = self.loss['rel'](predEdgeShouldBeFalse,zeros)
+                assert(not torch.isnan(relLossFalse))
                 if relLoss is None:
                     relLoss=relLossFalse
                 else:
@@ -1964,8 +1969,9 @@ class GraphPairTrainer(BaseTrainer):
                 log['{}_{}'.format(name,graphIteration)]=stat
 
             if self.save_images_every>0 and self.iteration%self.save_images_every==0:
-                path = os.path.join(self.save_images_dir,'{}_{}.png'.format(instance['name'],graphIteration))
-                draw_graph(outputBoxes,torch.Sigmoid(nodePred).cpu().detach(),torch.Sigmoid(edgePred).cpu().detach(),edgeIndexes,predGroups,image,predTypes,targetBoxes,self.model,path)
+                path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b',graphIteration))#instance['name'],graphIteration))
+                draw_graph(outputBoxes,self.model.used_threshConf,torch.sigmoid(nodePred).cpu().detach(),torch.sigmoid(edgePred).cpu().detach(),edgeIndexes,predGroups,image,edgePredTypes,targetBoxes,self.model,path)
+                print('saved {}'.format(path))
         
         #log['rel_prec']= fullPrec
         #log['rel_recall']= eRecall

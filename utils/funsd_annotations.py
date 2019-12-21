@@ -42,6 +42,9 @@ def combineLine(classMap,line,bbs,trans,lineTrans,s,label):
     #nex = j<len(boxes)-1
     #numNeighbors.append(len(boxinfo['linking'])+(1 if prev else 0)+(1 if nex else 0))
     #prev=True
+
+
+
 def createLines(annotations,classMap,scale):
     numClasses=len(classMap)
     boxes = annotations['form']
@@ -53,6 +56,7 @@ def createLines(annotations,classMap,scale):
     line=[]
     lineTrans=[]
 
+    numBBs = len(boxes)
     #new line
     line=[]
     lineTrans=[]
