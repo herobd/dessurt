@@ -17,10 +17,10 @@ class YoloLoss (nn.Module):
         self.multiclass=multiclass
         self.anchors=anchors
         self.num_anchors=len(anchors)
-        self.mse_loss = nn.MSELoss(reduction='elementwise_mean')  # Coordinate loss
-        self.bce_loss = nn.BCEWithLogitsLoss(reduction='elementwise_mean')  # Confidence loss
-        self.ce_loss = nn.CrossEntropyLoss(reduction='elementwise_mean')  # Class loss
-        self.mse_loss = nn.MSELoss(reduction='elementwise_mean')  # Num neighbor regression
+        self.mse_loss = nn.MSELoss(reduction='mean')  # Coordinate loss
+        self.bce_loss = nn.BCEWithLogitsLoss(reduction='mean')  # Confidence loss
+        self.ce_loss = nn.CrossEntropyLoss(reduction='mean')  # Class loss
+        self.mse_loss = nn.MSELoss(reduction='mean')  # Num neighbor regression
 
     def forward(self,prediction, target, target_sizes, target_num_neighbors=None ):
 
@@ -339,9 +339,9 @@ class YoloDistLoss (nn.Module):
         self.multiclass=multiclass
         self.anchors=anchors
         self.num_anchors=len(anchors)
-        self.mse_loss = nn.MSELoss(reduction='elementwise_mean')  # Coordinate loss
-        self.bce_loss = nn.BCEWithLogitsLoss(reduction='elementwise_mean')  # Confidence loss
-        self.ce_loss = nn.CrossEntropyLoss(reduction='elementwise_mean')  # Class loss
+        self.mse_loss = nn.MSELoss(reduction='mean')  # Coordinate loss
+        self.bce_loss = nn.BCEWithLogitsLoss(reduction='mean')  # Confidence loss
+        self.ce_loss = nn.CrossEntropyLoss(reduction='mean')  # Class loss
 
         #make anchor points from anchors
         self.scaled_anchors = torch.FloatTensor([(a['width'] / scale[0], a['height']/ scale[1], a['rot']) for a in self.anchors])

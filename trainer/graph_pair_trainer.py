@@ -547,7 +547,10 @@ class GraphPairTrainer(BaseTrainer):
                     instance['num_neighbors']=None
                 if not self.logged:
                     print('iter:{} valid batch: {}/{}'.format(self.iteration,batch_idx,len(self.valid_data_loader)), end='\r')
-                losses,log_run, out = self.run(instance,False,get=['bb_stats','nn_acc'])
+                if self.mergeAndGroup:
+                    losses,log_run, out = self.newRun(instance,False,get=['bb_stats','nn_acc'])
+                else:
+                    losses,log_run, out = self.run(instance,False,get=['bb_stats','nn_acc'])
 
                 for name,value in log_run.items():
                     if value is not None:
