@@ -108,7 +108,7 @@ class EdgeFunc(nn.Module):
     def clear(self):
         self.rcrhdn_edges=None
 
-    def forward(self, source, target, edge_attr, u):
+    def forward(self, source, target, edge_attr, u, batch=None):
         if self.use_rcrhdn and self.rcrhdn_edges is None:
             self.rcrhdn_edges = self.start_rcrhdn_edges(edge_attr)
         # source, target: [E, F_x], where E is the number of edges.
@@ -238,7 +238,7 @@ class NodeTreeFunc(nn.Module):
                 #data = paired.view(data.size(0),data.size(1))
         return data
 
-    def forward(self, x, edge_index, edge_attr, u):
+    def forward(self, x, edge_index, edge_attr, u, batch=None):
         if self.use_rcrhdn and self.rcrhdn_nodes is None:
             self.rcrhdn_nodes = self.start_rcrhdn_nodes(x)
         # x: [N, F_x], where N is the number of nodes.
@@ -350,7 +350,7 @@ class NodeAttFunc(nn.Module):
     def clear(self):
         self.rcrhdn_nodes=None
 
-    def forward(self, x, edge_index, edge_attr, u):
+    def forward(self, x, edge_index, edge_attr, u, batch=None):
         if self.use_rcrhdn and self.rcrhdn_nodes is None:
             self.rcrhdn_nodes = self.start_rcrhdn_nodes(x)
         # x: [N, F_x], where N is the number of nodes.
@@ -482,7 +482,7 @@ class MetaGraphLayer(nn.Module):
     def forward(self, input):
         x, edge_index, edge_attr, u = input
         batch=None
-        x, edge_attr, u = self.op(x, edge_index, edge_attr, u, batch)
+        x, edge_attr, u = self.op(x, edge_index, edge_attr=edge_attr, u=u, batch=batch)
         return x, edge_index, edge_attr, u
 
 

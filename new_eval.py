@@ -181,6 +181,7 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                       data_loader=data_loader,
                       valid_data_loader=valid_data_loader,
                       train_logger=train_logger)
+    trainer.save_images_every=-1
     #saveFunc = eval(trainer_class+'_printer')
     saveFunc = eval(config['data_loader']['data_set_name']+'_eval')
 

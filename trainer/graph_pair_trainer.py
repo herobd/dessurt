@@ -1735,9 +1735,7 @@ class GraphPairTrainer(BaseTrainer):
 
 
     def newRun(self,instance,useGT,threshIntur=None,get=[]):
-        numClasses = self.model.numBBTypes
-        if 'no_blanks' in self.config['validation'] and not self.config['data_loader']['no_blanks']:
-            numClasses-=1
+        numClasses = len(self.data_loader.dataset.classMap)
         image, targetBoxes, adj, target_num_neighbors = self._to_tensor(instance)
         gtGroups = instance['gt_groups']
         gtGroupAdj = instance['gt_groups_adj']
@@ -1779,6 +1777,7 @@ class GraphPairTrainer(BaseTrainer):
         losses=defaultdict(lambda:0)
         log={}
         #for graphIteration in range(len(allEdgePred)):
+        allEdgePredTypes=[]
         for graphIteration,(outputBoxes,edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allOutputBoxes,allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
             #edgePred=allEdgePred[graphIteration]
             #nodePred=allNodePred[graphIteration]
@@ -1786,6 +1785,7 @@ class GraphPairTrainer(BaseTrainer):
             #predGroups=allPredGroups[graphIteration]
 
             predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, bbFullHit, proposedInfo, logIter, edgePredTypes = self.newAlignEdgePred(targetBoxes,adj,gtGroups,gtGroupAdj,outputBoxes,edgePred,edgeIndexes,predGroups, rel_prop_pred if graphIteration==0 else None)
+            allEdgePredTypes.append(edgePredTypes)
             #create aligned GT
             #this was wrong...
                 #first, remove unmatched predicitons that didn't overlap (weren't close) to any targets
@@ -1847,6 +1847,7 @@ class GraphPairTrainer(BaseTrainer):
                         node_conf_gt.append(1)
 
                 node_pred_use_index += node_pred_use_index_sp
+                assert(targetBoxes.is_cuda)
                 if len(node_pred_use_index)>0:
                     nodePredClass_use = nodePred[node_pred_use_index][:,:,self.model.nodeIdxClass:self.model.nodeIdxClassEnd]
                     alignedClass_use = targetBoxes[0][node_gt_use_class_indexes,13:13+len(self.classMap)]
@@ -1922,7 +1923,9 @@ class GraphPairTrainer(BaseTrainer):
 
 
 
-            if not self.model.detector_frozen:
+            
+            #Fine tuning detector. Should only happed once
+            if not self.model.detector_frozen and graphIteration==0:
                 if targetBoxes is not None:
                     targSize = targetBoxes.size(1)
                 else:
@@ -1975,6 +1978,30 @@ class GraphPairTrainer(BaseTrainer):
                 path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b',graphIteration))#instance['name'],graphIteration))
                 draw_graph(outputBoxes,self.model.used_threshConf,torch.sigmoid(nodePred).cpu().detach(),torch.sigmoid(edgePred).cpu().detach(),edgeIndexes,predGroups,image,edgePredTypes,targetBoxes,self.model,path)
                 print('saved {}'.format(path))
+
+            if 'bb_stats' in get:
+
+                if self.model.detector.predNumNeighbors:
+                    beforeCls=1
+                    #outputBoxesM=torch.cat((outputBoxes[:,0:6],outputBoxes[:,7:]),dim=1) #throw away NN pred
+                else:
+                    beforeCls=0
+                #if targetBoxes is not None:
+                #    targetBoxes = targetBoxes.cpu()
+                if targetBoxes is not None:
+                    target_for_b = targetBoxes[0].cpu()
+                else:
+                    target_for_b = torch.empty(0)
+                if self.model.rotation:
+                    ap_5, prec_5, recall_5 =AP_dist(target_for_b,outputBoxes,0.9,numClasses, beforeCls=beforeCls)
+                else:
+                    ap_5, prec_5, recall_5 =AP_iou(target_for_b,outputBoxes,0.5,numClasses, beforeCls=beforeCls)
+                prec_5 = np.array(prec_5)
+                recall_5 = np.array(recall_5)
+                log['bb_AP_{}'.format(graphIteration)]=ap_5
+                log['bb_prec_{}'.format(graphIteration)]=prec_5
+                log['bb_recall_{}'.format(graphIteration)]=recall_5
+                log['bb_Fm_avg_{}'.format(graphIteration)]=(2*(prec_5*recall_5)/(prec_5+recall_5)).mean()
         
         #log['rel_prec']= fullPrec
         #log['rel_recall']= eRecall
@@ -1986,24 +2013,6 @@ class GraphPairTrainer(BaseTrainer):
             if 'classFinalLoss' in losses:
                 log['class loss improvement (neg is good)'] = losses['classFinalLoss'].item()-class_loss
 
-        if 'bb_stats' in get:
-            outputBoxes=torch.cat((outputBoxes[:,0:6],outputBoxes[:,7:]),dim=1) #throw away NN pred
-            if targetBoxes is not None:
-                targetBoxes = targetBoxes.cpu()
-            if targetBoxes is not None:
-                target_for_b = targetBoxes[0]
-            else:
-                target_for_b = torch.empty(0)
-            if self.model.rotation:
-                ap_5, prec_5, recall_5 =AP_dist(target_for_b,outputBoxes,0.9,numClasses)
-            else:
-                ap_5, prec_5, recall_5 =AP_iou(target_for_b,outputBoxes,0.5,numClasses)
-            prec_5 = np.array(prec_5)
-            recall_5 = np.array(recall_5)
-            log['bb_AP']=ap_5
-            log['bb_prec']=prec_5
-            log['bb_recall']=recall_5
-            log['bb_Fm_avg']=(2*(prec_5*recall_5)/(prec_5+recall_5)).mean()
 
         if 'nn_acc' in get:
             if self.model.predNN and bbPred is not None:
@@ -2046,4 +2055,8 @@ class GraphPairTrainer(BaseTrainer):
                  got[name] = allPredGroups
             elif name=='allOutputBoxes':
                  got[name] = allOutputBoxes
+            elif name=='allEdgePredTypes':
+                 got[name] = allEdgePredTypes
+            elif name != 'bb_stats' and name != 'nn_acc':
+                raise NotImplementedError('Cannot get [{}], unknown'.format(name))
         return losses, log, got

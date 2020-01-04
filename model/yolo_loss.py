@@ -33,6 +33,7 @@ class YoloLoss (nn.Module):
         FloatTensor = torch.cuda.FloatTensor if prediction.is_cuda else torch.FloatTensor
         LongTensor = torch.cuda.LongTensor if prediction.is_cuda else torch.LongTensor
         ByteTensor = torch.cuda.ByteTensor if prediction.is_cuda else torch.ByteTensor
+        BoolTensor = torch.cuda.BoolTensor if prediction.is_cuda else torch.BoolTensor
 
         x = prediction[..., 1]  # Center x
         y = prediction[..., 2]  # Center y
@@ -89,8 +90,8 @@ class YoloLoss (nn.Module):
             precision = 1
 
         # Handle masks
-        mask = (mask.type(ByteTensor))
-        conf_mask = (conf_mask.type(ByteTensor))
+        mask = (mask.type(BoolTensor))
+        conf_mask = (conf_mask.type(BoolTensor))
 
         # Handle target variables
         tx = tx.type(FloatTensor).to(prediction.device)
@@ -104,7 +105,7 @@ class YoloLoss (nn.Module):
 
         # Get conf mask where gt and where there is no gt
         conf_mask_true = mask
-        conf_mask_false = conf_mask - mask
+        conf_mask_false = conf_mask & ~mask #conf_mask - mask
 
         #import pdb; pdb.set_trace()
 
