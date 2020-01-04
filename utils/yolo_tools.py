@@ -342,7 +342,7 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClas
             #print(pred.size())
             clsPredInd = torch.argmax(pred[:,beforeCls+6:beforeCls+6+numClasses],dim=1)==cls
         else:
-            clsPredInd = torch.empty(0,dtype=torch.uint8)
+            clsPredInd = torch.empty(0,dtype=torch.bool)
         if (ignoreClasses and pred.size(0)>0) or (clsTargInd.any() and clsPredInd.any()):
             if ignoreClasses:
                 clsTarg=target
@@ -355,7 +355,7 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClas
 
             clsIOUs *= hits.float()
             ps = torch.argmax(clsIOUs,dim=1)
-            left_ps = torch.ones(clsPred.size(0),dtype=torch.uint8)
+            left_ps = torch.ones(clsPred.size(0),dtype=torch.bool)
             left_ps[ps]=0
             truePos=0
             for t in range(clsTarg.size(0)):

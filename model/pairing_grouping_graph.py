@@ -719,10 +719,11 @@ class PairingGroupingGraph(BaseModel):
                 oldGroups.append(group)
                 if id in newGroupToOld:
                     oldNodes = newGroupToOld[id]+[id]
-                    random.shuffle(oldNodes) #TODO something other than random
-                    newNodeFeat = self.groupNodeFunc(oldNodeFeats[oldNodes[0]],oldNodeFeats[oldNodes[1]])
-                    for oldNode in oldNodes[2:]:
-                        newNodeFeat = self.groupNodeFunc(newNodeFeat,oldNodeFeats[oldNode])
+                    #random.shuffle(oldNodes) 
+                    #newNodeFeat = self.groupNodeFunc(oldNodeFeats[oldNodes[0]],oldNodeFeats[oldNodes[1]])
+                    #for oldNode in oldNodes[2:]:
+                    #    newNodeFeat = self.groupNodeFunc(newNodeFeat,oldNodeFeats[oldNode])
+                    newNodeFeat = self.groupNodeFunc( [oldNodeFeats[on] for on in oldNodes] )
                     newNodeFeats.append(newNodeFeat)
                 else:
                     newNodeFeats.append(oldNodeFeats[id])
@@ -759,7 +760,7 @@ class PairingGroupingGraph(BaseModel):
         workingGroups = {i:v for i,v in enumerate(oldGroups)}
         for i,(g0,g1) in enumerate(oldEdgeIndexes):
             groupEdges.append((groupPreds[i].item(),g0,g1))
-        while True:
+        while len(groupEdges)>0:
             groupEdges.sort(key=lambda x:x[0])
             score, g0, g1 = groupEdges.pop()
             if score<self.groupThresh:
