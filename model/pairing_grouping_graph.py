@@ -763,6 +763,8 @@ class PairingGroupingGraph(BaseModel):
         while len(groupEdges)>0:
             groupEdges.sort(key=lambda x:x[0])
             score, g0, g1 = groupEdges.pop()
+            if g0==g1:
+                continue
             if score<self.groupThresh:
                 groupEdges.append((score, g0, g1))
                 break
@@ -775,6 +777,8 @@ class PairingGroupingGraph(BaseModel):
             mEdges=defaultdict(list)
             mEdgeFeats=defaultdict(list)
             for i,(scoreE,g0E,g1E) in enumerate(groupEdges):
+                if g0E==g1E:
+                    continue
                 assert(not( (g0E==g1 or g0E==g0) and (g1E==g1 or g1E==g0) ))
                 if g0E==g1 or g0E==g0:
                     mEdges[g1E].append(scoreE)

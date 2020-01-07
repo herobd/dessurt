@@ -35,7 +35,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
             image = cv2.cvtColor(image,cv2.COLOR_GRAY2RGB)
         #if name=='text_start_gt':
 
-        if verbosity>2:
+        if verbosity>1:
             #Draw GT bbs
             for j in range(targetBoxes.size(1)):
                 plotRect(image,(1,0.5,0),targetBoxes[0,j,0:5])
@@ -102,11 +102,12 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
             maxY+=2
             lineWidth=2
             color=(shade/2,0,shade)
-            cv2.line(image,(minX,minY),(maxX,minY),color,lineWidth)
-            cv2.line(image,(maxX,minY),(maxX,maxY),color,lineWidth)
-            cv2.line(image,(maxX,maxY),(minX,maxY),color,lineWidth)
-            cv2.line(image,(minX,maxY),(minX,minY),color,lineWidth)
-            image[minY:minY+3,minX:minX+3]=idColor
+            if len(group)>1:
+                cv2.line(image,(minX,minY),(maxX,minY),color,lineWidth)
+                cv2.line(image,(maxX,minY),(maxX,maxY),color,lineWidth)
+                cv2.line(image,(maxX,maxY),(minX,maxY),color,lineWidth)
+                cv2.line(image,(minX,maxY),(minX,minY),color,lineWidth)
+                image[minY:minY+3,minX:minX+3]=idColor
             image[maxY:maxY+1,minX:minX+1]=idColor
             image[maxY:maxY+1,maxX:maxX+1]=idColor
             image[minY:minY+1,maxX:maxX+1]=idColor

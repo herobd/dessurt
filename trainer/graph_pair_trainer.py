@@ -1847,7 +1847,7 @@ class GraphPairTrainer(BaseTrainer):
                         node_conf_gt.append(1)
 
                 node_pred_use_index += node_pred_use_index_sp
-                assert(targetBoxes.is_cuda)
+
                 if len(node_pred_use_index)>0:
                     nodePredClass_use = nodePred[node_pred_use_index][:,:,self.model.nodeIdxClass:self.model.nodeIdxClassEnd]
                     alignedClass_use = targetBoxes[0][node_gt_use_class_indexes,13:13+len(self.classMap)]
@@ -1933,6 +1933,11 @@ class GraphPairTrainer(BaseTrainer):
                 #import pdb;pdb.set_trace()
                 boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
                 losses['boxLoss'] += boxLoss
+                logIter['bb_position_loss'] = position_loss
+                logIter['bb_conf_loss'] = conf_loss
+                logIter['bb_class_loss'] = class_loss
+                logIter['bb_nn_loss'] = nn_loss
+
                 #boxLoss *= self.lossWeights['box']
                 #if relLoss is not None:
                 #    loss = relLoss + boxLoss
