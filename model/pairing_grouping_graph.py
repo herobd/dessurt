@@ -312,6 +312,7 @@ class PairingGroupingGraph(BaseModel):
             self.pairer = None
             self.mergeThresh=0.6
             self.groupThresh=0.6
+            self.keepEdgeThresh=0.4
             
             if 'group_node_method' not in config or config['group_node_method']=='mean':
                 self.groupNodeFunc = lambda l: torch.stack(l,dim=0).mean(dim=0)
@@ -411,6 +412,14 @@ class PairingGroupingGraph(BaseModel):
             else:
                 confThreshMul = self.confThresh*(1-otherThreshIntur) + otherThresh*otherThreshIntur
             self.used_threshConf = max(maxConf*confThreshMul,0.5)
+
+        if self.training:
+            self.used_threshConf += np.random.normal(0,0.1) #we'll tweak the threshold around to make training more robust
+
+        ###
+        #print('THresh: {}'.format(self.used_threshConf))
+        ###
+
         if self.rotation:
             bbPredictions = non_max_sup_dist(bbPredictions.cpu(),self.used_threshConf,2.5,hard_detect_limit)
         else:
@@ -613,13 +622,16 @@ class PairingGroupingGraph(BaseModel):
         newBBs_line={}
         newBBIdCounter=0
         oldToNewBBIndexes={}
+        relPreds = torch.sigmoid(edgePreds[:,-1,0]).cpu().detach()
+        mergePreds = torch.sigmoid(edgePreds[:,-1,0]).cpu().detach()
+        groupPreds = torch.sigmoid(edgePreds[:,-1,2]).cpu().detach()
         ##Prevent all nodes from merging during first iterations (bad init):
         if not(torch.sigmoid(edgePreds[:,-1,1]).mean()>self.mergeThresh*0.99 and edgePreds.size(0)>5):
         
             for i,(n0,n1) in enumerate(oldEdgeIndexes):
-                mergePred = edgePreds[i,-1,1]
+                #mergePred = edgePreds[i,-1,1]
                 
-                if torch.sigmoid(mergePred)>self.mergeThresh: #TODO condition this on whether it is correct. and GT?:
+                if mergePreds[i]>self.mergeThresh: #TODO condition this on whether it is correct. and GT?:
                     if len(oldGroups[n0])==1 and len(oldGroups[n1])==1:
                         bbId0 = oldGroups[n0][0]
                         bbId1 = oldGroups[n1][0]
@@ -729,37 +741,50 @@ class PairingGroupingGraph(BaseModel):
                     newNodeFeats.append(oldNodeFeats[id])
             oldNodeFeats = torch.stack(newNodeFeats,dim=0)
 
-            temp = oldEdgeIndexes
-            oldEdgeIndexes = []
-            for n0,n1 in temp:
-                if n0 in oldGroupToNew:
-                    n0=newIdToPos[oldGroupToNew[n0]]
-                else:
-                    n0 = newIdToPos[n0]
-                if n1 in oldGroupToNew:
-                    n1=newIdToPos[oldGroupToNew[n1]]
-                else:
-                    n1 = newIdToPos[n1]
-                assert(n0<bbs.size(0) and n1<bbs.size(0))
-                #if n0!=n1:
-                oldEdgeIndexes.append((n0,n1)) #I prune out edges between the same nodes later
-                #else:
-                #    ?
+            #We'll adjust the edges to acount for merges as well as prune edges and get ready for grouping
+            #temp = oldEdgeIndexes
+            #oldEdgeIndexes = []
+            groupEdges=[]
+            edgeFeats = []
+            for i,(n0,n1) in enumerate(oldEdgeIndexes):
+                if relPreds[i]>self.keepEdgeThresh:
+                    if n0 in oldGroupToNew:
+                        n0=newIdToPos[oldGroupToNew[n0]]
+                    else:
+                        n0 = newIdToPos[n0]
+                    if n1 in oldGroupToNew:
+                        n1=newIdToPos[oldGroupToNew[n1]]
+                    else:
+                        n1 = newIdToPos[n1]
+                    assert(n0<bbs.size(0) and n1<bbs.size(0))
+                    if n0!=n1:
+                        #oldEdgeIndexes.append((n0,n1))
+                        groupEdges.append((groupPreds[i].item(),n0,n1))
+                        edgeFeats.append([oldEdgeFeats[i]])
+                    #else:
+                    #    It disapears
+            oldEdgeIndexes=None
              
         else:
             bbs=oldBBs
+            groupEdges=[]
+            edgeFeats = []
+            for i,(n0,n1) in enumerate(oldEdgeIndexes):
+                if relPreds[i]>self.keepEdgeThresh:
+                    groupEdges.append((groupPreds[i].item(),n0,n1))
+                    edgeFeats.append([oldEdgeFeats[i]])
+            oldEdgeIndexes=None
 
 
 
         #Find nodes that should be grouped
         ##NEWER, just merge the groups with the highest score between them. when merging edges, sum the scores
-        groupPreds = torch.sigmoid(edgePreds[:,-1,2]).cpu().detach()
-        groupEdges=[]
-        edgeFeats = [[oldEdgeFeats[i]] for i in range(oldEdgeFeats.size(0))]
+        #groupEdges=[]
+        #edgeFeats = [[oldEdgeFeats[i]] for i in range(oldEdgeFeats.size(0))]
         newNodeFeats = {i:[oldNodeFeats[i]] for i in range(oldNodeFeats.size(0))}
         workingGroups = {i:v for i,v in enumerate(oldGroups)}
-        for i,(g0,g1) in enumerate(oldEdgeIndexes):
-            groupEdges.append((groupPreds[i].item(),g0,g1))
+        #for i,(g0,g1) in enumerate(oldEdgeIndexes):
+        #    groupEdges.append((groupPreds[i].item(),g0,g1))
         while len(groupEdges)>0:
             groupEdges.sort(key=lambda x:x[0])
             score, g0, g1 = groupEdges.pop()
@@ -768,6 +793,7 @@ class PairingGroupingGraph(BaseModel):
             if score<self.groupThresh:
                 groupEdges.append((score, g0, g1))
                 break
+
             workingGroups[g0] += workingGroups[g1]
             del workingGroups[g1]
 
@@ -777,9 +803,9 @@ class PairingGroupingGraph(BaseModel):
             mEdges=defaultdict(list)
             mEdgeFeats=defaultdict(list)
             for i,(scoreE,g0E,g1E) in enumerate(groupEdges):
-                if g0E==g1E:
+                if g0E==g1E or ( (g0E==g1 or g0E==g0) and (g1E==g1 or g1E==g0) ):
                     continue
-                assert(not( (g0E==g1 or g0E==g0) and (g1E==g1 or g1E==g0) ))
+                #assert(not( (g0E==g1 or g0E==g0) and (g1E==g1 or g1E==g0) ))
                 if g0E==g1 or g0E==g0:
                     mEdges[g1E].append(scoreE)
                     mEdgeFeats[g1E] += edgeFeats[i]
