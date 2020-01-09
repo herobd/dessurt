@@ -1779,6 +1779,7 @@ class GraphPairTrainer(BaseTrainer):
         #for graphIteration in range(len(allEdgePred)):
         allEdgePredTypes=[]
         for graphIteration,(outputBoxes,edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allOutputBoxes,allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
+
             #edgePred=allEdgePred[graphIteration]
             #nodePred=allNodePred[graphIteration]
             #edgeIndexes=allEdgeIndexes[graphIteration]
@@ -1786,6 +1787,27 @@ class GraphPairTrainer(BaseTrainer):
 
             predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, bbFullHit, proposedInfo, logIter, edgePredTypes = self.newAlignEdgePred(targetBoxes,adj,gtGroups,gtGroupAdj,outputBoxes,edgePred,edgeIndexes,predGroups, rel_prop_pred if graphIteration==0 else None)
             allEdgePredTypes.append(edgePredTypes)
+            logIter['rel_pred_mean'] = edgePred[:,-1,0].mean().item()
+            logIter['rel_pred_std'] = edgePred[:,-1,0].std().item()
+            logIter['merge_pred_mean'] = edgePred[:,-1,1].mean().item()
+            logIter['merge_pred_std'] = edgePred[:,-1,1].std().item()
+            logIter['group_pred_mean'] = edgePred[:,-1,2].mean().item()
+            logIter['group_pred_std'] = edgePred[:,-1,2].std().item()
+        
+            rel_preds_typ=defaultdict(list)
+            for i,typ in edgePredTypes[0].items():
+                typ = typ[1]
+                rel_preds_typ[typ].append(edgePred[i,-1,0].item())
+            for typ, scores in rel_preds_typ.items():
+                logIter['rel_pred_{}_mean'.format(typ)] = np.mean(scores)
+                logIter['rel_pred_{}_std'.format(typ)] = np.std(scores)
+            group_preds_typ=defaultdict(list)
+            for i,typ in edgePredTypes[2].items():
+                typ = typ[1]
+                group_preds_typ[typ].append(edgePred[i,-1,2].item())
+            for typ, scores in group_preds_typ.items():
+                logIter['group_pred_{}_mean'.format(typ)] = np.mean(scores)
+                logIter['group_pred_{}_std'.format(typ)] = np.std(scores)
             #create aligned GT
             #this was wrong...
                 #first, remove unmatched predicitons that didn't overlap (weren't close) to any targets
