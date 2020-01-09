@@ -623,10 +623,10 @@ class PairingGroupingGraph(BaseModel):
         newBBIdCounter=0
         oldToNewBBIndexes={}
         relPreds = torch.sigmoid(edgePreds[:,-1,0]).cpu().detach()
-        mergePreds = torch.sigmoid(edgePreds[:,-1,0]).cpu().detach()
+        mergePreds = torch.sigmoid(edgePreds[:,-1,1]).cpu().detach()
         groupPreds = torch.sigmoid(edgePreds[:,-1,2]).cpu().detach()
         ##Prevent all nodes from merging during first iterations (bad init):
-        if not(torch.sigmoid(edgePreds[:,-1,1]).mean()>self.mergeThresh*0.99 and edgePreds.size(0)>5):
+        if not(mergePreds.mean()>self.mergeThresh*0.99 and edgePreds.size(0)>5):
         
             for i,(n0,n1) in enumerate(oldEdgeIndexes):
                 #mergePred = edgePreds[i,-1,1]
@@ -680,20 +680,24 @@ class PairingGroupingGraph(BaseModel):
 
 
             #Actually rewrite bbs
-            bbs=[]
-            oldBBIdToNew={}
-            device = oldBBs.device
-            for i in range(oldBBs.size(0)):
-                if i not in oldToNewBBIndexes:
-                    oldBBIdToNew[i]=len(bbs)
-                    bbs.append(oldBBs[i])
-            #oldBBs=oldBBs.cpu()
-            for id,bb in newBBs.items():
-                for old,new in oldToNewBBIndexes.items():
-                    if new==id:
-                        oldBBIdToNew[old]=len(bbs)
-                bbs.append(bb.to(device))
-            bbs=torch.stack(bbs,dim=0)
+            if len(newBBs)==0:
+                bbs = oldBBs
+                oldBBIdToNew=list(range(oldBBs.size(0)))
+            else:
+                bbs=[]
+                oldBBIdToNew={}
+                device = oldBBs.device
+                for i in range(oldBBs.size(0)):
+                    if i not in oldToNewBBIndexes:
+                        oldBBIdToNew[i]=len(bbs)
+                        bbs.append(oldBBs[i])
+                #oldBBs=oldBBs.cpu()
+                for id,bb in newBBs.items():
+                    for old,new in oldToNewBBIndexes.items():
+                        if new==id:
+                            oldBBIdToNew[old]=len(bbs)
+                    bbs.append(bb.to(device))
+                bbs=torch.stack(bbs,dim=0)
                     
 
             #TODO run text_rec on newBBs_line
