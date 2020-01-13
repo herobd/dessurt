@@ -1778,257 +1778,258 @@ class GraphPairTrainer(BaseTrainer):
         log={}
         #for graphIteration in range(len(allEdgePred)):
         allEdgePredTypes=[]
-        for graphIteration,(outputBoxes,edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allOutputBoxes,allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
+        if allEdgePred is not None:
+            for graphIteration,(outputBoxes,edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allOutputBoxes,allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
 
-            #edgePred=allEdgePred[graphIteration]
-            #nodePred=allNodePred[graphIteration]
-            #edgeIndexes=allEdgeIndexes[graphIteration]
-            #predGroups=allPredGroups[graphIteration]
+                #edgePred=allEdgePred[graphIteration]
+                #nodePred=allNodePred[graphIteration]
+                #edgeIndexes=allEdgeIndexes[graphIteration]
+                #predGroups=allPredGroups[graphIteration]
 
-            predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, bbFullHit, proposedInfo, logIter, edgePredTypes = self.newAlignEdgePred(targetBoxes,adj,gtGroups,gtGroupAdj,outputBoxes,edgePred,edgeIndexes,predGroups, rel_prop_pred if graphIteration==0 else None)
-            allEdgePredTypes.append(edgePredTypes)
-            logIter['rel_pred_mean'] = edgePred[:,-1,0].mean().item()
-            logIter['rel_pred_std'] = edgePred[:,-1,0].std().item()
-            logIter['merge_pred_mean'] = edgePred[:,-1,1].mean().item()
-            logIter['merge_pred_std'] = edgePred[:,-1,1].std().item()
-            logIter['group_pred_mean'] = edgePred[:,-1,2].mean().item()
-            logIter['group_pred_std'] = edgePred[:,-1,2].std().item()
-        
-            rel_preds_typ=defaultdict(list)
-            for i,typ in edgePredTypes[0].items():
-                typ = typ[1]
-                rel_preds_typ[typ].append(edgePred[i,-1,0].item())
-            for typ, scores in rel_preds_typ.items():
-                logIter['rel_pred_{}_mean'.format(typ)] = np.mean(scores)
-                logIter['rel_pred_{}_std'.format(typ)] = np.std(scores)
-            group_preds_typ=defaultdict(list)
-            for i,typ in edgePredTypes[2].items():
-                typ = typ[1]
-                group_preds_typ[typ].append(edgePred[i,-1,2].item())
-            for typ, scores in group_preds_typ.items():
-                logIter['group_pred_{}_mean'.format(typ)] = np.mean(scores)
-                logIter['group_pred_{}_std'.format(typ)] = np.std(scores)
-            #create aligned GT
-            #this was wrong...
-                #first, remove unmatched predicitons that didn't overlap (weren't close) to any targets
-                #toKeep = 1-((bbNoIntersections==1) * (bbAlignment==-1))
-            #remove predictions that overlapped with GT, but not enough
-            #toKeep = 1-((bbFullHit==0) * (bbAlignment!=-1)) #toKeep = not (incomplete_overlap and did_overlap)
-            #bbAlignment_use = bbAlignment[toKeep]
-            assert(not self.model.predNN)
-            if self.model.predClass:
-                node_pred_use_index=[]
-                node_gt_use_class_indexes=[]
-                node_pred_use_index_sp=[]
-                alignedClass_use_sp=[]
-
-                node_conf_use_index=[]
-                node_conf_gt=[]#torch.FloatTensor(len(predGroups))
-
-                for i,predGroup in enumerate(predGroups):
-                    ts=[bbAlignment[pId] for pId in predGroup]
-                    classes=defaultdict(lambda:0)
-                    classesIndexes={-2:-2}
-                    hits=misses=0
-                    for tId in ts:
-                        if tId>=0:
-                            #this is unfortunate. It's here since we use multiple classes
-                            clsRep = ','.join([str(int(targetBoxes[0][tId,13+clasI])) for clasI in range(len(self.classMap))])
-                            classes[clsRep] += 1
-                            classesIndexes[clsRep] = tId
-                            hits+=1
-                        else:
-                            classes[-1]+=1
-                            classesIndexes[-1]=-1
-                            misses+=1
-                    targetClass=-2
-                    for cls,count in classes.items():
-                        if count/len(ts)>0.8:
-                            targetClass = cls
-                            break
-
-                    if type(targetClass) is str:
-                        node_pred_use_index.append(i)
-                        node_gt_use_class_indexes.append(classesIndexes[targetClass])
-                    elif targetClass==-1 and self.final_class_bad_alignment:
-                        node_pred_use_index_sp.append(i)
-                        error_class = torch.FloatTensor(1,len(self.classMap)+self.num_node_error_class).zero_()
-                        error_class[0,self.final_class_bad_alignment_index]=1
-                        alignedClass_use_sp.append(error_class)
-                    elif targetClass==-2 and self.final_class_inpure_group:
-                        node_pred_use_index_sp.append(i)
-                        error_class = torch.FloatTensor(1,len(self.classMap)+self.num_node_error_class).zero_()
-                        error_class[0,self.final_class_inpure_group_index]=1
-                        alignedClass_use_sp.append(error_class)
-
-                    if hits==0:
-                        node_conf_use_index.append(i)
-                        node_conf_gt.append(0)
-                    elif misses==0 or hits/misses>0.5:
-                        node_conf_use_index.append(i)
-                        node_conf_gt.append(1)
-
-                node_pred_use_index += node_pred_use_index_sp
-
-                if len(node_pred_use_index)>0:
-                    nodePredClass_use = nodePred[node_pred_use_index][:,:,self.model.nodeIdxClass:self.model.nodeIdxClassEnd]
-                    alignedClass_use = targetBoxes[0][node_gt_use_class_indexes,13:13+len(self.classMap)]
-                    if self.num_node_error_class>0:
-                        alignedClass_use = torch.cat((alignedClass_use,torch.FloatTensor(alignedClass_use.size(0),self.num_bb_error_class).zero_().to(alignedClass_use.device)),dim=1)
-                        if len(alignedClass_use_sp)>0:
-                            alignedClass_use_sp = torch.cat(alignedClass_use_sp,dim=0).to(alignedClass_use.device)
-                            alignedClass_use = torch.cat((alignedClass_use,alignedClass_use_sp),dim=0)
-                else:
-                    nodePredClass_use = None
-                    alignedClass_use = None
-
-                if len(node_conf_use_index)>0:
-                    nodePredConf_use = nodePred[node_conf_use_index][:,:,self.model.nodeIdxConf]
-                    nodeGTConf_use = torch.FloatTensor(node_conf_gt).to(nodePred.device)
-
-            ####
-
-
-            if edgePred is not None:
-                numEdgePred = edgePred.size(0)
-                if predEdgeShouldBeTrue is not None:
-                    lenTrue = predEdgeShouldBeTrue.size(0)
-                else:
-                    lenTrue = 0
-                if predEdgeShouldBeFalse is not None:
-                    lenFalse = predEdgeShouldBeFalse.size(0)
-                else:
-                    lenFalse = 0
-            else:
-                numEdgePred = lenTrue = lenFalse = 0
-
-            relLoss = None
-            #separating the loss into true and false portions is not only convienint, it balances the loss between true/false examples
-            if predEdgeShouldBeTrue is not None and predEdgeShouldBeTrue.size(0)>0 and predEdgeShouldBeTrue.size(1)>0:
-                ones = torch.ones_like(predEdgeShouldBeTrue).to(image.device)
-                relLoss = self.loss['rel'](predEdgeShouldBeTrue,ones)
-                assert(not torch.isnan(relLoss))
-                debug_avg_relTrue = predEdgeShouldBeTrue.mean().item()
-            else:
-                debug_avg_relTrue =0 
-            if predEdgeShouldBeFalse is not None and predEdgeShouldBeFalse.size(0)>0 and predEdgeShouldBeFalse.size(1)>0:
-                zeros = torch.zeros_like(predEdgeShouldBeFalse).to(image.device)
-                relLossFalse = self.loss['rel'](predEdgeShouldBeFalse,zeros)
-                assert(not torch.isnan(relLossFalse))
-                if relLoss is None:
-                    relLoss=relLossFalse
-                else:
-                    relLoss+=relLossFalse
-                debug_avg_relFalse = predEdgeShouldBeFalse.mean().item()
-            else:
-                debug_avg_relFalse = 0
-            if relLoss is not None:
-                #relLoss *= self.lossWeights['rel']
-                losses['relLoss']+=relLoss
-
-            if proposedInfo is not None:
-                propPredPairingShouldBeTrue,propPredPairingShouldBeFalse= proposedInfo[0:2]
-                propRelLoss = None
-                #seperating the loss into true and false portions is not only convienint, it balances the loss between true/false examples
-                if propPredPairingShouldBeTrue is not None and propPredPairingShouldBeTrue.size(0)>0:
-                    ones = torch.ones_like(propPredPairingShouldBeTrue).to(image.device)
-                    propRelLoss = self.loss['propRel'](propPredPairingShouldBeTrue,ones)
-                if propPredPairingShouldBeFalse is not None and propPredPairingShouldBeFalse.size(0)>0:
-                    zeros = torch.zeros_like(propPredPairingShouldBeFalse).to(image.device)
-                    propRelLossFalse = self.loss['propRel'](propPredPairingShouldBeFalse,zeros)
-                    if propRelLoss is None:
-                        propRelLoss=propRelLossFalse
-                    else:
-                        propRelLoss+=propRelLossFalse
-                if propRelLoss is not None:
-                    losses['propRelLoss']+=propRelLoss
-
-
-
+                predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, bbFullHit, proposedInfo, logIter, edgePredTypes = self.newAlignEdgePred(targetBoxes,adj,gtGroups,gtGroupAdj,outputBoxes,edgePred,edgeIndexes,predGroups, rel_prop_pred if graphIteration==0 else None)
+                allEdgePredTypes.append(edgePredTypes)
+                logIter['rel_pred_mean'] = edgePred[:,-1,0].mean().item()
+                logIter['rel_pred_std'] = edgePred[:,-1,0].std().item()
+                logIter['merge_pred_mean'] = edgePred[:,-1,1].mean().item()
+                logIter['merge_pred_std'] = edgePred[:,-1,1].std().item()
+                logIter['group_pred_mean'] = edgePred[:,-1,2].mean().item()
+                logIter['group_pred_std'] = edgePred[:,-1,2].std().item()
             
-            #Fine tuning detector. Should only happed once
-            if not self.model.detector_frozen and graphIteration==0:
-                if targetBoxes is not None:
-                    targSize = targetBoxes.size(1)
+                rel_preds_typ=defaultdict(list)
+                for i,typ in edgePredTypes[0].items():
+                    typ = typ[1]
+                    rel_preds_typ[typ].append(edgePred[i,-1,0].item())
+                for typ, scores in rel_preds_typ.items():
+                    logIter['rel_pred_{}_mean'.format(typ)] = np.mean(scores)
+                    logIter['rel_pred_{}_std'.format(typ)] = np.std(scores)
+                group_preds_typ=defaultdict(list)
+                for i,typ in edgePredTypes[2].items():
+                    typ = typ[1]
+                    group_preds_typ[typ].append(edgePred[i,-1,2].item())
+                for typ, scores in group_preds_typ.items():
+                    logIter['group_pred_{}_mean'.format(typ)] = np.mean(scores)
+                    logIter['group_pred_{}_std'.format(typ)] = np.std(scores)
+                #create aligned GT
+                #this was wrong...
+                    #first, remove unmatched predicitons that didn't overlap (weren't close) to any targets
+                    #toKeep = 1-((bbNoIntersections==1) * (bbAlignment==-1))
+                #remove predictions that overlapped with GT, but not enough
+                #toKeep = 1-((bbFullHit==0) * (bbAlignment!=-1)) #toKeep = not (incomplete_overlap and did_overlap)
+                #bbAlignment_use = bbAlignment[toKeep]
+                assert(not self.model.predNN)
+                if self.model.predClass:
+                    node_pred_use_index=[]
+                    node_gt_use_class_indexes=[]
+                    node_pred_use_index_sp=[]
+                    alignedClass_use_sp=[]
+
+                    node_conf_use_index=[]
+                    node_conf_gt=[]#torch.FloatTensor(len(predGroups))
+
+                    for i,predGroup in enumerate(predGroups):
+                        ts=[bbAlignment[pId] for pId in predGroup]
+                        classes=defaultdict(lambda:0)
+                        classesIndexes={-2:-2}
+                        hits=misses=0
+                        for tId in ts:
+                            if tId>=0:
+                                #this is unfortunate. It's here since we use multiple classes
+                                clsRep = ','.join([str(int(targetBoxes[0][tId,13+clasI])) for clasI in range(len(self.classMap))])
+                                classes[clsRep] += 1
+                                classesIndexes[clsRep] = tId
+                                hits+=1
+                            else:
+                                classes[-1]+=1
+                                classesIndexes[-1]=-1
+                                misses+=1
+                        targetClass=-2
+                        for cls,count in classes.items():
+                            if count/len(ts)>0.8:
+                                targetClass = cls
+                                break
+
+                        if type(targetClass) is str:
+                            node_pred_use_index.append(i)
+                            node_gt_use_class_indexes.append(classesIndexes[targetClass])
+                        elif targetClass==-1 and self.final_class_bad_alignment:
+                            node_pred_use_index_sp.append(i)
+                            error_class = torch.FloatTensor(1,len(self.classMap)+self.num_node_error_class).zero_()
+                            error_class[0,self.final_class_bad_alignment_index]=1
+                            alignedClass_use_sp.append(error_class)
+                        elif targetClass==-2 and self.final_class_inpure_group:
+                            node_pred_use_index_sp.append(i)
+                            error_class = torch.FloatTensor(1,len(self.classMap)+self.num_node_error_class).zero_()
+                            error_class[0,self.final_class_inpure_group_index]=1
+                            alignedClass_use_sp.append(error_class)
+
+                        if hits==0:
+                            node_conf_use_index.append(i)
+                            node_conf_gt.append(0)
+                        elif misses==0 or hits/misses>0.5:
+                            node_conf_use_index.append(i)
+                            node_conf_gt.append(1)
+
+                    node_pred_use_index += node_pred_use_index_sp
+
+                    if len(node_pred_use_index)>0:
+                        nodePredClass_use = nodePred[node_pred_use_index][:,:,self.model.nodeIdxClass:self.model.nodeIdxClassEnd]
+                        alignedClass_use = targetBoxes[0][node_gt_use_class_indexes,13:13+len(self.classMap)]
+                        if self.num_node_error_class>0:
+                            alignedClass_use = torch.cat((alignedClass_use,torch.FloatTensor(alignedClass_use.size(0),self.num_bb_error_class).zero_().to(alignedClass_use.device)),dim=1)
+                            if len(alignedClass_use_sp)>0:
+                                alignedClass_use_sp = torch.cat(alignedClass_use_sp,dim=0).to(alignedClass_use.device)
+                                alignedClass_use = torch.cat((alignedClass_use,alignedClass_use_sp),dim=0)
+                    else:
+                        nodePredClass_use = None
+                        alignedClass_use = None
+
+                    if len(node_conf_use_index)>0:
+                        nodePredConf_use = nodePred[node_conf_use_index][:,:,self.model.nodeIdxConf]
+                        nodeGTConf_use = torch.FloatTensor(node_conf_gt).to(nodePred.device)
+
+                ####
+
+
+                if edgePred is not None:
+                    numEdgePred = edgePred.size(0)
+                    if predEdgeShouldBeTrue is not None:
+                        lenTrue = predEdgeShouldBeTrue.size(0)
+                    else:
+                        lenTrue = 0
+                    if predEdgeShouldBeFalse is not None:
+                        lenFalse = predEdgeShouldBeFalse.size(0)
+                    else:
+                        lenFalse = 0
                 else:
-                    targSize =0 
-                #import pdb;pdb.set_trace()
-                boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
-                losses['boxLoss'] += boxLoss
-                logIter['bb_position_loss'] = position_loss
-                logIter['bb_conf_loss'] = conf_loss
-                logIter['bb_class_loss'] = class_loss
-                logIter['bb_nn_loss'] = nn_loss
+                    numEdgePred = lenTrue = lenFalse = 0
 
-                #boxLoss *= self.lossWeights['box']
-                #if relLoss is not None:
-                #    loss = relLoss + boxLoss
-                #else:
-                #    loss = boxLoss
-            #else:
-            #    loss = relLoss
+                relLoss = None
+                #separating the loss into true and false portions is not only convienint, it balances the loss between true/false examples
+                if predEdgeShouldBeTrue is not None and predEdgeShouldBeTrue.size(0)>0 and predEdgeShouldBeTrue.size(1)>0:
+                    ones = torch.ones_like(predEdgeShouldBeTrue).to(image.device)
+                    relLoss = self.loss['rel'](predEdgeShouldBeTrue,ones)
+                    assert(not torch.isnan(relLoss))
+                    debug_avg_relTrue = predEdgeShouldBeTrue.mean().item()
+                else:
+                    debug_avg_relTrue =0 
+                if predEdgeShouldBeFalse is not None and predEdgeShouldBeFalse.size(0)>0 and predEdgeShouldBeFalse.size(1)>0:
+                    zeros = torch.zeros_like(predEdgeShouldBeFalse).to(image.device)
+                    relLossFalse = self.loss['rel'](predEdgeShouldBeFalse,zeros)
+                    assert(not torch.isnan(relLossFalse))
+                    if relLoss is None:
+                        relLoss=relLossFalse
+                    else:
+                        relLoss+=relLossFalse
+                    debug_avg_relFalse = predEdgeShouldBeFalse.mean().item()
+                else:
+                    debug_avg_relFalse = 0
+                if relLoss is not None:
+                    #relLoss *= self.lossWeights['rel']
+                    losses['relLoss']+=relLoss
+
+                if proposedInfo is not None:
+                    propPredPairingShouldBeTrue,propPredPairingShouldBeFalse= proposedInfo[0:2]
+                    propRelLoss = None
+                    #seperating the loss into true and false portions is not only convienint, it balances the loss between true/false examples
+                    if propPredPairingShouldBeTrue is not None and propPredPairingShouldBeTrue.size(0)>0:
+                        ones = torch.ones_like(propPredPairingShouldBeTrue).to(image.device)
+                        propRelLoss = self.loss['propRel'](propPredPairingShouldBeTrue,ones)
+                    if propPredPairingShouldBeFalse is not None and propPredPairingShouldBeFalse.size(0)>0:
+                        zeros = torch.zeros_like(propPredPairingShouldBeFalse).to(image.device)
+                        propRelLossFalse = self.loss['propRel'](propPredPairingShouldBeFalse,zeros)
+                        if propRelLoss is None:
+                            propRelLoss=propRelLossFalse
+                        else:
+                            propRelLoss+=propRelLossFalse
+                    if propRelLoss is not None:
+                        losses['propRelLoss']+=propRelLoss
 
 
-            if self.model.predNN and nodePredNN_use is not None and nodePredNN_use.size(0)>0:
-                alignedNN_use = alignedNN_use[:,None] #introduce "time" dimension to broadcast
-                nn_loss_final = self.loss['nnFinal'](nodePredNN_use,alignedNN_use)
-                losses['nnFinalLoss']+=nn_loss_final
-                #nn_loss_final *= self.lossWeights['nn']
+
                 
-                #if loss is not None:
-                #    loss += nn_loss_final
+                #Fine tuning detector. Should only happed once
+                if not self.model.detector_frozen and graphIteration==0:
+                    if targetBoxes is not None:
+                        targSize = targetBoxes.size(1)
+                    else:
+                        targSize =0 
+                    #import pdb;pdb.set_trace()
+                    boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
+                    losses['boxLoss'] += boxLoss
+                    logIter['bb_position_loss'] = position_loss
+                    logIter['bb_conf_loss'] = conf_loss
+                    logIter['bb_class_loss'] = class_loss
+                    logIter['bb_nn_loss'] = nn_loss
+
+                    #boxLoss *= self.lossWeights['box']
+                    #if relLoss is not None:
+                    #    loss = relLoss + boxLoss
+                    #else:
+                    #    loss = boxLoss
                 #else:
-                #    loss = nn_loss_final
-                #nn_loss_final = nn_loss_final.item()
-            #else:
-                #nn_loss_final=0
+                #    loss = relLoss
 
-            if self.model.predClass and nodePredClass_use is not None and nodePredClass_use.size(0)>0:
-                alignedClass_use = alignedClass_use[:,None] #introduce "time" dimension to broadcast
-                class_loss_final = self.loss['classFinal'](nodePredClass_use,alignedClass_use)
-                losses['classFinalLoss'] += class_loss_final
 
-            if nodePredConf_use is not None and nodePredConf_use.size(0)>0:
-                nodeGTConf_use = nodeGTConf_use[:,None] #introduce "time" dimension to broadcast
-                conf_loss_final = self.loss['classFinal'](nodePredConf_use,nodeGTConf_use)
-                losses['confFinalLoss'] += conf_loss_final
-                #class_loss_final *= self.lossWeights['class']
-                #loss += class_loss_final
-                #class_loss_final = class_loss_final.item()
-            #else:
-                #class_loss_final = 0
+                if self.model.predNN and nodePredNN_use is not None and nodePredNN_use.size(0)>0:
+                    alignedNN_use = alignedNN_use[:,None] #introduce "time" dimension to broadcast
+                    nn_loss_final = self.loss['nnFinal'](nodePredNN_use,alignedNN_use)
+                    losses['nnFinalLoss']+=nn_loss_final
+                    #nn_loss_final *= self.lossWeights['nn']
+                    
+                    #if loss is not None:
+                    #    loss += nn_loss_final
+                    #else:
+                    #    loss = nn_loss_final
+                    #nn_loss_final = nn_loss_final.item()
+                #else:
+                    #nn_loss_final=0
 
-            for name,stat in logIter.items():
-                log['{}_{}'.format(name,graphIteration)]=stat
+                if self.model.predClass and nodePredClass_use is not None and nodePredClass_use.size(0)>0:
+                    alignedClass_use = alignedClass_use[:,None] #introduce "time" dimension to broadcast
+                    class_loss_final = self.loss['classFinal'](nodePredClass_use,alignedClass_use)
+                    losses['classFinalLoss'] += class_loss_final
 
-            if self.save_images_every>0 and self.iteration%self.save_images_every==0:
-                path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b',graphIteration))#instance['name'],graphIteration))
-                draw_graph(outputBoxes,self.model.used_threshConf,torch.sigmoid(nodePred).cpu().detach(),torch.sigmoid(edgePred).cpu().detach(),edgeIndexes,predGroups,image,edgePredTypes,targetBoxes,self.model,path)
-                print('saved {}'.format(path))
+                if nodePredConf_use is not None and nodePredConf_use.size(0)>0:
+                    nodeGTConf_use = nodeGTConf_use[:,None] #introduce "time" dimension to broadcast
+                    conf_loss_final = self.loss['classFinal'](nodePredConf_use,nodeGTConf_use)
+                    losses['confFinalLoss'] += conf_loss_final
+                    #class_loss_final *= self.lossWeights['class']
+                    #loss += class_loss_final
+                    #class_loss_final = class_loss_final.item()
+                #else:
+                    #class_loss_final = 0
 
-            if 'bb_stats' in get:
+                for name,stat in logIter.items():
+                    log['{}_{}'.format(name,graphIteration)]=stat
 
-                if self.model.detector.predNumNeighbors:
-                    beforeCls=1
-                    #outputBoxesM=torch.cat((outputBoxes[:,0:6],outputBoxes[:,7:]),dim=1) #throw away NN pred
-                else:
-                    beforeCls=0
-                #if targetBoxes is not None:
-                #    targetBoxes = targetBoxes.cpu()
-                if targetBoxes is not None:
-                    target_for_b = targetBoxes[0].cpu()
-                else:
-                    target_for_b = torch.empty(0)
-                if self.model.rotation:
-                    ap_5, prec_5, recall_5 =AP_dist(target_for_b,outputBoxes,0.9,numClasses, beforeCls=beforeCls)
-                else:
-                    ap_5, prec_5, recall_5 =AP_iou(target_for_b,outputBoxes,0.5,numClasses, beforeCls=beforeCls)
-                prec_5 = np.array(prec_5)
-                recall_5 = np.array(recall_5)
-                log['bb_AP_{}'.format(graphIteration)]=ap_5
-                log['bb_prec_{}'.format(graphIteration)]=prec_5
-                log['bb_recall_{}'.format(graphIteration)]=recall_5
-                log['bb_Fm_avg_{}'.format(graphIteration)]=(2*(prec_5*recall_5)/(prec_5+recall_5)).mean()
+                if self.save_images_every>0 and self.iteration%self.save_images_every==0:
+                    path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b',graphIteration))#instance['name'],graphIteration))
+                    draw_graph(outputBoxes,self.model.used_threshConf,torch.sigmoid(nodePred).cpu().detach(),torch.sigmoid(edgePred).cpu().detach(),edgeIndexes,predGroups,image,edgePredTypes,targetBoxes,self.model,path)
+                    print('saved {}'.format(path))
+
+                if 'bb_stats' in get:
+
+                    if self.model.detector.predNumNeighbors:
+                        beforeCls=1
+                        #outputBoxesM=torch.cat((outputBoxes[:,0:6],outputBoxes[:,7:]),dim=1) #throw away NN pred
+                    else:
+                        beforeCls=0
+                    #if targetBoxes is not None:
+                    #    targetBoxes = targetBoxes.cpu()
+                    if targetBoxes is not None:
+                        target_for_b = targetBoxes[0].cpu()
+                    else:
+                        target_for_b = torch.empty(0)
+                    if self.model.rotation:
+                        ap_5, prec_5, recall_5 =AP_dist(target_for_b,outputBoxes,0.9,numClasses, beforeCls=beforeCls)
+                    else:
+                        ap_5, prec_5, recall_5 =AP_iou(target_for_b,outputBoxes,0.5,numClasses, beforeCls=beforeCls)
+                    prec_5 = np.array(prec_5)
+                    recall_5 = np.array(recall_5)
+                    log['bb_AP_{}'.format(graphIteration)]=ap_5
+                    log['bb_prec_{}'.format(graphIteration)]=prec_5
+                    log['bb_recall_{}'.format(graphIteration)]=recall_5
+                    log['bb_Fm_avg_{}'.format(graphIteration)]=(2*(prec_5*recall_5)/(prec_5+recall_5)).mean()
         
         #log['rel_prec']= fullPrec
         #log['rel_recall']= eRecall
