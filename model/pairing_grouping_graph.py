@@ -11,6 +11,7 @@ from model.binary_pair_real import BinaryPairReal
 #from model.roi_align.roi_align import RoIAlign
 from model.roi_align import ROIAlign as RoIAlign
 from model.cnn_lstm import CRNN
+from model.word2vec_adapter import Word2VecAdapter, Word2VecAdapterShallow
 from skimage import draw
 from model.net_builder import make_layers, getGroupSize
 from utils.yolo_tools import non_max_sup_iou, non_max_sup_dist
@@ -354,16 +355,32 @@ class PairingGroupingGraph(BaseModel):
                 print('WARNING, is text_rec set to frozen?')
                 self.text_rec.eval()
                 self.text_rec = self.text_rec.cuda()
-                state=torch.load(config['text_rec']['file'])['state_dict']
-                self.text_rec.load_state_dict(state)
+                if 'hw_with_style_file' in config['text_rec']:
+                    state=torch.load(config['text_rec']['hw_with_style_file'])['state_dict']
+                    hwr_state_dict={}
+                    for key,value in  state.items():
+                        if key[:4]=='hwr.':
+                            hwr_state_dict[key[4:]] = value
+                else:
+                    hwr_state_dict=torch.load(config['text_rec']['file'])['state_dict']
+                self.text_rec.load_state_dict(hwr_state_dict)
                 self.hw_input_height = config['text_rec']['input_height']
                 with open(config['text_rec']['char_set']) as f:
                     char_set = json.load(f)
                 self.idx_to_char = {}
                 for k,v in char_set['idx_to_char'].items():
                     self.idx_to_char[int(k)] = v
-
-            self.embedding_model = lambda x: None #This could be a learned function, or preload something
+            
+            if 'embedding' in config['text_rec']:
+                if 'word2vec' in config['text_rec']:
+                    if 'shallow' in config['text_rec']:
+                        self.embedding_model = Word2VecAdapterShallow()
+                    else:
+                        self.embedding_model = Word2VecAdapter()
+                else:
+                    raise NotImplementedError('Unknown text embedding method: {}'.format(config['text_rec']))
+            else:
+                self.embedding_model = lambda x: None #This could be a learned function, or preload something
         else:
             self.text_rec=None
 
@@ -1864,7 +1881,7 @@ class PairingGroupingGraph(BaseModel):
             #cv2.imshow('line',imm)
             #cv2.waitKey()
 
-        return res
+        return output_strings
 
 
 
