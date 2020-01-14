@@ -37,7 +37,7 @@ class Word2VecAdapter(nn.Module):
         emb = self.adaption1(emb)
         c=0
         for count in wordCounts:
-            embSent.append(emb[c:c+count].mean(dim=0)
+            embSent.append(emb[c:c+count].mean(dim=0))
             c+=count
         emb = torch.cat(embSent,dim=0)
         emb = self.adaption2(emb)
