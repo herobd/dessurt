@@ -137,6 +137,13 @@ class PairingGroupingGraph(BaseModel):
         else:
            self.numShapeFeats=0
            self.numShapeFeatsBB=0
+
+
+        if 'text_rec' in config:
+            self.numTextFeats = ?
+        else:
+            self.numTextFeats = 0
+
         if type(config['graph_config']) is list:
             for graphconfig in config['graph_config']:
                 graphconfig['num_shape_feats']=self.numShapeFeats
@@ -232,9 +239,9 @@ class PairingGroupingGraph(BaseModel):
             featurizer_fc = config['bb_featurizer_fc'] if 'bb_featurizer_fc' in config else None
             if self.useShapeFeats!='only':
                 if featurizer_fc is None:
-                    convOut=graph_in_channels-self.numShapeFeatsBB
+                    convOut=graph_in_channels-(self.numShapeFeatsBB+self.numTextFeats)
                 else:
-                    convOut=featurizer_fc[0]-self.numShapeFeatsBB
+                    convOut=featurizer_fc[0]-(self.numShapeFeatsBB+self.numTextFeats)
                 if featurizer is None:
                     convlayers = [ nn.Conv2d(detectorSavedFeatSize+bbMasks_bb,convOut,kernel_size=(2,3)) ]
                     if featurizer_fc is not None:
@@ -295,7 +302,7 @@ class PairingGroupingGraph(BaseModel):
                 if self.use2ndFeatures:
                     self.roi_alignBB2 = RoIAlign(self.poolBB2_h,self.poolBB2_w,1.0/detect_save2_scale)
             else:
-                featurizer_fc = [self.numShapeFeatsBB]+featurizer_fc
+                featurizer_fc = [self.numShapeFeatsBB+self.numTextFeats]+featurizer_fc
             if featurizer_fc is not None:
                 featurizer_fc = featurizer_fc + ['FCnR{}'.format(graph_in_channels)]
                 layers, last_ch_node = make_layers(featurizer_fc,norm=feat_norm_fc)
@@ -350,8 +357,10 @@ class PairingGroupingGraph(BaseModel):
         #HWR stuff
         if 'text_rec' in config:
             if config['text_rec']['model'] == 'CRNN':
-                self.hw_channels=config['text_rec']['num_channels']
-                self.text_rec = CRNN(config['text_rec']['cnn_out_size'],config['text_rec']['num_channels'],config['text_rec']['num_outputs'],512)
+                self.hw_channels = config['text_rec']['num_channels'] if 'num_channels' in config['text_rec'] else 1
+                norm = config['text_rec']['norm'] if 'norm' in config['text_rec'] else 'batch'
+                use_softmax = config['text_rec']['use_softmax'] if 'use_softmax' in config['text_rec'] else True
+                self.text_rec = CRNN(config['text_rec']['num_char'],self.hw_channels,norm=norm,use_softmax=use_softmax)
                 print('WARNING, is text_rec set to frozen?')
                 self.text_rec.eval()
                 self.text_rec = self.text_rec.cuda()
@@ -370,15 +379,17 @@ class PairingGroupingGraph(BaseModel):
                 self.idx_to_char = {}
                 for k,v in char_set['idx_to_char'].items():
                     self.idx_to_char[int(k)] = v
+            else:
+                raise NotImplementedError('Unknown ATR model: {}'.format(config['text_rec']['model']))
             
             if 'embedding' in config['text_rec']:
-                if 'word2vec' in config['text_rec']:
-                    if 'shallow' in config['text_rec']:
-                        self.embedding_model = Word2VecAdapterShallow()
+                if 'word2vec' in config['text_rec']['embedding']:
+                    if 'shallow' in config['text_rec']['embedding']:
+                        self.embedding_model = Word2VecAdapterShallow(self.numTextFeats)
                     else:
-                        self.embedding_model = Word2VecAdapter()
+                        self.embedding_model = Word2VecAdapter(self.numTextFeats)
                 else:
-                    raise NotImplementedError('Unknown text embedding method: {}'.format(config['text_rec']))
+                    raise NotImplementedError('Unknown text embedding method: {}'.format(config['text_rec']['embedding']))
             else:
                 self.embedding_model = lambda x: None #This could be a learned function, or preload something
         else:
@@ -971,8 +982,6 @@ class PairingGroupingGraph(BaseModel):
 
 
     def createGraph(self,bbs,features,features2,imageHeight,imageWidth,text_emb=None,flip=None,debug_image=None):
-        if text_emb is not None:
-            raise NotImplemented('having appened text emb yet')
         ##tic=timeit.default_timer()
         if self.relationshipProposal == 'line_of_sight':
             candidates = self.selectLineOfSightEdges(bbs.detach(),imageHeight,imageWidth)
@@ -1306,6 +1315,8 @@ class PairingGroupingGraph(BaseModel):
                 bb_features = bb_features.view(bb_features.size(0),bb_features.size(1))
                 if self.useShapeFeats:
                     bb_features = torch.cat( (bb_features,bb_shapeFeats.to(bb_features.device)), dim=1 )
+                if text_emb is not None:
+                    bb_features = torch.cat( (bb_features,text_emb), dim=1 )
             else:
                 assert(self.useShapeFeats)
                 bb_features = bb_shapeFeats.to(features.device)

@@ -59,7 +59,7 @@ def get_extensions():
 
 setup(
     name="pairingNet",
-    version="0.1",
+    version="0.2",
     author="brian davis",
     url="https://github.com/herobd/pairing",
     description="detection and pairing of form-image elements",
