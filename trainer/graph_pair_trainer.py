@@ -56,7 +56,7 @@ class GraphPairTrainer(BaseTrainer):
         self.thresh_rel = config['trainer']['thresh_rel'] if 'thresh_rel' in config['trainer'] else 0.5
         self.thresh_overSeg = self.model.mergeThresh
         self.thresh_group = self.model.groupThresh
-        self.thresh_error = config['trainer']['thresh_error'] if 'thresh_error' in config['trainer'] else 0.5
+        self.thresh_error = config['trainer']['thresh_error'] if 'thresh_error' in config['trainer'] else [0.5]*len(self.thresh_group)
 
         #we iniailly train the pairing using GT BBs, but eventually need to fine-tune the pairing using the networks performance
         self.stop_from_gt = config['trainer']['stop_from_gt'] if 'stop_from_gt' in config['trainer'] else None
@@ -958,7 +958,7 @@ class GraphPairTrainer(BaseTrainer):
         return predsPos,predsNeg, recall, prec ,fullPrec, computeAP(scores), targIndex, fullHit, proposedInfo, final_prop_rel_recall, final_prop_rel_prec
 
 
-    def newAlignEdgePred(self,targetBoxes,adj,gtGroups,gtGroupAdj,outputBoxes,edgePred,edgeIndexes,predGroups,rel_prop_pred):
+    def newAlignEdgePred(self,targetBoxes,adj,gtGroups,gtGroupAdj,outputBoxes,edgePred,edgeIndexes,predGroups,rel_prop_pred,thresh_overSeg,thresh_group,thresh_error):
         if edgePred is None:
             if targetBoxes is None:
                 prec=1
@@ -1168,7 +1168,7 @@ class GraphPairTrainer(BaseTrainer):
                         predsGTOverSeg.append(predsOverSeg[i])
                     else:
                         predsGTNotOverSeg.append(predsOverSeg[i])
-                    if torch.sigmoid(predsOverSeg[i])>self.thresh_overSeg:
+                    if torch.sigmoid(predsOverSeg[i])>thresh_overSeg:
                         if wasOverSeg:
                             truePosOverSeg+=1
                             saveOverSegPred[i]='TP'
@@ -1183,7 +1183,7 @@ class GraphPairTrainer(BaseTrainer):
                             trueNegOverSeg+=1
                             saveOverSegPred[i]='TN'
                 else:
-                    if torch.sigmoid(predsOverSeg[i])>self.thresh_overSeg:
+                    if torch.sigmoid(predsOverSeg[i])>thresh_overSeg:
                         saveOverSegPred[i]='UP'
                     else:
                         saveOverSegPred[i]='UN'
@@ -1192,7 +1192,7 @@ class GraphPairTrainer(BaseTrainer):
                         predsGTGroup.append(predsGroup[i])
                     else:
                         predsGTNoGroup.append(predsGroup[i])
-                    if torch.sigmoid(predsGroup[i])>self.thresh_group:
+                    if torch.sigmoid(predsGroup[i])>thresh_group:
                         if wasGroup:
                             truePosGroup+=1
                             saveGroupPred[i]='TP'
@@ -1208,7 +1208,7 @@ class GraphPairTrainer(BaseTrainer):
                             trueNegGroup+=1
                             saveGroupPred[i]='TN'
                 else:
-                    if torch.sigmoid(predsGroup[i])>self.thresh_group:
+                    if torch.sigmoid(predsGroup[i])>thresh_group:
                         saveGroupPred[i]='UP'
                     else:
                         saveGroupPred[i]='UN'
@@ -1217,7 +1217,7 @@ class GraphPairTrainer(BaseTrainer):
                         predsGTError.append(predsError[i])
                     else:
                         predsGTNoError.append(predsError[i])
-                    if torch.sigmoid(predsError[i])>self.thresh_error:
+                    if torch.sigmoid(predsError[i])>thresh_error:
                         if wasError:
                             truePosError+=1
                             saveErrorPred[i]='TP'
@@ -1232,7 +1232,7 @@ class GraphPairTrainer(BaseTrainer):
                             trueNegError+=1
                             saveErrorPred[i]='TN'
                 else:
-                    if torch.sigmoid(predsError[i])>self.thresh_error:
+                    if torch.sigmoid(predsError[i])>thresh_error:
                         saveErrorPred[i]='UP'
                     else:
                         saveErrorPred[i]='UN'
@@ -1786,7 +1786,20 @@ class GraphPairTrainer(BaseTrainer):
                 #edgeIndexes=allEdgeIndexes[graphIteration]
                 #predGroups=allPredGroups[graphIteration]
 
-                predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, bbFullHit, proposedInfo, logIter, edgePredTypes = self.newAlignEdgePred(targetBoxes,adj,gtGroups,gtGroupAdj,outputBoxes,edgePred,edgeIndexes,predGroups, rel_prop_pred if graphIteration==0 else None)
+                predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, bbFullHit, proposedInfo, logIter, edgePredTypes = self.newAlignEdgePred(
+                        targetBoxes,
+                        adj,
+                        gtGroups,
+                        gtGroupAdj,
+                        outputBoxes,
+                        edgePred,
+                        edgeIndexes,
+                        predGroups, 
+                        rel_prop_pred if graphIteration==0 else None,
+                        self.thresh_overSeg[graphIteration],
+                        self.thresh_group[graphIteration],
+                        self.thresh_error[graphIteration]
+                        )
                 allEdgePredTypes.append(edgePredTypes)
                 logIter['rel_pred_mean'] = edgePred[:,-1,0].mean().item()
                 logIter['rel_pred_std'] = edgePred[:,-1,0].std().item()
@@ -2030,6 +2043,12 @@ class GraphPairTrainer(BaseTrainer):
                     log['bb_prec_{}'.format(graphIteration)]=prec_5
                     log['bb_recall_{}'.format(graphIteration)]=recall_5
                     log['bb_Fm_avg_{}'.format(graphIteration)]=(2*(prec_5*recall_5)/(prec_5+recall_5)).mean()
+
+        ##print final state of graph
+        #if self.save_images_every>0 and self.iteration%self.save_images_every==0:
+        #    path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b','final'))#instance['name'],graphIteration))
+        #    draw_graph(finalOutputBoxes,self.model.used_threshConf,torch.sigmoid(finalNodePred).cpu().detach(),torch.sigmoid(finalEgePred).cpu().detach(),finalEdgeIndexes,finalPredGroups,image,edgePredTypes,targetBoxes,self.model,path)
+        #    print('saved {}'.format(path))
         
         #log['rel_prec']= fullPrec
         #log['rel_recall']= eRecall

@@ -140,7 +140,7 @@ class PairingGroupingGraph(BaseModel):
 
 
         if 'text_rec' in config:
-            self.numTextFeats = ?
+            self.numTextFeats = config['text_rec']['num_feats']
         else:
             self.numTextFeats = 0
 
@@ -318,9 +318,9 @@ class PairingGroupingGraph(BaseModel):
             for graphconfig in config['graph_config']:
                 self.graphnets.append( eval(graphconfig['arch'])(graphconfig) )
             self.pairer = None
-            self.mergeThresh=0.6
-            self.groupThresh=0.6
-            self.keepEdgeThresh=0.4
+            self.mergeThresh=[0.7,0.6]
+            self.groupThresh=[0.9,0.6]
+            self.keepEdgeThresh=[0.4,0.5]
             
             if 'group_node_method' not in config or config['group_node_method']=='mean':
                 self.groupNodeFunc = lambda l: torch.stack(l,dim=0).mean(dim=0)
@@ -361,6 +361,8 @@ class PairingGroupingGraph(BaseModel):
                 norm = config['text_rec']['norm'] if 'norm' in config['text_rec'] else 'batch'
                 use_softmax = config['text_rec']['use_softmax'] if 'use_softmax' in config['text_rec'] else True
                 self.text_rec = CRNN(config['text_rec']['num_char'],self.hw_channels,norm=norm,use_softmax=use_softmax)
+                self.atr_batch_size = config['text_rec']['batch_size']
+                self.pad_text_height = config['text_rec']['pad_text_height'] if 'pad_text_height' in config['text_rec'] else False
                 print('WARNING, is text_rec set to frozen?')
                 self.text_rec.eval()
                 self.text_rec = self.text_rec.cuda()
@@ -370,9 +372,11 @@ class PairingGroupingGraph(BaseModel):
                     for key,value in  state.items():
                         if key[:4]=='hwr.':
                             hwr_state_dict[key[4:]] = value
-                else:
+                    self.text_rec.load_state_dict(hwr_state_dict)
+                elif 'file' in config['text_rec']:
                     hwr_state_dict=torch.load(config['text_rec']['file'])['state_dict']
-                self.text_rec.load_state_dict(hwr_state_dict)
+                    self.text_rec.load_state_dict(hwr_state_dict)
+
                 self.hw_input_height = config['text_rec']['input_height']
                 with open(config['text_rec']['char_set']) as f:
                     char_set = json.load(f)
@@ -392,6 +396,8 @@ class PairingGroupingGraph(BaseModel):
                     raise NotImplementedError('Unknown text embedding method: {}'.format(config['text_rec']['embedding']))
             else:
                 self.embedding_model = lambda x: None #This could be a learned function, or preload something
+
+            self.merge_embedding_layer = nn.Sequential(nn.ReLU(True),nn.Linear(graph_in_channels+self.numTextFeats,graph_in_channels))
         else:
             self.text_rec=None
 
@@ -500,6 +506,7 @@ class PairingGroupingGraph(BaseModel):
                 transcriptions = self.getTranscriptions(useBBs,image)
                 embeddings = self.embedding_model(transcriptions)
             else:
+                transcriptions=None
                 embeddings=None
             if self.useMetaGraph:
                 allOutputBoxes=[]
@@ -510,6 +517,7 @@ class PairingGroupingGraph(BaseModel):
                 allEdgeIndexes=[]
                 graph,edgeIndexes,rel_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings)
                 groups=[[i] for i in range(useBBs.size(0))]
+                bbTrans = transcriptions
                 #undirected
                 #edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
                 if graph is None:
@@ -530,9 +538,12 @@ class PairingGroupingGraph(BaseModel):
                 #print('graph 0:   bbs:{}, nodes:{}, edges:{}'.format(useBBs.size(0),nodeOuts.size(0),edgeOuts.size(0)))
                 
                 
-                for graphnet in self.graphnets[1:]:
+                for gIter,graphnet in enumerate(self.graphnets[1:]):
+
                     #print('before edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(edgeFeats.size(),useBBs.size(),nodeFeats.size(),len(edgeIndexes)))
-                    useBBs,graph,groups,edgeIndexes=self.mergeAndGroup(edgeIndexes,edgeOuts,groups,nodeFeats,edgeFeats,uniFeats,useBBs,image)
+                    useBBs,graph,groups,edgeIndexes,bbTrans=self.mergeAndGroup(
+                            self.mergeThresh[gIter],self.keepEdgeThresh[gIter],self.groupThresh[gIter],
+                            edgeIndexes,edgeOuts,groups,nodeFeats,edgeFeats,uniFeats,useBBs,bbTrans,image)
                     #print('graph 1-:   bbs:{}, nodes:{}, edges:{}'.format(useBBs.size(0),len(groups),len(edgeIndexes)))
                     if len(edgeIndexes)==0:
                         break #we have no graph, so we can just end here
@@ -545,6 +556,16 @@ class PairingGroupingGraph(BaseModel):
                     allEdgeOuts.append(edgeOuts)
                     allGroups.append(groups)
                     allEdgeIndexes.append(edgeIndexes)
+
+                ##Final state of the graph
+                #useBBs,graph,groups,edgeIndexes,bbTrans=self.mergeAndGroup(
+                #        self.mergeThresh[-1],self.keepEdgeThresh[-1],self.groupThresh[-1],
+                #        edgeIndexes,edgeOuts,groups,nodeFeats,edgeFeats,uniFeats,useBBs,bbTrans,image)
+                #allOutputBoxes.append(useBBs.cpu()) 
+                #allNodeOuts.append(nodeOuts.cpu().detach())
+                #allEdgeOuts.append(edgeOuts)
+                #allGroups.append(groups)
+                #allEdgeIndexes.append(edgeIndexes)
 
 
             else:
@@ -633,33 +654,33 @@ class PairingGroupingGraph(BaseModel):
                 bb = torch.cat((conf,loc,newClass),dim=0)
             else:
                 bb = torch.cat((loc,newClass),dim=0)
-            if self.text_rec is not None:
-                crop = image[:,:,minY:maxY+1,minX:maxX+1]
-                scale = self.hw_input_height/crop.size(2)
-                line = F.interpolate(crop,scale=scale,mode='bilinear')
-            else:
-                line=None
+            #if self.text_rec is not None:
+            #    crop = image[:,:,minY:maxY+1,minX:maxX+1]
+            #    scale = self.hw_input_height/crop.size(2)
+            #    line = F.interpolate(crop,scale=scale,mode='bilinear')
+            #else:
+            #    line=None
 
-        return bb,line
+        return bb
 
         #resBatch = self.text_rec(lines)
 
     #Use the graph network's predictions to merge oversegmented detections and group nodes into a single node
-    def mergeAndGroup(self,oldEdgeIndexes,edgePreds,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,image):
+    def mergeAndGroup(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePreds,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image):
         newBBs={}
-        newBBs_line={}
+        #newBBs_line={}
         newBBIdCounter=0
         oldToNewBBIndexes={}
         relPreds = torch.sigmoid(edgePreds[:,-1,0]).cpu().detach()
         mergePreds = torch.sigmoid(edgePreds[:,-1,1]).cpu().detach()
         groupPreds = torch.sigmoid(edgePreds[:,-1,2]).cpu().detach()
         ##Prevent all nodes from merging during first iterations (bad init):
-        if not(mergePreds.mean()>self.mergeThresh*0.99 and edgePreds.size(0)>5):
+        if not(mergePreds.mean()>mergeThresh*0.99 and edgePreds.size(0)>5):
         
             for i,(n0,n1) in enumerate(oldEdgeIndexes):
                 #mergePred = edgePreds[i,-1,1]
                 
-                if mergePreds[i]>self.mergeThresh: #TODO condition this on whether it is correct. and GT?:
+                if mergePreds[i]>mergeThresh: #TODO condition this on whether it is correct. and GT?:
                     if len(oldGroups[n0])==1 and len(oldGroups[n1])==1:
                         bbId0 = oldGroups[n0][0]
                         bbId1 = oldGroups[n1][0]
@@ -676,22 +697,22 @@ class PairingGroupingGraph(BaseModel):
                             mergeNewId1 = None
                             bb1 = oldBBs[bbId1].cpu()
 
-                        newBB,line= self.mergeBB(bb0,bb1,image)
+                        newBB= self.mergeBB(bb0,bb1,image)
 
                         if mergeNewId0 is None and mergeNewId1 is None:
                             oldToNewBBIndexes[bbId0]=newBBIdCounter
                             oldToNewBBIndexes[bbId1]=newBBIdCounter
                             newBBs[newBBIdCounter]=newBB
-                            newBBs_line[newBBIdCounter]=line
+                            #newBBs_line[newBBIdCounter]=line
                             newBBIdCounter+=1
                         elif mergeNewId0 is None:
                             oldToNewBBIndexes[bbId0]=mergeNewId1
                             newBBs[mergeNewId1]=newBB
-                            newBBs_line[mergeNewId1]=line
+                            #newBBs_line[mergeNewId1]=line
                         elif mergeNewId1 is None:
                             oldToNewBBIndexes[bbId1]=mergeNewId0
                             newBBs[mergeNewId0]=newBB
-                            newBBs_line[mergeNewId0]=line
+                            #newBBs_line[mergeNewId0]=line
                         elif mergeNewId0!=mergeNewId1:
                             #merge two merged bbs
                             oldToNewBBIndexes[bbId1]=mergeNewId0
@@ -699,10 +720,10 @@ class PairingGroupingGraph(BaseModel):
                                 if new == mergeNewId1:
                                     oldToNewBBIndexes[old]=mergeNewId0
                             newBBs[mergeNewId0]=newBB
-                            newBBs_line[mergeNewId0]=line
+                            #newBBs_line[mergeNewId0]=line
                             #print('merge {} and {} (d), because of {} and {}'.format(mergeNewId0,mergeNewId1,bbId0,bbId1))
                             del newBBs[mergeNewId1]
-                            del newBBs_line[mergeNewId1]
+                            #del newBBs_line[mergeNewId1]
 
 
 
@@ -712,13 +733,19 @@ class PairingGroupingGraph(BaseModel):
                 bbs = oldBBs
                 oldBBIdToNew=list(range(oldBBs.size(0)))
             else:
+                device = oldBBs.device
                 bbs=[]
                 oldBBIdToNew={}
-                device = oldBBs.device
+                if self.text_rec is not None:
+                    bbTransTmp=[]
                 for i in range(oldBBs.size(0)):
                     if i not in oldToNewBBIndexes:
                         oldBBIdToNew[i]=len(bbs)
                         bbs.append(oldBBs[i])
+                        if self.text_rec is not None:
+                            bbTransTmp.append(bbTrans[i])
+                if self.text_rec is not None:
+                    bbTrans = bbTransTmp
                 #oldBBs=oldBBs.cpu()
                 for id,bb in newBBs.items():
                     for old,new in oldToNewBBIndexes.items():
@@ -730,7 +757,10 @@ class PairingGroupingGraph(BaseModel):
 
             #TODO run text_rec on newBBs_line
             if self.text_rec is not None:
-                raise NotImplementedError('ATR not implemented for merge yet')
+                newTrans = self.getTranscriptions(bbs[-len(newBBs):],image)
+                #newEmbeddings = self.embedding_model(newTrans)
+                #now we need to embed and append these and the old trans to node features
+                bbTrans += newTrans
 
 
             #rewrite groups with merged instances
@@ -779,7 +809,7 @@ class PairingGroupingGraph(BaseModel):
             groupEdges=[]
             edgeFeats = []
             for i,(n0,n1) in enumerate(oldEdgeIndexes):
-                if relPreds[i]>self.keepEdgeThresh:
+                if relPreds[i]>keepEdgeThresh:
                     if n0 in oldGroupToNew:
                         n0=newIdToPos[oldGroupToNew[n0]]
                     else:
@@ -822,7 +852,7 @@ class PairingGroupingGraph(BaseModel):
             score, g0, g1 = groupEdges.pop()
             if g0==g1:
                 continue
-            if score<self.groupThresh:
+            if score<groupThresh:
                 groupEdges.append((score, g0, g1))
                 break
 
@@ -872,12 +902,24 @@ class PairingGroupingGraph(BaseModel):
 
         newNodeFeatsD=newNodeFeats
         newNodeFeats=[]
+        if self.text_rec is not None:
+            newNodeTrans=[]
         newGroups=[]
         oldToIdx={}
+        if self.include_bb_conf:
+            yIndex=2
+        else:
+            yIndex=1
         for oldG,bbIds in workingGroups.items():
             oldToIdx[oldG]=len(newGroups)
             newGroups.append(bbIds)
             newNodeFeats.append( self.groupNodeFunc(newNodeFeatsD[oldG]) )
+            if self.text_rec is not None:
+                newTrans = ''
+                #Something to get read-order correct, assuming groups only vertical, so sorting by y-position
+                groupTrans = [(bbs[bbId,yIndex].item(),bbTrans[bbId]) for bbId in bbIds]
+                groupTrans.sort(key=lambda a:a[0])
+                newNodeTrans.append(' '.join([t[1] for t in groupTrans]))
         newEdges = [(oldToIdx[g0],oldToIdx[g1]) for s,g0,g1 in groupEdges]
         assert(len(newEdgeFeats)==len(newEdges))
 
@@ -960,6 +1002,10 @@ class PairingGroupingGraph(BaseModel):
         #    newEdgeFeats.append(newEdgeFeat)
 
         newNodeFeats = torch.stack(newNodeFeats,dim=0)
+        if self.text_rec is not None:
+            newNodeEmbeddings = self.embedding_model(newNodeTrans)
+            newNodeFeats = self.merge_embedding_layer(torch.cat((newNodeFeats,newNodeEmbeddings),dim=1))
+
         if len(newEdgeFeats)>0:
             newEdgeFeats = torch.stack(newEdgeFeats,dim=0)
         else:
@@ -974,7 +1020,7 @@ class PairingGroupingGraph(BaseModel):
 
         newGraph = (newNodeFeats, newEdgeIndexes, newEdgeFeats, oldUniversalFeats)
 
-        return bbs, newGraph, newGroups, edges
+        return bbs, newGraph, newGroups, edges, bbTrans
 
 
                 
@@ -1814,11 +1860,11 @@ class PairingGroupingGraph(BaseModel):
 
     def getTranscriptions(self,bbs,image):
         #get corners from bb predictions
-        x = bbs[:,0]
-        y = bbs[:,1]
-        r = bbs[:,2]
-        h = bbs[:,3]
-        w = bbs[:,4]
+        x = bbs[:,1]
+        y = bbs[:,2]
+        r = bbs[:,3]
+        h = bbs[:,4]
+        w = bbs[:,5]
         cos_r = torch.cos(r)
         sin_r = torch.sin(r)
         tlX = -w*cos_r + -h*sin_r +x
@@ -1852,16 +1898,18 @@ class PairingGroupingGraph(BaseModel):
         h *=2
         w *=2
 
-        scale = self.hw_input_height/h
-        scaled_w = ((w+1)*scale).int()
+        if self.pad_text_height:
+            h = torch.where(h<self.hw_input_height,torch.empty_like(h).fill_(self.hw_input_height),h)
+        scale = self.hw_input_height/h.cpu()
+        all_scaled_w = (((x2-x1)+1)*scale)#.int()
 
-        res=[]
+        output_strings=[]
         for index in range(0,bbs.size(0),self.atr_batch_size):
             num = min(self.atr_batch_size,bbs.size(0)-index)
-            max_w = scaled_w.max().item()
+            max_w = math.ceil(all_scaled_w[index:index+num].max().item())
 
         
-            lines = torch.FloatTensor(num,image.size(1),self.hw_input_height,max_w).fill_(0).to(image.device)
+            lines = torch.FloatTensor(num,image.size(1),self.hw_input_height,max_w).fill_(-1).to(image.device)
             imm = [None]*num
             for i in range(index,index+num):
                 
@@ -1869,28 +1917,44 @@ class PairingGroupingGraph(BaseModel):
                     crop = rotate(image[0,:,y1[i]:y2[i]+1,x1[i]:x2[i]+1],r[i],(h[i],w[i]))
                 else:
                     crop = image[...,y1[i]:y2[i]+1,x1[i]:x2[i]+1]
+                if self.pad_text_height and crop.size(2)<self.hw_input_height:
+                    diff = self.hw_input_height-crop.size(2)
+                    crop = F.pad(crop,(0,0,diff//2,diff//2+diff%2),"constant",-1)
+                elif crop.size(2)<h[i]:
+                    diff = int(h[i])-crop.size(2)
+                    if y1[i]==0:
+                        crop = F.pad(crop,(0,0,0,diff),"constant",-1)
+                    elif y2[i]==image.size(2)-1:
+                        crop = F.pad(crop,(0,0,diff,0),"constant",-1)
+                    else:
+                        assert(False and 'why is it short if not getting cropped by image boundary?')
                 scale = self.hw_input_height/crop.size(2)
                 scaled_w = int(crop.size(3)*scale)
-                lines[i,:,:,0:scaled_w] = F.interpolate(crop, size=(self.hw_input_height,scaled_w), mode='bilinear')#.to(crop.device)
-                imm[i] = lines[i].cpu().numpy().transpose([1,2,0])
-                imm[i] = 256*(2-imm[i])/2
+                lines[i-index,:,:,0:scaled_w] = F.interpolate(crop, size=(self.hw_input_height,scaled_w), mode='bilinear',align_corners=False)[0]#.to(crop.device)
+                imm[i-index] = lines[i-index].cpu().numpy().transpose([1,2,0])
+                imm[i-index] = 256*(2-imm[i-index])/2
 
 
 
             if lines.size(1)==1 and self.hw_channels==3:
                 lines = lines.expand(-1,3,-1,-1)
 
-            resBatch = self.text_rec(lines)
-            res.append(resBatch)
-        res = torch.cat(res,dim=0)
+            resBatch = self.text_rec(lines).cpu().detach().numpy().transpose(1,0,2)
+            batch_strings, decoded_raw_hw = decode_handwriting(resBatch, self.idx_to_char)
+            ###debug
+            for i in range(num):
+                cv2.imwrite('out2/line{}-{}.png'.format(i+index,batch_strings[i]),imm[i])
+            ###
+            output_strings += batch_strings
+            #res.append(resBatch)
+        #res = torch.cat(res,dim=1)
 
-        #Debug
-        resN=res.data.cpu().numpy()
-        output_strings, decoded_raw_hw = decode_handwriting(resN, self.idx_to_char)
-        for i in range(min(10,bbs.size(0))):
-            cv2.imwrite('out2/line{}-{}.png'.format(i,output_strings[i]),imm[i])
+        ### Debug ###
+        #resN=res.data.cpu().numpy()
+        #output_strings, decoded_raw_hw = decode_handwriting(resN, self.idx_to_char)
             #cv2.imshow('line',imm)
             #cv2.waitKey()
+        ###
 
         return output_strings
 
