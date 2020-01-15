@@ -19,6 +19,10 @@ If upgrading cuda, remove the old version first either with apt-get or uninstall
 * `opencv`
 * `scikit-image`
 
+`pytorch-geometric`: https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html
+
+`conda install gensim`
+
 
 for cvxpy (optimization), you must have python 3.7 or later:
 
