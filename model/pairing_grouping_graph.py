@@ -315,12 +315,15 @@ class PairingGroupingGraph(BaseModel):
         if type(config['graph_config']) is list:
             self.useMetaGraph = True
             self.graphnets=nn.ModuleList()
+            self.mergeThresh=[]
+            self.groupThresh=[]
+            self.keepEdgeThresh=[]
             for graphconfig in config['graph_config']:
                 self.graphnets.append( eval(graphconfig['arch'])(graphconfig) )
+                self.mergeThresh.append(graphconfig['merge_thresh'] if 'merge_thresh' in graphconfig else 0.6)
+                self.groupThresh.append(graphconfig['group_thresh'] if 'group_thresh' in graphconfig else 0.6)
+                self.keepEdgeThresh.append(graphconfig['keep_edge_thresh'] if 'keep_edge_thresh' in graphconfig else 0.4)
             self.pairer = None
-            self.mergeThresh=[0.7,0.6]
-            self.groupThresh=[0.9,0.6]
-            self.keepEdgeThresh=[0.4,0.5]
             
             if 'group_node_method' not in config or config['group_node_method']=='mean':
                 self.groupNodeFunc = lambda l: torch.stack(l,dim=0).mean(dim=0)
