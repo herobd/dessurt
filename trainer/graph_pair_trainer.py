@@ -1284,6 +1284,7 @@ class GraphPairTrainer(BaseTrainer):
             recallOverSeg = truePosOverSeg/(truePosOverSeg+falseNegOverSeg) if truePosOverSeg+falseNegOverSeg>0 else 1
             precOverSeg = truePosOverSeg/(truePosOverSeg+falsePosOverSeg) if truePosOverSeg+falsePosOverSeg>0 else 1
             recallGroup = truePosGroup/(truePosGroup+falseNegGroup) if truePosGroup+falseNegGroup>0 else 1
+            assert(falsePosGroup>0 and truePosGroup>0)
             precGroup = truePosGroup/(truePosGroup+falsePosGroup) if truePosGroup+falsePosGroup>0 else 1
             recallError = truePosError/(truePosError+falseNegError) if truePosError+falseNegError>0 else 1
             precError = truePosError/(truePosError+falsePosError) if truePosError+falsePosError>0 else 1
