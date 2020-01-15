@@ -54,7 +54,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                 #    cv2.bb(bbImage[:,:,2],p1,p2,shade,2)
                 #elif name=='field_end_gt' or name=='field_start_gt':
                 #    cv2.bb(bbImage[:,:,0],p1,p2,shade,2)
-                maxIndex =np.argmax(bbs[j,model.nodeIdxClass:model.nodeIdxClassEnd])
+                maxIndex =np.argmax(bbs[j,5+model.nodeIdxClass:5+model.nodeIdxClassEnd])
                 if maxIndex==0:
                     color=(0,0,shade) #header
                 elif maxIndex==1:
