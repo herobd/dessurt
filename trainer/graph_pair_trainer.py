@@ -1778,6 +1778,7 @@ class GraphPairTrainer(BaseTrainer):
         log={}
         #for graphIteration in range(len(allEdgePred)):
         allEdgePredTypes=[]
+        proposedInfo=None
         if allEdgePred is not None:
             for graphIteration,(outputBoxes,edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allOutputBoxes,allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
 
@@ -1786,8 +1787,10 @@ class GraphPairTrainer(BaseTrainer):
                 #edgeIndexes=allEdgeIndexes[graphIteration]
                 #predGroups=allPredGroups[graphIteration]
 
-                predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, bbFullHit, proposedInfo, logIter, edgePredTypes = self.newAlignEdgePred(targetBoxes,adj,gtGroups,gtGroupAdj,outputBoxes,edgePred,edgeIndexes,predGroups, rel_prop_pred if graphIteration==0 else None)
+                predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, bbFullHit, proposedInfoI, logIter, edgePredTypes = self.newAlignEdgePred(targetBoxes,adj,gtGroups,gtGroupAdj,outputBoxes,edgePred,edgeIndexes,predGroups, rel_prop_pred if graphIteration==0 else None)
                 allEdgePredTypes.append(edgePredTypes)
+                if graphIteration==0:
+                    proposedInfo=proposedInfoI
                 logIter['rel_pred_mean'] = edgePred[:,-1,0].mean().item()
                 logIter['rel_pred_std'] = edgePred[:,-1,0].std().item()
                 logIter['merge_pred_mean'] = edgePred[:,-1,1].mean().item()
