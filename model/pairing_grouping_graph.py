@@ -11,7 +11,7 @@ from model.binary_pair_real import BinaryPairReal
 #from model.roi_align.roi_align import RoIAlign
 #from model.roi_align import ROIAlign as RoIAlign
 from torchvision.ops import RoIAlign
-from model.cnn_lstm import CRNN
+from model.cnn_lstm import CRNN, SmallCRNN
 from model.word2vec_adapter import Word2VecAdapter, Word2VecAdapterShallow
 from skimage import draw
 from model.net_builder import make_layers, getGroupSize
@@ -364,11 +364,15 @@ class PairingGroupingGraph(BaseModel):
 
         #HWR stuff
         if 'text_rec' in config:
-            if config['text_rec']['model'] == 'CRNN':
+            if 'CRNN' in config['text_rec']['model']:
                 self.hw_channels = config['text_rec']['num_channels'] if 'num_channels' in config['text_rec'] else 1
                 norm = config['text_rec']['norm'] if 'norm' in config['text_rec'] else 'batch'
                 use_softmax = config['text_rec']['use_softmax'] if 'use_softmax' in config['text_rec'] else True
-                self.text_rec = CRNN(config['text_rec']['num_char'],self.hw_channels,norm=norm,use_softmax=use_softmax)
+                if 'Small' in config['text_rec']['model']:
+                    self.text_rec = SmallCRNN(config['text_rec']['num_char'],self.hw_channels,norm=norm,use_softmax=use_softmax)
+                else:
+                    self.text_rec = CRNN(config['text_rec']['num_char'],self.hw_channels,norm=norm,use_softmax=use_softmax)
+                    
                 self.atr_batch_size = config['text_rec']['batch_size']
                 self.pad_text_height = config['text_rec']['pad_text_height'] if 'pad_text_height' in config['text_rec'] else False
                 print('WARNING, is text_rec set to frozen?')
