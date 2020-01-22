@@ -198,3 +198,5 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
     
 
         io.imsave(path,image)
+
+

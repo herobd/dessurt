@@ -76,9 +76,7 @@
         "monitor_mode": "none",
         "warmup_steps": 1000,
         "thresh_conf":0.88,
-        "thresh_intersect":0.4,
-
-        "use_learning_schedule": "detector"
+        "thresh_intersect":0.4
     },
     "arch": "YoloBoxDetector", 
     "model": {
