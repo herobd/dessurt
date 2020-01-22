@@ -2198,11 +2198,20 @@ class GraphPairTrainer(BaseTrainer):
                 gtRelHit[index]=True
             except ValueError:
                 pass
-        relPrec /= len(predPairs)
-        relRecall = sum(gtRelHit)/len(gt_groups_adj)
+        if len(predPairs)>0:
+            relPrec /= len(predPairs)
+        else:
+            relPrec = 1
+        if len(gt_groups_adj)>0:
+            relRecall = sum(gtRelHit)/len(gt_groups_adj)
+        else:
+            relRecall = 1
 
         log['final_rel_prec']=relPrec
         log['final_rel_recall']=relRecall
-        log['final_rel_Fm']=(2*(relPrec*relRecall)/(relPrec+relRecall))
+        if relPrec+relRecall>0:
+            log['final_rel_Fm']=(2*(relPrec*relRecall)/(relPrec+relRecall))
+        else:
+            log['final_rel_Fm']=0
 
         return log
