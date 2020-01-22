@@ -558,6 +558,9 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
                **losses,
 
              }
+    for key,value in log.items():
+        if key.startswith('final'):
+            retData[key]=value
     if rel_ap is not None: #none ap if no relationships
         retData['rel_AP']=rel_ap
         retData['no_targs']=0

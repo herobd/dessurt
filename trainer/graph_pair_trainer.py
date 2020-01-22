@@ -983,7 +983,7 @@ class GraphPairTrainer(BaseTrainer):
                 'FmGroup' : Fm,
                 'recallError' : recall,
                 'precError' : prec,
-                'FmError' : Fm,
+                'FmError' : Fm
                 }
             
             #return torch.tensor([]),torch.tensor([]), targIndex, torch.ones(outputBoxes.size(0)), None, log
@@ -1005,9 +1005,9 @@ class GraphPairTrainer(BaseTrainer):
                 else:
                     targIndex, fullHit, overSegmented = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,hard_thresh=False,fixed=self.fixedAlign)
             else:
-                targIndex=torch.LongTensor(num_pred_bbs).fill_(-1)
-                fullHit=torch.BoolTensor(num_pred_bbs).false_()
-                overSegmented=torch.BoolTensor(num_pred_bbs).false_()
+                targIndex=torch.LongTensor(outputBoxes.size(0)).fill_(-1)
+                fullHit=torch.BoolTensor(outputBoxes.size(0)).false_()
+                overSegmented=torch.BoolTensor(outputBoxes.size(0)).false_()
 
 
 
@@ -1288,6 +1288,8 @@ class GraphPairTrainer(BaseTrainer):
             precGroup = truePosGroup/(truePosGroup+falsePosGroup) if truePosGroup+falsePosGroup>0 else 1
             recallError = truePosError/(truePosError+falseNegError) if truePosError+falseNegError>0 else 1
             precError = truePosError/(truePosError+falsePosError) if truePosError+falsePosError>0 else 1
+
+
             log = {
                 'recallRel' : recallRel, 
                 'precRel' : precRel, 
@@ -1678,10 +1680,10 @@ class GraphPairTrainer(BaseTrainer):
                 log['class loss improvement (neg is good)'] = losses['classFinalLoss'].item()-class_loss
 
         if 'bb_stats' in get:
-            outputBoxes=torch.cat((outputBoxes[:,0:6],outputBoxes[:,7:]),dim=1) #throw away NN pred
+            if self.model.detector.predNumNeighbors:
+                outputBoxes=torch.cat((outputBoxes[:,0:6],outputBoxes[:,7:]),dim=1) #throw away NN pred
             if targetBoxes is not None:
                 targetBoxes = targetBoxes.cpu()
-            if targetBoxes is not None:
                 target_for_b = targetBoxes[0]
             else:
                 target_for_b = torch.empty(0)
@@ -1694,7 +1696,9 @@ class GraphPairTrainer(BaseTrainer):
             log['bb_AP']=ap_5
             log['bb_prec']=prec_5
             log['bb_recall']=recall_5
-            log['bb_Fm_avg']=(2*(prec_5*recall_5)/(prec_5+recall_5)).mean()
+            Fm=2*(prec_5*recall_5)/(prec_5+recall_5)
+            Fm[np.isnan(Fm)]=0
+            log['bb_Fm_avg']=Fm.mean()
 
         if 'nn_acc' in get:
             if self.model.predNN and bbPred is not None:
@@ -1741,7 +1745,7 @@ class GraphPairTrainer(BaseTrainer):
         gtGroups = instance['gt_groups']
         gtGroupAdj = instance['gt_groups_adj']
         if useGT:
-            allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred = self.model(
+            allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred, final = self.model(
                                     image,
                                     targetBoxes,
                                     target_num_neighbors,
@@ -1771,7 +1775,7 @@ class GraphPairTrainer(BaseTrainer):
             #outputBoxes, outputOffsets: one, predicted at the begining
             #relPred, relIndexes, bbPred, predGroups: multiple, for each step in graph prediction. relIndexes indexes into predGroups, which indexes to outputBoxes
             #rel_prop_pred: if we use prop, one for begining
-            allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred = self.model(image,
+            allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred, final = self.model(image,
                     otherThresh=self.conf_thresh_init, otherThreshIntur=threshIntur, hard_detect_limit=self.train_hard_detect_limit)
             #gtPairing,predPairing = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred)
         ### TODO code prealigned
@@ -2046,7 +2050,9 @@ class GraphPairTrainer(BaseTrainer):
                     log['bb_AP_{}'.format(graphIteration)]=ap_5
                     log['bb_prec_{}'.format(graphIteration)]=prec_5
                     log['bb_recall_{}'.format(graphIteration)]=recall_5
-                    log['bb_Fm_avg_{}'.format(graphIteration)]=(2*(prec_5*recall_5)/(prec_5+recall_5)).mean()
+                    Fm=2*(prec_5*recall_5)/(prec_5+recall_5)
+                    Fm[np.isnan(Fm)]=0
+                    log['bb_Fm_avg_{}'.format(graphIteration)]=Fm.mean()
 
         ##print final state of graph
         #if self.save_images_every>0 and self.iteration%self.save_images_every==0:
@@ -2081,6 +2087,11 @@ class GraphPairTrainer(BaseTrainer):
         #if final_prop_rel_prec is not None:
         #    log['final_prop_rel_prec']=final_prop_rel_prec
 
+        gt_groups_adj = instance['gt_groups_adj']
+        finalLog = self.final_eval(targetBoxes.cpu(),gtGroups,gt_groups_adj,*final)
+        log.update(finalLog)
+        #import pdb;pdb.set_trace()
+
         got={}#outputBoxes, outputOffsets, relPred, relIndexes, bbPred, rel_prop_pred
         for name in get:
             if name=='edgePred':
@@ -2111,3 +2122,87 @@ class GraphPairTrainer(BaseTrainer):
             elif name != 'bb_stats' and name != 'nn_acc':
                 raise NotImplementedError('Cannot get [{}], unknown'.format(name))
         return losses, log, got
+
+    def final_eval(self,targetBoxes,gtGroups,gt_groups_adj,outputBoxes,predGroups,predPairs,predTrans=None):
+        log={}
+        numClasses = len(self.data_loader.dataset.classMap)
+        if targetBoxes is not None:
+            targetBoxes = targetBoxes.cpu()
+            if self.model.rotation:
+                targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
+            else:
+                targIndex, fullHit, overSegmented = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,hard_thresh=False,fixed=self.fixedAlign)
+        else:
+            targIndex=torch.LongTensor(outputBoxes.size(0)).fill_(-1)
+            fullHit=torch.BoolTensor(outputBoxes.size(0)).false_()
+            overSegmented=torch.BoolTensor(outputBoxes.size(0)).false_()
+
+        if self.model.detector.predNumNeighbors:
+            beforeCls=1
+            #outputBoxesM=torch.cat((outputBoxes[:,0:6],outputBoxes[:,7:]),dim=1) #throw away NN pred
+        else:
+            beforeCls=0
+        #if targetBoxes is not None:
+        #    targetBoxes = targetBoxes.cpu()
+        if targetBoxes is not None:
+            target_for_b = targetBoxes[0].cpu()
+        else:
+            target_for_b = torch.empty(0)
+        if self.model.rotation:
+            ap_5, prec_5, recall_5 =AP_dist(target_for_b,outputBoxes,0.9,numClasses, beforeCls=beforeCls)
+        else:
+            ap_5, prec_5, recall_5 =AP_iou(target_for_b,outputBoxes,0.5,numClasses, beforeCls=beforeCls)
+        prec_5 = np.array(prec_5)
+        recall_5 = np.array(recall_5)
+        log['final_bb_AP']=ap_5
+        log['fina_bb_prec']=prec_5
+        log['final_bb_recall']=recall_5
+        Fm=2*(prec_5*recall_5)/(prec_5+recall_5)
+        Fm[np.isnan(Fm)]=0
+        log['final_bb_Fm_avg']=Fm.mean()
+
+        predGroupsT={}
+        for node in range(len(predGroups)):
+            predGroupsT[node] = [targIndex[bb].item() for bb in predGroups[node] if targIndex[bb].item()>=0 and (fullHit[bb] or overSegmented[bb])]
+        
+        gtGroupHit=[False]*len(gtGroups)
+        groupCompleteness=[]
+        groupPurity=[]
+        predToGTGroup={}
+        for node,predGroupT in predGroupsT.items():
+            gtGroupId = getGTGroup(predGroupT,gtGroups)
+            predToGTGroup[node]=gtGroupId
+            gtGroupHit[gtGroupId]=True
+            purity=sum([tId in gtGroups[gtGroupId] for tId in predGroupT])
+            purity/=len(predGroups[node])
+            groupPurity.append(purity)
+            completeness=sum([gtId in predGroupT for gtId in gtGroups[gtGroupId]])
+            completeness/=len(gtGroups[gtGroupId])
+            groupCompleteness.append(completeness)
+
+        for hit in gtGroupHit:
+            if not hit:
+                groupCompleteness.append(0)
+
+        log['final_groupCompleteness']=np.mean(groupCompleteness)
+        log['final_groupPurity']=np.mean(groupPurity)
+
+        gtRelHit=[False]*len(gt_groups_adj)
+        relPrec=0
+        for n0,n1 in predPairs:
+            gtG0=predToGTGroup[n0]
+            gtG1=predToGTGroup[n1]
+            try:
+                index=gt_groups_adj.index((min(gtG0,gtG1),max(gtG0,gtG1)))
+                relPrec+=1
+                gtRelHit[index]=True
+            except ValueError:
+                pass
+        relPrec /= len(predPairs)
+        relRecall = sum(gtRelHit)/len(gt_groups_adj)
+
+        log['final_rel_prec']=relPrec
+        log['final_rel_recall']=relRecall
+        log['final_rel_Fm']=(2*(relPrec*relRecall)/(relPrec+relRecall))
+
+        return log

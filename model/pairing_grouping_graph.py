@@ -471,7 +471,7 @@ class PairingGroupingGraph(BaseModel):
         #Otherwise we have to to alignment first
         if not useGTBBs:
             if bbPredictions.size(0)==0:
-                return [bbPredictions], offsetPredictions, None, None, None, None, None
+                return [bbPredictions], offsetPredictions, None, None, None, None, None, (None,None,None,None)
             if self.include_bb_conf:
                 useBBs = bbPredictions
             else:
@@ -483,7 +483,11 @@ class PairingGroupingGraph(BaseModel):
                 useBBs = gtBBs[:,1:]
         else:
             if gtBBs is None:
-                return [bbPredictions], offsetPredictions, None, None, None, None, None
+                if self.text_rec is not None:
+                    transcriptions = self.getTranscriptions(useBBs,image)
+                else:
+                    transcriptions=None
+                return [bbPredictions], offsetPredictions, None, None, None, None, None, (useBBs.cpu().detach(),None,None,transcriptions)
             useBBs = gtBBs[0,:,0:5]
             if self.useShapeFeats or self.relationshipProposal=='feature_nn':
                 classes = gtBBs[0,:,13:]
@@ -504,12 +508,14 @@ class PairingGroupingGraph(BaseModel):
                 #fake some confifence values
                 conf = torch.rand(useBBs.size(0),1)*0.33 +0.66
                 useBBs = torch.cat((conf.to(useBBs.device),useBBs),dim=1)
+        if self.text_rec is not None:
+            transcriptions = self.getTranscriptions(useBBs,image)
+        else:
+            transcriptions=None
         if useBBs.size(0)>1:
             if self.text_rec is not None:
-                transcriptions = self.getTranscriptions(useBBs,image)
                 embeddings = self.embedding_model(transcriptions)
             else:
-                transcriptions=None
                 embeddings=None
             if self.useMetaGraph:
                 allOutputBoxes=[]
@@ -524,7 +530,7 @@ class PairingGroupingGraph(BaseModel):
                 #undirected
                 #edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
                 if graph is None:
-                    return [bbPredictions], offsetPredictions, None, None, None, None, rel_prop_scores
+                    return [bbPredictions], offsetPredictions, None, None, None, None, rel_prop_scores, (useBBs.cpu().detach(),None,None,transcriptions)
 
                 nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = self.graphnets[0](graph)
                 edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
@@ -561,14 +567,10 @@ class PairingGroupingGraph(BaseModel):
                     allEdgeIndexes.append(edgeIndexes)
 
                 ##Final state of the graph
-                #useBBs,graph,groups,edgeIndexes,bbTrans=self.mergeAndGroup(
-                #        self.mergeThresh[-1],self.keepEdgeThresh[-1],self.groupThresh[-1],
-                #        edgeIndexes,edgeOuts,groups,nodeFeats,edgeFeats,uniFeats,useBBs,bbTrans,image)
-                #allOutputBoxes.append(useBBs.cpu()) 
-                #allNodeOuts.append(nodeOuts.cpu().detach())
-                #allEdgeOuts.append(edgeOuts)
-                #allGroups.append(groups)
-                #allEdgeIndexes.append(edgeIndexes)
+                useBBs,graph,groups,edgeIndexes,bbTrans=self.mergeAndGroup(
+                        self.mergeThresh[-1],self.keepEdgeThresh[-1],self.groupThresh[-1],
+                        edgeIndexes,edgeOuts.detach(),groups,nodeFeats.detach(),edgeFeats.detach(),uniFeats.detach() if uniFeats is not None else None,useBBs.detach(),bbTrans,image)
+                final=(useBBs.cpu().detach(),groups,edgeIndexes,bbTrans)
 
 
             else:
@@ -577,9 +579,9 @@ class PairingGroupingGraph(BaseModel):
             #for rel in relOuts:
             #    i,j,a=graphToDetectionsMap(
 
-            return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores
+            return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores, final
         else:
-            return [bbPredictions], offsetPredictions, None, None, None, None, None
+            return [bbPredictions], offsetPredictions, None, None, None, None, None, (useBBs.cpu().detach(),None,None,transcriptions)
 
     #This rewrites the confidence and class predictions based on the (re)predictions from the graph network
     def updateBBs(self,bbs,groups,nodeOuts):
