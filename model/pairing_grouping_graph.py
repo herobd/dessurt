@@ -9,7 +9,8 @@ from model.meta_graph_net import MetaGraphNet
 from model.binary_pair_net import BinaryPairNet
 from model.binary_pair_real import BinaryPairReal
 #from model.roi_align.roi_align import RoIAlign
-from model.roi_align import ROIAlign as RoIAlign
+#from model.roi_align import ROIAlign as RoIAlign
+from torchvision.ops import RoIAlign
 from model.cnn_lstm import CRNN
 from model.word2vec_adapter import Word2VecAdapter, Word2VecAdapterShallow
 from skimage import draw
@@ -219,9 +220,11 @@ class PairingGroupingGraph(BaseModel):
             layers.append( nn.AvgPool2d((fsizeY,fsizeX)) )
             self.relFeaturizerConv = nn.Sequential(*layers)
 
-            self.roi_align = RoIAlign(self.pool_h,self.pool_w,1.0/detect_save_scale)
+            #self.roi_align = RoIAlign(self.pool_h,self.pool_w,1.0/detect_save_scale) Facebook implementation
+            self.roi_align = RoIAlign((self.pool_h,self.pool_w),1.0/detect_save_scale,-1)
             if self.use2ndFeatures:
-                self.roi_align2 = RoIAlign(self.pool2_h,self.pool2_w,1.0/detect_save2_scale)
+                #self.roi_align2 = RoIAlign(self.pool2_h,self.pool2_w,1.0/detect_save2_scale)
+                self.roi_align2 = RoIAlign((self.pool2_h,self.pool2_w),1.0/detect_save2_scale,-1)
         else:
             last_ch_relC=0
 
@@ -298,9 +301,11 @@ class PairingGroupingGraph(BaseModel):
                     convlayers.append( nn.AvgPool2d((fsizeY,fsizeX)) )
                 self.bbFeaturizerConv = nn.Sequential(*convlayers)
 
-                self.roi_alignBB = RoIAlign(self.poolBB_h,self.poolBB_w,1.0/detect_save_scale)
+                #self.roi_alignBB = RoIAlign(self.poolBB_h,self.poolBB_w,1.0/detect_save_scale)
+                self.roi_alignBB = RoIAlign((self.poolBB_h,self.poolBB_w),1.0/detect_save_scale,-1)
                 if self.use2ndFeatures:
-                    self.roi_alignBB2 = RoIAlign(self.poolBB2_h,self.poolBB2_w,1.0/detect_save2_scale)
+                    #self.roi_alignBB2 = RoIAlign(self.poolBB2_h,self.poolBB2_w,1.0/detect_save2_scale)
+                    self.roi_alignBB2 = RoIAlign((self.poolBB2_h,self.poolBB2_w),1.0/detect_save2_scale,-1)
             else:
                 featurizer_fc = [self.numShapeFeatsBB+self.numTextFeats]+featurizer_fc
             if featurizer_fc is not None:
