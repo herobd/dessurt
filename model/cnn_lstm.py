@@ -97,3 +97,53 @@ class CRNN(BaseModel):#(nn.Module):
         for i,layer in enumerate(save_from):
             self.cnn[layer].register_forward_hook( factorySave(i) )
 
+#This model is intended for images with a height of 24
+class SmallCRNN(BaseModel):#(nn.Module):
+
+    def __init__(self, nclass, nc=1, cnnOutSize=512, nh=512, n_rnn=2, leakyRelu=False, norm='batch',use_softmax=False):
+        super(SmallCRNN, self).__init__(None)
+        # assert imgH % 16 == 0, 'imgH has to be a multiple of 16'
+        self.use_softmax=use_softmax
+
+        ks = [3, 3, 3, 3, 3, 3, 3]
+        ps = [1, 1, 1, 1, 1, 1, 0]
+        ss = [1, 1, 1, 1, 1, 1, 1]
+        nm = [128, 128, 256, 256, 512, 512, 512]
+        drop = [False,False,True,True,True,True,True]
+
+        cnn = nn.Sequential()
+
+        def convRelu(i, norm=None):
+            nIn = nc if i == 0 else nm[i - 1]
+            nOut = nm[i]
+            cnn.add_module('conv{0}'.format(i),
+                           nn.Conv2d(nIn, nOut, ks[i], ss[i], ps[i]))
+            if norm is not None and 'group' in norm:
+                cnn.add_module('groupnorm{0}'.format(i), nn.GroupNorm(getGroupSize(nOut),nOut))
+            elif norm:
+                cnn.add_module('batchnorm{0}'.format(i), nn.BatchNorm2d(nOut))
+            if drop[i]:
+                cnn.add_module('dropout{0}'.format(i),nn.Dropout2d(0.1,True))
+            if leakyRelu:
+                cnn.add_module('relu{0}'.format(i),
+                               nn.LeakyReLU(0.2, inplace=True))
+            else:
+                cnn.add_module('relu{0}'.format(i), nn.ReLU(True))
+
+        convRelu(0)
+        convRelu(1,norm)
+        cnn.add_module('pooling{0}'.format(0), nn.MaxPool2d(2, 2))  # 128x12x12c
+        convRelu(2,norm)
+        convRelu(3)
+        cnn.add_module('pooling{0}'.format(1), nn.MaxPool2d(2, 2))  # 256x6x6c
+        convRelu(4, norm)
+        convRelu(5)       
+        cnn.add_module('pooling{0}'.format(2),
+                       nn.MaxPool2d((2, 2), (2, 1), (0, 1)))  # 512x3x6c
+        convRelu(6, norm)                                     # 512x1x6c-2
+
+        self.cnn = cnn
+
+        self.rnn = BidirectionalLSTM(cnnOutSize, nh, nclass)
+        self.softmax = nn.LogSoftmax(dim=2)
+
