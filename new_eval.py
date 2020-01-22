@@ -14,6 +14,7 @@ import math
 from collections import defaultdict
 import pickle
 #import requests
+import warnings
 
 def update_status(name,message):
     try:
@@ -406,15 +407,17 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
             except StopIteration:
                 print('ERROR: ran out of valid batches early. Expected {} more'.format(len(valid_data_loader)-vi))
             ####
-                
-            val_metrics_sum /= len(valid_data_loader)
-            print('{} metrics'.format(validName))
-            for i in range(len(metrics)):
-                print(metrics[i].__name__ + ': '+str(val_metrics_sum[i]))
-            for typ in val_comb_metrics:
-                print('{} overall mean: {}, std {}'.format(typ,np.mean(val_comb_metrics[typ],axis=0), np.std(val_comb_metrics[typ],axis=0)))
-                for name, typeLists in val_metrics_list[typ].items():
-                    print('{} {} mean: {}, std {}'.format(typ,name,np.mean(typeLists,axis=0),np.std(typeLists,axis=0)))
+
+            with warnings.catch_warnings():   
+                warnings.simplefilter('error')
+                val_metrics_sum /= len(valid_data_loader)
+                print('{} metrics'.format(validName))
+                for i in range(len(metrics)):
+                    print(metrics[i].__name__ + ': '+str(val_metrics_sum[i]))
+                for typ in val_comb_metrics:
+                    print('{} overall mean: {}, std {}'.format(typ,np.mean(val_comb_metrics[typ],axis=0), np.std(val_comb_metrics[typ],axis=0)))
+                    for name, typeLists in val_metrics_list[typ].items():
+                        print('{} {} mean: {}, std {}'.format(typ,name,np.mean(typeLists,axis=0),np.std(typeLists,axis=0)))
 
             if 'save_nns' in config:
                 pickle.dump(nns,open(config['save_nns'],'wb'))

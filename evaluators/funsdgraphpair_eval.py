@@ -437,10 +437,14 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
                 else:
                     toRet['{}: F-M@{}'.format(gIter,rel_threshold)]=0
                 toRet['{}: rel_AP@{}'.format(gIter,rel_threshold)]=rel_ap
-                toRet['{}: rel_truePred_len@{}'.format(gIter,rel_threshold)]=truePred_len
-                toRet['{}: rel_trueRej_len@{}'.format(gIter,rel_threshold)]=trueRej_len
-                toRet['{}: rel_falseRej_len@{}'.format(gIter,rel_threshold)]=falseRej_len
-                toRet['{}: rel_falsePred_len@{}'.format(gIter,rel_threshold)]=falsePred_len
+                if len(truePred_len)>0:
+                    toRet['{}: rel_truePred_len@{}'.format(gIter,rel_threshold)]=truePred_len
+                if len(trueRej_len)>0:
+                    toRet['{}: rel_trueRej_len@{}'.format(gIter,rel_threshold)]=trueRej_len
+                if len(falseRej_len)>0:
+                    toRet['{}: rel_falseRej_len@{}'.format(gIter,rel_threshold)]=falseRej_len
+                if len(falsePred_len)>0:
+                    toRet['{}: rel_falsePred_len@{}'.format(gIter,rel_threshold)]=falsePred_len
                 #precisionHistory[precision]=(draw_rel_thresh,stepSize)
                 #if targetPrecision is not None:
                 #    if abs(precision-targetPrecision)<0.001:
@@ -560,7 +564,10 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
              }
     for key,value in log.items():
         if key.startswith('final'):
-            retData[key]=value
+            if type(value) is np.ndarray:
+                retData['!'+key]={i:[value[i]] for i in range(value.shape[0])}
+            else:
+                retData['!'+key]=[value]
     if rel_ap is not None: #none ap if no relationships
         retData['rel_AP']=rel_ap
         retData['no_targs']=0

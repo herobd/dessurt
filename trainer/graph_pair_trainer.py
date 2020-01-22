@@ -2155,49 +2155,70 @@ class GraphPairTrainer(BaseTrainer):
         prec_5 = np.array(prec_5)
         recall_5 = np.array(recall_5)
         log['final_bb_AP']=ap_5
-        log['fina_bb_prec']=prec_5
+        log['final_bb_prec']=prec_5
         log['final_bb_recall']=recall_5
         Fm=2*(prec_5*recall_5)/(prec_5+recall_5)
         Fm[np.isnan(Fm)]=0
         log['final_bb_Fm_avg']=Fm.mean()
 
         predGroupsT={}
-        for node in range(len(predGroups)):
-            predGroupsT[node] = [targIndex[bb].item() for bb in predGroups[node] if targIndex[bb].item()>=0 and (fullHit[bb] or overSegmented[bb])]
+        if predGroups is not None:
+            for node in range(len(predGroups)):
+                predGroupsT[node] = [targIndex[bb].item() for bb in predGroups[node] if targIndex[bb].item()>=0 and (fullHit[bb] or overSegmented[bb])]
         
         gtGroupHit=[False]*len(gtGroups)
         groupCompleteness=[]
-        groupPurity=[]
+        groupPurity={}
         predToGTGroup={}
+        offId = -1
         for node,predGroupT in predGroupsT.items():
             gtGroupId = getGTGroup(predGroupT,gtGroups)
             predToGTGroup[node]=gtGroupId
-            gtGroupHit[gtGroupId]=True
-            purity=sum([tId in gtGroups[gtGroupId] for tId in predGroupT])
-            purity/=len(predGroups[node])
-            groupPurity.append(purity)
-            completeness=sum([gtId in predGroupT for gtId in gtGroups[gtGroupId]])
-            completeness/=len(gtGroups[gtGroupId])
-            groupCompleteness.append(completeness)
+            if gtGroupId<0:
+                purity=0
+                gtGroupId=offId
+                offId-=1
+            else:
+                if gtGroupHit[gtGroupId]:
+                    purity=sum([tId in gtGroups[gtGroupId] for tId in predGroupT])
+                    purity/=len(predGroups[node])
+                    if purity<groupPurity[gtGroupId]:
+                        gtGroupId=offId
+                        offId-=1
+                        purity=0
+                    else:
+                        groupPurity[offId]=0
+                        offId-=1
+                else:
+                    purity=sum([tId in gtGroups[gtGroupId] for tId in predGroupT])
+                    purity/=len(predGroups[node])
+                    gtGroupHit[gtGroupId]=True
+            groupPurity[gtGroupId]=purity
+
+            if gtGroupId>=0:
+                completeness=sum([gtId in predGroupT for gtId in gtGroups[gtGroupId]])
+                completeness/=len(gtGroups[gtGroupId])
+                groupCompleteness.append(completeness)
 
         for hit in gtGroupHit:
             if not hit:
                 groupCompleteness.append(0)
 
         log['final_groupCompleteness']=np.mean(groupCompleteness)
-        log['final_groupPurity']=np.mean(groupPurity)
+        log['final_groupPurity']=np.mean([v for k,v in groupPurity.items()])
 
         gtRelHit=[False]*len(gt_groups_adj)
         relPrec=0
         for n0,n1 in predPairs:
             gtG0=predToGTGroup[n0]
             gtG1=predToGTGroup[n1]
-            try:
-                index=gt_groups_adj.index((min(gtG0,gtG1),max(gtG0,gtG1)))
-                relPrec+=1
-                gtRelHit[index]=True
-            except ValueError:
-                pass
+            if gtG0>=0 and gtG1>=0:
+                try:
+                    index=gt_groups_adj.index((min(gtG0,gtG1),max(gtG0,gtG1)))
+                    relPrec+=1
+                    gtRelHit[index]=True
+                except ValueError:
+                    pass
         if len(predPairs)>0:
             relPrec /= len(predPairs)
         else:
