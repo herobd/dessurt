@@ -1909,9 +1909,10 @@ class PairingGroupingGraph(BaseModel):
         y1 = torch.max(y1,torch.tensor(0).int())
         y2 = torch.min(y2,torch.tensor(image.size(2)-1).int())
 
-        h *=2
-        w *=2
+        #h *=2
+        #w *=2
 
+        h = (y2-y1).float()
         if self.pad_text_height:
             h = torch.where(h<self.hw_input_height,torch.empty_like(h).fill_(self.hw_input_height),h)
         scale = self.hw_input_height/h.cpu()

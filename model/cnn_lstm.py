@@ -147,3 +147,29 @@ class SmallCRNN(BaseModel):#(nn.Module):
         self.rnn = BidirectionalLSTM(cnnOutSize, nh, nclass)
         self.softmax = nn.LogSoftmax(dim=2)
 
+
+    def forward(self, input, style=None):
+        # conv features
+        conv = self.cnn(input)
+        b, c, h, w = conv.size()
+        # assert h == 1, "the height of conv must be 1"
+        conv = conv.view(b, -1, w)
+        conv = conv.permute(2, 0, 1)  # [w, b, c]
+        # rnn features
+        output = self.rnn(conv)
+
+        if self.use_softmax:
+            return self.softmax(output)
+        else:
+            return output
+
+    def setup_save_features(self):
+        save_from = [12]
+        self.saved_features = [None]*len(save_from)
+        def factorySave(i):
+            def saveX(module, input ,output):
+                self.saved_features[i]=output
+            return saveX
+        for i,layer in enumerate(save_from):
+            self.cnn[layer].register_forward_hook( factorySave(i) )
+
