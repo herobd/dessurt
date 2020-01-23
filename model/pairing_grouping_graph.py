@@ -1916,7 +1916,7 @@ class PairingGroupingGraph(BaseModel):
         if self.pad_text_height:
             h = torch.where(h<self.hw_input_height,torch.empty_like(h).fill_(self.hw_input_height),h)
         scale = self.hw_input_height/h.cpu()
-        all_scaled_w = (((x2-x1)+1)*scale)#.int()
+        all_scaled_w = (((x2-x1).float()+1)*scale)#.int()
 
         output_strings=[]
         for index in range(0,bbs.size(0),self.atr_batch_size):
