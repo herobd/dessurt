@@ -43,7 +43,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         return acc_metrics
 
     if toEval is None:
-        toEval = ['allEdgePred','allEdgeIndexes','allNodePred','allOutputBoxes', 'allPredGroups', 'allEdgePredTypes']
+        toEval = ['allEdgePred','allEdgeIndexes','allNodePred','allOutputBoxes', 'allPredGroups', 'allEdgePredTypes','final']
 
     rel_thresholds = [config['THRESH']] if 'THRESH' in config else [0.5]
     if ('sweep_threshold' in config and config['sweep_threshold']) or ('sweep_thresholds' in config and config['sweep_thresholds']):
@@ -545,6 +545,12 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
             toRet['{}: nn_acc_detector'.format(gIter)] = nn_acc_d
 
         print('\n{} ap:{}\tnumMissedByDetect:{}\tmissedByHuer:{}'.format(imageName,rel_ap,numMissedByDetect,numMissedByHeur))
+
+    if outDir is not None:
+        path = os.path.join(outDir,'{}_final.png'.format(imageName))
+        finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = out['final']
+        draw_graph(finalOutputBoxes,trainer.model.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,data,None,targetBoxes,trainer.model,path,bbTrans=finalBBTrans)
+
     for key in losses.keys():
         losses[key] = losses[key].item()
     retData= { 'bb_ap':[ap_5],
