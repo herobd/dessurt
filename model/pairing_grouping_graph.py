@@ -1958,8 +1958,10 @@ class PairingGroupingGraph(BaseModel):
 
             if lines.size(1)==1 and self.hw_channels==3:
                 lines = lines.expand(-1,3,-1,-1)
-
-            resBatch = self.text_rec(lines).cpu().detach().numpy().transpose(1,0,2)
+            
+            with torch.no_grad():
+                self.text_rec.eval()
+                resBatch = self.text_rec(lines).cpu().detach().numpy().transpose(1,0,2)
             batch_strings, decoded_raw_hw = decode_handwriting(resBatch, self.idx_to_char)
             ###debug
             for i in range(num):
