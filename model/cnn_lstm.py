@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import torch.nn.functional as F
 from .net_builder import getGroupSize
 
 from base import BaseModel
@@ -149,6 +150,11 @@ class SmallCRNN(BaseModel):#(nn.Module):
 
 
     def forward(self, input, style=None):
+
+        #we'll pad if too short horizontally
+        if input.size(3)<12:
+            diff = 12-input.size(3)
+            input = F.pad(input,(diff//2,diff//2+diff%2,0,0))
         # conv features
         conv = self.cnn(input)
         b, c, h, w = conv.size()
