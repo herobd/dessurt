@@ -542,6 +542,7 @@ class PairingGroupingGraph(BaseModel):
                     return [bbPredictions], offsetPredictions, None, None, None, None, rel_prop_scores, (useBBs.cpu().detach(),None,None,transcriptions)
 
                 nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = self.graphnets[0](graph)
+                assert(edgeOuts is None or not torch.isnan(edgeOuts).any())
                 edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
                 #edgeOuts = (edgeOuts[:edgeOuts.size(0)//2] + edgeOuts[edgeOuts.size(0)//2:])/2 #average two directions of edge
                 #edgeFeats = (edgeFeats[:edgeFeats.size(0)//2] + edgeFeats[edgeFeats.size(0)//2:])/2 #average two directions of edge
@@ -1360,6 +1361,7 @@ class PairingGroupingGraph(BaseModel):
             if self.useShapeFeats != "only":
                 #bb_features[i]= F.avg_pool2d(features[0,:,minY:maxY+1,minX:maxX+1], (1+maxY-minY,1+maxX-minX)).view(-1)
                 bb_features = self.roi_alignBB(features,rois.to(features.device))
+                assert(not torch.isnan(bb_features).any())
                 if features2 is not None:
                     bb_features2 = self.roi_alignBB2(features2,rois.to(features.device))
                     if not self.splitFeatures:
@@ -1381,8 +1383,10 @@ class PairingGroupingGraph(BaseModel):
                 assert(self.useShapeFeats)
                 bb_features = bb_shapeFeats.to(features.device)
 
+            assert(not torch.isnan(bb_features).any())
             if self.bbFeaturizerFC is not None:
                 bb_features = self.bbFeaturizerFC(bb_features) #if uncommented, change rot on bb_shapeFeats, maybe not
+            assert(not torch.isnan(bb_features).any())
         else:
             bb_features = None
         
@@ -1915,8 +1919,9 @@ class PairingGroupingGraph(BaseModel):
         h = (y2-y1).float()
         if self.pad_text_height:
             h = torch.where(h<self.hw_input_height,torch.empty_like(h).fill_(self.hw_input_height),h)
-        scale = self.hw_input_height/h.cpu()
-        all_scaled_w = (((x2-x1)+1)*scale)#.int()
+        scale = self.hw_input_height/h
+        all_scaled_w = (((x2-x1).float()+1)*scale).cpu()#.int()
+        scale=None
 
         output_strings=[]
         for index in range(0,bbs.size(0),self.atr_batch_size):
