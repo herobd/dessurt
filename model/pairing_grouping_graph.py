@@ -364,6 +364,8 @@ class PairingGroupingGraph(BaseModel):
 
         #HWR stuff
         if 'text_rec' in config:
+            self.padATRy=3
+            self.padATRx=10
             if 'CRNN' in config['text_rec']['model']:
                 self.hw_channels = config['text_rec']['num_channels'] if 'num_channels' in config['text_rec'] else 1
                 norm = config['text_rec']['norm'] if 'norm' in config['text_rec'] else 'batch'
@@ -377,9 +379,9 @@ class PairingGroupingGraph(BaseModel):
                 self.pad_text_height = config['text_rec']['pad_text_height'] if 'pad_text_height' in config['text_rec'] else False
                 print('WARNING, is text_rec set to frozen?')
                 self.text_rec.eval()
-                self.text_rec = self.text_rec.cuda()
+                #self.text_rec = self.text_rec.cuda()
                 if 'hw_with_style_file' in config['text_rec']:
-                    state=torch.load(config['text_rec']['hw_with_style_file'])['state_dict']
+                    state=torch.load(config['text_rec']['hw_with_style_file'], map_location=lambda storage, location: storage)['state_dict']
                     hwr_state_dict={}
                     for key,value in  state.items():
                         if key[:4]=='hwr.':
@@ -1908,10 +1910,15 @@ class PairingGroupingGraph(BaseModel):
         y1 = torch.min(torch.min(tlY,trY),torch.min(brY,blY)).int()
         y2 = torch.max(torch.max(tlY,trY),torch.max(brY,blY)).int()
 
+        x1-=self.padATRx
+        x2+=self.padATRx
+        y1-=self.padATRy
+        y2+=self.padATRy
+
         x1 = torch.max(x1,torch.tensor(0).int())
-        x2 = torch.min(x2,torch.tensor(image.size(3)-1).int())
+        x2 = torch.max(torch.min(x2,torch.tensor(image.size(3)-1).int()),torch.tensor(0).int())
         y1 = torch.max(y1,torch.tensor(0).int())
-        y2 = torch.min(y2,torch.tensor(image.size(2)-1).int())
+        y2 = torch.max(torch.min(y2,torch.tensor(image.size(2)-1).int()),torch.tensor(0).int())
 
         #h *=2
         #w *=2
