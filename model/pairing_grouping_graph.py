@@ -1949,7 +1949,7 @@ class PairingGroupingGraph(BaseModel):
                     else:
                         assert(False and 'why is it short if not getting cropped by image boundary?')
                 scale = self.hw_input_height/crop.size(2)
-                scaled_w = int(crop.size(3)*scale)
+                scaled_w = math.ceil(crop.size(3)*scale)
                 lines[i-index,:,:,0:scaled_w] = F.interpolate(crop, size=(self.hw_input_height,scaled_w), mode='bilinear',align_corners=False)[0]#.to(crop.device)
                 imm[i-index] = lines[i-index].cpu().numpy().transpose([1,2,0])
                 imm[i-index] = 256*(2-imm[i-index])/2
