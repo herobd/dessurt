@@ -81,6 +81,7 @@ def main(config, resume):
     signal.signal(signal.SIGINT, handleSIGINT)
 
     print("Begin training")
+    update_status(name,'started',supercomputer)
     trainer.train()
 
 

@@ -209,7 +209,7 @@ class GraphPairTrainer(BaseTrainer):
             if m.grad is None:
                 continue
             count+=1
-            meangrad+=m.grad.data.mean()
+            meangrad+=m.grad.data.mean().cpu().item()
         if count!=0:
             meangrad/=count
         self.optimizer.step()
@@ -2054,10 +2054,11 @@ class GraphPairTrainer(BaseTrainer):
                     Fm[np.isnan(Fm)]=0
                     log['bb_Fm_avg_{}'.format(graphIteration)]=Fm.mean()
 
-        ##print final state of graph
-        #if self.save_images_every>0 and self.iteration%self.save_images_every==0:
-        #    path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b','final'))#instance['name'],graphIteration))
-        #    draw_graph(finalOutputBoxes,self.model.used_threshConf,torch.sigmoid(finalNodePred).cpu().detach(),torch.sigmoid(finalEgePred).cpu().detach(),finalEdgeIndexes,finalPredGroups,image,edgePredTypes,targetBoxes,self.model,path)
+        #print final state of graph
+        if self.save_images_every>0 and self.iteration%self.save_images_every==0:
+            path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b','final'))#instance['name'],graphIteration))
+            finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = final
+            draw_graph(finalOutputBoxes,self.model.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,image,None,targetBoxes,self.model,path,bbTrans=finalBBTrans)
         #    print('saved {}'.format(path))
         
         #log['rel_prec']= fullPrec
@@ -2119,6 +2120,8 @@ class GraphPairTrainer(BaseTrainer):
                  got[name] = allOutputBoxes
             elif name=='allEdgePredTypes':
                  got[name] = allEdgePredTypes
+            elif name=='final':
+                 got[name] = final
             elif name != 'bb_stats' and name != 'nn_acc':
                 raise NotImplementedError('Cannot get [{}], unknown'.format(name))
         return losses, log, got

@@ -25,8 +25,11 @@ def plotRect(img,color,xyrhw,lineWidth=1):
     cv2.line(img,br,bl,color,lineWidth)
     cv2.line(img,bl,tl,color,lineWidth)
 
-def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,image,predTypes,targetBoxes,model,path,verbosity=2):
+def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,image,predTypes,targetBoxes,model,path,verbosity=2,bbTrans=None):
     #for graphIteration,(outputBoxes,nodePred,edgePred,edgeIndexes,predGroups) in zip(allOutputBoxes,allNodePred,allEdgePred,allEdgeIndexes,allPredGroups):
+        if bbTrans is not None:
+            transPath = path[:-3]+'txt'
+            transOut = open(transPath,'w')
         outputBoxes = outputBoxes.data.numpy()
         data = image.cpu().numpy()
         b=0
@@ -68,9 +71,9 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                 lineWidth=1
                 plotRect(image,color,bbs[j,1:6],lineWidth)
 
+                x=int(bbs[j,1])
+                y=int(bbs[j,2])
                 if verbosity>3 and predNN is not None:
-                    x=int(bbs[j,1])
-                    y=int(bbs[j,2])#-bbs[j,4])
                     targ_j = bbAlignment[j].item()
                     if targ_j>=0:
                         gtNN = target_num_neighbors[0,targ_j].item()
@@ -79,6 +82,11 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                     pred_nn = predNN[j].item()
                     color = min(abs(pred_nn-gtNN),1)#*0.5
                     cv2.putText(image,'{:.2}/{}'.format(pred_nn,gtNN),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(color,0,0),2,cv2.LINE_AA)
+                if bbTrans is not None:
+                    cv2.putText(image,'{}'.format(j),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,color,2,cv2.LINE_AA)
+                    transOut.write('{}: {}\n'.format(j,bbTrans[j]))
+        if bbTrans is not None:
+            transOut.close()
 
         #Draw pred groups (based on bb pred)
         groupCenters=[]
@@ -101,7 +109,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
             maxX+=2
             maxY+=2
             lineWidth=2
-            color=(shade/2,0,shade)
+            color=(0.5,0,1)
             if len(group)>1:
                 cv2.line(image,(minX,minY),(maxX,minY),color,lineWidth)
                 cv2.line(image,(maxX,minY),(maxX,maxY),color,lineWidth)
@@ -125,7 +133,8 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
             #if score>draw_rel_thresh:
             x1,y1 = groupCenters[g1]
             x2,y2 = groupCenters[g2]
-            if ( (predTypes[0][i]=='TN' or predTypes[0][i]=='UN') and
+            if (predTypes is not None and
+                (predTypes[0][i]=='TN' or predTypes[0][i]=='UN') and
                  (predTypes[1][i]=='TN' or predTypes[1][i]=='UN') and
                  (predTypes[2][i]=='TN' or predTypes[2][i]=='UN') ):
                 lineColor = (0,0,edgePred[i,-1,0].item()) #BLUE
@@ -133,33 +142,38 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
             else:
                 edgesToDraw.append((i,x1,y1,x2,y2))
 
-        edgeClassification = [(predTypes[i],edgePred[:,-1,i]) for i in range(len(predTypes))]
+        if predTypes is not None:
+            edgeClassification = [(predTypes[i],edgePred[:,-1,i]) for i in range(len(predTypes))]
 
-        for i,x1,y1,x2,y2 in edgesToDraw:
-                lineColor = (0,edgePred[i,-1,0].item(),0)
-                boxColors=[]
-                for predType,pred in edgeClassification:
-                    if predType[i]=='TP':
-                        color = (0,pred[i].item(),0) #Green
-                    elif predType[i]=='FP':
-                        color = (pred[i].item(),pred[i].item()*0.5,0) #Orange
-                    elif predType[i]=='TN':
-                        color = (0,0,1-pred[i].item()) #Blue
-                    elif predType[i]=='TN':
-                        color = (1-pred[i].item(),0,0) #Red
-                    else: #We don;t know the GT
-                        color = (pred[i].item(),pred[i].item(),pred[i].item())
-                    boxColors.append(color)
+            for i,x1,y1,x2,y2 in edgesToDraw:
+                    lineColor = (0,edgePred[i,-1,0].item(),0)
+                    boxColors=[]
+                    for predType,pred in edgeClassification:
+                        if predType[i]=='TP':
+                            color = (0,pred[i].item(),0) #Green
+                        elif predType[i]=='FP':
+                            color = (pred[i].item(),pred[i].item()*0.5,0) #Orange
+                        elif predType[i]=='TN':
+                            color = (0,0,1-pred[i].item()) #Blue
+                        elif predType[i]=='TN':
+                            color = (1-pred[i].item(),0,0) #Red
+                        else: #We don;t know the GT
+                            color = (pred[i].item(),pred[i].item(),pred[i].item())
+                        boxColors.append(color)
+                    cv2.line(image,(x1,y1),(x2,y2),lineColor,2)
+                    cX = (x1+x2)//2
+                    cY = (y1+y2)//2
+                    #print('{} {},  {} {},  > {} {}'.format(x1,y1,x2,y2,cX,cY))
+                    for i,(offsetX,offsetY,s) in enumerate([(-2,-2,3),(1,-2,3),(1,1,3),(-2,1,3)]):
+                        if i>=len(boxColors):
+                            break
+                        tX=cX+offsetX
+                        tY=cY+offsetY
+                        image[tY:tY+s,tX:tX+s]=boxColors[i]
+        else:
+            lineColor = (0,0.8,0)
+            for i,x1,y1,x2,y2 in edgesToDraw:
                 cv2.line(image,(x1,y1),(x2,y2),lineColor,2)
-                cX = (x1+x2)//2
-                cY = (y1+y2)//2
-                #print('{} {},  {} {},  > {} {}'.format(x1,y1,x2,y2,cX,cY))
-                for i,(offsetX,offsetY,s) in enumerate([(-2,-2,3),(1,-2,3),(1,1,3),(-2,1,3)]):
-                    if i>=len(boxColors):
-                        break
-                    tX=cX+offsetX
-                    tY=cY+offsetY
-                    image[tY:tY+s,tX:tX+s]=boxColors[i]
 
 
         #Draw alginment between gt and pred bbs

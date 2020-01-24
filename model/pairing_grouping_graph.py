@@ -11,7 +11,7 @@ from model.binary_pair_real import BinaryPairReal
 #from model.roi_align.roi_align import RoIAlign
 #from model.roi_align import ROIAlign as RoIAlign
 from torchvision.ops import RoIAlign
-from model.cnn_lstm import CRNN
+from model.cnn_lstm import CRNN, SmallCRNN
 from model.word2vec_adapter import Word2VecAdapter, Word2VecAdapterShallow
 from skimage import draw
 from model.net_builder import make_layers, getGroupSize
@@ -364,18 +364,24 @@ class PairingGroupingGraph(BaseModel):
 
         #HWR stuff
         if 'text_rec' in config:
-            if config['text_rec']['model'] == 'CRNN':
+            self.padATRy=3
+            self.padATRx=10
+            if 'CRNN' in config['text_rec']['model']:
                 self.hw_channels = config['text_rec']['num_channels'] if 'num_channels' in config['text_rec'] else 1
                 norm = config['text_rec']['norm'] if 'norm' in config['text_rec'] else 'batch'
                 use_softmax = config['text_rec']['use_softmax'] if 'use_softmax' in config['text_rec'] else True
-                self.text_rec = CRNN(config['text_rec']['num_char'],self.hw_channels,norm=norm,use_softmax=use_softmax)
+                if 'Small' in config['text_rec']['model']:
+                    self.text_rec = SmallCRNN(config['text_rec']['num_char'],self.hw_channels,norm=norm,use_softmax=use_softmax)
+                else:
+                    self.text_rec = CRNN(config['text_rec']['num_char'],self.hw_channels,norm=norm,use_softmax=use_softmax)
+                    
                 self.atr_batch_size = config['text_rec']['batch_size']
                 self.pad_text_height = config['text_rec']['pad_text_height'] if 'pad_text_height' in config['text_rec'] else False
                 print('WARNING, is text_rec set to frozen?')
                 self.text_rec.eval()
-                self.text_rec = self.text_rec.cuda()
+                #self.text_rec = self.text_rec.cuda()
                 if 'hw_with_style_file' in config['text_rec']:
-                    state=torch.load(config['text_rec']['hw_with_style_file'])['state_dict']
+                    state=torch.load(config['text_rec']['hw_with_style_file'], map_location=lambda storage, location: storage)['state_dict']
                     hwr_state_dict={}
                     for key,value in  state.items():
                         if key[:4]=='hwr.':
@@ -538,6 +544,7 @@ class PairingGroupingGraph(BaseModel):
                     return [bbPredictions], offsetPredictions, None, None, None, None, rel_prop_scores, (useBBs.cpu().detach(),None,None,transcriptions)
 
                 nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = self.graphnets[0](graph)
+                assert(edgeOuts is None or not torch.isnan(edgeOuts).any())
                 edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
                 #edgeOuts = (edgeOuts[:edgeOuts.size(0)//2] + edgeOuts[edgeOuts.size(0)//2:])/2 #average two directions of edge
                 #edgeFeats = (edgeFeats[:edgeFeats.size(0)//2] + edgeFeats[edgeFeats.size(0)//2:])/2 #average two directions of edge
@@ -1356,6 +1363,7 @@ class PairingGroupingGraph(BaseModel):
             if self.useShapeFeats != "only":
                 #bb_features[i]= F.avg_pool2d(features[0,:,minY:maxY+1,minX:maxX+1], (1+maxY-minY,1+maxX-minX)).view(-1)
                 bb_features = self.roi_alignBB(features,rois.to(features.device))
+                assert(not torch.isnan(bb_features).any())
                 if features2 is not None:
                     bb_features2 = self.roi_alignBB2(features2,rois.to(features.device))
                     if not self.splitFeatures:
@@ -1377,8 +1385,10 @@ class PairingGroupingGraph(BaseModel):
                 assert(self.useShapeFeats)
                 bb_features = bb_shapeFeats.to(features.device)
 
+            assert(not torch.isnan(bb_features).any())
             if self.bbFeaturizerFC is not None:
                 bb_features = self.bbFeaturizerFC(bb_features) #if uncommented, change rot on bb_shapeFeats, maybe not
+            assert(not torch.isnan(bb_features).any())
         else:
             bb_features = None
         
@@ -1900,18 +1910,25 @@ class PairingGroupingGraph(BaseModel):
         y1 = torch.min(torch.min(tlY,trY),torch.min(brY,blY)).int()
         y2 = torch.max(torch.max(tlY,trY),torch.max(brY,blY)).int()
 
+        x1-=self.padATRx
+        x2+=self.padATRx
+        y1-=self.padATRy
+        y2+=self.padATRy
+
         x1 = torch.max(x1,torch.tensor(0).int())
-        x2 = torch.min(x2,torch.tensor(image.size(3)-1).int())
+        x2 = torch.max(torch.min(x2,torch.tensor(image.size(3)-1).int()),torch.tensor(0).int())
         y1 = torch.max(y1,torch.tensor(0).int())
-        y2 = torch.min(y2,torch.tensor(image.size(2)-1).int())
+        y2 = torch.max(torch.min(y2,torch.tensor(image.size(2)-1).int()),torch.tensor(0).int())
 
-        h *=2
-        w *=2
+        #h *=2
+        #w *=2
 
+        h = (y2-y1).float()
         if self.pad_text_height:
             h = torch.where(h<self.hw_input_height,torch.empty_like(h).fill_(self.hw_input_height),h)
-        scale = self.hw_input_height/h.cpu()
-        all_scaled_w = (((x2-x1)+1)*scale)#.int()
+        scale = self.hw_input_height/h
+        all_scaled_w = (((x2-x1).float()+1)*scale).cpu()#.int()
+        scale=None
 
         output_strings=[]
         for index in range(0,bbs.size(0),self.atr_batch_size):
@@ -1939,7 +1956,7 @@ class PairingGroupingGraph(BaseModel):
                     else:
                         assert(False and 'why is it short if not getting cropped by image boundary?')
                 scale = self.hw_input_height/crop.size(2)
-                scaled_w = int(crop.size(3)*scale)
+                scaled_w = math.ceil(crop.size(3)*scale)
                 lines[i-index,:,:,0:scaled_w] = F.interpolate(crop, size=(self.hw_input_height,scaled_w), mode='bilinear',align_corners=False)[0]#.to(crop.device)
                 imm[i-index] = lines[i-index].cpu().numpy().transpose([1,2,0])
                 imm[i-index] = 256*(2-imm[i-index])/2
@@ -1948,8 +1965,10 @@ class PairingGroupingGraph(BaseModel):
 
             if lines.size(1)==1 and self.hw_channels==3:
                 lines = lines.expand(-1,3,-1,-1)
-
-            resBatch = self.text_rec(lines).cpu().detach().numpy().transpose(1,0,2)
+            
+            with torch.no_grad():
+                self.text_rec.eval()
+                resBatch = self.text_rec(lines).cpu().detach().numpy().transpose(1,0,2)
             batch_strings, decoded_raw_hw = decode_handwriting(resBatch, self.idx_to_char)
             ###debug
             for i in range(num):
