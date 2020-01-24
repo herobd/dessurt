@@ -209,7 +209,7 @@ class GraphPairTrainer(BaseTrainer):
             if m.grad is None:
                 continue
             count+=1
-            meangrad+=m.grad.data.mean()
+            meangrad+=m.grad.data.mean().cpu().item()
         if count!=0:
             meangrad/=count
         self.optimizer.step()

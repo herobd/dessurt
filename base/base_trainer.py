@@ -169,7 +169,7 @@ class BaseTrainer:
         """
         Full training logic
         """
-        sumLog=defaultdict(lambda:0)
+        sumLog=defaultdict(lambda:0.0)
         sumTime=0
         #for metric in self.metrics:
         #    sumLog['avg_'+metric.__name__]=0
