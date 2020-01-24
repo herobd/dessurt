@@ -842,7 +842,7 @@ class PairingGroupingGraph(BaseModel):
             groupEdges=[]
             edgeFeats = []
             for i,(n0,n1) in enumerate(oldEdgeIndexes):
-                if relPreds[i]>self.keepEdgeThresh:
+                if relPreds[i]>keepEdgeThresh:
                     groupEdges.append((groupPreds[i].item(),n0,n1))
                     edgeFeats.append([oldEdgeFeats[i]])
             oldEdgeIndexes=None
