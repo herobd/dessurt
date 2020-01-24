@@ -170,6 +170,10 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                         tX=cX+offsetX
                         tY=cY+offsetY
                         image[tY:tY+s,tX:tX+s]=boxColors[i]
+        else:
+            lineColor = (0,0.8,0)
+            for i,x1,y1,x2,y2 in edgesToDraw:
+                cv2.line(image,(x1,y1),(x2,y2),lineColor,2)
 
 
         #Draw alginment between gt and pred bbs
