@@ -7,7 +7,7 @@ import re
 debug=False
 if debug:
     wordmodel = 'glove-wiki-gigaword-100'
-    vecsize = 100
+    vecsize = 300
     from collections import defaultdict
 else:
     wordmodel = 'word2vec-google-news-300'
