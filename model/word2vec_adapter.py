@@ -7,7 +7,7 @@ import re
 debug=False
 if debug:
     wordmodel = 'glove-wiki-gigaword-100'
-    vecsize = 100
+    vecsize = 300
     from collections import defaultdict
 else:
     wordmodel = 'word2vec-google-news-300'
@@ -88,9 +88,11 @@ class Word2VecAdapterShallow(nn.Module):
                         count+=1
                     except KeyError:
                         pass
-            vector/=count
+            if count>0:
+                vector/=count
             emb.append(vector)
         emb = torch.from_numpy(np.stack(emb,axis=0)).float().to(self.adaption[0].weight.device)
+        assert(not torch.isnan(emb).any())
         return self.adaption(emb)
 
         
