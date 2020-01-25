@@ -480,6 +480,8 @@ def newGetTargIndexForPreds_iou(target,pred,iou_thresh,numClasses,beforeCls=0,ha
 
 #This also returns which pred BBs are oversegmentations of targets (horizontall)
 def newGetTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,getLoc, hard_thresh,fixed):
+    if pred is None: 
+        return None, None
     targIndex = torch.LongTensor((pred.size(0)))
     targIndex[:] = -1
     #mAP=0.0
