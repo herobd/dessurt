@@ -1937,7 +1937,7 @@ class PairingGroupingGraph(BaseModel):
 
         
             lines = torch.FloatTensor(num,image.size(1),self.hw_input_height,max_w).fill_(-1).to(image.device)
-            imm = [None]*num
+            #imm = [None]*num
             for i in range(index,index+num):
                 
                 if self.rotation:
@@ -1958,8 +1958,8 @@ class PairingGroupingGraph(BaseModel):
                 scale = self.hw_input_height/crop.size(2)
                 scaled_w = math.ceil(crop.size(3)*scale)
                 lines[i-index,:,:,0:scaled_w] = F.interpolate(crop, size=(self.hw_input_height,scaled_w), mode='bilinear',align_corners=False)[0]#.to(crop.device)
-                imm[i-index] = lines[i-index].cpu().numpy().transpose([1,2,0])
-                imm[i-index] = 256*(2-imm[i-index])/2
+                #imm[i-index] = lines[i-index].cpu().numpy().transpose([1,2,0])
+                #imm[i-index] = 256*(2-imm[i-index])/2
 
 
 
@@ -1971,8 +1971,8 @@ class PairingGroupingGraph(BaseModel):
                 resBatch = self.text_rec(lines).cpu().detach().numpy().transpose(1,0,2)
             batch_strings, decoded_raw_hw = decode_handwriting(resBatch, self.idx_to_char)
             ###debug
-            for i in range(num):
-                cv2.imwrite('out2/line{}-{}.png'.format(i+index,batch_strings[i]),imm[i])
+            #for i in range(num):
+            #    cv2.imwrite('out2/line{}-{}.png'.format(i+index,batch_strings[i]),imm[i])
             ###
             output_strings += batch_strings
             #res.append(resBatch)
