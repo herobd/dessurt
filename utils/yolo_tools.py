@@ -254,9 +254,9 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClas
         #if there are no targets, we shouldn't be pred anything
         if ignoreClasses:
             #aps.append(0)
-            ap=0
-            precisions.append(0)
-            recalls.append(1)
+            ap=0.0
+            precisions.append(0.0)
+            recalls.append(1.0)
         else:
             #numClasses=pred.size(1)-6
             ap=0
@@ -264,24 +264,24 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClas
             for cls in range(numClasses):
                 if (torch.argmax(pred[:,beforeCls+6:],dim=1)==cls).any():
                     #aps.append(0) #but we did for this class :(
-                    ap+=0
-                    precisions.append(0)
-                    class_ap.append(0)
+                    ap+=0.0
+                    precisions.append(0.0)
+                    class_ap.append(0.0)
                 else:
                     #aps.append(1) #we didn't for this class :)
-                    ap+=1
-                    precisions.append(1)
-                    class_ap.append(1)
-                recalls.append(1)
+                    ap+=1.0
+                    precisions.append(1.0)
+                    class_ap.append(1.0)
+                recalls.append(1.0)
         if getClassAP:
             return ap/numClasses, precisions, recalls, class_ap
         else:
             return ap/numClasses, precisions, recalls
     else:
         if getClassAP:
-            return 1, [1]*numClasses, [1]*numClasses, [1]*numClasses #we didn't for all classes :)
+            return 1.0, [1.0]*numClasses, [1.0]*numClasses, [1.0]*numClasses #we didn't for all classes :)
         else:
-            return 1, [1]*numClasses, [1]*numClasses
+            return 1.0, [1.0]*numClasses, [1.0]*numClasses
 
     allScores=[]
     classScores=[[] for i in range(numClasses)]
@@ -481,7 +481,7 @@ def newGetTargIndexForPreds_iou(target,pred,iou_thresh,numClasses,beforeCls=0,ha
 #This also returns which pred BBs are oversegmentations of targets (horizontall)
 def newGetTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,getLoc, hard_thresh,fixed):
     if pred is None: 
-        return None, None
+        return None, None, None
     targIndex = torch.LongTensor((pred.size(0)))
     targIndex[:] = -1
     #mAP=0.0
@@ -490,7 +490,7 @@ def newGetTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,getLoc, 
     recalls=[]
 
     if len(target.size())<=1:
-        return None, None
+        return None, None, None
 
     #by class
     #import pdb; pdb.set_trace()
