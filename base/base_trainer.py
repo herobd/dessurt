@@ -239,7 +239,7 @@ class BaseTrainer:
                     log = {**log, **sumLog}
                 self._minor_log(log)
                 for key in sumLog:
-                    sumLog[key] =0
+                    sumLog[key] =0.0
                 if self.iteration%self.val_step!=0: #we'll do it later if we have a validation pass
                     self.train_logger.add_entry(log)
 
