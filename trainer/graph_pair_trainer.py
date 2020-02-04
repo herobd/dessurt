@@ -2212,6 +2212,8 @@ class GraphPairTrainer(BaseTrainer):
 
         gtRelHit=[False]*len(gt_groups_adj)
         relPrec=0
+        if predPairs is None:
+            predPairs=[]
         for n0,n1 in predPairs:
             gtG0=predToGTGroup[n0]
             gtG1=predToGTGroup[n1]
