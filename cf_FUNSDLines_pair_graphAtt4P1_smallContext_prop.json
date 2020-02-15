@@ -62,7 +62,7 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 425000,
+        "iterations": 525000,
         "save_dir": "saved/",
         "val_step": 5000,
         "save_step": 25000,
