@@ -285,7 +285,7 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClas
 
     allScores=[]
     classScores=[[] for i in range(numClasses)]
-    if len(pred.size())>1 and pred.size(0)>0:
+    if pred is not None and len(pred.size())>1 and pred.size(0)>0:
         #This is an alternate metric that computes AP of all classes together
         #Your only a hit if you have the same class
         allIOUs = getLoc(target[:,0:],pred[:,1:])
@@ -338,7 +338,7 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClas
     #import pdb; pdb.set_trace()
     for cls in range(numClasses):
         clsTargInd = target[:,cls+13]==1
-        if len(pred.size())>1 and pred.size(0)>0:
+        if pred is not None and len(pred.size())>1 and pred.size(0)>0:
             #print(pred.size())
             clsPredInd = torch.argmax(pred[:,beforeCls+6:beforeCls+6+numClasses],dim=1)==cls
         else:

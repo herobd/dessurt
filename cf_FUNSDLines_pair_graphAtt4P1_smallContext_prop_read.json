@@ -4,7 +4,7 @@
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
-    "super_computer":false,
+    "super_computer":true,
     "data_loader": {
         "data_set_name": "FUNSDGraphPair",
         "data_dir": "../data/FUNSD",
@@ -62,7 +62,7 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 425000,
+        "iterations": 525000,
         "save_dir": "saved/",
         "val_step": 5000,
         "save_step": 25000,
@@ -139,7 +139,7 @@
             "use_softmax": true,
             "batch_size": 8,
             "pad_text_height": true,
-            "hw_with_style_file": "saved/allfontSmall_ocr_softmax_aug/checkpoint-latest.pth",
+            "hw_with_style_file": "../hw_with_style/saved/allfontSmall_ocr_softmax_aug/checkpoint-USED.pth",
             "input_height": 24,
             "char_set": "../data/english_char_set.json",
             "embedding": "word2vec shallow",
