@@ -1,4 +1,5 @@
 import gensim.downloader as api
+from bpemb import BPEmb
 import torch
 import torch.nn as nn
 import numpy as np
@@ -62,7 +63,7 @@ class Word2VecAdapterShallow(nn.Module):
         if debug:
             self.wv = defaultdict(lambda : np.zeros(vecsize))
         else:
-            self.wv = api.load(wordmodel)
+            self.wv = None#api.load(wordmodel)
         self.adaption = nn.Sequential(
                 nn.Linear(vecsize,256),
                 nn.ReLU(True),
@@ -71,6 +72,8 @@ class Word2VecAdapterShallow(nn.Module):
                 )
 
     def forward(self,transcriptions):
+        if self.wv is None:
+            self.wv = api.load(wordmodel) #lazy
         emb=[]
         for t in transcriptions:
             vector = np.zeros(vecsize)
@@ -98,3 +101,44 @@ class Word2VecAdapterShallow(nn.Module):
         
 
 
+
+class BPEmbAdapter(nn.Module):
+    def __init__(self,out_size):
+        super(BPEmbAdapter, self).__init__()
+        self.embedder = None#api.load(wordmodel)
+        self.vecsize=100
+        #self.convs = nn.Sequential(
+        #        nn.Conv1d(self.vecsize,256,kernel=3,padding=1)
+        #        nn.ReLU(True),
+        #        nn.Conv1d(256,256,kernel=3,padding=1),
+        #        nn.ReLU(True),
+        #        )
+        self.rnn = nn.LSTM(100,128,2,droupout=0.2,bidirectional=True)
+        self.linear = nn.Sequential(
+                nn.Linear(256,out_size),
+                nn.Dropout(0.1),
+                nn.ReLU(True)
+                )
+
+    def forward(self,transcriptions):
+        if self.embedder is None:
+            self.embedder = BPEmb(lang="en",vs=100000)
+        emb=[]
+        for t in transcriptions:
+            #t=re.sub(r'[^\w\s]','',t) #remove puncutation, uhh it seems to have puncutation...
+            t=re.sub(r'\d','0',t)
+            bps = self.embedder.encode(t)
+            vectors=[]
+            for w in bps
+                try:
+                    vectors.append(self.wv[w])
+                    count+=1
+                except KeyError:
+                    vectors.append( np.zeros(self.vecsize) )
+            vectors = np.stack(vectors,axis=0)
+            emb.append(vector)
+        emb = torch.from_numpy(np.stack(emb,axis=1)).float().to(self.rnn.weight.device)
+        assert(not torch.isnan(emb).any())
+        emb,_,_ = self.rnn(emb)
+        emb = emb.mean(dim=0) #ehh, just average
+        return self.linear(emb)
