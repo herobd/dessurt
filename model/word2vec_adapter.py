@@ -113,7 +113,7 @@ class BPEmbAdapter(nn.Module):
         #        nn.Conv1d(256,256,kernel=3,padding=1),
         #        nn.ReLU(True),
         #        )
-        self.rnn = nn.LSTM(100,128,2,droupout=0.2,bidirectional=True)
+        self.rnn = nn.LSTM(100,128,2,dropout=0.2,bidirectional=True)
         self.linear = nn.Sequential(
                 nn.Linear(256,out_size),
                 nn.Dropout(0.1),
@@ -124,21 +124,31 @@ class BPEmbAdapter(nn.Module):
         if self.embedder is None:
             self.embedder = BPEmb(lang="en",vs=100000)
         emb=[]
+        max_len=0
         for t in transcriptions:
             #t=re.sub(r'[^\w\s]','',t) #remove puncutation, uhh it seems to have puncutation...
             t=re.sub(r'\d','0',t)
             bps = self.embedder.encode(t)
             vectors=[]
-            for w in bps
+            for w in bps:
                 try:
-                    vectors.append(self.wv[w])
-                    count+=1
+                    vectors.append(self.embedder[w])
                 except KeyError:
                     vectors.append( np.zeros(self.vecsize) )
-            vectors = np.stack(vectors,axis=0)
-            emb.append(vector)
-        emb = torch.from_numpy(np.stack(emb,axis=1)).float().to(self.rnn.weight.device)
+            max_len = max(max_len,len(vectors))
+            if len(vectors)>0:
+                vectors = np.stack(vectors,axis=0)
+            else:
+                #print('no embedding for: {}'.format(t))
+                vectors = np.zeros((1,self.vecsize))
+            emb.append(vectors)
+        #pad all sequences to same length
+        for i in range(len(emb)):
+            if emb[i].shape[0]<max_len:
+                diff = max_len-emb[i].shape[0]
+                emb[i] = np.pad(emb[i],((0,diff),(0,0)))
+        emb = torch.from_numpy(np.stack(emb,axis=1)).float().to(self.rnn._flat_weights[0].device)
         assert(not torch.isnan(emb).any())
-        emb,_,_ = self.rnn(emb)
+        emb,_ = self.rnn(emb)
         emb = emb.mean(dim=0) #ehh, just average
         return self.linear(emb)
