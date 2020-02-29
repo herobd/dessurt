@@ -62,10 +62,11 @@ def correctTrans(pred,gt):
     new_pred=[]
     for p in pred:
         if len(p)>0:
-            min_dist=999999
+            min_dis=999999
+            best_gt=p
             for g in gt:
                 dis = editdistance.eval(p,g)/len(p)
-                if dis<min_dis:
+                if dis<min_dis and dis<0.7:
                     min_dis=dis
                     best_gt = g
             new_pred.append(best_gt)
