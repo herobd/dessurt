@@ -1,5 +1,7 @@
 import numpy as np
 import sys
+import editdistance
+
 def str2label_single(value, characterToIndex={}, unknown_index=None):
     if unknown_index is None:
         unknown_index = len(characterToIndex)
@@ -55,3 +57,18 @@ def naive_decode(output):
         if rawPredData[i] != 0 and not ( i > 0 and rawPredData[i] == rawPredData[i-1] ):
             predData.append(rawPredData[i])
     return predData, list(rawPredData)
+
+def correctTrans(pred,gt):
+    new_pred=[]
+    for p in pred:
+        if len(p)>0:
+            min_dist=999999
+            for g in gt:
+                dis = editdistance.eval(p,g)/len(p)
+                if dis<min_dis:
+                    min_dis=dis
+                    best_gt = g
+            new_pred.append(best_gt)
+        else:
+            new_pred.append(p)
+    return new_pred

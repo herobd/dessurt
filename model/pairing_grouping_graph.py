@@ -17,6 +17,7 @@ from skimage import draw
 from model.net_builder import make_layers, getGroupSize
 from utils.yolo_tools import non_max_sup_iou, non_max_sup_dist
 from utils.util import decode_handwriting
+from utils.string_utils import correctTrans
 import math
 import random
 import json
@@ -435,7 +436,7 @@ class PairingGroupingGraph(BaseModel):
             print('Unfroze detector')
         
 
-    def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=300, debug=False,old_nn=False):
+    def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=300, debug=False,old_nn=False,gtTrans=None):
         ##tic=timeit.default_timer()
         bbPredictions, offsetPredictions, _,_,_,_ = self.detector(image)
         _=None
@@ -495,12 +496,12 @@ class PairingGroupingGraph(BaseModel):
             else:
                 useBBs = gtBBs[:,1:]
         else:
-            if gtBBs is None:
-                if self.text_rec is not None:
-                    transcriptions = self.getTranscriptions(useBBs,image)
-                else:
-                    transcriptions=None
-                return [bbPredictions], offsetPredictions, None, None, None, None, None, (useBBs.cpu().detach(),None,None,transcriptions)
+            #if gtBBs is None:
+            #    if self.text_rec is not None:
+            #        transcriptions = self.getTranscriptions(useBBs,image)
+            #    else:
+            #        transcriptions=None
+            #    return [bbPredictions], offsetPredictions, None, None, None, None, None, (useBBs.cpu().detach(),None,None,transcriptions)
             useBBs = gtBBs[0,:,0:5]
             if self.useShapeFeats or self.relationshipProposal=='feature_nn':
                 classes = gtBBs[0,:,13:]
@@ -522,7 +523,12 @@ class PairingGroupingGraph(BaseModel):
                 conf = torch.rand(useBBs.size(0),1)*0.33 +0.66
                 useBBs = torch.cat((conf.to(useBBs.device),useBBs),dim=1)
         if self.text_rec is not None:
-            transcriptions = self.getTranscriptions(useBBs,image)
+            if useGTBBs and gtTrans is not None:
+                transcriptions = gtTrans
+            else:
+                transcriptions = self.getTranscriptions(useBBs,image)
+                if gtTrans is not None:
+                    transcriptions=correctTrans(transcriptions,gtTrans)
         else:
             transcriptions=None
         if useBBs.size(0)>1:
@@ -774,7 +780,6 @@ class PairingGroupingGraph(BaseModel):
                 bbs=torch.stack(bbs,dim=0)
                     
 
-            #TODO run text_rec on newBBs_line
             if self.text_rec is not None:
                 newTrans = self.getTranscriptions(bbs[-len(newBBs):],image)
                 #newEmbeddings = self.embedding_model(newTrans)
