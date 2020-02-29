@@ -1748,6 +1748,8 @@ class GraphPairTrainer(BaseTrainer):
         gtGroupAdj = instance['gt_groups_adj']
         if self.use_gt_trans:
             gtTrans = instance['transcription']
+            if (gtTrans)==0:
+                gtTrans=None
         else:
             gtTrans = None
         if useGT:
