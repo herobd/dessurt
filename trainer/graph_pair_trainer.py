@@ -79,6 +79,8 @@ class GraphPairTrainer(BaseTrainer):
 
         self.fixedAlign = config['trainer']['fixed_align'] if 'fixed_align' in config['trainer'] else False
 
+        self.use_gt_trans = config['trainer']['use_gt_trans'] if 'use_gt_trans' in config['trainer'] else False
+
         self.num_node_error_class = 0
         self.final_class_bad_alignment = False
         self.final_class_bad_alignment = False
@@ -1744,6 +1746,10 @@ class GraphPairTrainer(BaseTrainer):
         image, targetBoxes, adj, target_num_neighbors = self._to_tensor(instance)
         gtGroups = instance['gt_groups']
         gtGroupAdj = instance['gt_groups_adj']
+        if self.use_gt_trans:
+            gtTrans = instance['transcription']
+        else:
+            gtTrans = None
         if useGT:
             allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred, final = self.model(
                                     image,
@@ -1752,7 +1758,8 @@ class GraphPairTrainer(BaseTrainer):
                                     True,
                                     otherThresh=self.conf_thresh_init, 
                                     otherThreshIntur=threshIntur, 
-                                    hard_detect_limit=self.train_hard_detect_limit)
+                                    hard_detect_limit=self.train_hard_detect_limit,
+                                    gtTrans = gtTrans)
             #TODO
             #predPairingShouldBeTrue,predPairingShouldBeFalse, eRecall,ePrec,fullPrec,ap,proposedInfo = self.prealignedEdgePred(adj,relPred,relIndexes,rel_prop_pred)
             #if bbPred is not None:
@@ -1776,7 +1783,10 @@ class GraphPairTrainer(BaseTrainer):
             #relPred, relIndexes, bbPred, predGroups: multiple, for each step in graph prediction. relIndexes indexes into predGroups, which indexes to outputBoxes
             #rel_prop_pred: if we use prop, one for begining
             allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred, final = self.model(image,
-                    otherThresh=self.conf_thresh_init, otherThreshIntur=threshIntur, hard_detect_limit=self.train_hard_detect_limit)
+                    otherThresh=self.conf_thresh_init, 
+                    otherThreshIntur=threshIntur, 
+                    hard_detect_limit=self.train_hard_detect_limit,
+                    gtTrans = gtTrans)
             #gtPairing,predPairing = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred)
         ### TODO code prealigned
         losses=defaultdict(lambda:0)
