@@ -72,6 +72,8 @@ class Word2VecAdapterShallow(nn.Module):
                 )
 
     def forward(self,transcriptions):
+        if len(transcriptions)==0:
+            return torch.FloatTensor(0).to(self.adaption[0].weight.device)
         if self.wv is None:
             self.wv = api.load(wordmodel) #lazy
         emb=[]

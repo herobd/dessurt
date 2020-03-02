@@ -1,10 +1,10 @@
 {
     "name": "FUNSDLines_pair_graphAtt2P2_smallContext_prop_readGT",
-    "cuda": false,
+    "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
-    "super_computer":false,
+    "super_computer":true,
     "data_loader": {
         "data_set_name": "FUNSDGraphPair",
         "data_dir": "../data/FUNSD",
