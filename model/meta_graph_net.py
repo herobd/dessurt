@@ -68,6 +68,7 @@ class EdgeFunc(nn.Module):
         actR=[]
         actP=[]
         acts = [actS,actM,actR,actP]
+        
         if 'group' in norm:
             actS.append(nn.GroupNorm(getGroupSize(edge_in*ch+rcrhdn_size,edge_in*8),edge_in*ch+rcrhdn_size))
             actM.append(nn.GroupNorm(getGroupSize(hidden_ch),hidden_ch))
