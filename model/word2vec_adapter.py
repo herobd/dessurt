@@ -149,7 +149,11 @@ class BPEmbAdapter(nn.Module):
             if emb[i].shape[0]<max_len:
                 diff = max_len-emb[i].shape[0]
                 emb[i] = np.pad(emb[i],((0,diff),(0,0)))
-        emb = torch.from_numpy(np.stack(emb,axis=1)).float().to(self.rnn._flat_weights[0].device)
+        if len(emb)>0:
+            emb = torch.from_numpy(np.stack(emb,axis=1)).float().to(self.rnn._flat_weights[0].device)
+        else:
+            #emb = torch.FloatTensor(0,1,self.vecsize).to(self.rnn._flat_weights[0].device)
+            return torch.FloatTensor(256).fill_(0).to(self.rnn._flat_weights[0].device)
         assert(not torch.isnan(emb).any())
         emb,_ = self.rnn(emb)
         emb = emb.mean(dim=0) #ehh, just average
