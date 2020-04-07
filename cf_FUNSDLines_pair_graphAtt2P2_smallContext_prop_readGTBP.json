@@ -1,10 +1,10 @@
 {
-    "name": "FUNSDLines_pair_graphTree2P2_smallContext_prop_read",
+    "name": "FUNSDLines_pair_graphAtt2P2_smallContext_prop_readGTBP",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
-    "super_computer":false,
+    "super_computer":true,
     "data_loader": {
         "data_set_name": "FUNSDGraphPair",
         "data_dir": "../data/FUNSD",
@@ -87,7 +87,9 @@
         "freeze_param_names": ["text_rec"],
 
         "use_learning_schedule": true,
-        "adapt_lr": false
+        "adapt_lr": false,
+
+        "use_gt_trans": true
     },
     "arch": "PairingGroupingGraph", 
     "model": {
@@ -129,7 +131,7 @@
             "num_heads": 4,
             "repetitions": 1,
             "use_repetition_res": false,
-            "encode_type": "tree",
+            "encode_type": "attention",
 	    "merge_thresh": 0.7,
             "group_thresh": 0.9,
             "keep_edge_thresh": 0.4
@@ -143,7 +145,7 @@
             "num_heads": 4,
             "repetitions": 1,
             "use_repetition_res": false,
-            "encode_type": "tree",
+            "encode_type": "attention",
 	    "merge_thresh": 0.6,
             "group_thresh": 0.6,
             "keep_edge_thresh": 0.5
@@ -156,10 +158,10 @@
             "use_softmax": true,
             "batch_size": 8,
             "pad_text_height": true,
-            "hw_with_style_file": "../hw_with_style/saved/allfontSmall_ocr_softmax_aug/checkpoint-USED.pth",
+            "hw_with_style_file": "saved/allfontSmall_ocr_softmax/checkpoint-latest.pth",
             "input_height": 24,
             "char_set": "../data/english_char_set.json",
-            "embedding": "word2vec shallow",
+            "embedding": "BP",
             "num_feats": 128
         }
 
