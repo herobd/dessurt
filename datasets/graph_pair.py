@@ -112,6 +112,7 @@ class GraphPairDataset(torch.utils.data.Dataset):
         ##tic=timeit.default_timer()
 
         bbs,ids,numClasses,trans, groups = self.parseAnn(annotations,s)
+        trans = {i:v for i,v in enumerate(trans)}
 
         #start_of_line, end_of_line = getStartEndGT(annotations['byId'].values(),s)
         #Try:
