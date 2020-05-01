@@ -418,6 +418,9 @@ class PairingGroupingGraph(BaseModel):
         else:
             self.text_rec=None
 
+
+        self.add_noise_to_word_embeddings = config['add_noise_to_word_embeddings'] if 'add_noise_to_word_embeddings' in config else 0
+
         if 'DEBUG' in config:
             self.detector.setDEBUG()
             self.setDEBUG()
@@ -534,6 +537,8 @@ class PairingGroupingGraph(BaseModel):
         if useBBs.size(0)>1:
             if self.text_rec is not None:
                 embeddings = self.embedding_model(transcriptions)
+                if self.add_noise_to_word_embeddings:
+                    embeddings += torch.randn_like(embeddings).to(embeddings.device)*self.add_noise_to_word_embeddings
             else:
                 embeddings=None
             if self.useMetaGraph:
@@ -1028,6 +1033,8 @@ class PairingGroupingGraph(BaseModel):
         newNodeFeats = torch.stack(newNodeFeats,dim=0)
         if self.text_rec is not None:
             newNodeEmbeddings = self.embedding_model(newNodeTrans)
+            if self.add_noise_to_word_embeddings>0:
+                newNodeEmbeddings += torch.randn_like(newNodeEmbeddings).to(newNodeEmbeddings.device)*self.add_noise_to_word_embeddings
             newNodeFeats = self.merge_embedding_layer(torch.cat((newNodeFeats,newNodeEmbeddings),dim=1))
 
         if len(newEdgeFeats)>0:
