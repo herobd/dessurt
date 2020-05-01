@@ -538,7 +538,7 @@ class PairingGroupingGraph(BaseModel):
             if self.text_rec is not None:
                 embeddings = self.embedding_model(transcriptions)
                 if self.add_noise_to_word_embeddings:
-                    embeddings += torch.randn_like(embeddings).to(embeddings.device)*self.add_noise_to_word_embeddings
+                    embeddings += torch.randn_like(embeddings).to(embeddings.device)*self.add_noise_to_word_embeddings*embeddings.mean()
             else:
                 embeddings=None
             if self.useMetaGraph:
