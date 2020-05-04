@@ -5,6 +5,264 @@ import numpy as np
 import math
 from utils.yolo_tools import allIOU, allDist
 
+def build_oversegmented_targets(
+    pred_boxes, pred_conf, pred_cls, target, target_sizes, anchors, num_anchors, num_classes, grid_sizeH, grid_sizeW, ignore_thres, scale, calcIOUAndDist=False, target_num_neighbors=None
+):
+    nB = pred_boxes.size(0)
+    nA = num_anchors
+    nC = num_classes
+    nH = grid_sizeH
+    nW = grid_sizeW
+    mask = torch.zeros(nB, nA, nH, nW)
+    conf_mask = torch.ones(nB, nA, nH, nW)
+    tx = torch.zeros(nB, nA, nH, nW)
+    ty = torch.zeros(nB, nA, nH, nW)
+    tw = torch.zeros(nB, nA, nH, nW)
+    th = torch.zeros(nB, nA, nH, nW)
+    tconf = torch.ByteTensor(nB, nA, nH, nW).fill_(0)
+    tcls = torch.ByteTensor(nB, nA, nH, nW, nC).fill_(0)
+    if target_num_neighbors is not None:
+        tneighbors = torch.FloatTensor(nB, nA, nH, nW).fill_(0)
+    else:
+        tneighbors=None
+    if calcIOUAndDist:
+        distances = torch.ones(nB,nA, nH, nW) #distance to closest target
+        ious = torch.zeros(nB,nA, nH, nW) #max iou to target
+    else:
+        distances=None
+        ious=None
+
+    nGT = 0
+    nCorrect = 0
+    #import pdb; pdb.set_trace()
+    for b in range(nB):
+        if calcIOUAndDist and target_sizes[b]>0:
+            raise Exception('caclIOUAndDist does not have normalized target (scaled)')
+            flat_pred = pred_boxes[b].view(-1,pred_boxes.size(-1))
+            #flat_target = target[b,:target_sizes[b]].view(-1,target.size(-1))
+            iousB = allIOU(flat_pred,target[b,:target_sizes[b]], boxes1XYWH=[0,1,2,3])
+            iousB = iousB.view(nA, nH, nW,-1)
+            ious[b] = iousB.max(dim=-1)[0]
+            distancesB = allDist(flat_pred,target[b,:target_sizes[b]])
+            distances[b] = distancesB.min(dim=-1)[0].view(nA, nH, nW)
+            #import pdb;pdb.set_trace()
+        #For oversegmented, we need to identify all tiles (not just on) that correspon to gt
+        #That brings up an interesting alternative: limit all predictions to their local tile (width). Proba not now...
+        for t in range(target_sizes[b]): #range(target.shape[1]):
+            #if target[b, t].sum() == 0:
+            #    continue
+            # Convert to position relative to box
+            gx = target[b, t, 0] / scale[0]
+            gy = target[b, t, 1] / scale[1]
+            gw = target[b, t, 4] / scale[0]
+            gh = target[b, t, 3] / scale[1]
+
+            gx1 = gx-gw
+            gx2 = gx+gw
+            gy1 = gy-gh
+            gy2 = gy+gh
+        
+            if gw==0 or gh==0:
+                continue
+            nGT += 1
+            # Get grid box indices
+            gi = max(round(gx),conf_mask.size(3)-1),0)
+            gj = max(round(gy),conf_mask.size(2)-1),0)
+            gi1 = max(round(g1x),conf_mask.size(3)-1),0)
+            gj1 = max(round(gy1),conf_mask.size(2)-1),0)
+            gi2 = max(round(gx2),conf_mask.size(3)-1),0)
+            gj2 = max(round(gy2),conf_mask.size(2)-1),0)
+
+            
+            #Get best matching anchor
+            best_n, anch_ious = get_closest_anchor_iou(anchors,gh,min(gw,self.maxWidth))
+            # Where the overlap is larger than threshold set mask to zero (ignore)
+            #conf_mask[b, anch_ious > ignore_thres, gj, gi] = 0
+            #  ignore_range, all, set to 1 later
+            conf_mask[b, anch_ious > ignore_thres, gj1:gj2+1,gi1:gi2+1] = 0
+            # Get ground truth box
+            gt_box = torch.FloatTensor(np.array([gx, gy, gw, gh])).unsqueeze(0)
+            # Get the best prediction
+            #pred_box = pred_boxes[b, best_n, gj, gi].unsqueeze(0)
+            # Masks
+            mask[b, best_n, gj, gi1:gi2+1] = 1
+            conf_mask[b, best_n, gj, gi1:gi2+1] = 1 #we ned to set this to 1 as we ignored it earylier
+            # Coordigates
+            tx[b, best_n, gj, gi] = inv_tanh(gx - (gi+0.5)) #TODO ???? left off
+            ty[b, best_n, gj, gi1:gi2+1] = inv_tanh(gy - (gj+0.5))
+            # Width and height
+            tw[b, best_n, gj, gi] = math.log(gw / anchors[best_n][0] + 1e-16)
+            th[b, best_n, gj, gi] = math.log(gh / anchors[best_n][1] + 1e-16)
+            # One-hot encoding of label
+            #target_label = int(target[b, t, 0])
+            tcls[b, best_n, gj, gi] = target[b, t,13:]
+            if target_num_neighbors is not None:
+                tneighbors[b, best_n, gj, gi] = target_num_neighbors[b, t]
+            tconf[b, best_n, gj, gi] = 1
+
+            # Calculate iou between ground truth and best matching prediction
+            if calcIOUAndDist:
+                #iou = ious[best_n*(nH*nW) + gj*(nW) + gi,t]
+                iou = iousB[best_n, gj, gi, t]
+            else:
+                iou = bbox_iou(gt_box, pred_box, x1y1x2y2=False)
+            pred_label = torch.argmax(pred_cls[b, best_n, gj, gi])
+            score = pred_conf[b, best_n, gj, gi]
+            #import pdb; pdb.set_trace()
+            #if iou > 0.5 and pred_label == torch.argmax(target[b,t,13:]) and score > 0:
+            #    nCorrect += 1
+
+    return nGT, nCorrect, mask, conf_mask, tx, ty, tw, th, tconf, tcls, tneighbors, distances, ious
+
+class OversegmentLoss (nn.Module):
+    def __init__(self, num_classes, rotation, scale, anchors, ignore_thresh=0.5,use_special_loss=False,bad_conf_weight=1.25, multiclass=False):
+        super(OversegmentLoss, self).__init__()
+        self.ignore_thresh=ignore_thresh
+        self.num_classes=num_classes
+        self.rotation=rotation
+        self.scale=scale
+        self.use_special_loss=use_special_loss
+        self.bad_conf_weight=bad_conf_weight
+        self.multiclass=multiclass
+        self.anchors=anchors
+        self.num_anchors=len(anchors)
+        self.mse_loss = nn.MSELoss(reduction='mean')  # Coordinate loss
+        self.bce_loss = nn.BCEWithLogitsLoss(reduction='mean')  # Confidence loss
+        self.ce_loss = nn.CrossEntropyLoss(reduction='mean')  # Class loss
+        self.mse_loss = nn.MSELoss(reduction='mean')  # Num neighbor regression
+
+    def forward(self,prediction, target, target_sizes, target_num_neighbors=None ):
+
+        nA = self.num_anchors
+        nB = prediction.size(0)
+        nH = prediction.size(2)
+        nW = prediction.size(3)
+        stride=self.scale
+
+        FloatTensor = torch.cuda.FloatTensor if prediction.is_cuda else torch.FloatTensor
+        LongTensor = torch.cuda.LongTensor if prediction.is_cuda else torch.LongTensor
+        ByteTensor = torch.cuda.ByteTensor if prediction.is_cuda else torch.ByteTensor
+        BoolTensor = torch.cuda.BoolTensor if prediction.is_cuda else torch.BoolTensor
+
+        x = prediction[..., 1]  # Center x
+        y = prediction[..., 2]  # Center y
+        w = prediction[..., 5]  # Width
+        h = prediction[..., 4]  # Height
+        #r = prediction[..., 3]  # Rotation (not used here)
+        pred_conf = prediction[..., 0]  # Conf 
+        if target_num_neighbors is not None: #self.predNumNeighbors:
+            pred_neighbors = 1+prediction[..., 6]  # num of neighbors, offset pred range so -1 is 0 neighbirs
+            pred_cls = prediction[..., 7:]  # Cls pred.
+        else:
+            pred_cls = prediction[..., 6:]  # Cls pred.
+
+        grid_x = torch.arange(nW).repeat(nH, 1).view([1, 1, nH, nW]).type(FloatTensor).to(prediction.device)
+        grid_y = torch.arange(nH).repeat(nW, 1).t().view([1, 1, nH, nW]).type(FloatTensor).to(prediction.device)
+        scaled_anchors = FloatTensor([(a['width'] / stride[0], a['height']/ stride[1]) for a in self.anchors])
+        anchor_w = scaled_anchors[:, 0:1].view((1, nA, 1, 1)).to(prediction.device)
+        anchor_h = scaled_anchors[:, 1:2].view((1, nA, 1, 1)).to(prediction.device)
+
+        # Add offset and scale with anchors
+        pred_boxes = FloatTensor(prediction[..., :4].shape)
+        pred_boxes[..., 0] = torch.tanh(x.data)+0.5 + grid_x
+        pred_boxes[..., 1] = torch.tanh(y.data)+0.5 + grid_y
+        pred_boxes[..., 2] = torch.exp(w.data) * anchor_w
+        pred_boxes[..., 3] = torch.exp(h.data) * anchor_h
+
+        #moved back into build_targets
+        #if target is not None:
+        #    target[:,:,[0,4]] /= self.scale[0]
+        #    target[:,:,[1,3]] /= self.scale[1]
+
+        nGT, nCorrect, mask, conf_mask, tx, ty, tw, th, tconf, tcls, tneighbors, distances, ious = build_oversegmented_targets(
+            pred_boxes=pred_boxes.cpu().data,
+            pred_conf=pred_conf.cpu().data,
+            pred_cls=pred_cls.cpu().data,
+            target=target.cpu().data if target is not None else None,
+            target_sizes=target_sizes,
+            anchors=scaled_anchors.cpu().data,
+            num_anchors=nA,
+            num_classes=self.num_classes,
+            grid_sizeH=nH,
+            grid_sizeW=nW,
+            ignore_thres=self.ignore_thresh,
+            scale=self.scale,
+            calcIOUAndDist=self.use_special_loss,
+            target_num_neighbors=target_num_neighbors
+        )
+
+        nProposals = int((pred_conf > 0).sum().item())
+        recall = float(nCorrect / nGT) if nGT else 1
+        if nProposals>0:
+            precision = float(nCorrect / nProposals)
+        else:
+            precision = 1
+
+        # Handle masks
+        mask = (mask.type(BoolTensor))
+        conf_mask = (conf_mask.type(BoolTensor))
+
+        # Handle target variables
+        tx = tx.type(FloatTensor).to(prediction.device)
+        ty = ty.type(FloatTensor).to(prediction.device)
+        tw = tw.type(FloatTensor).to(prediction.device)
+        th = th.type(FloatTensor).to(prediction.device)
+        tconf = tconf.type(FloatTensor).to(prediction.device)
+        tcls = tcls.type(LongTensor).to(prediction.device)
+        if target_num_neighbors is not None:
+            tneighbors = tneighbors.type(FloatTensor).to(prediction.device)
+
+        # Get conf mask where gt and where there is no gt
+        conf_mask_true = mask
+        conf_mask_false = conf_mask & ~mask #conf_mask - mask
+
+        #import pdb; pdb.set_trace()
+
+        # Mask outputs to ignore non-existing objects
+        if self.use_special_loss:
+            loss_conf = weighted_bce_loss(pred_conf[conf_mask_false], tconf[conf_mask_false],distances[conf_mask_false],ious[conf_mask_false],nB)
+            distances=None
+            ious=None
+        else:
+            loss_conf = self.bce_loss(pred_conf[conf_mask_false], tconf[conf_mask_false])
+        loss_conf *= self.bad_conf_weight
+        if target is not None and nGT>0:
+            loss_x = self.mse_loss(x[mask], tx[mask])
+            loss_y = self.mse_loss(y[mask], ty[mask])
+            loss_w = self.mse_loss(w[mask], tw[mask])
+            loss_h = self.mse_loss(h[mask], th[mask])
+            if self.multiclass:
+                loss_cls = self.bce_loss(pred_cls[mask], tcls[mask].float())
+            else:
+                loss_cls =  self.ce_loss(pred_cls[mask], torch.argmax(tcls[mask], 1)) *(1 / nB) #this multiply is erronous
+            loss_conf += self.bce_loss(pred_conf[conf_mask_true], tconf[conf_mask_true])
+            if target_num_neighbors is not None: #if self.predNumNeighbors:
+                loss_nn = 0.1*self.mse_loss(pred_neighbors[mask],tneighbors[mask])
+            else:
+                loss_nn = 0
+            loss = loss_x + loss_y + loss_w + loss_h + loss_conf + loss_cls + loss_nn
+            if target_num_neighbors is not None:
+                loss_nn=loss_nn.item()
+            return (
+                loss,
+                loss_x.item()+loss_y.item()+loss_w.item()+loss_h.item(),
+                loss_conf.item(),
+                loss_cls.item(),
+                loss_nn,
+                recall,
+                precision,
+            )
+        else:
+            return (
+                loss_conf,
+                0,
+                loss_conf.item(),
+                0,
+                0,
+                recall,
+                precision,
+            )
+
 class YoloLoss (nn.Module):
     def __init__(self, num_classes, rotation, scale, anchors, ignore_thresh=0.5,use_special_loss=False,bad_conf_weight=1.25, multiclass=False):
         super(YoloLoss, self).__init__()
