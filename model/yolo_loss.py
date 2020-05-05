@@ -66,28 +66,69 @@ def build_oversegmented_targets(
                 continue
             nGT += 1
             # Get grid box indices
-            gi = max(round(gx),conf_mask.size(3)-1),0)
-            gj = max(round(gy),conf_mask.size(2)-1),0)
-            gi1 = max(round(g1x),conf_mask.size(3)-1),0)
-            gj1 = max(round(gy1),conf_mask.size(2)-1),0)
-            gi2 = max(round(gx2),conf_mask.size(3)-1),0)
-            gj2 = max(round(gy2),conf_mask.size(2)-1),0)
+            gi = max(int(gx),conf_mask.size(3)-1),0)
+            gj = max(int(gy),conf_mask.size(2)-1),0)
+            gi1 = max(int(g1x),conf_mask.size(3)-1),0)
+            gj1 = max(int(gy1),conf_mask.size(2)-1),0)
+            gi2 = max(int(gx2),conf_mask.size(3)-1),0)
+            gj2 = max(int(gy2),conf_mask.size(2)-1),0)
+            #We truncate with int() instead of rounding since each tile i is actually centered at i+0.5
 
-            
-            #Get best matching anchor
-            best_n, anch_ious = get_closest_anchor_iou(anchors,gh,min(gw,self.maxWidth))
+            #We don't want to include a tile if the real box doesn't extend past it's centerpoint, these shouldn't predict (arguably unless the real box covers the whole tile we don't want to predict)
+            if gx1>gi1+0.5:
+                gi1+=1
+            if gx2<gi2+0.5:
+                gi2-=1
+
+            #We need to handle the end points of the line differently (they probably need smaller anchor rectangles)
+            if gi1>gi2: #uh oh, we have a really small box between two tiles
+                gi1=gi2 = gi
+
+            if gi1==gi2:
+                over_seg_gws = [gw]
+            else
+                
+                #Get best matching anchor
+                #Build oversegmented gt sizes for each i/tile: (gh,min(self.maxWidth,this_x-gx1,gx2-this_x))
+                over_seg_gws = [min(self.maxWidth,this_i+0.5-gx1,gx2-this_x+0.5) for this_i range(gi1,gi2+1)]
+            best_ns,anch_ious = multi_get_closest_anchor_iou(anchors,gh,over_seg_gws)
+
+            #best_n, anch_ious = get_closest_anchor_iou(anchors,gh,min(gw,self.maxWidth))
             # Where the overlap is larger than threshold set mask to zero (ignore)
             #conf_mask[b, anch_ious > ignore_thres, gj, gi] = 0
             #  ignore_range, all, set to 1 later
-            conf_mask[b, anch_ious > ignore_thres, gj1:gj2+1,gi1:gi2+1] = 0
+            X,X = torch.where(anch_ious > ignore_thres) #ignore_anch, anch_x
+            #conf_mask[([b]*anch_x.size(0),ignore_anch,list(range(gj1:gj2+1)),anch_x)]=0
+            for j in range(gj1,gj2+1):
+                conf_mask[b,:,j,:][ignore_anch,anch_x]=0
+            #conf_mask[b, anch_ious > ignore_thres, gj1:gj2+1,gi1:gi2+1] = 0
             # Get ground truth box
             gt_box = torch.FloatTensor(np.array([gx, gy, gw, gh])).unsqueeze(0)
             # Get the best prediction
             #pred_box = pred_boxes[b, best_n, gj, gi].unsqueeze(0)
             # Masks
-            mask[b, best_n, gj, gi1:gi2+1] = 1
-            conf_mask[b, best_n, gj, gi1:gi2+1] = 1 #we ned to set this to 1 as we ignored it earylier
-            # Coordigates
+
+            mask[b,:,gj,:][(best_ns,list(range(gi1,gi2+1))] = 1
+            conf_mask[b,:,gj,:][(best_ns,list(range(gi1,gi2+1))] = 1
+            #mask[b, best_n, gj, gi1:gi2+1] = 1
+            #conf_mask[b, best_n, gj, gi1:gi2+1] = 1 #we ned to set this to 1 as we ignored it earylier
+            # Coordinates
+            #DO we first want to compute position and than the scaling based on that, or vice-versa?
+            #For X, the anchor was selected assuming a position centered on the tile. However, this won't work for some (end tiles). We can simply compute the best position given the selected anchors
+            for index,i in range(?):
+                best_n = best_ns[index]
+                diff1 = gx1-(i+0.5-anchor_width[best_n])
+                diff2 = gx2-(i+0.5+anchor_width[best_n])
+                if diff1<=0 and diff2>=0:
+                    #no change is needed, the real box extends beyond the anchor
+                    tx[b, best_n, gj, i] = 0
+                    tw[b, best_n, gj, gi] = 0
+                elif diff1>0 and diff1<diff2:
+                    tx[b, best_n, gj, i] = inv_tanh(diff1)
+                elif diff2<0 and diff2>diff1:
+                    tx[b, best_n, gj, i] = inv_tanh(diff2)
+                else:
+                    center
             tx[b, best_n, gj, gi] = inv_tanh(gx - (gi+0.5)) #TODO ???? left off
             ty[b, best_n, gj, gi1:gi2+1] = inv_tanh(gy - (gj+0.5))
             # Width and height
@@ -112,6 +153,7 @@ def build_oversegmented_targets(
             #if iou > 0.5 and pred_label == torch.argmax(target[b,t,13:]) and score > 0:
             #    nCorrect += 1
 
+    assert(False and 'TODO verify this works!')
     return nGT, nCorrect, mask, conf_mask, tx, ty, tw, th, tconf, tcls, tneighbors, distances, ious
 
 class OversegmentLoss (nn.Module):
@@ -485,6 +527,18 @@ def get_closest_anchor_iou(anchors,gh,gw):
     anch_ious = bbox_iou(gt_box, anchor_shapes) #these are at half their size, but IOU is the same
     # Find the best matching anchor box
     best_n = np.argmax(anch_ious)
+
+    return best_n, anch_ious
+def multi_get_closest_anchor_iou(anchors,gh,gws):
+    # Get shape of gt box
+    gt_box = torch.FloatTensor(len(gws),4).zero_()
+    gt_box[:,2] = torch.FloatTensor(gh)
+    # Get shape of anchor box
+    anchor_shapes = torch.FloatTensor(np.concatenate((np.zeros((len(anchors), 2)), np.array(anchors)), 1))
+    # Calculate iou between gt and anchor shapes
+    anch_ious = multi_bbox_iou(gt_box, anchor_shapes) #these are at half their size, but IOU is the same
+    # Find the best matching anchor box
+    best_n = anch_ious.argmax(dim=?)
 
     return best_n, anch_ious
 
