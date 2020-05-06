@@ -170,17 +170,23 @@ class FormsGraphPair(GraphPairDataset):
             if not self.onlyFormStuff or ('paired' in bb and bb['paired']):
                 bbsToUse.append(bb)
                 ids.append(bb['id'])
-                if 'transcriptions' in annotations:
+                if 'transcriptions' in annotations and bb['id'] in annotations['transcriptions']:
                     trans[bb['id']] = annotations['transcriptions'][bb['id']]
                 else:
                     trans[bb['id']] =None
+
+            typeBB = 'print' if bb['isBlank']==0 or bb['isBlank']==2 else ('handwriting' if bb['isBlank']==1 else ('signature' if bb['isBlank']==4 else 'UNKNOWN'))
+            metadata[bb['id']] = {'type': typeBB}
 
 
         
         bbs = getBBWithPoints(bbsToUse,scale,useBlankClass=(not self.no_blanks),usePairedClass=self.use_paired_class,useAllClass=self.useClasses)
         #numClasses = bbs.shape[2]-16
         numClasses = len(self.classMap)
-        return bbs,ids,numClasses, trans
+
+        print('WARNING. groups=None')
+        groups=None
+        return bbs,ids,numClasses, trans, groups, metadata
 
     def getResponseBBIdList(self,queryId,annotations):
         return getResponseBBIdList_(self,queryId,annotations)
