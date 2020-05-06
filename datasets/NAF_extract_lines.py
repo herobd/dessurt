@@ -1,12 +1,13 @@
 from datasets.forms_graph_pair import FormsGraphPair
 from datasets import forms_graph_pair
 import math
-import sys
+import sys, os
 from matplotlib import pyplot as plt
 from matplotlib import gridspec
 from matplotlib.patches import Polygon
 import numpy as np
-import torch
+import torch,cv2
+from utils.util import ensure_dir
 
 def write(data,out_dir):
     b=0
@@ -14,6 +15,7 @@ def write(data,out_dir):
     #print (data['img'].size())
     #img = (data['img'][0].permute(1,2,0)+1)/2.0
     img = (data['img'][b].permute(1,2,0)+1)/2.0
+    img = (img.numpy()*255).astype(np.uint8)
     #print(img.shape)
     #print(data['pixel_gt']['table_pixels'].shape)
     print(data['imgName'])
@@ -24,6 +26,9 @@ def write(data,out_dir):
     #print('num bb:{}'.format(data['bb_sizes'][b]))
     heights=[]
     widths=[]
+    ensure_dir(os.path.join(out_dir,'print'))
+    ensure_dir (os.path.join(out_dir,'handwriting'))
+    ensure_dir( os.path.join(out_dir,'signature'))
     with open(os.path.join(out_dir,'trans.txt'),'w') as out_text:
         for i in range(data['bb_gt'].size(1)):
             xc=data['bb_gt'][b,i,0]
@@ -33,20 +38,19 @@ def write(data,out_dir):
             w=data['bb_gt'][b,i,4]
             text=data['bb_gt'][b,i,13]
             field=data['bb_gt'][b,i,14]
-            if text>0:
-                color = 'b-'
+            typeBB= data['metadata']['type']
+            if len(data['transcription'])>0:
+                trans = data['transcription'][i]
             else:
-                color = 'r-'
-            tr = (math.cos(rot)*w-math.sin(rot)*h +xc, math.sin(rot)*w+math.cos(rot)*h +yc)
-            tl = (math.cos(rot)*-w-math.sin(rot)*h +xc, math.sin(rot)*-w+math.cos(rot)*h +yc)
-            br = (math.cos(rot)*w-math.sin(rot)*-h +xc, math.sin(rot)*w+math.cos(rot)*-h +yc)
-            bl = (math.cos(rot)*-w-math.sin(rot)*-h +xc, math.sin(rot)*-w+math.cos(rot)*-h +yc)
-            trans = data['transcription'][i]
-            #y1 = min(tr,tl)
-            #y2 = max(br,bl)
-            #x1 = min(x
-            #from https://jdhao.github.io/2019/02/23/crop_rotated_rectangle_opencv/
-            rect = cv2.minAreaRect([bl,br,tr,tl])
+                trans = '$UNKNOWN$'
+            #tr = (math.cos(rot)*w-math.sin(rot)*h +xc, math.sin(rot)*w+math.cos(rot)*h +yc)
+            #tl = (math.cos(rot)*-w-math.sin(rot)*h +xc, math.sin(rot)*-w+math.cos(rot)*h +yc)
+            #br = (math.cos(rot)*w-math.sin(rot)*-h +xc, math.sin(rot)*w+math.cos(rot)*-h +yc)
+            #bl = (math.cos(rot)*-w-math.sin(rot)*-h +xc, math.sin(rot)*-w+math.cos(rot)*-h +yc)
+            ##from https://jdhao.github.io/2019/02/23/crop_rotated_rectangle_opencv/
+            #rect = cv2.minAreaRect(np.array([bl,br,tr,tl]))
+            ##import pdb;pdb.set_trace()
+            rect = ((xc,yc),(2*w,2*h),rot)
             box = cv2.boxPoints(rect)
             box = np.int0(box)
             width = int(rect[1][0])
@@ -67,17 +71,16 @@ def write(data,out_dir):
             widths.append(warped.shape[1])
             #line_img
             #print([tr,tl,br,bl])
-            line_name = "{}_l{}.png".format(data['imgName'],i)
-            path = os.path.join(out_dir,line_name)
+            line_name = "{}_{}{}.png".format(data['imgName'],typeBB[0],i)
+            path = os.path.join(out_dir,typeBB,line_name)
             cv2.imwrite(path,warped)
             out_text.write('{}|{}'.format(line_name,trans))
-    quit()
     return heights,widths
 
 
 if __name__ == "__main__":
     dirPath = sys.argv[1]
-    out_dir = sys,argv[2]
+    out_dir = sys.argv[2]
     data=FormsGraphPair(dirPath=dirPath,split='train',config={
         'color':False,
         'crop_to_page':False,
