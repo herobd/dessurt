@@ -16,6 +16,8 @@ def display(data):
     img = (data['img'][b].permute(1,2,0)+1)/2.0
     #print(img.shape)
     #print(data['pixel_gt']['table_pixels'].shape)
+    #if data['imgName']!='004191670_00348':
+    #    return
     print(data['imgName'])
 
 
@@ -53,8 +55,8 @@ def display(data):
         #print([tr,tl,br,bl])
 
         ax_im.plot([tr[0],tl[0],bl[0],br[0],tr[0]],[tr[1],tl[1],bl[1],br[1],tr[1]],color)
-    groups=[]
-    groupMap={}
+    #groups=[]
+    #groupMap={}
     for ind1,ind2 in data['adj']:
         x1=data['bb_gt'][b,ind1,0]
         y1=data['bb_gt'][b,ind1,1]
@@ -64,50 +66,73 @@ def display(data):
         ax_im.plot([x1,x2],[y1,y2],'g-')
         #print('{} to {}, {} - {}'.format(ind1,ind2,(x1,y1),(x2,y2)))
 
-        if data['bb_gt'][b,ind1,13]==data['bb_gt'][b,ind2,13]:
-            if ind1 not in groupMap and ind2 not in groupMap:
-                groups.append([ind1,ind2])
-                groupMap[ind1]=groups[-1]
-                groupMap[ind2]=groups[-1]
-            elif ind1 not in groupMap:
-                groupMap[ind2].append(ind1)
-                groupMap[ind1]=groupMap[ind2]
-            elif ind2 not in groupMap:
-                groupMap[ind1].append(ind2)
-                groupMap[ind2]=groupMap[ind1]
-            else:
-                goneGroup = groupMap[ind2]
-                groups.remove(groupMap[ind2])
-                groupMap[ind1] += goneGroup
-                for indx in goneGroup:
-                    groupMap[indx] = groupMap[ind1]
+    #    if data['bb_gt'][b,ind1,13]==data['bb_gt'][b,ind2,13]:
+    #        if ind1 not in groupMap and ind2 not in groupMap:
+    #            groups.append([ind1,ind2])
+    #            groupMap[ind1]=groups[-1]
+    #            groupMap[ind2]=groups[-1]
+    #        elif ind1 not in groupMap:
+    #            groupMap[ind2].append(ind1)
+    #            groupMap[ind1]=groupMap[ind2]
+    #        elif ind2 not in groupMap:
+    #            groupMap[ind1].append(ind2)
+    #            groupMap[ind2]=groupMap[ind1]
+    #        else:
+    #            goneGroup = groupMap[ind2]
+    #            groups.remove(groupMap[ind2])
+    #            groupMap[ind1] += goneGroup
+    #            for indx in goneGroup:
+    #                groupMap[indx] = groupMap[ind1]
 
-    for group in groups:
-        maxX=0
-        maxY=0
-        minX=9999999
-        minY=9999999
+    #for group in groups:
+    #    maxX=0
+    #    maxY=0
+    #    minX=9999999
+    #    minY=9999999
+    #    for i in group:
+    #        xc=data['bb_gt'][b,i,0]
+    #        yc=data['bb_gt'][b,i,1]
+    #        rot=data['bb_gt'][b,i,2]
+    #        h=data['bb_gt'][b,i,3]
+    #        w=data['bb_gt'][b,i,4]
+    #        text=data['bb_gt'][b,i,13]
+    #        field=data['bb_gt'][b,i,14]
+    #        if text>0:
+    #            color = 'y:'
+    #        else:
+    #            color = 'm:'
+    #        tr = (math.cos(rot)*w-math.sin(rot)*h +xc, math.sin(rot)*w+math.cos(rot)*h +yc)
+    #        tl = (math.cos(rot)*-w-math.sin(rot)*h +xc, math.sin(rot)*-w+math.cos(rot)*h +yc)
+    #        br = (math.cos(rot)*w-math.sin(rot)*-h +xc, math.sin(rot)*w+math.cos(rot)*-h +yc)
+    #        bl = (math.cos(rot)*-w-math.sin(rot)*-h +xc, math.sin(rot)*-w+math.cos(rot)*-h +yc)
+    #        maxX = max(maxX,tr[0],tl[0],br[0],bl[0])
+    #        minX = min(minX,tr[0],tl[0],br[0],bl[0])
+    #        maxY = max(maxY,tr[1],tl[1],br[1],bl[1])
+    #        minY = min(minY,tr[1],tl[1],br[1],bl[1])
+    #    ax_im.plot([minX,maxX,maxX,minX,minX],[minY,minY,maxY,maxY,minY],color)
+    groupCenters=[]
+    for group in data['gt_groups']:
+        maxX=maxY=0
+        minX=minY=999999999
         for i in group:
             xc=data['bb_gt'][b,i,0]
             yc=data['bb_gt'][b,i,1]
             rot=data['bb_gt'][b,i,2]
+            assert(rot==0)
             h=data['bb_gt'][b,i,3]
             w=data['bb_gt'][b,i,4]
-            text=data['bb_gt'][b,i,13]
-            field=data['bb_gt'][b,i,14]
-            if text>0:
-                color = 'y:'
-            else:
-                color = 'm:'
-            tr = (math.cos(rot)*w-math.sin(rot)*h +xc, math.sin(rot)*w+math.cos(rot)*h +yc)
-            tl = (math.cos(rot)*-w-math.sin(rot)*h +xc, math.sin(rot)*-w+math.cos(rot)*h +yc)
-            br = (math.cos(rot)*w-math.sin(rot)*-h +xc, math.sin(rot)*w+math.cos(rot)*-h +yc)
-            bl = (math.cos(rot)*-w-math.sin(rot)*-h +xc, math.sin(rot)*-w+math.cos(rot)*-h +yc)
-            maxX = max(maxX,tr[0],tl[0],br[0],bl[0])
-            minX = min(minX,tr[0],tl[0],br[0],bl[0])
-            maxY = max(maxY,tr[1],tl[1],br[1],bl[1])
-            minY = min(minY,tr[1],tl[1],br[1],bl[1])
-        ax_im.plot([minX,maxX,maxX,minX,minX],[minY,minY,maxY,maxY,minY],color)
+            maxX=max(maxX,xc+w)
+            maxY=max(maxY,yc+h)
+            minX=min(minX,xc-w)
+            minY=min(minY,yc-h)
+        if len(group)>1:
+            ax_im.plot([minX,maxX,maxX,minX,minX],[minY,minY,maxY,maxY,minY],'c:')
+        groupCenters.append(((minX+maxX)//2, (minY+minY)//2) )
+
+    for g1,g2 in data['gt_groups_adj']:
+        x1,y1 = groupCenters[g1]
+        x2,y2 = groupCenters[g2]
+        ax_im.plot([x1,x2],[y1,y2],'c-')
     plt.show()
 
 

@@ -112,8 +112,8 @@ class GraphPairDataset(torch.utils.data.Dataset):
         ##tic=timeit.default_timer()
 
         bbs,ids,numClasses,trans, groups, metadata = self.parseAnn(annotations,s)
-        trans = {i:v for i,v in enumerate(trans)}
-        metadata = {i:v for i,v in enumerate(metadata)}
+        #trans = {i:v for i,v in enumerate(trans)}
+        #metadata = {i:v for i,v in enumerate(metadata)}
 
         #start_of_line, end_of_line = getStartEndGT(annotations['byId'].values(),s)
         #Try:
@@ -224,6 +224,7 @@ class GraphPairDataset(torch.utils.data.Dataset):
             for group in groups:
                 for i in group:
                     assert(i<bbs.shape[1])
+
         return {
                 "img": img,
                 "bb_gt": bbs,
