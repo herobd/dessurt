@@ -120,19 +120,32 @@ def fixAnnotations(this,annotations):
                     bb['type'] == 'fieldCol' or
                     bb['type'] == 'fieldRegion'
                 )
+    def fixIsBlank(bb):
+        if 'isBlank' in bb:
+            if bb['type'] == 'fieldCircle':
+                bb['isBlank'] = 'print'
+            else:
+                if type(bb['isBlank']) is int:
+                    isBlankMap=['print', 'handwriting', 'print', 'blank', 'signature']
+                    bb['isBlank'] = isBlankMap[bb['isBlank']]
+        else:
+            bb['isBlank'] = 'print'
 
 
 
     #restructure
     annotations['byId']={}
-    for bb in annotations['textBBs']:
+    for iii,bb in enumerate(annotations['textBBs']):
+        fixIsBlank(bb)
         annotations['byId'][bb['id']]=bb
     for bb in annotations['fieldBBs']:
+        fixIsBlank(bb)
         annotations['byId'][bb['id']]=bb
     if 'samePairs' in annotations:
         if not this.only_opposite_pairs:
             annotations['pairs']+=annotations['samePairs']
         del annotations['samePairs']
+
 
     numPairsWithoutBB=0
     for id1,id2 in annotations['pairs']:
@@ -387,6 +400,7 @@ def fixAnnotations(this,annotations):
     for pair in annotations['pairs']:
         assert(len(pair)==2)
 
+
     return numPairsWithoutBB
 
 def getBBWithPoints(useBBs,s,useBlankClass=False,usePairedClass=False, useAllClass=[]):
@@ -609,3 +623,99 @@ def getResponseBBIdList_(this,queryId,annotations):
                 #responseBBList.append(annotations['byId'][otherId])
                 responseBBList.append(otherId)
     return responseBBList
+
+def computeRotation(bb):
+    tlX = bb['poly_points'][0][0]
+    tlY = bb['poly_points'][0][1]
+    trX = bb['poly_points'][1][0]
+    trY = bb['poly_points'][1][1]
+    brX = bb['poly_points'][2][0]
+    brY = bb['poly_points'][2][1]
+    blX = bb['poly_points'][3][0]
+    blY = bb['poly_points'][3][1]
+
+    lX = (tlX+blX)/2
+    lY = (tlY+blY)/2
+    rX = (trX+brX)/2
+    rY = (trY+brY)/2
+
+    return math.atan2(rY-lY,rX-lX)
+
+def computeRotationDiff(bb1,bb2):
+    r1 = computeRotation(bb1)
+    r2 = computeRotation(bb2)
+
+    diff = r1-r2
+    if diff>2*np.pi:
+        diff-=2*np.pi
+    elif diff<-2*np.pi:
+        diff+=2*np.pi
+    return abs(diff)
+
+def formGroups(annotations):
+    #printTypes(annotations)
+    groups={}
+    groupMap={}
+    curGroupId=0
+    rot_diff = 40.0/180 * np.pi
+    for pair in annotations['pairs']:
+        if  ( #this is the rule that determines which bbs get grouped
+                (
+                (annotations['byId'][pair[0]]['type'] == annotations['byId'][pair[1]]['type']) or
+                ('P' in annotations['byId'][pair[0]]['type'] and 'P' in annotations['byId'][pair[1]]['type']) 
+                ) and (
+                    computeRotationDiff(annotations['byId'][pair[0]],annotations['byId'][pair[1]]) < rot_diff
+
+                )
+                ):
+            #print('adding grouping between: {} and {}'.format(annotations['byId'][pair[0]]['type'],annotations['byId'][pair[1]]['type']))
+            if pair[0] not in groupMap and pair[1] not in groupMap:
+                groups[curGroupId] = list(pair)
+                groupMap[pair[0]] = curGroupId
+                groupMap[pair[1]] = curGroupId
+                curGroupId+=1
+            elif pair[1] not in groupMap:
+                groupId = groupMap[pair[0]]
+                groups[groupId].append(pair[1])
+                groupMap[pair[1]]=groupId
+            elif pair[0] not in groupMap:
+                groupId = groupMap[pair[1]]
+                groups[groupId].append(pair[0])
+                groupMap[pair[0]]=groupId
+            elif groupMap[pair[1]] != groupMap[pair[0]]:
+                goneGroupId = groupMap[pair[1]]
+                goneGroup = groups[goneGroupId]
+                del groups[goneGroupId]
+                groupId = groupMap[pair[0]]
+                groups[groupId] += goneGroup
+                for bbId in goneGroup:
+                    groupMap[bbId]=groupId
+
+    groups = [group for gid,group in groups.items()]
+
+    #groups of single elements
+    for bbId in annotations['byId']:
+        if bbId not in groupMap:
+            groups.append([bbId])
+    
+    #for group in groups:
+    #    toprint=''
+    #    for bbId in group:
+    #        toprint+=annotations['byId'][bbId]['type']+', '
+    #    toprint+=':'
+    #    print(toprint)
+
+    return groups
+
+def printTypes(annotations):
+    toprint=''
+    n=6
+    for i,(bbId,bb) in enumerate(annotations['byId'].items()):
+        if len(bb['type'])>7:
+            toprint+=bb['type']+'\t'
+        else:
+            toprint+=bb['type']+'\t\t'
+        if i%n==n-1:
+            print(toprint)
+            toprint=''
+    print(toprint)
