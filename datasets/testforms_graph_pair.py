@@ -16,7 +16,7 @@ def display(data):
     img = (data['img'][b].permute(1,2,0)+1)/2.0
     #print(img.shape)
     #print(data['pixel_gt']['table_pixels'].shape)
-    #if data['imgName']!='004191670_00348':
+    #if data['imgName']!='005025348_00116':
     #    return
     print(data['imgName'])
 
@@ -127,12 +127,13 @@ def display(data):
             minY=min(minY,yc-h)
         if len(group)>1:
             ax_im.plot([minX,maxX,maxX,minX,minX],[minY,minY,maxY,maxY,minY],'c:')
-        groupCenters.append(((minX+maxX)//2, (minY+minY)//2) )
+        groupCenters.append(((minX+maxX)//2, (minY+minY)//2,len(group)>1 ))
 
     for g1,g2 in data['gt_groups_adj']:
-        x1,y1 = groupCenters[g1]
-        x2,y2 = groupCenters[g2]
-        ax_im.plot([x1,x2],[y1,y2],'c-')
+        x1,y1,big1 = groupCenters[g1]
+        x2,y2,big2 = groupCenters[g2]
+        if big1 or big2:
+            ax_im.plot([x1,x2],[y1,y2],'c-')
     plt.show()
 
 
