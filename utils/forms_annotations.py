@@ -646,9 +646,9 @@ def computeRotationDiff(bb1,bb2):
     r2 = computeRotation(bb2)
 
     diff = r1-r2
-    if diff>2*np.pi:
+    if diff>np.pi:
         diff-=2*np.pi
-    elif diff<-2*np.pi:
+    elif diff<-np.pi:
         diff+=2*np.pi
     return abs(diff)
 def getCenterPoint(bb):
@@ -720,8 +720,43 @@ def horizontalOverlap(bb1,bb2):
         bY1=max(lY1,rY1)
         bY2=max(lY2,rY2)
         overlap = min(bY1,bY2)-max(aY1,aY2)
+        print(overlap)
         return max(0,overlap/(bY1-aY1),overlap/(bY2-aY2))
+def areFar(bb1,bb2):
+    tlX1 = bb1['poly_points'][0][0]
+    tlY1 = bb1['poly_points'][0][1]
+    trX1 = bb1['poly_points'][1][0]
+    trY1 = bb1['poly_points'][1][1]
+    brX1 = bb1['poly_points'][2][0]
+    brY1 = bb1['poly_points'][2][1]
+    blX1 = bb1['poly_points'][3][0]
+    blY1 = bb1['poly_points'][3][1]
+    tlX2 = bb2['poly_points'][0][0]
+    tlY2 = bb2['poly_points'][0][1]
+    trX2 = bb2['poly_points'][1][0]
+    trY2 = bb2['poly_points'][1][1]
+    brX2 = bb2['poly_points'][2][0]
+    brY2 = bb2['poly_points'][2][1]
+    blX2 = bb2['poly_points'][3][0]
+    blY2 = bb2['poly_points'][3][1]
 
+    lX1 = (tlX1+blX1)/2
+    rX1 = (trX1+brX1)/2
+    lY1 = (tlY1+blY1)/2
+    rY1 = (trY1+brY1)/2
+    lX2 = (tlX2+blX2)/2
+    rX2 = (trX2+brX2)/2
+    lY2 = (tlY2+blY2)/2
+    rY2 = (trY2+brY2)/2
+
+    h1 = ((blX1-tlX1)+(brX1-blX1))/2
+    h2 = ((blX2-tlX2)+(brX2-blX2))/2
+
+    thresh = 1.2*max(h1,h2)
+    
+
+    dist = math.sqrt(min( (lX1-rX2)**2 + (lY1-rY2)**2, (lX2-rX1)**2 + (lY2-rY1)**2 ))
+    return dist>thresh
 
 def formGroups(annotations):
     #printTypes(annotations)
@@ -735,8 +770,12 @@ def formGroups(annotations):
     #These are for collecting info used to split bad groups later
     relative_rel_angles=defaultdict(dict)
     hasMinorNeighbor = defaultdict(lambda: False)
+    textNeighbors = defaultdict(list)
 
     for pair in annotations['pairs']:
+        if annotations['byId'][pair[0]]['type']=='text' and annotations['byId'][pair[1]]['type']=='text':
+            textNeighbors[pair[0]].append(pair[1])
+            textNeighbors[pair[1]].append(pair[0])
         if annotations['byId'][pair[0]]['type']=='textMinor' and annotations['byId'][pair[1]]['type']=='field':
             hasMinorNeighbor[pair[1]]=True
         elif annotations['byId'][pair[1]]['type']=='textMinor' and annotations['byId'][pair[0]]['type']=='field':
@@ -744,10 +783,12 @@ def formGroups(annotations):
         if  ( #this is the rule that determines which bbs get grouped
                 (
                 (annotations['byId'][pair[0]]['type'] == annotations['byId'][pair[1]]['type']) or
-                ('P' in annotations['byId'][pair[0]]['type'] and 'P' in annotations['byId'][pair[1]]['type']) 
+                ('P' in annotations['byId'][pair[0]]['type'] and 'P' in annotations['byId'][pair[1]]['type']) or
+                ( ('fieldP' in annotations['byId'][pair[0]]['type'] or 'fieldP' in annotations['byId'][pair[1]]['type']) and ('textMinor' in annotations['byId'][pair[0]]['type'] or 'textMinor' in annotations['byId'][pair[1]]['type']) )
+                or ( ('textP' in annotations['byId'][pair[0]]['type'] or 'textP' in annotations['byId'][pair[1]]['type']) and ('Circle' in annotations['byId'][pair[0]]['type'] or 'Circle' in annotations['byId'][pair[1]]['type']) )
                 ) and (
                     computeRotationDiff(annotations['byId'][pair[0]],annotations['byId'][pair[1]]) < rot_diff and
-                    (annotations['byId'][pair[0]]['type']!='textMinor' or horizontalOverlap(annotations['byId'][pair[0]],annotations['byId'][pair[1]]) > 0.1 )
+                    (annotations['byId'][pair[0]]['type']!='textMinor' or horizontalOverlap(annotations['byId'][pair[0]],annotations['byId'][pair[1]]) > 0.2 )
                     #(annotations['byId'][pair[0]]['type']!='textMinor' or connectionNotParallel(annotations['byId'][pair[0]],annotations['byId'][pair[1]]) )
                 )
                 ):
@@ -783,35 +824,63 @@ def formGroups(annotations):
 
             a0_to_1 = math.atan2(cy1-cy0,cx1-cx0)
             a1_to_0 = math.atan2(cy0-cy1,cx0-cx1)
-            relative_rel_angles[pair[0]][pair[1]]= a0_to_1 - rot0
-            relative_rel_angles[pair[1]][pair[0]]= a1_to_0 - rot1
+            rela0 = a0_to_1 - rot0
+            rela1 = a1_to_0 - rot1
+            if rela0>np.pi:
+                rela0-=2*np.pi
+            elif rela0<-np.pi:
+                rela0+=2*np.pi
+            if rela1>np.pi:
+                rela1-=2*np.pi
+            elif rela1<-np.pi:
+                rela1+=2*np.pi
+            relative_rel_angles[pair[0]][pair[1]]= rela0
+            relative_rel_angles[pair[1]][pair[0]]= rela1
 
     #Now, we're going to examine each group to see if it needs split
     removeGroupIds=[]
     allNewGroups=[]
     for groupId,group in groups.items():
-        splitCandidates=[]
+        splitCandidates=[] #These will be instances of side-by-side paragraphs, particularly the last line in a paragraph
+        splitAllTextDownCandidates=[]#These are instances of a title with sub-texts below it
         allHaveMinorNeighbor=True
         for bbId in group:
+            downTexts=[] if annotations['byId'][bbId]['type']=='text' else None
             #toprint='{}[{}]: '.format(bbId,annotations['byId'][bbId]['type'])
             upPairs=[]
+            angles=[]
             for otherId,angle in relative_rel_angles[bbId].items():
                 #toprint+='[{}] {}, '.format(annotations['byId'][otherId]['type'],angle)
-                if leftThresh>angle and angle>rightThresh:
+                #is the neighbor above?
+                if leftThresh>angle and angle>rightThresh: # and areFar(annotations['byId'][bbId],annotations['byId'][otherId]):
                     upPairs.append(otherId)
+                    angles.append(angle)
+
+                #if downTexts is not None and annotations['byId'][otherId]['type']=='text':
+                #    print('{} - {}: {}'.format(bbId,otherId,angle))
+                if downTexts is not None and annotations['byId'][otherId]['type']=='text' and angle<np.pi and angle>0:
+                    downTexts.append(otherId)
             if len(upPairs)>1:
+                
                 splitCandidates.append((bbId,upPairs))
+                #print('split cand: {} {}'.format(bbId,list(zip(upPairs,angles))))
+            if downTexts is not None and len(downTexts)>2:
+                splitAllTextDownCandidates.append((bbId,downTexts))
+                    
             #print(toprint)
             if not hasMinorNeighbor[bbId]:
                 allHaveMinorNeighbor=False
-        if allHaveMinorNeighbor:
+        if allHaveMinorNeighbor: #This is not group fields that are together, but have individual minor labels
             assert(len(splitCandidates)==0)
             removeGroupIds.append(groupId)
             allNewGroups+=[[bbId] for bbId in group]
-        elif len(splitCandidates)>0:
+
+        recreate=False
+        newPairs = list(annotations['pairs'])
+        if len(splitCandidates)>0:
+            recreate=True
             #print('split cand {}'.format(splitCandidates))
             
-            newPairs = list(annotations['pairs'])
             for bbId,upPairs in splitCandidates:
                 cx,cy = getCenterPoint(annotations['byId'][bbId])
                 furthestDist=0
@@ -827,6 +896,15 @@ def formGroups(annotations):
                 elif [cutThis,bbId] in newPairs:
                     newPairs.remove([cutThis,bbId])
 
+        for headId, subIds in splitAllTextDownCandidates:
+            recreate=True
+            for subId in subIds:
+                if [headId,subId] in newPairs:
+                    newPairs.remove([headId,subId])
+                elif [subId,headId] in newPairs:
+                    newPairs.remove([subId,headId])
+
+        if recreate:
             #recreate groups
             newGroups={}
             newGroupMap={}
