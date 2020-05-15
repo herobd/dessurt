@@ -8,6 +8,8 @@ from matplotlib.patches import Polygon
 import numpy as np
 import torch
 
+only=''
+
 def display(data):
     b=0
 
@@ -16,8 +18,9 @@ def display(data):
     img = (data['img'][b].permute(1,2,0)+1)/2.0
     #print(img.shape)
     #print(data['pixel_gt']['table_pixels'].shape)
-    #if data['imgName']!='005025348_00116':
-    #    return
+    if len(only)>0:
+        if data['imgName']!=only:
+            return
     print(data['imgName'])
 
 
