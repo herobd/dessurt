@@ -111,8 +111,9 @@ class GraphPairDataset(torch.utils.data.Dataset):
         
         ##tic=timeit.default_timer()
 
-        bbs,ids,numClasses,trans, groups = self.parseAnn(annotations,s)
-        trans = {i:v for i,v in enumerate(trans)}
+        bbs,ids,numClasses,trans, groups, metadata = self.parseAnn(annotations,s)
+        #trans = {i:v for i,v in enumerate(trans)}
+        #metadata = {i:v for i,v in enumerate(metadata)}
 
         #start_of_line, end_of_line = getStartEndGT(annotations['byId'].values(),s)
         #Try:
@@ -211,17 +212,19 @@ class GraphPairDataset(torch.utils.data.Dataset):
         #if table_points is not None:
         #    table_points = None if table_points.shape[1] == 0 else torch.from_numpy(table_points)
         groups_adj = []
-        for n0,n1 in pairs:
-            for i,ns in enumerate(groups):
-                if n0 in ns:
-                    g0=i
-                if n1 in ns:
-                    g1=i
-            if g0!=g1:
-                groups_adj.append((min(g0,g1),max(g0,g1)))
-        for group in groups:
-            for i in group:
-                assert(i<bbs.shape[1])
+        if groups is not None:
+            for n0,n1 in pairs:
+                for i,ns in enumerate(groups):
+                    if n0 in ns:
+                        g0=i
+                    if n1 in ns:
+                        g1=i
+                if g0!=g1:
+                    groups_adj.append((min(g0,g1),max(g0,g1)))
+            for group in groups:
+                for i in group:
+                    assert(i<bbs.shape[1])
+
         return {
                 "img": img,
                 "bb_gt": bbs,
@@ -231,6 +234,7 @@ class GraphPairDataset(torch.utils.data.Dataset):
                 "scale": s,
                 "cropPoint": cropPoint,
                 "transcription": [trans[id] for id in ids if id in trans],
+                "metadata": [metadata[id] for id in ids if id in metadata],
                 "gt_groups": groups,
                 "gt_groups_adj": groups_adj
                 }
