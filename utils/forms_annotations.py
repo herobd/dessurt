@@ -126,7 +126,7 @@ def fixAnnotations(this,annotations):
                 bb['isBlank'] = 'print'
             else:
                 if type(bb['isBlank']) is int:
-                    isBlankMap=['print', 'handwriting', 'print', 'blank', 'signature']
+                    isBlankMap=['print', 'handwriting', 'print', 'blank', 'signature','ERROR?']
                     bb['isBlank'] = isBlankMap[bb['isBlank']]
         else:
             bb['isBlank'] = 'print'
