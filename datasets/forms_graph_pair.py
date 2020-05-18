@@ -7,7 +7,7 @@ import json
 import os
 import math
 from collections import defaultdict, OrderedDict
-from utils.forms_annotations import fixAnnotations, convertBBs, getBBWithPoints, getStartEndGT, getResponseBBIdList_
+from utils.forms_annotations import fixAnnotations, convertBBs, getBBWithPoints, getStartEndGT, getResponseBBIdList_, formGroups
 import timeit
 from .graph_pair import GraphPairDataset
 
@@ -166,21 +166,29 @@ class FormsGraphPair(GraphPairDataset):
         bbsToUse=[]
         ids=[]
         trans={}
+        metadata={}
         for id,bb in annotations['byId'].items():
             if not self.onlyFormStuff or ('paired' in bb and bb['paired']):
                 bbsToUse.append(bb)
                 ids.append(bb['id'])
-                if 'transcriptions' in annotations:
+                if 'transcriptions' in annotations and bb['id'] in annotations['transcriptions']:
                     trans[bb['id']] = annotations['transcriptions'][bb['id']]
                 else:
                     trans[bb['id']] =None
+
+            metadata[bb['id']] = {'type': bb['isBlank']}
 
 
         
         bbs = getBBWithPoints(bbsToUse,scale,useBlankClass=(not self.no_blanks),usePairedClass=self.use_paired_class,useAllClass=self.useClasses)
         #numClasses = bbs.shape[2]-16
         numClasses = len(self.classMap)
-        return bbs,ids,numClasses, trans
+
+        idGroups=formGroups(annotations)
+        revIds = {bbId:n for n,bbId in enumerate(ids)}
+        groups = [ [revIds[bbId] for bbId in group] for group in idGroups]
+        #print(metadata)
+        return bbs,ids,numClasses, trans, groups, metadata
 
     def getResponseBBIdList(self,queryId,annotations):
         return getResponseBBIdList_(self,queryId,annotations)
