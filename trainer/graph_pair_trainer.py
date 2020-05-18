@@ -1752,7 +1752,7 @@ class GraphPairTrainer(BaseTrainer):
                 gtTrans=None
         else:
             gtTrans = None
-        if useGT:
+        if useGT and targetBoxes is not None:
             allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred, final = self.model(
                                     image,
                                     targetBoxes,

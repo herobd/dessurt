@@ -23,6 +23,10 @@ If upgrading cuda, remove the old version first either with apt-get or uninstall
 
 `conda install gensim`
 
+`pip install bpemb`
+
+`pip install edgit distance`
+
 
 for cvxpy (optimization), you must have python 3.7 or later:
 

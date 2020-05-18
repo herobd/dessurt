@@ -184,10 +184,15 @@ class FormsGraphPair(GraphPairDataset):
         #numClasses = bbs.shape[2]-16
         numClasses = len(self.classMap)
 
+        #import pdb;pdb.set_trace()
         idGroups=formGroups(annotations)
-        revIds = {bbId:n for n,bbId in enumerate(ids)}
-        groups = [ [revIds[bbId] for bbId in group] for group in idGroups]
+        #revIds = {bbId:n for n,bbId in enumerate(ids)}
+        #groups = [ [revIds[bbId] for bbId in group] for group in idGroups]
+        groups = idGroups
+        assert(bbs is not None)
         #print(metadata)
+        assert(bbs is not None)
+        assert(len(groups)>0)
         return bbs,ids,numClasses, trans, groups, metadata
 
     def getResponseBBIdList(self,queryId,annotations):

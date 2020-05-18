@@ -224,7 +224,6 @@ class GraphPairDataset(torch.utils.data.Dataset):
             for group in groups:
                 for i in group:
                     assert(i<bbs.shape[1])
-
         return {
                 "img": img,
                 "bb_gt": bbs,
