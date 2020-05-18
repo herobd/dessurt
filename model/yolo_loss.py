@@ -66,12 +66,12 @@ def build_oversegmented_targets(
                 continue
             nGT += 1
             # Get grid box indices
-            gi = max(int(gx),conf_mask.size(3)-1),0)
-            gj = max(int(gy),conf_mask.size(2)-1),0)
-            gi1 = max(int(g1x),conf_mask.size(3)-1),0)
-            gj1 = max(int(gy1),conf_mask.size(2)-1),0)
-            gi2 = max(int(gx2),conf_mask.size(3)-1),0)
-            gj2 = max(int(gy2),conf_mask.size(2)-1),0)
+            gi = max(min(int(gx),conf_mask.size(3)-1),0)
+            gj = max(min(int(gy),conf_mask.size(2)-1),0)
+            gi1 = max(min(int(g1x),conf_mask.size(3)-1),0)
+            gj1 = max(min(int(gy1),conf_mask.size(2)-1),0)
+            gi2 = max(min(int(gx2),conf_mask.size(3)-1),0)
+            gj2 = max(min(int(gy2),conf_mask.size(2)-1),0)
             #We truncate with int() instead of rounding since each tile i is actually centered at i+0.5
 
             #We don't want to include a tile if the real box doesn't extend past it's centerpoint, these shouldn't predict (arguably unless the real box covers the whole tile we don't want to predict)
@@ -86,11 +86,11 @@ def build_oversegmented_targets(
 
             if gi1==gi2:
                 over_seg_gws = [gw]
-            else
+            else:
                 
                 #Get best matching anchor
                 #Build oversegmented gt sizes for each i/tile: (gh,min(self.maxWidth,this_x-gx1,gx2-this_x))
-                over_seg_gws = [min(self.maxWidth,this_i+0.5-gx1,gx2-this_x+0.5) for this_i range(gi1,gi2+1)]
+                over_seg_gws = [min(self.maxWidth,this_i+0.5-gx1,gx2-this_x+0.5) for this_i in range(gi1,gi2+1)]
             best_ns,anch_ious = multi_get_closest_anchor_iou(anchors,gh,over_seg_gws)
 
             #best_n, anch_ious = get_closest_anchor_iou(anchors,gh,min(gw,self.maxWidth))
@@ -108,14 +108,14 @@ def build_oversegmented_targets(
             #pred_box = pred_boxes[b, best_n, gj, gi].unsqueeze(0)
             # Masks
 
-            mask[b,:,gj,:][(best_ns,list(range(gi1,gi2+1))] = 1
-            conf_mask[b,:,gj,:][(best_ns,list(range(gi1,gi2+1))] = 1
+            mask[b,:,gj,:][(best_ns,list(range(gi1,gi2+1)))] = 1
+            conf_mask[b,:,gj,:][(best_ns,list(range(gi1,gi2+1)))] = 1
             #mask[b, best_n, gj, gi1:gi2+1] = 1
             #conf_mask[b, best_n, gj, gi1:gi2+1] = 1 #we ned to set this to 1 as we ignored it earylier
             # Coordinates
             #DO we first want to compute position and than the scaling based on that, or vice-versa?
             #For X, the anchor was selected assuming a position centered on the tile. However, this won't work for some (end tiles). We can simply compute the best position given the selected anchors
-            for index,i in range(?):
+            for index,i in range(IDK):
                 best_n = best_ns[index]
                 diff1 = gx1-(i+0.5-anchor_width[best_n])
                 diff2 = gx2-(i+0.5+anchor_width[best_n])
@@ -538,7 +538,7 @@ def multi_get_closest_anchor_iou(anchors,gh,gws):
     # Calculate iou between gt and anchor shapes
     anch_ious = multi_bbox_iou(gt_box, anchor_shapes) #these are at half their size, but IOU is the same
     # Find the best matching anchor box
-    best_n = anch_ious.argmax(dim=?)
+    best_n = anch_ious.argmax(dim=IDK)
 
     return best_n, anch_ious
 
