@@ -785,7 +785,7 @@ def formGroups(annotations):
                 (annotations['byId'][pair[0]]['type'] == annotations['byId'][pair[1]]['type']) or
                 ('P' in annotations['byId'][pair[0]]['type'] and 'P' in annotations['byId'][pair[1]]['type']) or
                 ( ('fieldP' in annotations['byId'][pair[0]]['type'] or 'fieldP' in annotations['byId'][pair[1]]['type']) and ('textMinor' in annotations['byId'][pair[0]]['type'] or 'textMinor' in annotations['byId'][pair[1]]['type']) )
-                or ( ('textP' in annotations['byId'][pair[0]]['type'] or 'textP' in annotations['byId'][pair[1]]['type']) and ('Circle' in annotations['byId'][pair[0]]['type'] or 'Circle' in annotations['byId'][pair[1]]['type']) )
+                or ( ('P' in annotations['byId'][pair[0]]['type'] or 'P' in annotations['byId'][pair[1]]['type']) and ('Circle' in annotations['byId'][pair[0]]['type'] or 'Circle' in annotations['byId'][pair[1]]['type']) )
                 ) and (
                     computeRotationDiff(annotations['byId'][pair[0]],annotations['byId'][pair[1]]) < rot_diff and
                     (annotations['byId'][pair[0]]['type']!='textMinor' or horizontalOverlap(annotations['byId'][pair[0]],annotations['byId'][pair[1]]) > 0.2 )
@@ -845,7 +845,8 @@ def formGroups(annotations):
         splitAllTextDownCandidates=[]#These are instances of a title with sub-texts below it
         allHaveMinorNeighbor=True
         for bbId in group:
-            downTexts=[] if annotations['byId'][bbId]['type']=='text' else None
+            bbType = annotations['byId'][bbId]['type']
+            downTexts=[] if bbType=='text' or bbType=='textMinor'  else None
             #toprint='{}[{}]: '.format(bbId,annotations['byId'][bbId]['type'])
             upPairs=[]
             angles=[]
@@ -858,14 +859,15 @@ def formGroups(annotations):
 
                 #if downTexts is not None and annotations['byId'][otherId]['type']=='text':
                 #    print('{} - {}: {}'.format(bbId,otherId,angle))
-                if downTexts is not None and annotations['byId'][otherId]['type']=='text' and angle<np.pi and angle>0:
+                if downTexts is not None and annotations['byId'][otherId]['type']==bbType and angle<np.pi and angle>0:
                     downTexts.append(otherId)
             if len(upPairs)>1:
                 
                 splitCandidates.append((bbId,upPairs))
                 #print('split cand: {} {}'.format(bbId,list(zip(upPairs,angles))))
-            if downTexts is not None and len(downTexts)>2:
+            if downTexts is not None and ( (len(downTexts)>2 and bbType=='text') or (len(downTexts)>1 and bbType=='textMinor')):
                 splitAllTextDownCandidates.append((bbId,downTexts))
+                #print('Down split {}[{}]: {}'.format(bbId,bbType,downTexts))
                     
             #print(toprint)
             if not hasMinorNeighbor[bbId]:
