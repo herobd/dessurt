@@ -250,7 +250,7 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClas
     if len(target.size())>1:
         #numClasses=target.size(1)-13
         pass
-    elif len(pred.size())>1 and pred.size(0)>0:
+    elif pred is not None and len(pred.size())>1 and pred.size(0)>0:
         #if there are no targets, we shouldn't be pred anything
         if ignoreClasses:
             #aps.append(0)

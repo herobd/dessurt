@@ -30,7 +30,8 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
         if bbTrans is not None:
             transPath = path[:-3]+'txt'
             transOut = open(transPath,'w')
-        outputBoxes = outputBoxes.data.numpy()
+        if outputBoxes is not None:
+            outputBoxes = outputBoxes.data.numpy()
         data = image.cpu().numpy()
         b=0
         image = (1-((1+np.transpose(data[b][:,:,:],(1,2,0)))/2.0)).copy()
@@ -38,12 +39,12 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
             image = cv2.cvtColor(image,cv2.COLOR_GRAY2RGB)
         #if name=='text_start_gt':
 
-        if verbosity>1:
+        if verbosity>1 and targetBoxes is not None:
             #Draw GT bbs
             for j in range(targetBoxes.size(1)):
                 plotRect(image,(1,0.5,0),targetBoxes[0,j,0:5])
 
-        if verbosity>1:
+        if verbosity>1 and outputBoxes is not None:
             #Draw pred bbs
             bbs = outputBoxes
             for j in range(bbs.shape[0]):

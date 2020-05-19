@@ -126,8 +126,12 @@ def fixAnnotations(this,annotations):
                 bb['isBlank'] = 'print'
             else:
                 if type(bb['isBlank']) is int:
-                    isBlankMap=['print', 'handwriting', 'print', 'blank', 'signature','ERROR?']
-                    bb['isBlank'] = isBlankMap[bb['isBlank']]
+                    isBlankMap=['print', 'handwriting', 'print', 'blank', 'signature','ERROR5?','ERROR6?','ERROR7?','ERROR8?','ERROR9?']
+                    if bb['isBlank']>len(isBlankMap):
+                        print('bad isBlank: {} for {}'.format(bb['isBlank'], annotations['imageFilename']))
+                        bb['isBlank'] = 'unknown'
+                    else:
+                        bb['isBlank'] = isBlankMap[bb['isBlank']]
         else:
             bb['isBlank'] = 'print'
 

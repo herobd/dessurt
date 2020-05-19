@@ -1008,8 +1008,8 @@ class GraphPairTrainer(BaseTrainer):
                     targIndex, fullHit, overSegmented = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,hard_thresh=False,fixed=self.fixedAlign)
             else:
                 targIndex=torch.LongTensor(outputBoxes.size(0)).fill_(-1)
-                fullHit=torch.BoolTensor(outputBoxes.size(0)).false_()
-                overSegmented=torch.BoolTensor(outputBoxes.size(0)).false_()
+                fullHit=torch.BoolTensor(outputBoxes.size(0)).fill_(0)
+                overSegmented=torch.BoolTensor(outputBoxes.size(0)).fill_(0)
 
 
 
@@ -2101,7 +2101,7 @@ class GraphPairTrainer(BaseTrainer):
         #    log['final_prop_rel_prec']=final_prop_rel_prec
 
         gt_groups_adj = instance['gt_groups_adj']
-        finalLog = self.final_eval(targetBoxes.cpu(),gtGroups,gt_groups_adj,*final)
+        finalLog = self.final_eval(targetBoxes.cpu() if targetBoxes is not None else None,gtGroups,gt_groups_adj,*final)
         log.update(finalLog)
         #import pdb;pdb.set_trace()
 
@@ -2147,10 +2147,10 @@ class GraphPairTrainer(BaseTrainer):
                 targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
             else:
                 targIndex, fullHit, overSegmented = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,hard_thresh=False,fixed=self.fixedAlign)
-        else:
+        elif outputBoxes is not None:
             targIndex=torch.LongTensor(outputBoxes.size(0)).fill_(-1)
-            fullHit=torch.BoolTensor(outputBoxes.size(0)).false_()
-            overSegmented=torch.BoolTensor(outputBoxes.size(0)).false_()
+            fullHit=torch.BoolTensor(outputBoxes.size(0)).fill_(0)
+            overSegmented=torch.BoolTensor(outputBoxes.size(0)).fill_(0)
 
         if self.model.detector.predNumNeighbors:
             beforeCls=1
