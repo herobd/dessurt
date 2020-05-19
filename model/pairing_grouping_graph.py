@@ -526,7 +526,7 @@ class PairingGroupingGraph(BaseModel):
                 conf = torch.rand(useBBs.size(0),1)*0.33 +0.66
                 useBBs = torch.cat((conf.to(useBBs.device),useBBs),dim=1)
         if self.text_rec is not None:
-            if useGTBBs and gtTrans is not None:
+            if useGTBBs and gtTrans is not None: # and len(gtTrans)==useBBs.size[0]:
                 transcriptions = gtTrans
             else:
                 transcriptions = self.getTranscriptions(useBBs,image)
