@@ -91,36 +91,37 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
 
         #Draw pred groups (based on bb pred)
         groupCenters=[]
-        for group in predGroups:
-            maxX=maxY=0
-            minY=minX=99999999
-            idColor = [random.random()/2+0.5 for i in range(3)]
-            for j in group:
-                tr,tl,br,bl=getCorners(outputBoxes[j,1:6])
-                image[tl[1]:tl[1]+2,tl[0]:tl[0]+2]=idColor
-                image[tr[1]:tr[1]+1,tr[0]:tr[0]+1]=idColor
-                image[bl[1]:bl[1]+1,bl[0]:bl[0]+1]=idColor
-                image[br[1]:br[1]+1,br[0]:br[0]+1]=idColor
-                maxX=max(maxX,tr[0],tl[0],br[0],bl[0])
-                minX=min(minX,tr[0],tl[0],br[0],bl[0])
-                maxY=max(maxY,tr[1],tl[1],br[1],bl[1])
-                minY=min(minY,tr[1],tl[1],br[1],bl[1])
-            minX-=2
-            minY-=2
-            maxX+=2
-            maxY+=2
-            lineWidth=2
-            color=(0.5,0,1)
-            if len(group)>1:
-                cv2.line(image,(minX,minY),(maxX,minY),color,lineWidth)
-                cv2.line(image,(maxX,minY),(maxX,maxY),color,lineWidth)
-                cv2.line(image,(maxX,maxY),(minX,maxY),color,lineWidth)
-                cv2.line(image,(minX,maxY),(minX,minY),color,lineWidth)
-                image[minY:minY+3,minX:minX+3]=idColor
-            image[maxY:maxY+1,minX:minX+1]=idColor
-            image[maxY:maxY+1,maxX:maxX+1]=idColor
-            image[minY:minY+1,maxX:maxX+1]=idColor
-            groupCenters.append(((minX+maxX)//2,(minY+maxY)//2))
+        if predGroups is not None:
+            for group in predGroups:
+                maxX=maxY=0
+                minY=minX=99999999
+                idColor = [random.random()/2+0.5 for i in range(3)]
+                for j in group:
+                    tr,tl,br,bl=getCorners(outputBoxes[j,1:6])
+                    image[tl[1]:tl[1]+2,tl[0]:tl[0]+2]=idColor
+                    image[tr[1]:tr[1]+1,tr[0]:tr[0]+1]=idColor
+                    image[bl[1]:bl[1]+1,bl[0]:bl[0]+1]=idColor
+                    image[br[1]:br[1]+1,br[0]:br[0]+1]=idColor
+                    maxX=max(maxX,tr[0],tl[0],br[0],bl[0])
+                    minX=min(minX,tr[0],tl[0],br[0],bl[0])
+                    maxY=max(maxY,tr[1],tl[1],br[1],bl[1])
+                    minY=min(minY,tr[1],tl[1],br[1],bl[1])
+                minX-=2
+                minY-=2
+                maxX+=2
+                maxY+=2
+                lineWidth=2
+                color=(0.5,0,1)
+                if len(group)>1:
+                    cv2.line(image,(minX,minY),(maxX,minY),color,lineWidth)
+                    cv2.line(image,(maxX,minY),(maxX,maxY),color,lineWidth)
+                    cv2.line(image,(maxX,maxY),(minX,maxY),color,lineWidth)
+                    cv2.line(image,(minX,maxY),(minX,minY),color,lineWidth)
+                    image[minY:minY+3,minX:minX+3]=idColor
+                image[maxY:maxY+1,minX:minX+1]=idColor
+                image[maxY:maxY+1,maxX:maxX+1]=idColor
+                image[minY:minY+1,maxX:maxX+1]=idColor
+                groupCenters.append(((minX+maxX)//2,(minY+maxY)//2))
 
 
 
@@ -129,19 +130,20 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
         numrelpred=0
         #hits = [False]*len(adjacency)
         edgesToDraw=[]
-        for i,(g1,g2) in enumerate(edgeIndexes):
-            
-            #if score>draw_rel_thresh:
-            x1,y1 = groupCenters[g1]
-            x2,y2 = groupCenters[g2]
-            if (predTypes is not None and
-                (predTypes[0][i]=='TN' or predTypes[0][i]=='UN') and
-                 (predTypes[1][i]=='TN' or predTypes[1][i]=='UN') and
-                 (predTypes[2][i]=='TN' or predTypes[2][i]=='UN') ):
-                lineColor = (0,0,edgePred[i,-1,0].item()) #BLUE
-                cv2.line(image,(x1,y1),(x2,y2),lineColor,1)
-            else:
-                edgesToDraw.append((i,x1,y1,x2,y2))
+        if edgeIndexes is not None:
+            for i,(g1,g2) in enumerate(edgeIndexes):
+                
+                #if score>draw_rel_thresh:
+                x1,y1 = groupCenters[g1]
+                x2,y2 = groupCenters[g2]
+                if (predTypes is not None and
+                    (predTypes[0][i]=='TN' or predTypes[0][i]=='UN') and
+                     (predTypes[1][i]=='TN' or predTypes[1][i]=='UN') and
+                     (predTypes[2][i]=='TN' or predTypes[2][i]=='UN') ):
+                    lineColor = (0,0,edgePred[i,-1,0].item()) #BLUE
+                    cv2.line(image,(x1,y1),(x2,y2),lineColor,1)
+                else:
+                    edgesToDraw.append((i,x1,y1,x2,y2))
 
         if predTypes is not None:
             edgeClassification = [(predTypes[i],edgePred[:,-1,i]) for i in range(len(predTypes))]
