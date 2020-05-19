@@ -224,6 +224,7 @@ class GraphPairDataset(torch.utils.data.Dataset):
             for group in groups:
                 for i in group:
                     assert(i<bbs.shape[1])
+
         return {
                 "img": img,
                 "bb_gt": bbs,
@@ -232,7 +233,7 @@ class GraphPairDataset(torch.utils.data.Dataset):
                 "imgName": imageName,
                 "scale": s,
                 "cropPoint": cropPoint,
-                "transcription": [trans[id] for id in ids if id in trans],
+                "transcription": [trans[id] for id in ids],
                 "metadata": [metadata[id] for id in ids if id in metadata],
                 "gt_groups": groups,
                 "gt_groups_adj": groups_adj

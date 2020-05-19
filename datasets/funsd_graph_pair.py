@@ -154,7 +154,7 @@ class FUNSDGraphPair(GraphPairDataset):
 
 
         #self.pairs=list(pairs)
-        return bbs, list(range(bbs.shape[1])), numClasses, trans, groups
+        return bbs, list(range(bbs.shape[1])), numClasses, trans, groups, {}
 
 
     def getResponseBBIdList(self,queryId,annotations):
