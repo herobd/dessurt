@@ -154,12 +154,7 @@ class GraphPairDataset(torch.utils.data.Dataset):
             bbs = out['bb_gt']
             ids= out['bb_auxs']
 
-            newGroups = []
-            for group in groups:
-                newGroup=[ids.index(bbId) for bbId in group if bbId in ids]
-                if len(newGroup)>0:
-                    newGroups.append(newGroup)
-            groups=newGroups
+
 
 
             ##tic=timeit.default_timer()
@@ -169,6 +164,12 @@ class GraphPairDataset(torch.utils.data.Dataset):
             else:
                 np_img = augmentation.apply_tensmeyer_brightness(np_img)
             ##print('augmentation: {}'.format(timeit.default_timer()-tic))
+        newGroups = []
+        for group in groups:
+            newGroup=[ids.index(bbId) for bbId in group if bbId in ids]
+            if len(newGroup)>0:
+                newGroups.append(newGroup)
+        groups=newGroups
         ##print('transfrm: {}  [{}, {}]'.format(timeit.default_timer()-ticTr,org_img.shape[0],org_img.shape[1]))
         pairs=set()
         #import pdb;pdb.set_trace()
