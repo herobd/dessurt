@@ -4,7 +4,7 @@
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
-    "super_computer":false,
+    "super_computer":true,
     "data_loader": {
         "data_set_name": "FUNSDGraphPair",
         "data_dir": "../data/FUNSD",
@@ -158,7 +158,7 @@
             "use_softmax": true,
             "batch_size": 8,
             "pad_text_height": true,
-            "hw_with_style_file": "saved/allfontSmall_ocr_softmax_aug/checkpoint-USED.pth",
+            "hw_with_style_file": "saved/allfontSmall_ocr_softmax/checkpoint-latest.pth",
             "input_height": 24,
             "char_set": "../data/english_char_set.json",
             "embedding": "word2vec shallow",
