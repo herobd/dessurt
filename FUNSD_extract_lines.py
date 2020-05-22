@@ -1,4 +1,4 @@
-from datasets.forms_graph_pair import FormsGraphPair
+from datasets.funsd_graph_pair import FUNSDGraphPair
 from datasets import forms_graph_pair
 import math
 import sys, os
@@ -9,7 +9,7 @@ import numpy as np
 import torch,cv2
 from utils.util import ensure_dir
 
-def write(data,out_dir,out_print,out_handwriting,out_signature):
+def write(data,out_dir,out_text): #,out_handwriting,out_signature):
     b=0
 
     #print (data['img'].size())
@@ -35,7 +35,7 @@ def write(data,out_dir,out_print,out_handwriting,out_signature):
         w=data['bb_gt'][b,i,4]
         text=data['bb_gt'][b,i,13]
         field=data['bb_gt'][b,i,14]
-        typeBB= data['metadata'][i]['type']
+        #typeBB= data['metadata'][i]['type']
         if len(data['transcription'])>0:
             trans = data['transcription'][i]
         else:
@@ -68,15 +68,9 @@ def write(data,out_dir,out_print,out_handwriting,out_signature):
         widths.append(warped.shape[1])
         #line_img
         #print([tr,tl,br,bl])
-        line_name = "{}_{}{}.png".format(data['imgName'],typeBB[0],i)
-        path = os.path.join(out_dir,typeBB,line_name)
+        line_name = "{}_{}.png".format(data['imgName'],i)
+        path = os.path.join(out_dir,line_name)
         cv2.imwrite(path,warped)
-        if typeBB=='print':
-            out_text=out_print
-        elif typeBB=='handwriting':
-            out_text=out_handwriting
-        elif typeBB=='signature':
-            out_text=out_signature
         out_text.write('{}|{}\n'.format(line_name,trans if trans is not None else '$UNKOWN$'))
     return heights,widths
 
@@ -84,17 +78,11 @@ def write(data,out_dir,out_print,out_handwriting,out_signature):
 if __name__ == "__main__":
     dirPath = sys.argv[1]
     out_dir = sys.argv[2]
-    data=FormsGraphPair(dirPath=dirPath,split='valid',config={
+    data=FUNSDGraphPair(dirPath=dirPath,split='train',config={
         'color':False,
         'crop_to_page':False,
         'rescale_range':[1,1],
-        'Xrescale_range':[0.4,0.65],
-        'Xcrop_params':{"crop_size":[652,1608],"pad":0}, 
-        'no_blanks':True,
-        "swap_circle":True,
-        'no_graphics':True,
-        'rotation':True,
-        'only_opposite_pairs':False,
+        "split_to_lines": True,
         #"only_types": ["text_start_gt"]
 })
 
@@ -103,16 +91,12 @@ if __name__ == "__main__":
 
     heights=[]
     widths=[]
-    ensure_dir(os.path.join(out_dir,'print'))
-    ensure_dir (os.path.join(out_dir,'handwriting'))
-    ensure_dir( os.path.join(out_dir,'signature'))
-    out_print = open(os.path.join(out_dir,'print.txt'),'w') 
-    out_handwriting = open(os.path.join(out_dir,'handwriting.txt'),'w') 
-    out_signature = open(os.path.join(out_dir,'signature.txt'),'w') 
+    ensure_dir(os.path.join(out_dir))
+    out_text = open(os.path.join(out_dir,'text.txt'),'w') 
     #test=10
     try:
         while True:
-            h,w =write(dataLoaderIter.next(),out_dir,out_print,out_handwriting,out_signature)
+            h,w =write(dataLoaderIter.next(),out_dir,out_text)
             heights+=h
             widths+=w
             #test-=1
@@ -120,8 +104,6 @@ if __name__ == "__main__":
             #    quit()
     except StopIteration:
         print('done')
-    out_print.close()
-    out_handwriting.close()
-    out_signature.close()
+    out_text.close()
     print('height\tm:{}\tstd:{}'.format(np.mean(heights),np.std(heights)))
     print('width\tm:{}\tstd:{}'.format(np.mean(widths),np.std(widths)))
