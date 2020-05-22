@@ -13,8 +13,8 @@ from model.simpleNN import SimpleNN
 class BinaryPairReal(nn.Module):
     def __init__(self, config): # predCount, base_0, base_1):
         super(BinaryPairReal, self).__init__()
-        numBBOut = config['bb_out'] if 'bb_out' in config else 0
-        numRelOut = config['rel_out'] if 'rel_out' in config else 1
+        numBBOut = config['bb_out'] if 'bb_out' in config else (config['node_out'] if 'node_out' in config else 0)
+        numRelOut = config['rel_out'] if 'rel_out' in config else (config['edge_out'] if 'edge_out' in config else 1)
 
         in_ch=config['in_channels']
 
@@ -22,15 +22,19 @@ class BinaryPairReal(nn.Module):
         dropout = config['dropout'] if 'dropout' in config else True
 
         layer_desc = config['layers'] if 'layers' in config else ['FC256','FC256','FC256']
-        layer_desc = [in_ch]+layer_desc+['FCnR{}'.format(numRelOut)]
+        layer_desc = [in_ch]+layer_desc#+['FCnR{}'.format(numRelOut)]
         layers, last_ch_relC = make_layers(layer_desc,norm=norm,dropout=dropout)
-        self.layers = nn.Sequential(*layers)
+        self.layersRel = nn.Sequential(*layers)
+        final, fin_ch_iout = make_layers([last_ch_relC,'FCnR{}'.format(numRelOut)],norm=norm,dropout=dropout)
+        self.finalRel = nn.Sequential(*final)
 
         if numBBOut>0:
             layer_desc = config['layers_bb'] if 'layers_bb' in config else ['FC256','FC256','FC256']
-            layer_desc = [in_ch]+layer_desc+['FCnR{}'.format(numBBOut)]
-            layers, last_ch_relC = make_layers(layer_desc,norm=norm,dropout=dropout)
+            layer_desc = [in_ch]+layer_desc#+['FCnR{}'.format(numBBOut)]
+            layers, last_ch_bbC = make_layers(layer_desc,norm=norm,dropout=dropout)
             self.layersBB = nn.Sequential(*layers)
+            final, fin_ch_out = make_layers([last_ch_bbC,'FCnR{}'.format(numBBOut)],norm=norm,dropout=dropout)
+            self.finalBB = nn.Sequential(*final)
 
         #This is written to by the PairingGraph object (which holds this one)
         self.numShapeFeats = config['num_shape_feats'] if 'num_shape_feats' in config else 16
@@ -68,9 +72,19 @@ class BinaryPairReal(nn.Module):
 
 
 
-    def forward(self, node_features, adjacencyMatrix, numBBs):
-        node_featuresR = node_features[numBBs:]
-        res = self.layers(node_featuresR)
+    def forward(self, node_features, adjacencyMatrix=None, numBBs=None):
+        if adjacencyMatrix is None and numBBs is None:
+            node_features, edge_indexes, edge_features, u_features = node_features #graph input
+            node_featuresR = edge_features
+            node_featuresB = node_features
+        else:
+            node_featuresR = node_features[numBBs:]
+            if numBBs>0:
+                node_featuresB = node_features[:numBBs]
+            else:
+                node_featuresB = None
+        featsRel = self.layersRel(node_featuresR)
+        res = self.finalRel(featsRel)
         if self.shape_layers is not None:
             if self.frozen_shape_layers:
                 self.shape_layers.eval()
@@ -80,12 +94,16 @@ class BinaryPairReal(nn.Module):
             else:
                 weight = self.split_weighting.clamp(0,1)
                 res = weight*res + (1-weight)*res2
-        if numBBs>0:
-            node_featuresB = node_features[:numBBs]
-            resB = self.layersBB(node_featuresB)
+        if node_featuresB is not None:
+            featsB = self.layersBB(node_featuresB)
+            resB = self.finalBB(featsB)
         else:
+            featsB=None
             resB=None
         #import pdb;pdb.set_trace()
-        return resB,res
+        if adjacencyMatrix is None and numBBs is None:
+            return resB[:,None,:],res[:,None,:], featsB,featsRel, u_features
+        else:
+            return resB, res
 
 
