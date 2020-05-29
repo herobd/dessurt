@@ -1,0 +1,323 @@
+Accounts Payable
+AP
+Accounts Receivable
+AR
+Accrual-Based Accounting
+Accumulated Depreciation
+Acid Test
+Acquisition Costs
+Adaptive Firm
+Adventure Capital
+Advertising Opportunity
+Agent
+Asset Turnover
+Assets
+Back End
+Balance Sheet
+Benchmark
+Brand
+Break-Even Analysis
+Break-Even Point
+Broker
+Bundling
+Burden Rate
+Business Mission
+Business Plan
+Buy-Sell Agreement
+C Corporation
+C Corp
+Compound Average Growth Rate
+CAGR
+Cannibalization
+Capital Assets
+Capital Expenditure
+Capital Input
+Cash
+Cash Basis
+Cash Flow
+Cash Flow Budget
+Cash Flow Statement
+Cash Sales
+Cash Spending
+Central Driving Forces Model
+Channel Conflicts
+Channels of Distribution
+Click-Through Rate
+Co-Branding
+Cost of Goods Sold
+Collection Period
+Commission
+Commission Percent
+Community Interest Company
+CIC
+Competitive Advantage
+Competitive Analysis
+Competitive Entry Wedges
+Completed Store Transactions
+Concentrated Target Marketing
+Contribution
+Contribution Margin
+Conversion Rate
+Core Marketing Strategy
+Corporation
+Corridor Principal
+Cost of Sales
+Cross Elasticity of Demand
+Current Assets
+Current Debt
+Current Liabilities
+Doing Business As
+DBA
+Debt and Equity
+Depreciation
+Differentiated Target Marketing
+Differentiation
+Direct Cost of Sales
+Direct Mail Marketing
+Direct Marketing
+Directory
+Distinctive Competency
+Diversification
+Dividends
+Dual Distribution
+Early Adopters
+Early Majority
+Earnings
+Earnings Before Interest and Taxes
+EBIT
+Earnings Before Interest Taxes Depreciation and Amortization
+EBITDA
+Economies of Scale
+Effective Demand
+Effective Tax Rate
+Entrepreneur in Heat
+EIH
+Entrepreneur
+Equity
+Equity Financing
+Evaluating Ideas and Opportunities
+Everett Rogers
+Exclusive Distribution
+Expense
+Experience Curve
+Features, Advantages, and Benefits
+FAB
+Failure Rule, Common Causes
+Failure Rule, Exceptions to the Rule
+Fatal 2% Rule
+Fighting Brand Strategy
+First Mover
+First Mover Advantage
+First Mover Disadvantage
+Fiscal Year
+Five Forces Model
+Fixed Cost
+Fixed Liabilities
+Floating Liabilities
+Focus Group
+Forms of Market Research
+Frequency Marketing
+Front End
+Websites
+Full-Cost Price Strategies
+Future Value Projections
+Goodwill
+Gross Margin
+Gross Margin Percent
+Guerrilla Marketing
+Harvesting
+Ideas Versus Opportunities
+Impressions
+Income Statement
+Initial Public Offering
+IPO
+Innovation
+Evolutionary or Revolutionary
+Innovators
+Integrated Marketing Communications
+Intensive Distribution
+Interest Expense
+Intraprenuership
+Inventory
+Inventory Turnover
+Inventory Turns
+Jobber
+Labor
+Laggards
+Leveraged Buy Out
+LBO
+Liabilities
+Life Cycle
+Limited
+Public Company
+AUS
+Limited Liability Company
+LLC
+Limited Liability Partnership
+Long-Term Assets
+Long-Term Interest Rate
+Long-Term Liabilities
+Loss
+Loyalty Programs
+Manufacturer’s Agent
+Market
+Market Development Funds
+Market Development Strategy
+Market Evolution
+Market Penetration Strategy
+Market Plan
+Market Redefinition
+Market Sales Potential
+Market Segmentation
+Market Share
+Marketing
+Marketing Audit
+Marketing Mix
+Marketing Plan
+Marketing Cost Analysis
+Materials
+Materials Included in Cost of Sales
+Mission Statement
+Moving Weighted Average
+Multiple Channel System
+Net Cash Flow
+Net Present Value
+NPV
+Net Profit
+Net Profit Margin Before Taxes
+Net Worth
+New Visitors
+New Brand Strategy
+Newsletter Subscriptions
+Not Invented Here
+NIH
+Obligations Incurred
+Offering
+Offering Mix or Portfolio
+On-Costs
+Operating Expenses
+Operating Leverage
+Operations Control
+Opportunities Versus Ideas
+Opportunity Analysis
+Opportunity Cost
+Original Equipment Manufacturer
+OEM
+Other Short-Term Liabilities
+Outsourcing
+Pageviews
+Paid-In Capital
+Partnership
+Payables
+Payback Period
+Payment Days
+Payment Delay
+Payroll
+Payroll Burden
+Penetration Pricing Strategy
+Perceived Risk
+Perceptual Map
+Personal Selling
+PEST analysis
+Plant and Equipment
+Point of Purchase Advertising
+POP
+Portfolio
+Positioning
+Premiums
+Price Elasticity of Demand
+Privately Owned
+Pro Forma Income Statement
+Pro Forma Statements
+Product
+PLC
+Profit
+Loss
+Proprietary
+Private Limited Company
+Public Relations
+Publicly Traded
+Pull Communication Strategy
+Push Communication Strategy
+Questionable Costs
+Receivables
+Receivables Turnover
+Regional Marketing
+Relevant Cost
+Repositioning
+Resource Requirements
+Websites
+Retained Earnings
+Return on Assets
+Return on Investment
+ROI
+Return on Sales
+Return Visitors
+Rich-Gumpert Evaluation System
+S Corporation
+S Corp
+Sales Break Even
+Sales Forecast
+Sales on Credit
+Scrambled Merchandising
+Seed Capital
+Selective Distribution
+Selling Approaches
+Senior Corps of Retired Executives
+SCORE
+Shareholders
+Short-Term
+Short-Term Assets
+Short-Term Notes
+Short-Term Liabilities
+Simple Linear Regression
+Situation Analysis
+Skimming Pricing Strategy
+Slotting Allowances
+Small Business Investment Council
+SBIC
+Sole Proprietorship
+Sole Trader
+Starting Date
+Stock
+Stock Market
+Stock Turnover
+Strategic Control
+Strategic Marketing Management
+Success Factors
+Success Requirements
+Sunk Cost
+Surplus or Deficit
+Switching Costs
+SWOT Analysis
+Systematic Innovation
+Tactics
+Target Market
+Target Marketing
+Tax Rate Percent
+Taxes Incurred
+Telemarketing
+Trade Margin
+Trading Down
+Trading Up
+Traffic
+Types of Entrepreneurs
+User Interface
+Unique User Sessions
+Unit Variable Cost
+Units Break-Even
+Unpaid Expenses
+User Benefits
+User Registrations
+Valuation
+Value
+Variable Cost
+Variance
+Venture Capitalists
+VC
+Venture Capital
+Website
+Website Metrics
+Website Traffic
+Wholesaler
+Working Capital
