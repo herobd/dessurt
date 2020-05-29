@@ -13,6 +13,7 @@ from model.binary_pair_real import BinaryPairReal
 from torchvision.ops import RoIAlign
 from model.cnn_lstm import CRNN, SmallCRNN
 from model.word2vec_adapter import Word2VecAdapter, Word2VecAdapterShallow, BPEmbAdapter
+from mode.hand_code_emb import HandCodeEmb
 from skimage import draw
 from model.net_builder import make_layers, getGroupSize
 from utils.yolo_tools import non_max_sup_iou, non_max_sup_dist
@@ -409,10 +410,12 @@ class PairingGroupingGraph(BaseModel):
                         self.embedding_model = Word2VecAdapter(self.numTextFeats)
                 elif 'BP' in config['text_rec']['embedding']:
                     self.embedding_model = BPEmbAdapter(self.numTextFeats)
+                elif 'hand' in config['text_rec']['embedding']:
+                    self.embedding_model = HandCodeEmb(self.numTextFeats)
                 else:
                     raise NotImplementedError('Unknown text embedding method: {}'.format(config['text_rec']['embedding']))
             else:
-                self.embedding_model = lambda x: None #This could be a learned function, or preload something
+                self.embedding_model = lambda x: None 
 
             self.merge_embedding_layer = nn.Sequential(nn.ReLU(True),nn.Linear(graph_in_channels+self.numTextFeats,graph_in_channels))
         else:
