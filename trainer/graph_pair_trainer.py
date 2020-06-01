@@ -2172,8 +2172,9 @@ class GraphPairTrainer(BaseTrainer):
         log['final_bb_AP']=ap_5
         log['final_bb_prec']=prec_5
         log['final_bb_recall']=recall_5
-        Fm=2*(prec_5*recall_5)/(prec_5+recall_5)
-        Fm[np.isnan(Fm)]=0
+        Fm = np.where(prec_5+recall_5==0,0,2*(prec_5*recall_5)/(prec_5+recall_5))
+        #Fm=2*(prec_5*recall_5)/(prec_5+recall_5)
+        #Fm[np.isnan(Fm)]=0
         log['final_bb_Fm_avg']=Fm.mean()
 
         predGroupsT={}
