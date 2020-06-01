@@ -94,7 +94,7 @@ class PairingGroupingGraph(BaseModel):
         else:
             graph_in_channels = config['graph_config']['in_channels'] if 'in_channels' in config['graph_config'] else 1
         self.useBBVisualFeats=True
-        if type(config['graph_config']) is str and config['graph_config']['arch'][:10]=='BinaryPair' and not self.predNN:
+        if (type(config['graph_config']) is str and config['graph_config']['arch'][:10]=='BinaryPair' and not self.predNN) or ('noBBVisualFeats' in config and config['noBBVisualFeats']):
             self.useBBVisualFeats=False
         self.includeRelRelEdges= config['use_rel_rel_edges'] if 'use_rel_rel_edges' in config else True
         #rel_channels = config['graph_config']['rel_channels']
@@ -423,6 +423,8 @@ class PairingGroupingGraph(BaseModel):
 
 
         self.add_noise_to_word_embeddings = config['add_noise_to_word_embeddings'] if 'add_noise_to_word_embeddings' in config else 0
+
+        self.blankRelFeats = config['blankRelFeats'] if 'blankRelFeats' in config else False
 
         if 'DEBUG' in config:
             self.detector.setDEBUG()
@@ -1298,6 +1300,8 @@ class PairingGroupingGraph(BaseModel):
                 relFeats = shapeFeats.to(features.device)
             else:
                 relFeats = torch.cat((relFeats,shapeFeats.to(relFeats.device)),dim=1)
+        if self.blankRelFeats:
+            relFeats = relFeats.zero_()
         if self.relFeaturizerFC is not None:
             relFeats = self.relFeaturizerFC(relFeats)
         #if self.useShapeFeats=='sp
@@ -1406,6 +1410,8 @@ class PairingGroupingGraph(BaseModel):
             if self.bbFeaturizerFC is not None:
                 bb_features = self.bbFeaturizerFC(bb_features) #if uncommented, change rot on bb_shapeFeats, maybe not
             assert(not torch.isnan(bb_features).any())
+        elif text_emb is not None:
+            bb_features = text_emb
         else:
             bb_features = None
         
