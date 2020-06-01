@@ -44,9 +44,11 @@ def correctTrans(pred,predBB,gt,gtBB):
         tx0=xp
         ty0=yp-hp
         lx0=xp-wp
-        ly0=py
+        ly0=yp
+
+        ds=[]
         for j,g in enumerate(gt):
-            xg,yg,rg,hg,wg = gtBB[j,1:6]
+            xg,yg,rg,hg,wg = gtBB[0,j,0:5]
             assert(rg==0)
             tx1=xg
             ty1=yg-hg
@@ -55,7 +57,7 @@ def correctTrans(pred,predBB,gt,gtBB):
             d = math.sqrt((tx0-tx1)**2 + (ty0-ty1)**2) + math.sqrt((lx0-lx1)**2 + (ly0-ly1)**2)
             if d<thresh:
                 ds.append([d,j,g])
-        ds.sort(key=lamda x:x[0])
+        ds.sort(key=lambda x:x[0])
 
         if len(ds)==0:
             new_pred.append(p)
@@ -72,17 +74,6 @@ def correctTrans(pred,predBB,gt,gtBB):
                     best_g = g
             new_pred.append(best_g)
 
-        if len(p)>0:
-            min_dis=999999
-            best_gt=p
-            for g in gt:
-                dis = editdistance.eval(p,g)/len(p)
-                if dis<min_dis and dis<0.7:
-                    min_dis=dis
-                    best_gt = g
-            new_pred.append(best_gt)
-        else:
-            new_pred.append(p)
     return new_pred
 
 class PairingGroupingGraph(BaseModel):

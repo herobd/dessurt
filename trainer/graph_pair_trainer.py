@@ -87,7 +87,7 @@ class GraphPairTrainer(BaseTrainer):
         self.final_class_inpure_group = False
 
         self.debug = 'DEBUG' in  config['trainer']
-        self.save_images_every = 50
+        self.save_images_every = config['trainer']['save_images_every'] if 'save_images_every' in config['trainer'] else 50
         self.save_images_dir = 'train_out'
         util.ensure_dir(self.save_images_dir)
 
