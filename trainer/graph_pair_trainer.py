@@ -1785,6 +1785,7 @@ class GraphPairTrainer(BaseTrainer):
             #relPred, relIndexes, bbPred, predGroups: multiple, for each step in graph prediction. relIndexes indexes into predGroups, which indexes to outputBoxes
             #rel_prop_pred: if we use prop, one for begining
             allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred, final = self.model(image,
+                    targetBoxes if gtTrans is not None else None,
                     otherThresh=self.conf_thresh_init, 
                     otherThreshIntur=threshIntur, 
                     hard_detect_limit=self.train_hard_detect_limit,
