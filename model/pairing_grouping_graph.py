@@ -18,7 +18,8 @@ from skimage import draw
 from model.net_builder import make_layers, getGroupSize
 from utils.yolo_tools import non_max_sup_iou, non_max_sup_dist
 from utils.util import decode_handwriting
-from utils.string_utils import correctTrans
+#from utils.string_utils import correctTrans
+import editdistance
 import math
 import random
 import json
@@ -30,6 +31,59 @@ import cv2
 MAX_CANDIDATES=325 #450
 MAX_GRAPH_SIZE=370
 #max seen 428, so why'd it crash on 375?
+
+def correctTrans(pred,predBB,gt,gtBB):
+    thresh=100
+    #x0,y0,r0,h0,w0 = bb0[locIdx:classIdx]
+    #x1,y1,r1,h1,w1 = bb1[locIdx:classIdx]
+
+    new_pred=[]
+    for i,p in enumerate(pred):
+        xp,yp,rp,hp,wp = predBB[i,0:5]
+        assert(rp==0)
+        tx0=xp
+        ty0=yp-hp
+        lx0=xp-wp
+        ly0=py
+        for j,g in enumerate(gt):
+            xg,yg,rg,hg,wg = gtBB[j,1:6]
+            assert(rg==0)
+            tx1=xg
+            ty1=yg-hg
+            lx1=xg-wg
+            ly1=yg
+            d = math.sqrt((tx0-tx1)**2 + (ty0-ty1)**2) + math.sqrt((lx0-lx1)**2 + (ly0-ly1)**2)
+            if d<thresh:
+                ds.append([d,j,g])
+        ds.sort(key=lamda x:x[0])
+
+        if len(ds)==0:
+            new_pred.append(p)
+        elif len(p)<3:
+            new_pred.append(ds[0][2]) #This isn't a long enough string, so base on distance alone
+        else:
+            min_d = ds[0][0]
+            best_score=None
+            for d,j,g in ds[:10]:
+                dis = editdistance.eval(p,g)/len(p)
+                score = dis*(d/min_d)
+                if best_score is None or score<best_score:
+                    best_score=score
+                    best_g = g
+            new_pred.append(best_g)
+
+        if len(p)>0:
+            min_dis=999999
+            best_gt=p
+            for g in gt:
+                dis = editdistance.eval(p,g)/len(p)
+                if dis<min_dis and dis<0.7:
+                    min_dis=dis
+                    best_gt = g
+            new_pred.append(best_gt)
+        else:
+            new_pred.append(p)
+    return new_pred
 
 class PairingGroupingGraph(BaseModel):
     def __init__(self, config):
@@ -536,7 +590,11 @@ class PairingGroupingGraph(BaseModel):
             else:
                 transcriptions = self.getTranscriptions(useBBs,image)
                 if gtTrans is not None:
-                    transcriptions=correctTrans(transcriptions,gtTrans)
+                    if self.include_bb_conf:
+                        justBBs = useBBs[:,1:]
+                    else:
+                        justBBs = useBBs
+                    transcriptions=correctTrans(transcriptions,justBBs,gtTrans,gtBBs)
         else:
             transcriptions=None
         if useBBs.size(0)>1:

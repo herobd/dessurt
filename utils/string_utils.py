@@ -58,7 +58,7 @@ def naive_decode(output):
             predData.append(rawPredData[i])
     return predData, list(rawPredData)
 
-def correctTrans(pred,gt):
+def correctTrans(pred,predBB,gt,gtBB):
     new_pred=[]
     for p in pred:
         if len(p)>0:
