@@ -89,7 +89,8 @@
         "use_learning_schedule": true,
         "adapt_lr": false,
 
-        "use_gt_trans": true
+        "use_gt_trans": true,
+        "save_images_every": 50
     },
     "arch": "PairingGroupingGraph", 
     "model": {
