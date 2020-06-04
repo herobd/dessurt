@@ -90,14 +90,14 @@ def build_oversegmented_targets(
                 
                 #Get best matching anchor
                 #Build oversegmented gt sizes for each i/tile: (gh,min(self.maxWidth,this_x-gx1,gx2-this_x))
-                over_seg_gws = [min(self.maxWidth,this_i+0.5-gx1,gx2-this_x+0.5) for this_i in range(gi1,gi2+1)]
+                over_seg_gws = [min(self.maxWidth,this_i+0.5-gx1,gx2-(this_x+0.5)) for this_i in range(gi1,gi2+1)]
             best_ns,anch_ious = multi_get_closest_anchor_iou(anchors,gh,over_seg_gws)
 
             #best_n, anch_ious = get_closest_anchor_iou(anchors,gh,min(gw,self.maxWidth))
             # Where the overlap is larger than threshold set mask to zero (ignore)
             #conf_mask[b, anch_ious > ignore_thres, gj, gi] = 0
             #  ignore_range, all, set to 1 later
-            X,X = torch.where(anch_ious > ignore_thres) #ignore_anch, anch_x
+            anch_x,ignore_anch = torch.where(anch_ious > ignore_thres)
             #conf_mask[([b]*anch_x.size(0),ignore_anch,list(range(gj1:gj2+1)),anch_x)]=0
             for j in range(gj1,gj2+1):
                 conf_mask[b,:,j,:][ignore_anch,anch_x]=0
@@ -121,14 +121,17 @@ def build_oversegmented_targets(
                 diff2 = gx2-(i+0.5+anchor_width[best_n])
                 if diff1<=0 and diff2>=0:
                     #no change is needed, the real box extends beyond the anchor
-                    tx[b, best_n, gj, i] = 0
-                    tw[b, best_n, gj, gi] = 0
+                    tx[b, best_n, gj, i] = 0 #TODO Should this actually be: No loss computed?
+                    tw[b, best_n, gj, gi] = 0 
                 elif diff1>0 and diff1<diff2:
                     tx[b, best_n, gj, i] = inv_tanh(diff1)
                 elif diff2<0 and diff2>diff1:
                     tx[b, best_n, gj, i] = inv_tanh(diff2)
                 else:
-                    center
+                    #this is not oversegmented
+                    offset = gx - (gi+0.5)
+                    tx[b, best_n, gj, i] = inv_tanh(offset) 
+                    tw[b, best_n, gj, i] = math.log(gw / anchors[best_n][0] + 1e-16)
             tx[b, best_n, gj, gi] = inv_tanh(gx - (gi+0.5)) #TODO ???? left off
             ty[b, best_n, gj, gi1:gi2+1] = inv_tanh(gy - (gj+0.5))
             # Width and height
@@ -511,6 +514,49 @@ def bbox_iou(box1, box2, x1y1x2y2=True):
 
     return iou
 
+def multi_bbox_iou(box1, box2, x1y1x2y2=True):
+    """
+    Returns the IoU of each box1 against each box2
+    """
+    if not x1y1x2y2:
+        # Transform from center and width to exact coordinates
+        #I assume H and W are half
+        b1_x1, b1_x2 = box1[:, 0] - box1[:, 2] , box1[:, 0] + box1[:, 2] 
+        b1_y1, b1_y2 = box1[:, 1] - box1[:, 3] , box1[:, 1] + box1[:, 3] 
+        b2_x1, b2_x2 = box2[:, 0] - box2[:, 2] , box2[:, 0] + box2[:, 2] 
+        b2_y1, b2_y2 = box2[:, 1] - box2[:, 3] , box2[:, 1] + box2[:, 3] 
+    else:
+        # Get the coordinates of bounding boxes
+        b1_x1, b1_y1, b1_x2, b1_y2 = box1[:, 0], box1[:, 1], box1[:, 2], box1[:, 3]
+        b2_x1, b2_y1, b2_x2, b2_y2 = box2[:, 0], box2[:, 1], box2[:, 2], box2[:, 3]
+
+    b1_x1 = b1_x1[:,None].expand(-1,len(box2))
+    b1_y1 = b1_y1[:,None].expand(-1,len(box2))
+    b1_x2 = b1_x2[:,None].expand(-1,len(box2))
+    b1_y2 = b1_y2[:,None].expand(-1,len(box2))
+
+    b2_x1 = b2_x1[None,:].expand(len(box1),-1)
+    b2_y1 = b2_y1[None,:].expand(len(box1),-1)
+    b2_x2 = b2_x2[None,:].expand(len(box1),-1)
+    b2_y2 = b2_y2[None,:].expand(len(box1),-1)
+
+    # get the corrdinates of the intersection rectangle
+    inter_rect_x1 = torch.max(b1_x1, b2_x1)
+    inter_rect_y1 = torch.max(b1_y1, b2_y1)
+    inter_rect_x2 = torch.min(b1_x2, b2_x2)
+    inter_rect_y2 = torch.min(b1_y2, b2_y2)
+    # Intersection area
+    inter_area = torch.clamp(inter_rect_x2 - inter_rect_x1 + 1, min=0) * torch.clamp(
+        inter_rect_y2 - inter_rect_y1 + 1, min=0
+    )
+    # Union Area
+    b1_area = (b1_x2 - b1_x1 + 1) * (b1_y2 - b1_y1 + 1)
+    b2_area = (b2_x2 - b2_x1 + 1) * (b2_y2 - b2_y1 + 1)
+
+    iou = inter_area / (b1_area + b2_area - inter_area + 1e-16)
+
+    return iou
+
 def inv_tanh(y):
     if y<=-1: #implicit gradient clipping done here
         return -2
@@ -532,13 +578,15 @@ def get_closest_anchor_iou(anchors,gh,gw):
 def multi_get_closest_anchor_iou(anchors,gh,gws):
     # Get shape of gt box
     gt_box = torch.FloatTensor(len(gws),4).zero_()
-    gt_box[:,2] = torch.FloatTensor(gh)
+    gt_box[:,3] = torch.FloatTensor(len(gws)).fill_(gh)
+    for i,gw in enumerate(gws):
+        gt_box[i,2]=gw
     # Get shape of anchor box
     anchor_shapes = torch.FloatTensor(np.concatenate((np.zeros((len(anchors), 2)), np.array(anchors)), 1))
     # Calculate iou between gt and anchor shapes
     anch_ious = multi_bbox_iou(gt_box, anchor_shapes) #these are at half their size, but IOU is the same
-    # Find the best matching anchor box
-    best_n = anch_ious.argmax(dim=IDK)
+    # Find the best matching anchor box index
+    best_n = anch_ious.argmax(dim=1)
 
     return best_n, anch_ious
 
