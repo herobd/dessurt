@@ -112,16 +112,16 @@
         "noBBVisualFeats": true,
 
         "expand_rel_context": 20,
-        "featurizer_start_h": 32,
-        "featurizer_start_w": 32,
+        "featurizer_start_h": 12,
+        "featurizer_start_w": 12,
         "featurizer_conv": ["sep128","M","sep128","sep128","M","sep256","sep256","M",238],
         "featurizer_fc": null,
 
         "pred_nn": false,
         "pred_class": true,
         "expand_bb_context": 20,
-        "featurizer_bb_start_h": 32,
-        "featurizer_bb_start_w": 32,
+        "featurizer_bb_start_h": 2,
+        "featurizer_bb_start_w": 2,
         "bb_featurizer_conv": ["sep64","M","sep64","sep64","M","sep128","sep128","M",250],
 
         "fix_bi_dir": true,
