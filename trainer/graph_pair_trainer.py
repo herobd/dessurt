@@ -2024,7 +2024,8 @@ class GraphPairTrainer(BaseTrainer):
                     losses['classFinalLoss'] += class_loss_final
 
                 if nodePredConf_use is not None and nodePredConf_use.size(0)>0:
-                    nodeGTConf_use = nodeGTConf_use[:,None] #introduce "time" dimension to broadcast
+                    if len(nodeGTConf_use.size())<len(nodePredConf_use.size()):
+                        nodeGTConf_use = nodeGTConf_use[:,None] #introduce "time" dimension to broadcast
                     conf_loss_final = self.loss['classFinal'](nodePredConf_use,nodeGTConf_use)
                     losses['confFinalLoss'] += conf_loss_final
                     #class_loss_final *= self.lossWeights['class']
