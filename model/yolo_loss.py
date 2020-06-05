@@ -5,6 +5,51 @@ import numpy as np
 import math
 from utils.yolo_tools import allIOU, allDist
 
+def bbox_coverage(box1, box2, x1y1x2y2=True):
+    """
+    Returns the covereage, how much of box1 is covered by the boxes (box2) and how much each box2 is covered by box1
+    """
+    assert(box1.size(0)==1)
+    if not x1y1x2y2:
+        # Transform from center and width to exact coordinates
+        #I assume H and W are half
+        b1_x1, b1_x2 = box1[:, 0] - box1[:, 2] , box1[:, 0] + box1[:, 2] 
+        b1_y1, b1_y2 = box1[:, 1] - box1[:, 3] , box1[:, 1] + box1[:, 3] 
+        b2_x1, b2_x2 = box2[:, 0] - box2[:, 2] , box2[:, 0] + box2[:, 2] 
+        b2_y1, b2_y2 = box2[:, 1] - box2[:, 3] , box2[:, 1] + box2[:, 3] 
+    else:
+        # Get the coordinates of bounding boxes
+        b1_x1, b1_y1, b1_x2, b1_y2 = box1[:, 0], box1[:, 1], box1[:, 2], box1[:, 3]
+        b2_x1, b2_y1, b2_x2, b2_y2 = box2[:, 0], box2[:, 1], box2[:, 2], box2[:, 3]
+
+    # get the corrdinates of the intersection rectangle
+    inter_rect_x1 = torch.max(b1_x1, b2_x1)
+    inter_rect_y1 = torch.max(b1_y1, b2_y1)
+    inter_rect_x2 = torch.min(b1_x2, b2_x2)
+    inter_rect_y2 = torch.min(b1_y2, b2_y2)
+    # Intersection area
+    inter_area = torch.clamp(inter_rect_x2 - inter_rect_x1 + 1, min=0) * torch.clamp(
+        inter_rect_y2 - inter_rect_y1 + 1, min=0
+    )
+    # Union Area
+    b1_area = (b1_x2 - b1_x1 + 1) * (b1_y2 - b1_y1 + 1)
+    b2_area = (b2_x2 - b2_x1 + 1) * (b2_y2 - b2_y1 + 1)
+
+    #iou = inter_area / (b1_area + b2_area - inter_area + 1e-16)
+    inter_rect_x1=inter_rect_x1[inter_area>0]
+    inter_rect_y1=inter_rect_y1[inter_area>0]
+    inter_rect_x2=inter_rect_x2[inter_area>0]
+    inter_rect_y2=inter_rect_y2[inter_area>0]
+
+    inter_rect_x1_R = inter_rect_x1[None,:].expand(inter_rect_x1.size(0),-1)
+    inter_rect_x1_C = inter_rect_x1[:,None].expand(-1,inter_rect_x1.size(0))
+    #TODO...
+
+    box1_coverage = ( inter_area.sum()-intersections_of_intersections_area.sum() )/b1_area
+    box2_covereage = inter_area/b2_area
+
+    return box1_covereage, box2_covereage
+
 def build_oversegmented_targets(
     pred_boxes, pred_conf, pred_cls, target, target_sizes, anchors, num_anchors, num_classes, grid_sizeH, grid_sizeW, ignore_thres, scale, calcIOUAndDist=False, target_num_neighbors=None
 ):
@@ -25,27 +70,19 @@ def build_oversegmented_targets(
         tneighbors = torch.FloatTensor(nB, nA, nH, nW).fill_(0)
     else:
         tneighbors=None
-    if calcIOUAndDist:
-        distances = torch.ones(nB,nA, nH, nW) #distance to closest target
-        ious = torch.zeros(nB,nA, nH, nW) #max iou to target
-    else:
-        distances=None
-        ious=None
+
+
+    assert(not calcIOUAndDist)
 
     nGT = 0
-    nCorrect = 0
+    covered_gt_area = 0
+    on_pred_area = 0
+    precision = 0
+    recall = 0
+    #nCorrect = 0
     #import pdb; pdb.set_trace()
     for b in range(nB):
-        if calcIOUAndDist and target_sizes[b]>0:
-            raise Exception('caclIOUAndDist does not have normalized target (scaled)')
-            flat_pred = pred_boxes[b].view(-1,pred_boxes.size(-1))
-            #flat_target = target[b,:target_sizes[b]].view(-1,target.size(-1))
-            iousB = allIOU(flat_pred,target[b,:target_sizes[b]], boxes1XYWH=[0,1,2,3])
-            iousB = iousB.view(nA, nH, nW,-1)
-            ious[b] = iousB.max(dim=-1)[0]
-            distancesB = allDist(flat_pred,target[b,:target_sizes[b]])
-            distances[b] = distancesB.min(dim=-1)[0].view(nA, nH, nW)
-            #import pdb;pdb.set_trace()
+        on_pred_areaB = torch.FloatTensor(pred_boxes.size(1)).zero_()
         #For oversegmented, we need to identify all tiles (not just on) that correspon to gt
         #That brings up an interesting alternative: limit all predictions to their local tile (width). Proba not now...
         for t in range(target_sizes[b]): #range(target.shape[1]):
@@ -104,6 +141,7 @@ def build_oversegmented_targets(
             #conf_mask[b, anch_ious > ignore_thres, gj1:gj2+1,gi1:gi2+1] = 0
             # Get ground truth box
             gt_box = torch.FloatTensor(np.array([gx, gy, gw, gh])).unsqueeze(0)
+            gt_area = gw+gh
             # Get the best prediction
             #pred_box = pred_boxes[b, best_n, gj, gi].unsqueeze(0)
             # Masks
@@ -113,51 +151,72 @@ def build_oversegmented_targets(
             #mask[b, best_n, gj, gi1:gi2+1] = 1
             #conf_mask[b, best_n, gj, gi1:gi2+1] = 1 #we ned to set this to 1 as we ignored it earylier
             # Coordinates
-            #DO we first want to compute position and than the scaling based on that, or vice-versa?
+            #DO we first want to compute position and than the scaling based on that, or vice-versa? Always  trying to predict at the edge of a tile might lead to weird effects... What about random for each instance? Or halfway for each?
+            #-> I think my final verdict will be to move and strech such that the side you're not matching stays in the same place. This should always maintain a constant distance form the center of the predicting tile to the max length for open/continuing sides
             #For X, the anchor was selected assuming a position centered on the tile. However, this won't work for some (end tiles). We can simply compute the best position given the selected anchors
             for index,i in range(IDK):
                 best_n = best_ns[index]
                 diff1 = gx1-(i+0.5-anchor_width[best_n])
                 diff2 = gx2-(i+0.5+anchor_width[best_n])
-                if diff1<=0 and diff2>=0:
-                    #no change is needed, the real box extends beyond the anchor
-                    tx[b, best_n, gj, i] = 0 #TODO Should this actually be: No loss computed?
-                    tw[b, best_n, gj, gi] = 0 
-                elif diff1>0 and diff1<diff2:
-                    tx[b, best_n, gj, i] = inv_tanh(diff1)
-                elif diff2<0 and diff2>diff1:
-                    tx[b, best_n, gj, i] = inv_tanh(diff2)
-                else:
-                    #this is not oversegmented
+
+                if anchor_width[best_n]>gw or gw-anchor_width[best_n]<=1.0
+                    #We'll just fit the anchor box to the whole line, either becuase the line is smaller or very close to the anchor size (less than one tile)
                     offset = gx - (gi+0.5)
                     tx[b, best_n, gj, i] = inv_tanh(offset) 
                     tw[b, best_n, gj, i] = math.log(gw / anchors[best_n][0] + 1e-16)
-            tx[b, best_n, gj, gi] = inv_tanh(gx - (gi+0.5)) #TODO ???? left off
+                elif diff1>=-0.5:
+                    #anchor box is close to left edge or past it, so lets move+strench left side to gt
+                    scale = 1 + diff1/(2*anchor_width[best_n])
+                    offset = anchor_width[best_n]*(1-scale)
+                    tx[b, best_n, gj, i] = inv_tanh(offset) 
+                    tw[b, best_n, gj, i] = math.log(scale + 1e-16)
+                elif diff2<=-0.5:
+                    #anchor box is close to right edge or past it, so lets move+strench right side to gt
+                    scale = 1 + diff2/(2*anchor_width[best_n])
+                    offset = anchor_width[best_n]*(scale-1)
+                    tx[b, best_n, gj, i] = inv_tanh(offset) 
+                    tw[b, best_n, gj, i] = math.log(scale + 1e-16)
+                elif diff1<=0 and diff2>=0:
+                    #no change is needed, the real box extends well beyond the anchor
+                    tx[b, best_n, gj, i] = 0 #TODO Should this actually be: No loss computed? seperate mask
+                    tw[b, best_n, gj, gi] = 0 
+                else:
+                    print("UNEXPECTED STATE")
+                    import pdb;pdb.set_trace()
             ty[b, best_n, gj, gi1:gi2+1] = inv_tanh(gy - (gj+0.5))
             # Width and height
-            tw[b, best_n, gj, gi] = math.log(gw / anchors[best_n][0] + 1e-16)
-            th[b, best_n, gj, gi] = math.log(gh / anchors[best_n][1] + 1e-16)
+            th[b, best_n, gj, gi1:gi2+1] = math.log(gh / anchors[best_n][1] + 1e-16)
             # One-hot encoding of label
             #target_label = int(target[b, t, 0])
-            tcls[b, best_n, gj, gi] = target[b, t,13:]
+            tcls[b, best_n, gj, gi1:gi2+1] = target[b, t,13:]
             if target_num_neighbors is not None:
-                tneighbors[b, best_n, gj, gi] = target_num_neighbors[b, t]
-            tconf[b, best_n, gj, gi] = 1
+                assert(False and 'Not really made for NN preds...')
+                tneighbors[b, best_n, gj, gi1] = target_num_neighbors[b, t]+1
+                tneighbors[b, best_n, gj, gi1+1:gi2] = target_num_neighbors[b, t]+2
+                tneighbors[b, best_n, gj, gi2+1] = target_num_neighbors[b, t]+1
+            tconf[b, best_n, gj, gi1:gi2+1] = 1
 
             # Calculate iou between ground truth and best matching prediction
-            if calcIOUAndDist:
-                #iou = ious[best_n*(nH*nW) + gj*(nW) + gi,t]
-                iou = iousB[best_n, gj, gi, t]
-            else:
-                iou = bbox_iou(gt_box, pred_box, x1y1x2y2=False)
-            pred_label = torch.argmax(pred_cls[b, best_n, gj, gi])
-            score = pred_conf[b, best_n, gj, gi]
+            class_elector = red_cls[b].argmax(dim=?)==torch.argmax(target[b,t,13:]
+            pred_right_label_boxes = pred_boxes[b][class_elector]) #this is already normalized to tile space
+         
+            gt_area_covered, pred_area_covered = bbox_coverage(gt_box, pred_right_label_boxes, x1y1x2y2=False)
+            covered_gt_area += area_covered/gt_area
+            if area_covered/gt_area>0.5:
+                recall+=1
+            on_pred_areaB[class_selector] = torch.max(on_pred_areaB[class_selector],pred_area_covered)
+            #pred_label = torch.argmax(pred_cls[b, best_n, gj, gi])
+            #score = pred_conf[b, best_n, gj, gi]
             #import pdb; pdb.set_trace()
             #if iou > 0.5 and pred_label == torch.argmax(target[b,t,13:]) and score > 0:
             #    nCorrect += 1
 
+        on_pred_area += on_pred_areaB.sum()
+        nPred += on_pred_areaB.size(0)
+        precision = (on_pred_areaB>0.5).sum()
+
     assert(False and 'TODO verify this works!')
-    return nGT, nCorrect, mask, conf_mask, tx, ty, tw, th, tconf, tcls, tneighbors, distances, ious
+    return nGT, mask, conf_mask, tx, ty, tw, th, tconf, tcls, tneighbors, on_pred_area/nPred, covered_gt_area/nGT, recall/nGT, precision/nPred
 
 class OversegmentLoss (nn.Module):
     def __init__(self, num_classes, rotation, scale, anchors, ignore_thresh=0.5,use_special_loss=False,bad_conf_weight=1.25, multiclass=False):
@@ -219,7 +278,7 @@ class OversegmentLoss (nn.Module):
         #    target[:,:,[0,4]] /= self.scale[0]
         #    target[:,:,[1,3]] /= self.scale[1]
 
-        nGT, nCorrect, mask, conf_mask, tx, ty, tw, th, tconf, tcls, tneighbors, distances, ious = build_oversegmented_targets(
+        nGT, mask, conf_mask, tx, ty, tw, th, tconf, tcls, tneighbors, distances, ious = build_oversegmented_targets(
             pred_boxes=pred_boxes.cpu().data,
             pred_conf=pred_conf.cpu().data,
             pred_cls=pred_cls.cpu().data,
@@ -236,12 +295,12 @@ class OversegmentLoss (nn.Module):
             target_num_neighbors=target_num_neighbors
         )
 
-        nProposals = int((pred_conf > 0).sum().item())
-        recall = float(nCorrect / nGT) if nGT else 1
-        if nProposals>0:
-            precision = float(nCorrect / nProposals)
-        else:
-            precision = 1
+        #nProposals = int((pred_conf > 0).sum().item())
+        #recall = float(nCorrect / nGT) if nGT else 1
+        #if nProposals>0:
+        #    precision = float(nCorrect / nProposals)
+        #else:
+        #    precision = 1
 
         # Handle masks
         mask = (mask.type(BoolTensor))
