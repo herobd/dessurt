@@ -36,16 +36,35 @@ def bbox_coverage(box1, box2, x1y1x2y2=True):
     b2_area = (b2_x2 - b2_x1 + 1) * (b2_y2 - b2_y1 + 1)
 
     #iou = inter_area / (b1_area + b2_area - inter_area + 1e-16)
+
+    #Remove pred boxes which do not intersect the GT in question
     inter_rect_x1=inter_rect_x1[inter_area>0]
     inter_rect_y1=inter_rect_y1[inter_area>0]
     inter_rect_x2=inter_rect_x2[inter_area>0]
     inter_rect_y2=inter_rect_y2[inter_area>0]
 
+    #calculate the intersetions among the remaining pred-intersection boxes
     inter_rect_x1_R = inter_rect_x1[None,:].expand(inter_rect_x1.size(0),-1)
     inter_rect_x1_C = inter_rect_x1[:,None].expand(-1,inter_rect_x1.size(0))
-    #TODO...
+    inter_rect_y1_R = inter_rect_y1[None,:].expand(inter_rect_y1.size(0),-1)
+    inter_rect_y1_C = inter_rect_y1[:,None].expand(-1,inter_rect_y1.size(0))
+    inter_rect_x2_R = inter_rect_x2[None,:].expand(inter_rect_x2.size(0),-1)
+    inter_rect_x2_C = inter_rect_x2[:,None].expand(-1,inter_rect_x2.size(0))
+    inter_rect_y2_R = inter_rect_y2[None,:].expand(inter_rect_y2.size(0),-1)
+    inter_rect_y2_C = inter_rect_y2[:,None].expand(-1,inter_rect_y2.size(0))
+    
+    inter_inter_rect_x1 = torch.max(inter_rect_x1_R,inter_rect_x1_C)
+    inter_inter_rect_y1 = torch.max(inter_rect_y1_R,inter_rect_y1_C)
+    inter_inter_rect_x2 = torch.max(inter_rect_x2_R,inter_rect_x2_C)
+    inter_inter_rect_y2 = torch.max(inter_rect_y2_R,inter_rect_y2_C)
+    inter_inter_area = torch.clamp(inter_inter_rect_x2 - inter_inter_rect_x1 + 1, min=0) * torch.clamp(
+        inter_inter_rect_y2 - inter_inter_rect_y1 + 1, min=0
+    )
 
-    box1_coverage = ( inter_area.sum()-intersections_of_intersections_area.sum() )/b1_area
+    intersections_of_intersections_area = torch.triu(inter_inter_area,diagonal=1).sum()
+
+    #We use the sum of pred-GT intersetions, minus the intersections intersecstions, as those would be counting double and shouldn't
+    box1_coverage = ( inter_area.sum()-intersections_of_intersections_area )/b1_area
     box2_covereage = inter_area/b2_area
 
     return box1_covereage, box2_covereage
@@ -201,8 +220,8 @@ def build_oversegmented_targets(
             pred_right_label_boxes = pred_boxes[b][class_elector]) #this is already normalized to tile space
          
             gt_area_covered, pred_area_covered = bbox_coverage(gt_box, pred_right_label_boxes, x1y1x2y2=False)
-            covered_gt_area += area_covered/gt_area
-            if area_covered/gt_area>0.5:
+            covered_gt_area += gt_area_covered/gt_area
+            if gt_area_covered/gt_area>0.5:
                 recall+=1
             on_pred_areaB[class_selector] = torch.max(on_pred_areaB[class_selector],pred_area_covered)
             #pred_label = torch.argmax(pred_cls[b, best_n, gj, gi])
@@ -278,7 +297,7 @@ class OversegmentLoss (nn.Module):
         #    target[:,:,[0,4]] /= self.scale[0]
         #    target[:,:,[1,3]] /= self.scale[1]
 
-        nGT, mask, conf_mask, tx, ty, tw, th, tconf, tcls, tneighbors, distances, ious = build_oversegmented_targets(
+        nGT, mask, conf_mask, tx, ty, tw, th, tconf, tcls, tneighbors, distances, pred_covered, gt_covered, recall, precision = build_oversegmented_targets(
             pred_boxes=pred_boxes.cpu().data,
             pred_conf=pred_conf.cpu().data,
             pred_cls=pred_cls.cpu().data,
@@ -355,6 +374,8 @@ class OversegmentLoss (nn.Module):
                 loss_nn,
                 recall,
                 precision,
+                gt_covered,
+                pred_covered
             )
         else:
             return (
@@ -365,6 +386,8 @@ class OversegmentLoss (nn.Module):
                 0,
                 recall,
                 precision,
+                gt_covered,
+                pred_covered
             )
 
 class YoloLoss (nn.Module):
