@@ -41,9 +41,9 @@ class BoxDetectTrainer(BaseTrainer):
                     scale=model.scale,
                     anchor_h=model.meanH)
         if 'loss_weights' in config:
-            self.loss_weight=config['loss_weights']
+            self.lossWeights=config['loss_weights']
         else:
-            self.loss_weight={'box':0.6, 'line': 0.4, 'point':0.4, 'pixel':8}
+            self.lossWeights={'box':0.6, 'line': 0.4, 'point':0.4, 'pixel':8}
         self.batch_size = data_loader.batch_size
         self.data_loader = data_loader
         self.data_loader_iter = iter(data_loader)
@@ -241,6 +241,8 @@ class BoxDetectTrainer(BaseTrainer):
         tota_class_loss =0
         tota_num_neighbor_loss =0
         total_val_metrics = np.zeros(len(self.metrics))
+        total_gt_covered=0
+        total_pred_covered=0
         losses={}
         mAP = 0
         mAP_count = 0
@@ -285,6 +287,7 @@ class BoxDetectTrainer(BaseTrainer):
                         outputBoxes = non_max_sup_iou(outputBoxes.cpu(),threshConf,self.thresh_intersect)
                     if targetBoxes is not None:
                         targetBoxes = targetBoxes.cpu()
+
                     for b in range(batchSize):
                         #if self.model.predNumNeighbors:
                         #    useOutputBoxes=torch.cat((outputBoxes[b][:,0:6],outputBoxes[b][:,7:]),dim=1)
@@ -304,6 +307,17 @@ class BoxDetectTrainer(BaseTrainer):
                             mAP_count+=1
                         mRecall += np.array(recall_5,dtype=np.float)#/len(outputBoxes)
                         mPrecision += np.array(prec_5,dtype=np.float)#/len(outputBoxes)
+                elif 'overseg' in self.loss:
+                    this_loss, position_loss, conf_loss, class_loss, nn_loss, recall, precision, gt_covered, pred_covered = self.loss['overseg'](outputOffsets,targetBoxes,targetBoxes_sizes,target_num_neighbors)
+
+                    total_val_loss+=this_loss.item()
+                    mRecall+=recall
+                    mPrecision+=precision
+                    total_gt_covered+=gt_covered
+                    total_pred_covered+=pred_covered
+                    total_position_loss+=position_loss
+                    total_conf_loss+=conf_loss
+                    total_class_loss+=class_loss
                 index=0
                 for name, target in targetLines.items():
                     #print('line')
@@ -311,22 +325,22 @@ class BoxDetectTrainer(BaseTrainer):
                     this_loss, line_pos_loss, line_conf_loss, line_class_loss = self.loss['line'](predictions,target,targetLines_sizes[name])
                     this_loss*=self.loss_weight['line']
                     loss+=this_loss
-                    losses['val_'+name+'_loss']=this_loss.item()
-                    losses['val_'+name+'_pos_loss']=line_pos_loss
-                    losses['val_'+name+'_conf_loss']=line_conf_loss
-                    losses['val_'+name+'_class_loss']=line_class_loss
+                    losses['val_'+name+'Loss']=this_loss.item()
+                    losses['val_'+name+'_posLoss']=line_pos_loss
+                    losses['val_'+name+'_confLoss']=line_conf_loss
+                    losses['val_'+name+'_classLoss']=line_class_loss
                     index+=1
                 index=0
                 for name, target in targetPoints.items():
                     predictions = outputPoints[index]
                     this_loss = self.loss['point'](predictions,target,targetPoints_sizes[name], **self.loss_params['point'])
                     loss+=this_loss*self.loss_weight['point']
-                    losses['val_'+name+'_loss']+=this_loss.item()
+                    losses['val_'+name+'Loss']+=this_loss.item()
                     index+=1
                 if targetPixels is not None:
                     this_loss = self.loss['pixel'](outputPixels,targetPixels, **self.loss_params['pixel'])
                     loss+=this_loss*self.loss_weight['pixel']
-                    losses['val_pixel_loss']+=this_loss.item()
+                    losses['val_pixelLoss']+=this_loss.item()
 
                 total_val_loss += loss.item()
                 loss=None
@@ -343,7 +357,7 @@ class BoxDetectTrainer(BaseTrainer):
             losses[name]/=len(self.valid_data_loader)
         if mAP_count==0:
             mAP_count=1
-        return {
+        ret=  {
             'val_loss': total_val_loss / len(self.valid_data_loader),
             'val_metrics': (total_val_metrics / len(self.valid_data_loader)).tolist(),
             'val_recall':(mRecall/(batchSize*len(self.valid_data_loader))).tolist(),
@@ -356,13 +370,16 @@ class BoxDetectTrainer(BaseTrainer):
             'val_num_neighbor_loss':tota_num_neighbor_loss / len(self.valid_data_loader),
             **losses
         }
+        if 'overseg' in self.loss:
+            ret['total_gt_covered'] = total_gt_covered / len(self.valid_data_loader)
+            ret['total_pred_covered'] = total_pred_covered / len(self.valid_data_loader)
+        return ret
 
 
 
 
 
     def run(self,instance,get=[]):
-        loss = 0
         index=0
         losses={}
         log={}
@@ -380,11 +397,23 @@ class BoxDetectTrainer(BaseTrainer):
         if 'box' in self.loss:
             this_loss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,targetBoxes_sizes,target_num_neighbors)
 
-            this_loss*=self.loss_weight['box']
-            loss+=this_loss
-            losses['box_loss']=this_loss.item()
+            losses['boxLoss']=this_loss.item()
+            log['position_loss']=position_loss
+            log['conf_loss']=conf_loss
+            log['class_loss']=class_loss
             #print('boxLoss:{}'.format(this_loss))
-            #display(instance)
+#display(instance)
+        elif 'overseg' in self.loss:
+            this_loss, position_loss, conf_loss, class_loss, nn_loss, recall, precision, gt_covered, pred_covered = self.loss['overseg'](outputOffsets,targetBoxes,targetBoxes_sizes,target_num_neighbors)
+
+            losses['oversegLoss']=this_loss.item()
+            log['recall']=recall
+            log['precision']=precision
+            log['gt_covered']=gt_covered
+            log['pred_covered']=pred_covered
+            log['position_loss']=position_loss
+            log['conf_loss']=conf_loss
+            log['class_loss']=class_loss
         else:
             position_loss=0
             conf_loss=0
@@ -395,28 +424,22 @@ class BoxDetectTrainer(BaseTrainer):
             #print('line')
             predictions = outputOffsetLines[index]
             this_loss, line_pos_loss, line_conf_loss, line_class_loss = self.loss['line'](predictions,target,targetLines_sizes[name])
-            this_loss*=self.loss_weight['line']
-            loss+=this_loss
-            losses[name+'_loss']=this_loss.item()
-            losses[name+'_pos_loss']=line_pos_loss
-            losses[name+'_conf_loss']=line_conf_loss
-            losses[name+'_class_loss']=line_class_loss
+            losses[name+'Loss']=this_loss.item()
+            losses[name+'_posLoss']=line_pos_loss
+            losses[name+'_confLoss']=line_conf_loss
+            losses[name+'_classLoss']=line_class_loss
             index+=1
         index=0
         for name, target in targetPoints.items():
             #print('point')
             predictions = outputPoints[index]
             this_loss, this_position_loss, this_conf_loss, this_class_loss = self.loss['point'](predictions,target,targetPoints_sizes[name], **self.loss_params['point'])
-            this_loss*=self.loss_weight['point']
-            loss+=this_loss
-            losses[name+'_loss']=this_loss.item()
+            losses[name+'Loss']=this_loss.item()
             index+=1
         if targetPixels is not None:
             #print('pixel')
             this_loss = self.loss['pixel'](outputPixels,targetPixels, **self.loss_params['pixel'])
-            this_loss*=self.loss_weight['pixel']
-            loss+=this_loss
-            losses['pixel_loss']=this_loss.item()
+            losses['pixelLoss']=this_loss.item()
         ##toc=timeit.default_timer()
         ##print('loss: '+str(toc-tic))
         ##tic=timeit.default_timer()
