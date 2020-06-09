@@ -65,13 +65,14 @@ def bbox_coverage(box1, box2, x1y1x2y2=True):
 
     #We use the sum of pred-GT intersetions, minus the intersections intersecstions, as those would be counting double and shouldn't
     box1_coverage = ( inter_area.sum()-intersections_of_intersections_area )/b1_area
-    box2_covereage = inter_area/b2_area
+    box2_coverage = inter_area/b2_area
 
-    return box1_covereage, box2_covereage
+    return box1_coverage, box2_coverage
 
 def build_oversegmented_targets(
-    pred_boxes, pred_conf, pred_cls, target, target_sizes, anchors, num_anchors, num_classes, grid_sizeH, grid_sizeW, ignore_thres, scale, calcIOUAndDist=False, target_num_neighbors=None
+    max_width, pred_boxes, pred_conf, pred_cls, target, target_sizes, anchors, num_anchors, num_classes, grid_sizeH, grid_sizeW, ignore_thresh, scale, calcIOUAndDist=False, target_num_neighbors=None
 ):
+    VISUAL_DEBUG=False
     nB = pred_boxes.size(0)
     nA = num_anchors
     nC = num_classes
@@ -101,10 +102,13 @@ def build_oversegmented_targets(
     #nCorrect = 0
     #import pdb; pdb.set_trace()
     for b in range(nB):
-        on_pred_areaB = torch.FloatTensor(pred_boxes.size(1)).zero_()
+        on_pred_areaB = torch.FloatTensor(pred_boxes.shape[1:4]).zero_()
         #For oversegmented, we need to identify all tiles (not just on) that correspon to gt
         #That brings up an interesting alternative: limit all predictions to their local tile (width). Proba not now...
         for t in range(target_sizes[b]): #range(target.shape[1]):
+
+            if VISUAL_DEBUG:
+                draw = np.zeros(nH*VIZ_SIZE,nW*VIZ_SIZE,3)
             #if target[b, t].sum() == 0:
             #    continue
             # Convert to position relative to box
@@ -124,7 +128,7 @@ def build_oversegmented_targets(
             # Get grid box indices
             gi = max(min(int(gx),conf_mask.size(3)-1),0)
             gj = max(min(int(gy),conf_mask.size(2)-1),0)
-            gi1 = max(min(int(g1x),conf_mask.size(3)-1),0)
+            gi1 = max(min(int(gx1),conf_mask.size(3)-1),0)
             gj1 = max(min(int(gy1),conf_mask.size(2)-1),0)
             gi2 = max(min(int(gx2),conf_mask.size(3)-1),0)
             gj2 = max(min(int(gy2),conf_mask.size(2)-1),0)
@@ -146,17 +150,20 @@ def build_oversegmented_targets(
                 
                 #Get best matching anchor
                 #Build oversegmented gt sizes for each i/tile: (gh,min(self.maxWidth,this_x-gx1,gx2-this_x))
-                over_seg_gws = [min(self.maxWidth,this_i+0.5-gx1,gx2-(this_x+0.5)) for this_i in range(gi1,gi2+1)]
+                over_seg_gws = [min(max_width,this_i+0.5-gx1,gx2-(this_i+0.5)) for this_i in range(gi1,gi2+1)]
             best_ns,anch_ious = multi_get_closest_anchor_iou(anchors,gh,over_seg_gws)
 
             #best_n, anch_ious = get_closest_anchor_iou(anchors,gh,min(gw,self.maxWidth))
             # Where the overlap is larger than threshold set mask to zero (ignore)
             #conf_mask[b, anch_ious > ignore_thres, gj, gi] = 0
             #  ignore_range, all, set to 1 later
-            anch_x,ignore_anch = torch.where(anch_ious > ignore_thres)
+            anch_x,ignore_anch = torch.where(anch_ious > ignore_thresh)
             #conf_mask[([b]*anch_x.size(0),ignore_anch,list(range(gj1:gj2+1)),anch_x)]=0
             for j in range(gj1,gj2+1):
                 conf_mask[b,:,j,:][ignore_anch,anch_x]=0
+                if VISUAL_DEBUG:
+                    for iii in range( anch_x.size(??):
+                        draw[j*VIZ_SIZE:(j+1)*VIZ_SIZE,anch_x[]*VIZ_SIZE:(anch_x[]+1)*VIZ_SIZE,1]=0
             #conf_mask[b, anch_ious > ignore_thres, gj1:gj2+1,gi1:gi2+1] = 0
             # Get ground truth box
             gt_box = torch.FloatTensor(np.array([gx, gy, gw, gh])).unsqueeze(0)
@@ -167,18 +174,23 @@ def build_oversegmented_targets(
 
             mask[b,:,gj,:][(best_ns,list(range(gi1,gi2+1)))] = 1
             conf_mask[b,:,gj,:][(best_ns,list(range(gi1,gi2+1)))] = 1
+            if VISUAL_DEBUG:
+                draw[gj*VIZ_SIZE:(gj+1)*VIZ_SIZE,gi1*VIZ_SIZE:(gi2+1)*VIZ_SIZE,0]=150
+                draw[gj*VIZ_SIZE:(gj+1)*VIZ_SIZE,gi1*VIZ_SIZE:(gi2+1)*VIZ_SIZE,1]=150
             #mask[b, best_n, gj, gi1:gi2+1] = 1
             #conf_mask[b, best_n, gj, gi1:gi2+1] = 1 #we ned to set this to 1 as we ignored it earylier
             # Coordinates
             #DO we first want to compute position and than the scaling based on that, or vice-versa? Always  trying to predict at the edge of a tile might lead to weird effects... What about random for each instance? Or halfway for each?
             #-> I think my final verdict will be to move and strech such that the side you're not matching stays in the same place. This should always maintain a constant distance form the center of the predicting tile to the max length for open/continuing sides
             #For X, the anchor was selected assuming a position centered on the tile. However, this won't work for some (end tiles). We can simply compute the best position given the selected anchors
-            for index,i in range(IDK):
+            anchor_width = anchors[:,0]
+            for index in range(len(best_ns)):
+                i = index+gi1
                 best_n = best_ns[index]
                 diff1 = gx1-(i+0.5-anchor_width[best_n])
                 diff2 = gx2-(i+0.5+anchor_width[best_n])
 
-                if anchor_width[best_n]>gw or gw-anchor_width[best_n]<=1.0
+                if anchor_width[best_n]>gw or gw-anchor_width[best_n]<=1.0:
                     #We'll just fit the anchor box to the whole line, either becuase the line is smaller or very close to the anchor size (less than one tile)
                     offset = gx - (gi+0.5)
                     tx[b, best_n, gj, i] = inv_tanh(offset) 
@@ -189,7 +201,7 @@ def build_oversegmented_targets(
                     offset = anchor_width[best_n]*(1-scale)
                     tx[b, best_n, gj, i] = inv_tanh(offset) 
                     tw[b, best_n, gj, i] = math.log(scale + 1e-16)
-                elif diff2<=-0.5:
+                elif diff2<=0.5:
                     #anchor box is close to right edge or past it, so lets move+strench right side to gt
                     scale = 1 + diff2/(2*anchor_width[best_n])
                     offset = anchor_width[best_n]*(scale-1)
@@ -215,9 +227,9 @@ def build_oversegmented_targets(
                 tneighbors[b, best_n, gj, gi2+1] = target_num_neighbors[b, t]+1
             tconf[b, best_n, gj, gi1:gi2+1] = 1
 
-            # Calculate iou between ground truth and best matching prediction
-            class_elector = red_cls[b].argmax(dim=?)==torch.argmax(target[b,t,13:]
-            pred_right_label_boxes = pred_boxes[b][class_elector]) #this is already normalized to tile space
+            # Calculate overlaps between ground truth and best matching prediction
+            class_selector = torch.logical_and(pred_cls[b].argmax(dim=3)==torch.argmax(target[b,t,13:]), pred_conf[b]>0)
+            pred_right_label_boxes = pred_boxes[b][class_selector] #this is already normalized to tile space
          
             gt_area_covered, pred_area_covered = bbox_coverage(gt_box, pred_right_label_boxes, x1y1x2y2=False)
             covered_gt_area += gt_area_covered/gt_area
@@ -238,8 +250,9 @@ def build_oversegmented_targets(
     return nGT, mask, conf_mask, tx, ty, tw, th, tconf, tcls, tneighbors, on_pred_area/nPred, covered_gt_area/nGT, recall/nGT, precision/nPred
 
 class OversegmentLoss (nn.Module):
-    def __init__(self, num_classes, rotation, scale, anchors, ignore_thresh=0.5,use_special_loss=False,bad_conf_weight=1.25, multiclass=False):
+    def __init__(self, num_classes, rotation, scale, anchors, ignore_thresh=0.5,use_special_loss=False,bad_conf_weight=1.25, multiclass=False,max_width=100):
         super(OversegmentLoss, self).__init__()
+        self.max_width=max_width
         self.ignore_thresh=ignore_thresh
         self.num_classes=num_classes
         self.rotation=rotation
@@ -298,6 +311,7 @@ class OversegmentLoss (nn.Module):
         #    target[:,:,[1,3]] /= self.scale[1]
 
         nGT, mask, conf_mask, tx, ty, tw, th, tconf, tcls, tneighbors, distances, pred_covered, gt_covered, recall, precision = build_oversegmented_targets(
+            self.max_width,
             pred_boxes=pred_boxes.cpu().data,
             pred_conf=pred_conf.cpu().data,
             pred_cls=pred_cls.cpu().data,
@@ -308,7 +322,7 @@ class OversegmentLoss (nn.Module):
             num_classes=self.num_classes,
             grid_sizeH=nH,
             grid_sizeW=nW,
-            ignore_thres=self.ignore_thresh,
+            ignore_thresh=self.ignore_thresh,
             scale=self.scale,
             calcIOUAndDist=self.use_special_loss,
             target_num_neighbors=target_num_neighbors

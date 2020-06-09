@@ -31,6 +31,12 @@ class BoxDetectTrainer(BaseTrainer):
                     rotation=model.rotation, 
                     scale=model.scale,
                     anchors=model.anchors)
+        elif 'overseg' in self.loss:
+            self.loss['overseg'] = self.loss['overseg'](**self.loss_params['overseg'], 
+                    num_classes=model.numBBTypes, 
+                    rotation=model.rotation, 
+                    scale=model.scale,
+                    anchors=model.anchors)
         if 'line' in self.loss and self.loss['line'] is not None:
             if 'line' in self.loss_params:
                 params = self.loss_params['line']

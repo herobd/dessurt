@@ -161,7 +161,7 @@ class FUNSDBoxDetect(BoxDetectDataset):
 
     def parseAnn(self,np_img,annotations,s,imageName):
         if self.split_to_lines:
-            bbs, numNeighbors = createLines(annotations,self.classMap,s)
+            bbs, numNeighbors, trans, groups = createLines(annotations,self.classMap,s)
             numClasses = len(self.classMap)
             pairs=None
         else:
@@ -228,7 +228,7 @@ class FUNSDBoxDetect(BoxDetectDataset):
 
 
 
-    def cluster(self,k,sample_count,outPath):
+    def cluster(self,k,sample_count,outPath,use_max_width=False):
         def makePointsAndRects(h,w,r=None):
             if r is None:
                 return np.array([-w/2.0,0,w/2.0,0,0,-h/2.0,0,h/2.0, 0,0, 0, h,w])
@@ -259,21 +259,43 @@ class FUNSDBoxDetect(BoxDetectDataset):
                 else:
                     s = np.random.uniform(self.rescale_range[0], self.rescale_range[1])
                 #partial_rescale = s/rescaled
-                boxes = annotations['form']
                 points=[]
-                for j,boxinfo in enumerate(boxes):
-                    lX,tY,rX,bY = boxinfo['box']
-                    w = rX-lX +1
-                    h = bY-tY +1
-                    p_left_x = -w/2
-                    p_left_y = 0
-                    p_right_x = w/2
-                    p_right_y = 0
-                    p_top_x = 0
-                    p_top_y = -h/2
-                    p_bot_x = 0
-                    p_bot_y = h/2
-                    points.append(np.array([p_left_x,p_left_y,p_right_x,p_right_y,p_top_x,p_top_y,p_bot_x,p_bot_y,0,0,0,h,w]))
+                if self.split_to_lines:
+                    bbs, numNeighbors, trans, groups = createLines(annotations,self.classMap,s)
+                    for j in range(bbs.shape[1]):
+                        w = bbs[0,j,2]-bbs[0,j,0]
+                        h = bbs[0,j,5]-bbs[0,j,1]
+                        if use_max_width:
+                            w = min(w,use_max_width)
+                        p_left_x = bbs[0,j,8]
+                        p_left_x = -w/2
+                        p_left_y = 0
+                        p_right_x = w/2
+                        p_right_y = 0
+                        p_top_x = 0
+                        p_top_y = -h/2
+                        p_bot_x = 0
+                        p_bot_y = h/2
+                        points.append(np.array([p_left_x,p_left_y,p_right_x,p_right_y,p_top_x,p_top_y,p_bot_x,p_bot_y,0,0,0,h,w]))
+                else:
+                    boxes = annotations['form']
+                    for j,boxinfo in enumerate(boxes):
+                        lX,tY,rX,bY = boxinfo['box']
+                        w = rX-lX +1
+                        h = bY-tY +1
+                        w *= s
+                        h *= s
+                        if use_max_width:
+                            w = min(w,use_max_width)
+                        p_left_x = -w/2
+                        p_left_y = 0
+                        p_right_x = w/2
+                        p_right_y = 0
+                        p_top_x = 0
+                        p_top_y = -h/2
+                        p_bot_x = 0
+                        p_bot_y = h/2
+                        points.append(np.array([p_left_x,p_left_y,p_right_x,p_right_y,p_top_x,p_top_y,p_bot_x,p_bot_y,0,0,0,h,w]))
                 points = np.stack(points,axis=0)
                 pointsAndRects.append(points)
         pointsAndRects = np.concatenate(pointsAndRects,axis=0)
@@ -430,8 +452,9 @@ class FUNSDBoxDetect(BoxDetectDataset):
         with open(outPath.format(final_k),'w') as out:
             out.write(json.dumps(toWrite))
             print('saved '+outPath.format(final_k))
-        cv2.imshow('clusters',draw)
-        cv2.waitKey()
+        #cv2.imshow('clusters',draw)
+        #cv2.waitKey()
+        cv2.imwrite('clusters.png',draw*255)
 
 
 def getWidthFromBB(bb):
