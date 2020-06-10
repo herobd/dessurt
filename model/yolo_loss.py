@@ -4,6 +4,260 @@ import torch
 import numpy as np
 import math
 from utils.yolo_tools import allIOU, allDist
+from matplotlib import pyplot as plt
+
+def build_oversegmented_targets_no_anchors_multiscale(
+    max_width, pred_boxes, pred_conf, pred_cls, target, target_sizes, num_classes, grid_sizeH, grid_sizeW, ignore_thresh, scale, calcIOUAndDist=False, target_angle=None
+):
+    VISUAL_DEBUG=True
+    VIZ_SIZE=24
+    nB = pred_boxes.size(0)
+    nC = num_classes
+    nHs = grid_sizesH
+    nWs = grid_sizesW
+    masks=[]
+    conf_masks=[]
+    t_ls=[]
+    t_rs=[]
+    t_ts=[]
+    t_bs=[]
+    for nH, nW in zip(nHs,nWs):
+        mask = torch.zeros(nB, nH, nW)
+        masks.append(mask)
+        conf_mask = torch.ones(nB,  nH, nW)
+        conf_masks.append(conf_mask)
+        t_l = torch.zeros(nB, nH, nW)
+        t_r = torch.zeros(nB, nH, nW)
+        t_t = torch.zeros(nB, nH, nW)
+        t_b = torch.zeros(nB, nH, nW)
+        t_conf = torch.ByteTensor(nB, nH, nW).fill_(0)
+        t_cls = torch.ByteTensor(nB, nH, nW, nC).fill_(0)
+        t_clss.append(...) etc
+    if target_angle is not None:
+        t_angle = torch.FloatTensor(nB, nH, nW).fill_(0)
+    else:
+        t_angle=None
+
+
+    assert(not calcIOUAndDist)
+
+    nGT = 0
+    nPred = 0
+    covered_gt_area = 0
+    on_pred_area = 0
+    precision = 0
+    recall = 0
+    #nCorrect = 0
+    #import pdb; pdb.set_trace()
+    for b in range(nB):
+        for pyramid layers:
+            on_pred_areaB = torch.FloatTensor(pred_boxes.shape[1:4]).zero_()
+        #For oversegmented, we need to identify all tiles (not just on) that correspon to gt
+        #That brings up an interesting alternative: limit all predictions to their local tile (width). Proba not now...
+        for t in range(target_sizes[b]): #range(target.shape[1]):
+            nGT += 1
+
+            if VISUAL_DEBUG:
+                draws=[]
+                for nH,nW in zip(nHs,nWs):
+                    draw = np.zeros([nH*VIZ_SIZE,nW*VIZ_SIZE,3],np.uint)
+                    for i in range(0,nW):
+                        draw[:,i*VIZ_SIZE,:]=60
+                    for j in range(0,nH):
+                        draw[j*VIZ_SIZE,:,:]=60
+                    draws.append(draw)
+
+                draw_colors = [(255,0,0),(100,255,0),(255,100,0),(0,255,0),(200,200,0),(255,200,0),(200,255,0)]
+
+
+            #candidate_pos=[]
+            #We need to decide which scale this is at TODO
+
+            for level in range(len(nHs)):
+
+                gx = target[b, t, 0] / scale[level][0]
+                gy = target[b, t, 1] / scale[level][1]
+                gw = target[b, t, 4] / scale[level][0]
+                gh = target[b, t, 3] / scale[level][1]
+
+                gx1 = gx-gw
+                gx2 = gx+gw
+                gy1 = gy-gh
+                gy2 = gy+gh
+            
+                if gw==0 or gh==0:
+                    continue
+                # Get grid box indices
+                gi = max(min(int(gx),conf_mask.size(3)-1),0)
+                gj = max(min(int(gy),conf_mask.size(2)-1),0)
+                gi1 = max(min(int(gx1),conf_mask.size(3)-1),0)
+                gj1 = max(min(int(gy1),conf_mask.size(2)-1),0)
+                gi2 = max(min(int(gx2),conf_mask.size(3)-1),0)
+                gj2 = max(min(int(gy2),conf_mask.size(2)-1),0)
+                #We truncate with int() instead of rounding since each tile i is actually centered at i+0.5
+
+                #We don't want to include a tile if the real box doesn't extend past it's centerpoint, these shouldn't predict (arguably unless the real box covers the whole tile we don't want to predict)
+                if gx1>gi1+0.5:
+                    gi1+=1
+                if gx2<gi2+0.5:
+                    gi2-=1
+
+                #We need to handle the end points of the line differently (they probably need smaller anchor rectangles)
+                if gi1>gi2: #uh oh, we have a really small box between two tiles
+                    gi1=gi2 = gi
+
+                if gi1==gi2:
+                    over_seg_gws = [gw]
+                else:
+                    
+                    #Get best matching anchor
+                    #Build oversegmented gt sizes for each i/tile: (gh,min(self.maxWidth,this_x-gx1,gx2-this_x))
+                    over_seg_gws = [min(max_width,this_i+0.5-gx1,gx2-(this_i+0.5)) for this_i in range(gi1,gi2+1)]
+                best_ns,anch_ious = multi_get_closest_anchor_iou(anchors,gh,over_seg_gws)
+
+            #best_n, anch_ious = get_closest_anchor_iou(anchors,gh,min(gw,self.maxWidth))
+            # Where the overlap is larger than threshold set mask to zero (ignore)
+            #conf_mask[b, anch_ious > ignore_thres, gj, gi] = 0
+            #  ignore_range, all, set to 1 later
+            anch_x,ignore_anch = torch.where(anch_ious > ignore_thresh)
+            #conf_mask[([b]*anch_x.size(0),ignore_anch,list(range(gj1:gj2+1)),anch_x)]=0
+            for j in range(gj1,gj2+1):
+                conf_mask[b,:,j,:][ignore_anch,anch_x]=0
+                if VISUAL_DEBUG:
+                    for iii in range( anch_x.size(0) ):
+                        draw[j*VIZ_SIZE+1:(j+1)*VIZ_SIZE,anch_x[iii]*VIZ_SIZE+ignore_anch[iii]*anchor_draw_size:anch_x[iii]*VIZ_SIZE+(ignore_anch[iii]+1)*anchor_draw_size,1]=0
+            #conf_mask[b, anch_ious > ignore_thres, gj1:gj2+1,gi1:gi2+1] = 0
+            # Get ground truth box
+            gt_box = torch.FloatTensor(np.array([gx, gy, gw, gh])).unsqueeze(0)
+            gt_area = gw+gh
+            # Get the best prediction
+            #pred_box = pred_boxes[b, best_n, gj, gi].unsqueeze(0)
+            # Masks
+
+            mask[b,:,gj,:][(best_ns,list(range(gi1,gi2+1)))] = 1
+            conf_mask[b,:,gj,:][(best_ns,list(range(gi1,gi2+1)))] = 1
+            if VISUAL_DEBUG:
+                for anchor_n, i in zip(best_ns,list(range(gi1,gi2+1))):
+                    draw[gj*VIZ_SIZE+1:(gj+1)*VIZ_SIZE,i*VIZ_SIZE+anchor_n*anchor_draw_size:i*VIZ_SIZE+(anchor_n+1)*anchor_draw_size,0]=110
+                    draw[gj*VIZ_SIZE+1:(gj+1)*VIZ_SIZE,i*VIZ_SIZE+anchor_n*anchor_draw_size:i*VIZ_SIZE+(anchor_n+1)*anchor_draw_size,1]=110
+            #mask[b, best_n, gj, gi1:gi2+1] = 1
+            #conf_mask[b, best_n, gj, gi1:gi2+1] = 1 #we ned to set this to 1 as we ignored it earylier
+            # Coordinates
+            #DO we first want to compute position and than the scaling based on that, or vice-versa? Always  trying to predict at the edge of a tile might lead to weird effects... What about random for each instance? Or halfway for each?
+            #-> I think my final verdict will be to move and strech such that the side you're not matching stays in the same place. This should always maintain a constant distance form the center of the predicting tile to the max length for open/continuing sides
+            #For X, the anchor was selected assuming a position centered on the tile. However, this won't work for some (end tiles). We can simply compute the best position given the selected anchors
+            anchor_width = anchors[:,0]
+            for index in range(len(best_ns)):
+                i = index+gi1
+                best_n = best_ns[index]
+                diff1 = gx1-(i+0.5-anchor_width[best_n])
+                diff2 = gx2-(i+0.5+anchor_width[best_n])
+
+                if (anchor_width[best_n]>gw or gw-anchor_width[best_n]<=1.0) and abs(gx - (i+0.5))<0.55:
+                    #We'll just fit the anchor box to the whole line, either becuase the line is smaller or very close to the anchor size (less than one tile)
+                    offset = gx - (i+0.5)
+                    assert(abs(offset.item())<1)
+                    tx[b, best_n, gj, i] = inv_tanh(offset) 
+                    scaleAnchor = gw / anchors[best_n][0]
+                    tw[b, best_n, gj, i] = math.log(scaleAnchor + 1e-16)
+                elif diff1>=-0.5:
+                    #anchor box is close to left edge or past it, so lets move+strench left side to gt
+                    scaleAnchor = 1 + diff1/(2*anchor_width[best_n])
+                    offset = anchor_width[best_n]*(1-scaleAnchor)
+                    assert(abs(offset.item())<1)
+                    tx[b, best_n, gj, i] = inv_tanh(offset) 
+                    tw[b, best_n, gj, i] = math.log(scaleAnchor + 1e-16)
+                elif diff2<=0.5:
+                    #anchor box is close to right edge or past it, so lets move+strench right side to gt
+                    scaleAnchor = 1 + diff2/(2*anchor_width[best_n])
+                    offset = anchor_width[best_n]*(scaleAnchor-1)
+                    assert(abs(offset.item())<1)
+                    tx[b, best_n, gj, i] = inv_tanh(offset) 
+                    tw[b, best_n, gj, i] = math.log(scaleAnchor + 1e-16)
+                elif diff1<=0 and diff2>=0:
+                    #no change is needed, the real box extends well beyond the anchor
+                    tx[b, best_n, gj, i] = 0 #TODO Should this actually be: No loss computed? seperate mask
+                    tw[b, best_n, gj, gi] = 0
+                    if VISUAL_DEBUG:
+                        offset=torch.FloatTensor(1).zero_()
+                        scaleAnchor=1
+                else:
+                    print("UNEXPECTED STATE")
+                    import pdb;pdb.set_trace()
+                th[b, best_n, gj, i] = math.log(gh / anchors[best_n][1] + 1e-16)
+                if VISUAL_DEBUG:
+                    #Draw loss boxes
+                    offset_y = gy - (gj+0.5)
+                    scaleAnchor_y = gh / anchors[best_n][1]
+                    draw_xc = ((i+offset+0.5)*VIZ_SIZE).item()
+                    draw_yc = ((gj+offset_y+0.5)*VIZ_SIZE).item()
+                    draw_h = (anchors[best_n][1]*scaleAnchor_y).item()*VIZ_SIZE
+                    draw_w = (anchors[best_n][0]*scaleAnchor).item()*VIZ_SIZE
+                    draw_lx = max(round(draw_xc-draw_w),0)
+                    draw_rx = min(round(draw_xc+draw_w),draw.shape[1]-1)
+                    draw_ty = max(round(draw_yc-draw_h),0)
+                    draw_by = min(round(draw_yc+draw_h),draw.shape[0]-1)
+                    #draw[draw_ty,draw_lx:draw_rx+1,i%2]=150+(50*i%3)
+                    #draw[draw_by,draw_lx:draw_rx+1,i%2]=150+(50*i%3)
+                    #draw[draw_ty:draw_by+1,draw_lx,i%2]=150+(50*i%3)
+                    #draw[draw_ty:draw_by+1,draw_rx,i%2]=150+(50*i%3)
+                    #draw[round(draw_yc),round(draw_xc),i%2]=150+(50*i%3)
+                    draw[draw_ty,draw_lx:draw_rx+1]=draw_colors[index%len(draw_colors)]
+                    draw[draw_by,draw_lx:draw_rx+1]=draw_colors[index%len(draw_colors)]
+                    draw[draw_ty:draw_by+1,draw_lx]=draw_colors[index%len(draw_colors)]
+                    draw[draw_ty:draw_by+1,draw_rx]=draw_colors[index%len(draw_colors)]
+                    draw[round(draw_yc),round(draw_xc)]=draw_colors[index%len(draw_colors)]
+            ty[b, best_n, gj, gi1:gi2+1] = inv_tanh(gy - (gj+0.5))
+            if VISUAL_DEBUG:
+                #Draw GT
+                draw_gy1 = max(round(gy1.item()*VIZ_SIZE)-1,0) #expand by one for visibility
+                draw_gy2 = min(round(gy2.item()*VIZ_SIZE)+1,draw.shape[0]-1)
+                draw_gx1 = max(round(gx1.item()*VIZ_SIZE)-1,0)
+                draw_gx2 = min(round(gx2.item()*VIZ_SIZE)+1,draw.shape[1]-1)
+                draw[draw_gy1,draw_gx1:draw_gx2+1,2]=255
+                draw[draw_gy2,draw_gx1:draw_gx2+1,2]=255
+                draw[draw_gy1:draw_gy2+1,draw_gx1,2]=255
+                draw[draw_gy1:draw_gy2+1,draw_gx2,2]=255
+            # Width and height
+            # One-hot encoding of label
+            #target_label = int(target[b, t, 0])
+            tcls[b, best_n, gj, gi1:gi2+1] = target[b, t,13:]
+            if target_num_neighbors is not None:
+                assert(False and 'Not really made for NN preds...')
+                tneighbors[b, best_n, gj, gi1] = target_num_neighbors[b, t]+1
+                tneighbors[b, best_n, gj, gi1+1:gi2] = target_num_neighbors[b, t]+2
+                tneighbors[b, best_n, gj, gi2+1] = target_num_neighbors[b, t]+1
+            tconf[b, best_n, gj, gi1:gi2+1] = 1
+
+            # Calculate overlaps between ground truth and best matching prediction
+            class_selector = torch.logical_and(pred_cls[b].argmax(dim=3)==torch.argmax(target[b,t,13:]), pred_conf[b]>0)
+            pred_right_label_boxes = pred_boxes[b][class_selector] #this is already normalized to tile space
+         
+            gt_area_covered, pred_area_covered = bbox_coverage(gt_box, pred_right_label_boxes, x1y1x2y2=False)
+            covered_gt_area += gt_area_covered/gt_area
+            if gt_area_covered/gt_area>0.5:
+                recall+=1
+            on_pred_areaB[class_selector] = torch.max(on_pred_areaB[class_selector],pred_area_covered)
+            #pred_label = torch.argmax(pred_cls[b, best_n, gj, gi])
+            #score = pred_conf[b, best_n, gj, gi]
+            #import pdb; pdb.set_trace()
+            #if iou > 0.5 and pred_label == torch.argmax(target[b,t,13:]) and score > 0:
+            #    nCorrect += 1
+
+        on_pred_area += on_pred_areaB.sum()
+        nPred += on_pred_areaB.size(0)
+        precision = (on_pred_areaB>0.5).sum()
+
+        if VISUAL_DEBUG:
+            fig = plt.figure()
+            ax_im = plt.subplot()
+            ax_im.set_axis_off()
+            ax_im.imshow(draw)
+            plt.show()
+
+
+    assert(False and 'TODO verify this works!')
+    return nGT, mask, conf_mask, tx, ty, tw, th, tconf, tcls, tneighbors, on_pred_area/nPred, covered_gt_area/nGT, recall/nGT, precision/nPred
 
 def bbox_coverage(box1, box2, x1y1x2y2=True):
     """
@@ -72,7 +326,8 @@ def bbox_coverage(box1, box2, x1y1x2y2=True):
 def build_oversegmented_targets(
     max_width, pred_boxes, pred_conf, pred_cls, target, target_sizes, anchors, num_anchors, num_classes, grid_sizeH, grid_sizeW, ignore_thresh, scale, calcIOUAndDist=False, target_num_neighbors=None
 ):
-    VISUAL_DEBUG=False
+    VISUAL_DEBUG=True
+    VIZ_SIZE=24
     nB = pred_boxes.size(0)
     nA = num_anchors
     nC = num_classes
@@ -95,6 +350,7 @@ def build_oversegmented_targets(
     assert(not calcIOUAndDist)
 
     nGT = 0
+    nPred = 0
     covered_gt_area = 0
     on_pred_area = 0
     precision = 0
@@ -108,7 +364,18 @@ def build_oversegmented_targets(
         for t in range(target_sizes[b]): #range(target.shape[1]):
 
             if VISUAL_DEBUG:
-                draw = np.zeros(nH*VIZ_SIZE,nW*VIZ_SIZE,3)
+                anchor_draw_size = int(VIZ_SIZE/nA)
+                if anchor_draw_size==0:
+                    VIZ_SIZE=nA
+                    anchor_draw_size=1
+                draw = np.zeros([nH*VIZ_SIZE,nW*VIZ_SIZE,3],np.uint)
+                for i in range(0,nW):
+                    draw[:,i*VIZ_SIZE,:]=60
+                for j in range(0,nH):
+                    draw[j*VIZ_SIZE,:,:]=60
+
+                draw_colors = [(255,0,0),(100,255,0),(255,100,0),(0,255,0),(200,200,0),(255,200,0),(200,255,0)]
+
             #if target[b, t].sum() == 0:
             #    continue
             # Convert to position relative to box
@@ -162,8 +429,8 @@ def build_oversegmented_targets(
             for j in range(gj1,gj2+1):
                 conf_mask[b,:,j,:][ignore_anch,anch_x]=0
                 if VISUAL_DEBUG:
-                    for iii in range( anch_x.size(??):
-                        draw[j*VIZ_SIZE:(j+1)*VIZ_SIZE,anch_x[]*VIZ_SIZE:(anch_x[]+1)*VIZ_SIZE,1]=0
+                    for iii in range( anch_x.size(0) ):
+                        draw[j*VIZ_SIZE+1:(j+1)*VIZ_SIZE,anch_x[iii]*VIZ_SIZE+ignore_anch[iii]*anchor_draw_size:anch_x[iii]*VIZ_SIZE+(ignore_anch[iii]+1)*anchor_draw_size,1]=0
             #conf_mask[b, anch_ious > ignore_thres, gj1:gj2+1,gi1:gi2+1] = 0
             # Get ground truth box
             gt_box = torch.FloatTensor(np.array([gx, gy, gw, gh])).unsqueeze(0)
@@ -175,8 +442,9 @@ def build_oversegmented_targets(
             mask[b,:,gj,:][(best_ns,list(range(gi1,gi2+1)))] = 1
             conf_mask[b,:,gj,:][(best_ns,list(range(gi1,gi2+1)))] = 1
             if VISUAL_DEBUG:
-                draw[gj*VIZ_SIZE:(gj+1)*VIZ_SIZE,gi1*VIZ_SIZE:(gi2+1)*VIZ_SIZE,0]=150
-                draw[gj*VIZ_SIZE:(gj+1)*VIZ_SIZE,gi1*VIZ_SIZE:(gi2+1)*VIZ_SIZE,1]=150
+                for anchor_n, i in zip(best_ns,list(range(gi1,gi2+1))):
+                    draw[gj*VIZ_SIZE+1:(gj+1)*VIZ_SIZE,i*VIZ_SIZE+anchor_n*anchor_draw_size:i*VIZ_SIZE+(anchor_n+1)*anchor_draw_size,0]=110
+                    draw[gj*VIZ_SIZE+1:(gj+1)*VIZ_SIZE,i*VIZ_SIZE+anchor_n*anchor_draw_size:i*VIZ_SIZE+(anchor_n+1)*anchor_draw_size,1]=110
             #mask[b, best_n, gj, gi1:gi2+1] = 1
             #conf_mask[b, best_n, gj, gi1:gi2+1] = 1 #we ned to set this to 1 as we ignored it earylier
             # Coordinates
@@ -190,33 +458,72 @@ def build_oversegmented_targets(
                 diff1 = gx1-(i+0.5-anchor_width[best_n])
                 diff2 = gx2-(i+0.5+anchor_width[best_n])
 
-                if anchor_width[best_n]>gw or gw-anchor_width[best_n]<=1.0:
+                if (anchor_width[best_n]>gw or gw-anchor_width[best_n]<=1.0) and abs(gx - (i+0.5))<0.55:
                     #We'll just fit the anchor box to the whole line, either becuase the line is smaller or very close to the anchor size (less than one tile)
-                    offset = gx - (gi+0.5)
+                    offset = gx - (i+0.5)
+                    assert(abs(offset.item())<1)
                     tx[b, best_n, gj, i] = inv_tanh(offset) 
-                    tw[b, best_n, gj, i] = math.log(gw / anchors[best_n][0] + 1e-16)
+                    scaleAnchor = gw / anchors[best_n][0]
+                    tw[b, best_n, gj, i] = math.log(scaleAnchor + 1e-16)
                 elif diff1>=-0.5:
                     #anchor box is close to left edge or past it, so lets move+strench left side to gt
-                    scale = 1 + diff1/(2*anchor_width[best_n])
-                    offset = anchor_width[best_n]*(1-scale)
+                    scaleAnchor = 1 + diff1/(2*anchor_width[best_n])
+                    offset = anchor_width[best_n]*(1-scaleAnchor)
+                    assert(abs(offset.item())<1)
                     tx[b, best_n, gj, i] = inv_tanh(offset) 
-                    tw[b, best_n, gj, i] = math.log(scale + 1e-16)
+                    tw[b, best_n, gj, i] = math.log(scaleAnchor + 1e-16)
                 elif diff2<=0.5:
                     #anchor box is close to right edge or past it, so lets move+strench right side to gt
-                    scale = 1 + diff2/(2*anchor_width[best_n])
-                    offset = anchor_width[best_n]*(scale-1)
+                    scaleAnchor = 1 + diff2/(2*anchor_width[best_n])
+                    offset = anchor_width[best_n]*(scaleAnchor-1)
+                    assert(abs(offset.item())<1)
                     tx[b, best_n, gj, i] = inv_tanh(offset) 
-                    tw[b, best_n, gj, i] = math.log(scale + 1e-16)
+                    tw[b, best_n, gj, i] = math.log(scaleAnchor + 1e-16)
                 elif diff1<=0 and diff2>=0:
                     #no change is needed, the real box extends well beyond the anchor
                     tx[b, best_n, gj, i] = 0 #TODO Should this actually be: No loss computed? seperate mask
-                    tw[b, best_n, gj, gi] = 0 
+                    tw[b, best_n, gj, gi] = 0
+                    if VISUAL_DEBUG:
+                        offset=torch.FloatTensor(1).zero_()
+                        scaleAnchor=1
                 else:
                     print("UNEXPECTED STATE")
                     import pdb;pdb.set_trace()
+                th[b, best_n, gj, i] = math.log(gh / anchors[best_n][1] + 1e-16)
+                if VISUAL_DEBUG:
+                    #Draw loss boxes
+                    offset_y = gy - (gj+0.5)
+                    scaleAnchor_y = gh / anchors[best_n][1]
+                    draw_xc = ((i+offset+0.5)*VIZ_SIZE).item()
+                    draw_yc = ((gj+offset_y+0.5)*VIZ_SIZE).item()
+                    draw_h = (anchors[best_n][1]*scaleAnchor_y).item()*VIZ_SIZE
+                    draw_w = (anchors[best_n][0]*scaleAnchor).item()*VIZ_SIZE
+                    draw_lx = max(round(draw_xc-draw_w),0)
+                    draw_rx = min(round(draw_xc+draw_w),draw.shape[1]-1)
+                    draw_ty = max(round(draw_yc-draw_h),0)
+                    draw_by = min(round(draw_yc+draw_h),draw.shape[0]-1)
+                    #draw[draw_ty,draw_lx:draw_rx+1,i%2]=150+(50*i%3)
+                    #draw[draw_by,draw_lx:draw_rx+1,i%2]=150+(50*i%3)
+                    #draw[draw_ty:draw_by+1,draw_lx,i%2]=150+(50*i%3)
+                    #draw[draw_ty:draw_by+1,draw_rx,i%2]=150+(50*i%3)
+                    #draw[round(draw_yc),round(draw_xc),i%2]=150+(50*i%3)
+                    draw[draw_ty,draw_lx:draw_rx+1]=draw_colors[index%len(draw_colors)]
+                    draw[draw_by,draw_lx:draw_rx+1]=draw_colors[index%len(draw_colors)]
+                    draw[draw_ty:draw_by+1,draw_lx]=draw_colors[index%len(draw_colors)]
+                    draw[draw_ty:draw_by+1,draw_rx]=draw_colors[index%len(draw_colors)]
+                    draw[round(draw_yc),round(draw_xc)]=draw_colors[index%len(draw_colors)]
             ty[b, best_n, gj, gi1:gi2+1] = inv_tanh(gy - (gj+0.5))
+            if VISUAL_DEBUG:
+                #Draw GT
+                draw_gy1 = max(round(gy1.item()*VIZ_SIZE)-1,0) #expand by one for visibility
+                draw_gy2 = min(round(gy2.item()*VIZ_SIZE)+1,draw.shape[0]-1)
+                draw_gx1 = max(round(gx1.item()*VIZ_SIZE)-1,0)
+                draw_gx2 = min(round(gx2.item()*VIZ_SIZE)+1,draw.shape[1]-1)
+                draw[draw_gy1,draw_gx1:draw_gx2+1,2]=255
+                draw[draw_gy2,draw_gx1:draw_gx2+1,2]=255
+                draw[draw_gy1:draw_gy2+1,draw_gx1,2]=255
+                draw[draw_gy1:draw_gy2+1,draw_gx2,2]=255
             # Width and height
-            th[b, best_n, gj, gi1:gi2+1] = math.log(gh / anchors[best_n][1] + 1e-16)
             # One-hot encoding of label
             #target_label = int(target[b, t, 0])
             tcls[b, best_n, gj, gi1:gi2+1] = target[b, t,13:]
@@ -245,6 +552,14 @@ def build_oversegmented_targets(
         on_pred_area += on_pred_areaB.sum()
         nPred += on_pred_areaB.size(0)
         precision = (on_pred_areaB>0.5).sum()
+
+        if VISUAL_DEBUG:
+            fig = plt.figure()
+            ax_im = plt.subplot()
+            ax_im.set_axis_off()
+            ax_im.imshow(draw)
+            plt.show()
+
 
     assert(False and 'TODO verify this works!')
     return nGT, mask, conf_mask, tx, ty, tw, th, tconf, tcls, tneighbors, on_pred_area/nPred, covered_gt_area/nGT, recall/nGT, precision/nPred
