@@ -6,6 +6,8 @@ import math
 from utils.yolo_tools import allIOU, allDist
 from matplotlib import pyplot as plt
 
+#This isn't totally anchor free, the model predicts horizontal and verticle text seperately.
+#The model predicts the centerpoint offset (normalized to tile size), rotation and height (2X tile size) and width (1x tile size)
 def build_oversegmented_targets_no_anchors_multiscale(
     max_width, pred_boxes, pred_conf, pred_cls, target, target_sizes, num_classes, grid_sizeH, grid_sizeW, ignore_thresh, scale, calcIOUAndDist=False, target_angle=None
 ):
@@ -22,19 +24,20 @@ def build_oversegmented_targets_no_anchors_multiscale(
     t_ts=[]
     t_bs=[]
     for nH, nW in zip(nHs,nWs):
-        mask = torch.zeros(nB, nH, nW)
+        mask = torch.zeros(nB, 2, nH, nW)
         masks.append(mask)
-        conf_mask = torch.ones(nB,  nH, nW)
+        conf_mask = torch.ones(nB, 2, nH, nW)
         conf_masks.append(conf_mask)
-        t_l = torch.zeros(nB, nH, nW)
-        t_r = torch.zeros(nB, nH, nW)
-        t_t = torch.zeros(nB, nH, nW)
-        t_b = torch.zeros(nB, nH, nW)
-        t_conf = torch.ByteTensor(nB, nH, nW).fill_(0)
-        t_cls = torch.ByteTensor(nB, nH, nW, nC).fill_(0)
+        targ_L = torch.zeros(nB, 2, nH, nW)
+        targ_R = torch.zeros(nB, 2, nH, nW)
+        targ_T = torch.zeros(nB, 2, nH, nW)
+        targ_B = torch.zeros(nB, 2, nH, nW)
+        targ_r = torch.zeros(nB, 2, nH, nW)
+        targ_conf = torch.ByteTensor(nB, 2, nH, nW).fill_(0)
+        targ_cls = torch.ByteTensor(nB, 2, nH, nW, nC).fill_(0)
         t_clss.append(...) etc
     if target_angle is not None:
-        t_angle = torch.FloatTensor(nB, nH, nW).fill_(0)
+        t_angle = torch.FloatTensor(nB, 2, nH, nW).fill_(0)
     else:
         t_angle=None
 
@@ -105,6 +108,8 @@ def build_oversegmented_targets_no_anchors_multiscale(
             g_bx = target[b, t, 11] / scale[level][0]
             g_by = target[b, t, 12] / scale[level][1]
 
+            isHorz = (gr>-np.pi/4 and gr<np.pi/4) or (gr<-3*np.pi/4 or gr>3*np.pi/4)
+
             gt_area = gw*gh
 
             #gx1 = gx-gw
@@ -141,8 +146,55 @@ def build_oversegmented_targets_no_anchors_multiscale(
             #DO we first want to compute position and than the scaling based on that, or vice-versa? Always  trying to predict at the edge of a tile might lead to weird effects... What about random for each instance? Or halfway for each?
             #-> I think my final verdict will be to move and strech such that the side you're not matching stays in the same place. This should always maintain a constant distance form the center of the predicting tile to the max length for open/continuing sides
             #For X, the anchor was selected assuming a position centered on the tile. However, this won't work for some (end tiles). We can simply compute the best position given the selected anchors
-            for index in range(len(best_ns)):
+            if (g_trx-g_tlx) !=0:
+                s_t = (g_try-g_tly)/(g_trx-g_tlx)
+            else:
+                s_t = float('inf')
+            c_t = g_tly-s_u*g_tlx
+            if g_brx-g_blx !=0:
+                s_b = (g_bry-g_bly)/(g_brx-g_blx)
+            else:
+                s_b = float('inf')
+            c_b = g_bly-s_u*g_blx
+            s_p = math.tan(gr-np.pi/2)
+            if s_p>9999999:
+                s_p = float('inf')
             for ty,tx in zip(hit_tile_ys,hit_tile_xs):
+                targ_r[b, 0 if isHorz else 1, ty, tx] = ?
+
+                tile_x = tx+0.5
+                tile_y = ty+0.5
+
+                #Calculate T top and B bottom boudaries (from tile center)
+                if not np.isinf(s_p) and not np.isinf(s_t):
+                    c_p = tile_y-s_p*tile_x
+                    ti_x = (c_p-c_t)/(s_t-s_p)
+                    ti_y = s_p*ti_x+c_p
+                elif np.isinf(s_t):
+                    ti_x = g_tlx
+                    ti_y = tile_y
+                elif np.isinf(s_p):
+                    ti_x = tile_x
+                    tiy = g_tly
+
+                T = math.sqrt(ti_x**2 + ti_y**2)
+                assert(T<2)
+                #TODO needs reworked with infs
+                if abs(math.atan2(ti_y-tile_y,ti_x-tile_x) - gr-np.pi/2)>0.01:
+                    T *= -1
+                targ_T[b, 0 if isHorz else 1, ty, tx] = T
+
+                bi_x = (c_p-c_b)/(s_b-s_p)
+                bi_y = s_p*bi_x+c_p
+                B = math.sqrt(bi_x**2 + bi_y**2)
+                asserb(T<2)
+                if abs(math.atan2(bi_y-bile_y,bi_x-bile_x) - gr-np.pi/2)>0.01:
+                    B *= -1
+                targ_B[b, 0 if isHorz else 1, ty, tx] = B
+
+                #same thing for left and right, but we cap L and R at 1 TODO
+
+            for index in range(len(best_ns)):
                 i = index+gi1
                 best_n = best_ns[index]
                 diff1 = gx1-(i+0.5-anchor_width[best_n])
