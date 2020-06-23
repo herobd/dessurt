@@ -45,6 +45,7 @@ def display(data):
             xc=data['bb_gt'][b,i,0]
             yc=data['bb_gt'][b,i,1]
             rot=data['bb_gt'][b,i,2]
+            print(rot)
             h=data['bb_gt'][b,i,3]
             w=data['bb_gt'][b,i,4]
             text=data['bb_gt'][b,i,13]
@@ -112,13 +113,13 @@ if __name__ == "__main__":
         'crop_params':{ "crop_size":[652,1608], 
                         "pad":0, 
                         "rot_degree_std_dev":1.5,
-                        "flip_horz": True,
-                        "flip_vert": True}, 
+                        "flip_horz": False,
+                        "flip_vert": False}, 
         'no_blanks':False,
         'use_paired_class':True,
         "swap_circle":True,
         'no_graphics':True,
-        'rotation':False,
+        'rotation':True,
         "only_types": {"boxes":True}
 })
     #data.cluster(start,repeat,'anchors_rot_{}.json')
