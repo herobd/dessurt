@@ -7,6 +7,8 @@ import numpy as np
 from .net_builder import make_layers
 
 
+MAX_H_PRED=2
+MAX_W_PRED=1.1
 
 
 
@@ -14,10 +16,11 @@ class OverSegBoxDetector(nn.Module): #BaseModel
     def __init__(self, config): # predCount, base_0, base_1):
         super(OverSegBoxDetector, self).__init__()
         self.config = config
-        self.rotation = config['rotation'] if 'rotation' in config else True
+        self.rotation = True
         self.numBBTypes = config['number_of_box_types']
         self.numBBParams = 6 #conf,L-off,T-off,R-off,B-off,rot
         self.predNumNeighbors=False
+        self.anchors=None
         self.numAnchors=2
 
         self.predPixelCount = config['number_of_pixel_types'] if 'number_of_pixel_types' in config else 0
@@ -33,37 +36,51 @@ class OverSegBoxDetector(nn.Module): #BaseModel
         self.numOutBB = (self.numBBTypes+self.numBBParams)*self.numAnchors
 
         if 'down_layers_cfg' in config:
+            #Don't define in channels
             layers_cfg = config['down_layers_cfg']
         else:
-            layers_cfg=[in_ch,64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512]
+            layers_cfg=[[64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512]]
 
-        self.net_down_modules, down_last_channels = make_layers(layers_cfg, dilation,norm,dropout=dropout)
+        self.net_down_modules = nn.ModuleList()
+        self.net_out_modules = nn.ModuleList()
+        last_ch_out = in_ch
+        for i,layers_cfg_set in enumerate(layers_cfg):
+            #assert(layers_cfg_set[0] == last_ch_out)
+            modules, down_last_channels = make_layers([last_ch_out]+layers_cfg_set, dilation,norm,dropout=dropout)
+            self.net_down_modules.append(nn.Sequential(*modules))
+
+            #TODO exception if creating Unet to not classify all resolutions
+            if i==len(layers_cfg)-1:
+                self.net_out_modules.append(nn.Conv2d(down_last_channels, self.numOutBB, kernel_size=1))
+            else: 
+                #if it isn't the last layer, include an extra regression layer
+                self.net_out_modules.append(nn.Sequential(
+                    nn.Conv2d(down_last_channels, down_last_channels, kernel_size=1),
+                    nn.ReLU(True),
+                    nn.Conv2d(down_last_channels, self.numOutBB, kernel_size=1)))
+            last_ch_out = down_last_channels
         self.final_features=None 
         self.last_channels=down_last_channels
-        self.net_down_modules.append(nn.Conv2d(down_last_channels, self.numOutBB, kernel_size=1))
-        self.net_down = nn.Sequential(*self.net_down_modules)
+        #self.net_down = nn.Sequential(*self.net_down_modules)
+        self.scale=[]
         scaleX=1
         scaleY=1
-        for a in layers_cfg:
-            if a=='M' or (type(a) is str and a[0]=='D'):
-                scaleX*=2
-                scaleY*=2
-            elif type(a) is str and a[0]=='U':
-                scaleX/=2
-                scaleY/=2
-            elif type(a) is str and a[0:4]=='long': #long pool
-                scaleX*=3
-                scaleY*=2
-        self.scale=(scaleX,scaleY)
+        for layers_cfg_set in layers_cfg:
+            for a in layers_cfg_set:
+                if a=='M' or (type(a) is str and a[0]=='D'):
+                    scaleX*=2
+                    scaleY*=2
+                elif type(a) is str and a[0]=='U':
+                    scaleX/=2
+                    scaleY/=2
+                elif type(a) is str and a[0:4]=='long': #long pool
+                    scaleX*=3
+                    scaleY*=2
+            self.scale.append((scaleX,scaleY))
+
 
         if self.predPixelCount>0:
-            if 'up_layers_cfg' in config:
-                up_layers_cfg =  config['up_layers_cfg']
-            else:
-                up_layers_cfg=[512, 'U+512', 256, 'U+256', 128, 'U+128', 64, 'U+64']
-            self.net_up_modules, up_last_channels = make_layers(up_layers_cfg, 1, norm,dropout=dropout)
-            self.net_up_modules.append(nn.Conv2d(up_last_channels, self.predPixelCount, kernel_size=1))
-            self.net_up_modules = nn.ModuleList(self.net_up_modules)
+            raise NotImplementedError('need to copy format for down layers')
 
         #self.base_0 = config['base_0']
         #self.base_1 = config['base_1']
@@ -73,62 +90,69 @@ class OverSegBoxDetector(nn.Module): #BaseModel
     def forward(self, img):
         #import pdb; pdb.set_trace()
         if self.predPixelCount>0:
+            raise NotImplementedError('need to ...')
             levels=[img]
             for module in self.net_down_modules:
                 levels.append(module(levels[-1]))
             y=levels[-1]
         else:
-            y = self.net_down(img)
+            ys=[]
+            x=img
+            for down_l,out_l in zip(self.net_down_modules,self.net_out_modules):
+                x=down_l(x)
+                ys.append(out_l(x))
 
 
         #priors_0 = Variable(torch.arange(0,y.size(2)).type_as(img.data), requires_grad=False)[None,:,None]
-        priors_0 = torch.arange(0,y.size(2)).type_as(img.data)[None,:,None]
-        priors_0 = (priors_0 + 0.5) * self.scale[1] #self.base_0
-        priors_0 = priors_0.expand(y.size(0), priors_0.size(1), y.size(3))
-        priors_0 = priors_0[:,None,:,:].to(img.device)
+        offsetPredictions_scales=[]
+        bbPredictions_scales=[]
+        for level,y in enumerate(ys):
+            priors_0 = torch.arange(0,y.size(2)).type_as(img.data)[None,:,None]
+            priors_0 = (priors_0 + 0.5) * self.scale[level][1] #self.base_0
+            priors_0 = priors_0.expand(y.size(0), priors_0.size(1), y.size(3))
+            priors_0 = priors_0[:,None,:,:].to(img.device)
 
-        #priors_1 = Variable(torch.arange(0,y.size(3)).type_as(img.data), requires_grad=False)[None,None,:]
-        priors_1 = torch.arange(0,y.size(3)).type_as(img.data)[None,None,:]
-        priors_1 = (priors_1 + 0.5) * self.scale[0] #elf.base_1
-        priors_1 = priors_1.expand(y.size(0), y.size(2), priors_1.size(2))
-        priors_1 = priors_1[:,None,:,:].to(img.device)
+            #priors_1 = Variable(torch.arange(0,y.size(3)).type_as(img.data), requires_grad=False)[None,None,:]
+            priors_1 = torch.arange(0,y.size(3)).type_as(img.data)[None,None,:]
+            priors_1 = (priors_1 + 0.5) * self.scale[level][0] #elf.base_1
+            priors_1 = priors_1.expand(y.size(0), y.size(2), priors_1.size(2))
+            priors_1 = priors_1[:,None,:,:].to(img.device)
 
-        pred_boxes=[]
-        pred_offsets=[] #we seperate anchor predictions here. And compute actual bounding boxes
-        for i in range(self.numAnchors):
+            pred_offsets=[] #we seperate anchor predictions here. And compute actual bounding boxes
+            pred_boxes=[]
+            for i in range(self.numAnchors):
 
-            offset = i*(self.numBBParams+self.numBBTypes)
+                offset = i*(self.numBBParams+self.numBBTypes)
 
-            stackedPred = [
-                torch.sigmoid(y[:,0+offset:1+offset,:,:]),                              #0. confidence
-                torch.tanh(y[:,1+offset:2+offset,:,:])*self.scale[0]*MAX_W_PRED + priors_1, #1. x1
-                torch.tanh(y[:,2+offset:3+offset,:,:])*self.scale[1]*MAX_H_PRED + priors_0, #2. y1
-                torch.tanh(y[:,3+offset:4+offset,:,:])*self.scale[0]*MAX_W_PRED + priors_1, #3. x2
-                torch.tanh(y[:,4+offset:5+offset,:,:])*self.scale[1]*MAX_H_PRED + priors_0, #4. y2
-                torch.sin(y[:,5+offset:6+offset,:,:]*torch.pi)*torch.pi,        #5. rotation (radians)
-            ]
+                stackedPred = [
+                    torch.sigmoid(y[:,0+offset:1+offset,:,:]),                              #0. confidence
+                    torch.tanh(y[:,1+offset:2+offset,:,:])*self.scale[level][0]*MAX_W_PRED + priors_1, #1. x1
+                    torch.tanh(y[:,2+offset:3+offset,:,:])*self.scale[level][1]*MAX_H_PRED + priors_0, #2. y1
+                    torch.tanh(y[:,3+offset:4+offset,:,:])*self.scale[level][0]*MAX_W_PRED + priors_1, #3. x2
+                    torch.tanh(y[:,4+offset:5+offset,:,:])*self.scale[level][1]*MAX_H_PRED + priors_0, #4. y2
+                    torch.sin(y[:,5+offset:6+offset,:,:]*np.pi)*np.pi,        #5. rotation (radians)
+                ]
 
 
-            for j in range(self.numBBTypes):
-                stackedPred.append(torch.sigmoid(y[:,6+j+offset:7+j+offset,:,:]))         #x. class prediction
-                #stackedOffsets.append(y[:,6+j+offset:7+j+offset,:,:])         #x. class prediction
-            pred_boxes.append(torch.cat(stackedPred, dim=1))
-            #pred_offsets.append(torch.cat(stackedOffsets, dim=1))
-            pred_offsets.append(y[:,offset:offset+self.numBBParams+self.numBBTypes,:,:])
-
-        if len(pred_boxes)>0:
-            bbPredictions = torch.stack(pred_boxes, dim=1)
+                for j in range(self.numBBTypes):
+                    stackedPred.append(torch.sigmoid(y[:,6+j+offset:7+j+offset,:,:]))         #x. class prediction
+                    #stackedOffsets.append(y[:,6+j+offset:7+j+offset,:,:])         #x. class prediction
+                pred_boxes.append(torch.cat(stackedPred, dim=1))
+                #pred_offsets.append(torch.cat(stackedOffsets, dim=1))
+                pred_offsets.append(y[:,offset:offset+self.numBBParams+self.numBBTypes,:,:])
             offsetPredictions = torch.stack(pred_offsets, dim=1)
-            
+            offsetPredictions = offsetPredictions.permute(0,1,3,4,2).contiguous()
+            offsetPredictions_scales.append(offsetPredictions)
+
+            bbPredictions = torch.stack(pred_boxes, dim=1)
             bbPredictions = bbPredictions.transpose(2,4).contiguous()#from [batch, anchors, channel, rows, cols] to [batch, anchros, cols, rows, channels]
             bbPredictions = bbPredictions.view(bbPredictions.size(0),bbPredictions.size(1),-1,bbPredictions.size(4))#flatten to [batch, anchors, instances, channel]
             #avg_conf_per_anchor = bbPredictions[:,:,:,0].mean(dim=0).mean(dim=1)
             bbPredictions = bbPredictions.view(bbPredictions.size(0),-1,bbPredictions.size(3)) #[batch, instances+anchors, channel]
+            bbPredictions_scales.append(bbPredictions)
 
-            offsetPredictions = offsetPredictions.permute(0,1,3,4,2).contiguous()
-        else:
-            bbPredictions=None
-            offsetPredictions=None
+        bbPredictions = torch.cat(bbPredictions_scales,dim=1) #stack the scales
+        bbPredictions_scales=None
 
         pixelPreds=None
         if self.predPixelCount>0:
@@ -144,7 +168,7 @@ class OverSegBoxDetector(nn.Module): #BaseModel
 
 
 
-        return bbPredictions, offsetPredictions, None,None,None,None, pixelPreds #, avg_conf_per_anchor
+        return bbPredictions, offsetPredictions_scales, None,None,None, pixelPreds #, avg_conf_per_anchor
 
     def summary(self):
         """

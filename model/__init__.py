@@ -5,6 +5,7 @@ from model.unet_with_detections import UNetWithDetections
 from model.sol_eol_finder import SOL_EOL_Finder
 from model.detector import Detector
 from model.yolo_box_detector import YoloBoxDetector
+from model.overseg_box_detector import OverSegBoxDetector
 from model.pairing_box_full import PairingBoxFull
 from model.pairing_box_net import PairingBoxNet
 from model.pairing_box_from_gt import PairingBoxFromGT

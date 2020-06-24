@@ -423,7 +423,6 @@ class CropBoxTransform(object):
                 points = np.append(points,np.ones((points.shape[0],1)),axis=1) #append 1 to make homogeneous (x,y,1)
                 points = M.dot(points.T).T #multiply rot matrix
                 bb_gt[0,:,0:16] = np.reshape(points,(-1,16)) #reshape back to single vector for each bb
-                raise NotImplementedError('Need to adjust rotation when mirroring and rotation aug')
 
             if line_gts is not None:
                 for name,gt in line_gts.items():
