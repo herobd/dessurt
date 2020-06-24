@@ -5,9 +5,8 @@ import numpy as np
 import math
 from utils.yolo_tools import allIOU, allDist
 from matplotlib import pyplot as plt
+from model.overseg_box_detector import MAX_H_PRED, MAX_W_PRED
 
-MAX_H_PRED=2
-MAX_W_PRED=1.1
 
 def norm_angle(a):
     if a>np.pi:
@@ -17,12 +16,14 @@ def norm_angle(a):
     else:
         return a
 class MultiScaleOversegmentLoss (nn.Module):
-    def __init__(self, num_classes, rotation, scales, anchors, ignore_thresh=0.5,use_special_loss=False,bad_conf_weight=1.25, multiclass=False,max_width=100):
+    def __init__(self, num_classes, rotation, scale, anchors, ignore_thresh=0.5,use_special_loss=False,bad_conf_weight=1.25, multiclass=False):
         super(MultiScaleOversegmentLoss, self).__init__()
         self.ignore_thresh=ignore_thresh
         self.num_classes=num_classes
         assert(rotation)
-        self.scales=scales
+        assert(anchors is None)
+        self.num_anchors=2
+        self.scales=scale
         self.use_special_loss=use_special_loss
         self.bad_conf_weight=bad_conf_weight
         self.multiclass=multiclass
@@ -34,13 +35,17 @@ class MultiScaleOversegmentLoss (nn.Module):
     def forward(self,predictions, target, target_sizes, target_num_neighbors=None ):
 
         nA = self.num_anchors
+        nHs=[]
+        nWs=[]
+        pred_boxes_scales=[]
+        pred_conf_scales=[]
+        pred_cls_scales=[]
         for level,prediction in enumerate(predictions):
             nB = prediction.size(0)
             nHs.append( prediction.size(2) )
             nH = prediction.size(2)
             nWs.append( prediction.size(3) )
             nW = prediction.size(3)
-            stride=self.scales[level]
 
             FloatTensor = torch.cuda.FloatTensor if prediction.is_cuda else torch.FloatTensor
             LongTensor = torch.cuda.LongTensor if prediction.is_cuda else torch.LongTensor
@@ -69,8 +74,7 @@ class MultiScaleOversegmentLoss (nn.Module):
             pred_conf_scales.append(pred_conf.cpu().data)
             pred_cls_scales.append(pred_cls.cpu().data)
 
-    #TODO is this interfaced correctly
-       nGT, masks, conf_masks, t_Ls, t_Ts, t_Rs, t_Bs, t_rs, tconf, tcls, tneighbors, distances, pred_covered, gt_covered, recall, precision = build_oversegmented_targets_multiscale(
+        nGT, masks, conf_masks, t_Ls, t_Ts, t_Rs, t_Bs, t_rs, tconf_scales, tcls_scales, tneighbors, pred_covered, gt_covered, recall, precision = build_oversegmented_targets_multiscale(
             pred_boxes=pred_boxes_scales,
             pred_conf=pred_conf_scales,
             pred_cls=pred_cls_scales,
@@ -80,7 +84,7 @@ class MultiScaleOversegmentLoss (nn.Module):
             grid_sizesH=nHs,
             grid_sizesW=nWs,
             ignore_thresh=self.ignore_thresh,
-            scales=self.scales,
+            scale=self.scales,
             calcIOUAndDist=self.use_special_loss
         )
 
@@ -96,52 +100,55 @@ class MultiScaleOversegmentLoss (nn.Module):
         conf_masks = [conf_mask.type(BoolTensor) for conf_mask in conf_masks]
         #TODO left off
         # Handle target variables
-        tx = tx.type(FloatTensor).to(prediction.device)
-        ty = ty.type(FloatTensor).to(prediction.device)
-        tw = tw.type(FloatTensor).to(prediction.device)
-        th = th.type(FloatTensor).to(prediction.device)
-        tconf = tconf.type(FloatTensor).to(prediction.device)
-        tcls = tcls.type(LongTensor).to(prediction.device)
-        if target_num_neighbors is not None:
-            tneighbors = tneighbors.type(FloatTensor).to(prediction.device)
+        t_Ls = [t.type(FloatTensor).to(prediction.device) for t in t_Ls]
+        t_Ts = [t.type(FloatTensor).to(prediction.device) for t in t_Ts]
+        t_Rs = [t.type(FloatTensor).to(prediction.device) for t in t_Rs]
+        t_Bs = [t.type(FloatTensor).to(prediction.device) for t in t_Bs]
+        t_rs = [t.type(FloatTensor).to(prediction.device) for t in t_rs]
+        tconf_scales = [t.type(FloatTensor).to(prediction.device) for t in tconf_scales]
+        tcls_scales = [t.type(FloatTensor).to(prediction.device) for t in tcls_scales]
 
         # Get conf mask where gt and where there is no gt
-        conf_mask_true = mask
-        conf_mask_false = conf_mask & ~mask #conf_mask - mask
+        conf_masks_true = masks
+        conf_masks_false = [conf_mask & ~mask  for conf_mask,mask in zip(conf_masks,masks)]
 
         #import pdb; pdb.set_trace()
 
         # Mask outputs to ignore non-existing objects
-        if self.use_special_loss:
-            loss_conf = weighted_bce_loss(pred_conf[conf_mask_false], tconf[conf_mask_false],distances[conf_mask_false],ious[conf_mask_false],nB)
-            distances=None
-            ious=None
-        else:
-            loss_conf = self.bce_loss(pred_conf[conf_mask_false], tconf[conf_mask_false])
+        loss_conf=0
+        for pred_conf,tconf,conf_mask_falsel in zip(pred_conf_scales,tconf_scales,conf_mask_false):
+            loss_conf += self.bce_loss(pred_conf[conf_mask_falsel], tconf[conf_mask_falsel])
         loss_conf *= self.bad_conf_weight
         if target is not None and nGT>0:
-            loss_x = self.mse_loss(x[mask], tx[mask])
-            loss_y = self.mse_loss(y[mask], ty[mask])
-            loss_w = self.mse_loss(w[mask], tw[mask])
-            loss_h = self.mse_loss(h[mask], th[mask])
-            if self.multiclass:
-                loss_cls = self.bce_loss(pred_cls[mask], tcls[mask].float())
-            else:
-                loss_cls =  self.ce_loss(pred_cls[mask], torch.argmax(tcls[mask], 1)) *(1 / nB) #this multiply is erronous
-            loss_conf += self.bce_loss(pred_conf[conf_mask_true], tconf[conf_mask_true])
-            if target_num_neighbors is not None: #if self.predNumNeighbors:
-                loss_nn = 0.1*self.mse_loss(pred_neighbors[mask],tneighbors[mask])
-            else:
-                loss_nn = 0
-            loss = loss_x + loss_y + loss_w + loss_h + loss_conf + loss_cls + loss_nn
-            if target_num_neighbors is not None:
-                loss_nn=loss_nn.item()
+            for pred_conf,tconf,conf_mask_truel in zip(pred_conf_scales,tconf_scales,conf_mask_true):
+                loss_conf += self.bce_loss(pred_conf[conf_mask_truel], tconf[conf_mask_truel])
+
+            loss_L=0
+            loss_T=0
+            loss_R=0
+            loss_B=0
+            loss_r=0
+            for level in range(len(t_Ls)):
+                loss_L += self.mse_loss(x1[level][mask], t_Ls[level][mask])
+                loss_T += self.mse_loss(y1[level][mask], t_Ts[level][mask])
+                loss_R += self.mse_loss(x2[level][mask], t_Rs[level][mask])
+                loss_B += self.mse_loss(y2[level][mask], t_Bs[level][mask])
+                loss_r += self.mse_loss(r[level][mask], t_rs[level][mask])
+
+            loss_cls=0
+            for pred_cls,tcls in zip(pred_cls_scales,tcls_scales):
+                if self.multiclass:
+                    loss_cls += self.bce_loss(pred_cls[mask], tcls[mask].float())
+                else:
+                    loss_cls +=  self.ce_loss(pred_cls[mask], torch.argmax(tcls[mask], 1)) 
+
+            loss = loss_L + loss_T + loss_R + loss_B + loss_r + loss_conf + loss_cls
             return (
                 loss,
-                loss_x.item()+loss_y.item()+loss_w.item()+loss_h.item(),
+                loss_L.item()+loss_T.item()+loss_R.item()+loss_B.item(),
                 loss_conf.item(),
                 loss_cls.item(),
-                loss_nn,
+                loss_r.item(),
                 recall,
                 precision,
                 gt_covered,
@@ -163,12 +170,11 @@ class MultiScaleOversegmentLoss (nn.Module):
 #This isn't totally anchor free, the model predicts horizontal and verticle text seperately.
 #The model predicts the centerpoint offset (normalized to tile size), rotation and height (2X tile size) and width (1x tile size)
 def build_oversegmented_targets_multiscale(
-    max_width, pred_boxes, pred_conf, pred_cls, target, target_sizes, num_classes, grid_sizesH, grid_sizesW, ignore_thresh, scale, calcIOUAndDist=False, target_angle=None
+    pred_boxes, pred_conf, pred_cls, target, target_sizes, num_classes, grid_sizesH, grid_sizesW, ignore_thresh, scale, calcIOUAndDist=False, target_angle=None
 ):
     VISUAL_DEBUG=True
     VIZ_SIZE=24
     use_rotation_aligned_predictions=False
-    nB = pred_boxes.size(0)
     nC = num_classes
     nHs = grid_sizesH
     nWs = grid_sizesW
@@ -181,7 +187,8 @@ def build_oversegmented_targets_multiscale(
     t_rs=[]
     t_confs=[]
     t_clss=[]
-    for nH, nW in zip(nHs,nWs):
+    for level,(nH, nW) in enumerate(zip(nHs,nWs)):
+        nB = pred_boxes[level].size(0)
         mask = torch.zeros(nB, 2, nH, nW)
         masks.append(mask)
         conf_mask = torch.ones(nB, 2, nH, nW)
@@ -218,6 +225,7 @@ def build_oversegmented_targets_multiscale(
     #import pdb; pdb.set_trace()
     for b in range(nB):
         for pyramid in layers:
+            #TODO how to do this multiscale?
             on_pred_areaB = torch.FloatTensor(pred_boxes.shape[1:4]).zero_()
         #For oversegmented, we need to identify all tiles (not just on) that correspon to gt
         #That brings up an interesting alternative: limit all predictions to their local tile (width). Proba not now...
@@ -481,7 +489,7 @@ def build_oversegmented_targets_multiscale(
                     targ_L[b, 0 if isHorz else 1, ty, tx] = inv_tanh(L/MAX_W_PRED)
                     R=ri_x-tile_x 
                     R = max(min(R,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
-                    targ_R[b, 0 if isHorz else 1, ty, tx] = inv_tanh(R/MAX_W_PRED)S
+                    targ_R[b, 0 if isHorz else 1, ty, tx] = inv_tanh(R/MAX_W_PRED)
 
                     targ_cls[b, 0 if isHorz else 1, ty, tx] = target[b, t,13:]
                     targ_conf[b, 0 if isHorz else 1, ty, tx] = 1

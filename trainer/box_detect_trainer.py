@@ -243,6 +243,7 @@ class BoxDetectTrainer(BaseTrainer):
         self.model.eval()
         total_val_loss = 0
         total_position_loss =0
+        total_rot_loss =0
         total_conf_loss =0
         tota_class_loss =0
         tota_num_neighbor_loss =0
@@ -314,7 +315,7 @@ class BoxDetectTrainer(BaseTrainer):
                         mRecall += np.array(recall_5,dtype=np.float)#/len(outputBoxes)
                         mPrecision += np.array(prec_5,dtype=np.float)#/len(outputBoxes)
                 elif 'overseg' in self.loss:
-                    this_loss, position_loss, conf_loss, class_loss, nn_loss, recall, precision, gt_covered, pred_covered = self.loss['overseg'](outputOffsets,targetBoxes,targetBoxes_sizes,target_num_neighbors)
+                    this_loss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered = self.loss['overseg'](outputOffsets,targetBoxes,targetBoxes_sizes)
 
                     total_val_loss+=this_loss.item()
                     mRecall+=recall
@@ -322,6 +323,7 @@ class BoxDetectTrainer(BaseTrainer):
                     total_gt_covered+=gt_covered
                     total_pred_covered+=pred_covered
                     total_position_loss+=position_loss
+                    total_rot_loss+=rot_loss
                     total_conf_loss+=conf_loss
                     total_class_loss+=class_loss
                 index=0
@@ -379,6 +381,7 @@ class BoxDetectTrainer(BaseTrainer):
         if 'overseg' in self.loss:
             ret['total_gt_covered'] = total_gt_covered / len(self.valid_data_loader)
             ret['total_pred_covered'] = total_pred_covered / len(self.valid_data_loader)
+            ret['total_rot_loss'] = total_rot_loss / len(self.valid_data_loader)
         return ret
 
 
@@ -410,7 +413,7 @@ class BoxDetectTrainer(BaseTrainer):
             #print('boxLoss:{}'.format(this_loss))
 #display(instance)
         elif 'overseg' in self.loss:
-            this_loss, position_loss, conf_loss, class_loss, nn_loss, recall, precision, gt_covered, pred_covered = self.loss['overseg'](outputOffsets,targetBoxes,targetBoxes_sizes,target_num_neighbors)
+            this_loss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered = self.loss['overseg'](outputOffsets,targetBoxes,targetBoxes_sizes)
 
             losses['oversegLoss']=this_loss.item()
             log['recall']=recall
@@ -420,6 +423,7 @@ class BoxDetectTrainer(BaseTrainer):
             log['position_loss']=position_loss
             log['conf_loss']=conf_loss
             log['class_loss']=class_loss
+            log['rot_loss']=rot_loss
         else:
             position_loss=0
             conf_loss=0
