@@ -7,8 +7,8 @@ import numpy as np
 from .net_builder import make_layers
 
 
-MAX_H_PRED=2
-MAX_W_PRED=1.1
+MAX_H_PRED=1.5
+MAX_W_PRED=0.55
 
 
 

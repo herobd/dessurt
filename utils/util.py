@@ -1,4 +1,5 @@
-import os
+import os, math
+import cv2
 import struct
 import torch
 from . import string_utils
@@ -137,3 +138,28 @@ def decode_handwriting(out, idx_to_char):
 
     return list_of_pred, list_of_raw_pred
 
+def xyrhwToCorners(xc,yc,rot,h,w):
+    tr = ( (w*math.cos(rot)-h*math.sin(rot) + xc),  (w*math.sin(rot)+h*math.cos(rot) + yc) )
+    tl = ( (-w*math.cos(rot)-h*math.sin(rot) + xc), (-w*math.sin(rot)+h*math.cos(rot) + yc) )
+    br = ( (w*math.cos(rot)+h*math.sin(rot) + xc),  (w*math.sin(rot)-h*math.cos(rot) + yc) )
+    bl = ( (-w*math.cos(rot)+h*math.sin(rot) + xc), (-w*math.sin(rot)-h*math.cos(rot) + yc) )
+    return tl,tr,br,bl
+
+def plotRect(img,color,xyrhw,lineWidth=1):
+    xc=xyrhw[0].item()
+    yc=xyrhw[1].item()
+    rot=xyrhw[2].item()
+    h=xyrhw[3].item()
+    w=xyrhw[4].item()
+    h = min(30000,h)
+    w = min(30000,w)
+    tl,tr,br,bl = xyrhwToCorners(xc,yc,rot,h,w)
+    tl = (int(tl[0]),int(tl[1]))
+    tr = (int(tr[0]),int(tr[1]))
+    br = (int(br[0]),int(br[1]))
+    bl = (int(bl[0]),int(bl[1]))
+
+    cv2.line(img,tl,tr,color,lineWidth)
+    cv2.line(img,tr,br,color,lineWidth)
+    cv2.line(img,br,bl,color,lineWidth)
+    cv2.line(img,bl,tl,color,lineWidth)
