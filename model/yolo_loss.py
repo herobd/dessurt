@@ -6,6 +6,10 @@ import math
 from utils.yolo_tools import allIOU, allDist
 from matplotlib import pyplot as plt
 from model.overseg_box_detector import MAX_H_PRED, MAX_W_PRED
+from utils.util import plotRect, xyrhwToCorners
+from shapely.geometry import Polygon
+import skimage.draw
+import cv2
 
 
 def norm_angle(a):
@@ -98,7 +102,6 @@ class MultiScaleOversegmentLoss (nn.Module):
         # Handle masks
         masks = [mask.type(BoolTensor) for mask in masks]
         conf_masks = [conf_mask.type(BoolTensor) for conf_mask in conf_masks]
-        #TODO left off
         # Handle target variables
         t_Ls = [t.type(FloatTensor).to(prediction.device) for t in t_Ls]
         t_Ts = [t.type(FloatTensor).to(prediction.device) for t in t_Ts]
@@ -224,24 +227,24 @@ def build_oversegmented_targets_multiscale(
     #nCorrect = 0
     #import pdb; pdb.set_trace()
     for b in range(nB):
-        for pyramid in layers:
-            #TODO how to do this multiscale?
-            on_pred_areaB = torch.FloatTensor(pred_boxes.shape[1:4]).zero_()
+        on_pred_areaB=[]
+        for level in range(len(nHs)):
+            on_pred_areaB.append( torch.FloatTensor(pred_boxes[level].shape[1:4]).zero_() )
         #For oversegmented, we need to identify all tiles (not just on) that correspon to gt
         #That brings up an interesting alternative: limit all predictions to their local tile (width). Proba not now...
         for t in range(target_sizes[b]): #range(target.shape[1]):
             nGT += 1
 
             if VISUAL_DEBUG:
-                draws=[]
+                draw=[]
                 for nH,nW in zip(nHs,nWs):
-                    draw = np.zeros([nH*VIZ_SIZE,nW*VIZ_SIZE,3],np.uint)
+                    drawl = np.zeros([nH*VIZ_SIZE,nW*VIZ_SIZE,3],np.uint8)
                     for i in range(0,nW):
-                        draw[:,i*VIZ_SIZE,:]=60
+                        drawl[:,i*VIZ_SIZE,:]=60
                     for j in range(0,nH):
-                        draw[j*VIZ_SIZE,:,:]=60
-                    draw[:,:,0]=90
-                    draws.append(draw)
+                        drawl[j*VIZ_SIZE,:,:]=60
+                    #drawl[:,:,0]=90
+                    draw.append(drawl)
 
                 draw_colors = [(255,0,0),(100,255,0),(255,100,0),(0,255,0),(200,200,0),(255,200,0),(200,255,0)]
 
@@ -255,7 +258,8 @@ def build_oversegmented_targets_multiscale(
                 gr = target[b, t, 2]
                 gh = target[b, t, 3] / scale[level][1]
 
-                rh = gh #math.cos(gr)*gh this isn't quite what I wanted...
+                #rh = gh*2 
+                rh = 2*gh/min(abs(math.cos(gr)),0.5)
                 diff = abs(rh-1)
                 if diff<closest_diff:
                     closest_diff = diff
@@ -263,16 +267,8 @@ def build_oversegmented_targets_multiscale(
                 #TODO we should mask out scales that are close
             level = closest
 
-            if VISUAL_DEBUG:
-                #Draw GT
-                draw_gy1 = max(round(gy1.item()*VIZ_SIZE)-1,0) #expand by one for visibility
-                draw_gy2 = min(round(gy2.item()*VIZ_SIZE)+1,draw.shape[0]-1)
-                draw_gx1 = max(round(gx1.item()*VIZ_SIZE)-1,0)
-                draw_gx2 = min(round(gx2.item()*VIZ_SIZE)+1,draw.shape[1]-1)
-                draw[level][draw_gy1,draw_gx1:draw_gx2+1]=(255,171,212)
-                draw[level][draw_gy2,draw_gx1:draw_gx2+1]=(255,171,212)
-                draw[level][draw_gy1:draw_gy2+1,draw_gx1]=(255,171,212)
-                draw[level][draw_gy1:draw_gy2+1,draw_gx2]=(255,171,212)
+            conf_mask = conf_masks[level]
+            mask = masks[level]
 
             nH = nHs[level]
             nW = nWs[level]
@@ -281,8 +277,8 @@ def build_oversegmented_targets_multiscale(
             targ_T = t_Ts[level]
             targ_B = t_Bs[level]
             targ_r = t_rs[level]
-            targ_conf = t_conf[level]
-            targ_cls = t_cls[level]
+            targ_conf = t_confs[level]
+            targ_cls = t_clss[level]
 
             gx = target[b, t, 0] / scale[level][0]
             gy = target[b, t, 1] / scale[level][1]
@@ -302,6 +298,26 @@ def build_oversegmented_targets_multiscale(
             isHorz = (gr>-np.pi/4 and gr<np.pi/4) or (gr<-3*np.pi/4 or gr>3*np.pi/4)
             #TODO handle 45degree text better (predict on both anchors)
 
+            if VISUAL_DEBUG:
+                #Draw GT
+
+                #draw_gy,draw_gx = skimage.draw.polygon([(g_lxI
+                #cv2.rectangle(draw[level],(gx,gy),(255,171,212),1
+                print('{}'.format((gx,gy,gr,gh,gw)))
+                #plotRect(draw[level],(255,171,212),(gx,gy,gr,gh,gw))
+                tl,tr,br,bl = xyrhwToCorners(gx,gy,gr,gh,gw)
+                tl = (int(VIZ_SIZE*tl[0]),int(VIZ_SIZE*tl[1]))
+                tr = (int(VIZ_SIZE*tr[0]),int(VIZ_SIZE*tr[1]))
+                br = (int(VIZ_SIZE*br[0]),int(VIZ_SIZE*br[1]))
+                bl = (int(VIZ_SIZE*bl[0]),int(VIZ_SIZE*bl[1]))
+                color=(255,171,212)
+                lineWidth=2
+                cv2.line(draw[level],tl,tr,color,lineWidth)
+                cv2.line(draw[level],tr,br,color,lineWidth)
+                cv2.line(draw[level],br,bl,color,lineWidth)
+                cv2.line(draw[level],bl,tl,color,lineWidth)
+
+
             gt_area = gw*gh
 
             #gx1 = gx-gw
@@ -313,25 +329,31 @@ def build_oversegmented_targets_multiscale(
                 continue
             #What tiles are relevant for predicting this? Just the center line? Do any tiles get an ignore (unmask)?
             hit_tile_ys, hit_tile_xs = skimage.draw.line(int(g_ly),int(g_lx),int(g_ry),int(g_rx))
-            ignore_tile_ys, ignore_tile_xs, weight_tile_ys, weight_tile_ys = skimage.draw.line_aa(int(g_ly),int(g_lx),int(g_ry),int(g_rx)) #This is nice, except I'm forced to pass integers in, perhaps this could be used for ignoring?
+            #hit_tile_ys, hit_tile_xs = (y,x) for y,x in zip(hit_tile_ys, hit_tile_xs) if y>=0 and y<
+            ignore_tile_ys, ignore_tile_xs, weight_tile = skimage.draw.line_aa(int(g_ly),int(g_lx),int(g_ry),int(g_rx)) #This is nice, except I'm forced to pass integers in, perhaps this could be used for ignoring?
 
             #all_tile_ys, all_tile_xs = skimage.draw.polygon(r,c,(nH,nW))
 
             #TODO fix end points. Probably shouldn't include tile if we're barely on it.
 
-            conf_mask[b,ignore_tile_ys,ignore_tile_xs]=0
+            #we use the anti-ailiased to ignore close tiles
+            close_thresh=0.25
+            conf_mask[b,:,ignore_tile_ys,ignore_tile_xs]= torch.where(torch.from_numpy(weight_tile[None,...])>close_thresh,torch.zeros_like(conf_mask[b,:,ignore_tile_ys,ignore_tile_xs]),conf_mask[b,:,ignore_tile_ys,ignore_tile_xs])
             if VISUAL_DEBUG:
-                for ty,tx in zip(ignore_tile_ys,ignore_tile_xs):
-                    draws[level][ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,tx*VIZ_SIZE+1:(tx+1)*VIZ_SIZE,1]=0
+                for ii,(ty,tx) in enumerate(zip(ignore_tile_ys,ignore_tile_xs)):
+                    if weight_tile[ii]>close_thresh:
+                        draw[level][ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,tx*VIZ_SIZE+1:(tx+1)*VIZ_SIZE,1]=0
             # Get the best prediction
             #pred_box = pred_boxes[b, best_n, gj, gi].unsqueeze(0)
             # Masks
 
-            mask[b,hit_tile_ys,hit_tile_xs]=1
-            conf_mask[b,hit_tile_ys,hit_tile_xs]=1
+            mask[b,:,hit_tile_ys,hit_tile_xs]=1
+            conf_mask[b,:,hit_tile_ys,hit_tile_xs]=1
             if VISUAL_DEBUG:
+                draw[level][0,0,:]=255
+                print(list(zip(hit_tile_xs,hit_tile_ys)))
                 for ty,tx in zip(hit_tile_ys,hit_tile_xs):
-                    draws[level][ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,tx*VIZ_SIZE+1:(tx+1)*VIZ_SIZE,1:3]=110
+                    draw[level][ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,tx*VIZ_SIZE+1:(tx+1)*VIZ_SIZE,1:3]=110
             #mask[b, best_n, gj, gi1:gi2+1] = 1
             #conf_mask[b, best_n, gj, gi1:gi2+1] = 1 #we ned to set this to 1 as we ignored it earylier
             # Coordinates
@@ -446,20 +468,20 @@ def build_oversegmented_targets_multiscale(
             else:
                 ##AXIS ALIGNED
                 #slopes (s_) and y-intersections (c_)
-                if (g_trx-g_tlx) !=0:
-                    s_len = s_t = (g_try-g_tly)/(g_trx-g_tlx)
+                if (g_rx-g_lx) !=0:
+                    s_len = s_t = (g_ry-g_ly)/(g_rx-g_lx)
                 else:
                     s_len = float('inf')
-                if (g_trx-g_brx) !=0:
-                    s_perp = s_t = (g_try-g_bry)/(g_trx-g_brx)
+                if (g_bx-g_tx) !=0:
+                    s_perp = s_t = (g_by-g_ty)/(g_bx-g_tx)
                 else:
                     s_perp = float('inf')
                 s_t=s_b=s_len
                 s_l=s_r=s_perp
-                c_t = g_try-s_t*g_trx
-                c_b = g_bry-s_t*g_brx
-                c_l = g_tly-s_t*g_tlx
-                c_r = g_try-s_t*g_trx
+                c_t = g_ty-s_t*g_tx
+                c_b = g_by-s_t*g_bx
+                c_l = g_ly-s_t*g_lx
+                c_r = g_ry-s_t*g_rx
                 for ty,tx in zip(hit_tile_ys,hit_tile_xs):
                     targ_r[b, 0 if isHorz else 1, ty, tx] = math.asin(gr/np.pi)/np.pi
                     tile_x = tx+0.5
@@ -483,6 +505,7 @@ def build_oversegmented_targets_multiscale(
                     li_x = (li_y-c_l)/s_l
                     ri_y = tile_y
                     ri_x = (ri_y-c_r)/s_r
+                    print('li_x,y:{},{}, ri_x,y:{},{}, s_l:{}, c_l:{}'.format(li_x,li_y,ri_x,ri_y,s_l,c_l))
                     
                     L=li_x-tile_x #negative if left of tile center (just add predcition to center)
                     L = max(min(L,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
@@ -494,36 +517,80 @@ def build_oversegmented_targets_multiscale(
                     targ_cls[b, 0 if isHorz else 1, ty, tx] = target[b, t,13:]
                     targ_conf[b, 0 if isHorz else 1, ty, tx] = 1
 
-            # Calculate overlaps between ground truth and best matching prediction
-            class_selector = torch.logical_and(pred_cls[b].argmax(dim=3)==torch.argmax(target[b,t,13:]), pred_conf[b]>0)
-            pred_right_label_boxes = pred_boxes[b][class_selector] #this is already normalized to tile space
-            #convert?
-         
-            gt_area_covered, pred_area_covered = bbox_coverage(gt_box, pred_right_label_boxes, x1y1x2y2_1=False)
-            covered_gt_area += gt_area_covered/gt_area
-            if gt_area_covered/gt_area>0.5:
-                recall+=1
-            on_pred_areaB[class_selector] = torch.max(on_pred_areaB[class_selector],pred_area_covered)
-            #pred_label = torch.argmax(pred_cls[b, best_n, gj, gi])
-            #score = pred_conf[b, best_n, gj, gi]
-            #import pdb; pdb.set_trace()
-            #if iou > 0.5 and pred_label == torch.argmax(target[b,t,13:]) and score > 0:
-            #    nCorrect += 1
+                    if VISUAL_DEBUG:
+                        print('T:{} B:{} L:{} R:{}'.format(T,B,L,R))
+                        d_tile_x = tile_x*VIZ_SIZE
+                        d_tile_y = tile_y*VIZ_SIZE
 
-            on_pred_area += on_pred_areaB.sum()
-            nPred += on_pred_areaB.size(0)
-            precision = (on_pred_areaB>0.5).sum()
+                        cv2.line(draw[level],(int(d_tile_x),int(d_tile_y)),(int(d_tile_x),int(d_tile_y+(T*VIZ_SIZE))),(255,255,0),1)
+                        cv2.line(draw[level],(int(d_tile_x),int(d_tile_y)),(int(d_tile_x),int(d_tile_y+(B*VIZ_SIZE))),(255,0,0),1)
+                        cv2.line(draw[level],(int(d_tile_x),int(d_tile_y)),(int(d_tile_x+(L*VIZ_SIZE)),int(d_tile_y)),(255,0,255),1)
+                        cv2.line(draw[level],(int(d_tile_x),int(d_tile_y)),(int(d_tile_x+(R*VIZ_SIZE)),int(d_tile_y)),(0,255,255),1)
+
+
+
+            # Calculate overlaps between ground truth and best matching prediction
+            drawn_level=level
+            for level in range(len(nHs)):
+                class_selector = torch.logical_and(pred_cls[level][b].argmax(dim=3)==torch.argmax(target[b,t,13:]), pred_conf[level][b]>0)
+                pred_right_label_boxes = pred_boxes[level][b][class_selector] #this is already normalized to tile space
+                #convert?
+             
+                gt_area_covered, pred_area_covered = bbox_coverage_axis_rot((gx,gy,gr,gh,gw), pred_right_label_boxes)
+                covered_gt_area += gt_area_covered/gt_area
+                if gt_area_covered/gt_area>0.5:
+                    recall+=1
+                on_pred_areaB[level][class_selector] = torch.max(on_pred_areaB[level][class_selector],torch.FloatTensor(pred_area_covered))
+                #pred_label = torch.argmax(pred_cls[b, best_n, gj, gi])
+                #score = pred_conf[b, best_n, gj, gi]
+                #import pdb; pdb.set_trace()
+                #if iou > 0.5 and pred_label == torch.argmax(target[b,t,13:]) and score > 0:
+                #    nCorrect += 1
+
 
             if VISUAL_DEBUG:
                 fig = plt.figure()
                 ax_im = plt.subplot()
                 ax_im.set_axis_off()
-                ax_im.imshow(draw[level])
+                ax_im.imshow(draw[drawn_level])
                 plt.show()
 
+        for level in range(len(nHs)):
+            on_pred_area += on_pred_areaB[level].sum()
+            #nPred += on_pred_areaB[level].size(0)
+            precision += (on_pred_areaB[level]>0.5).sum()
+    for level in range(len(nHs)):
+        nPred += (pred_conf[level][b]>0).sum()
 
     assert(False and 'TODO verify this works!')
     return nGT, masks, conf_masks, t_Ls, t_Ts, t_Rs, t_Bs, t_rs, t_confs, t_clss, on_pred_area/nPred, covered_gt_area/nGT, recall/nGT, precision/nPred
+
+def bbox_coverage_axis_rot(box_gt, pred_boxes):
+    """
+    Computes how much the gt is covered by predictions and how much of each prediction is covered by the gt
+    """
+    gt_poly = Polygon(xyrhwToCorners(*box_gt[0:5]))
+    pred_areas=[]
+    agglom = None
+    for i in range(pred_boxes.size(0)):
+        pred_poly = Polygon([pred_boxes[i,0:2],(pred_boxes[i,2],pred_boxes[i,1]),pred_boxes[i,2:4],(pred_boxes[i,0],pred_boxes[i,3])])
+        if gt_poly.intersects(pred_poly):
+            inter = gt_poly.intersection(pred_poly)
+            pred_areas.append(inter.area/pred_poly.area)
+            if agglom is None:
+                agglom = inter
+            else:
+                agglom = agglom.union(inter)
+        else:
+            pred_areas.append(0)
+
+    if agglom is not None:
+        return agglom.intersection(gt_poly).area/gt_poly.area, pred_areas
+    else:
+        return 0, pred_areas
+
+
+
 
 def bbox_coverage(box1, box2, x1y1x2y2_1=True, x1y1x2y2_2=True):
     """

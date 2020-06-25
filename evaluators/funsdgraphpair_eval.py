@@ -5,6 +5,7 @@ import torch
 import torch.nn.functional as F
 import cv2
 from utils import util
+from utils.util import plotRect
 from model.alignment_loss import alignment_loss
 import math
 from model.loss import *
@@ -16,23 +17,6 @@ from utils.forms_annotations import fixAnnotations, getBBInfo
 from evaluators.draw_graph import draw_graph
 
 
-def plotRect(img,color,xyrhw,lineWidth=1):
-    xc=xyrhw[0].item()
-    yc=xyrhw[1].item()
-    rot=xyrhw[2].item()
-    h=xyrhw[3].item()
-    w=xyrhw[4].item()
-    h = min(30000,h)
-    w = min(30000,w)
-    tr = ( int(w*math.cos(rot)-h*math.sin(rot) + xc),  int(w*math.sin(rot)+h*math.cos(rot) + yc) )
-    tl = ( int(-w*math.cos(rot)-h*math.sin(rot) + xc), int(-w*math.sin(rot)+h*math.cos(rot) + yc) )
-    br = ( int(w*math.cos(rot)+h*math.sin(rot) + xc),  int(w*math.sin(rot)-h*math.cos(rot) + yc) )
-    bl = ( int(-w*math.cos(rot)+h*math.sin(rot) + xc), int(-w*math.sin(rot)-h*math.cos(rot) + yc) )
-
-    cv2.line(img,tl,tr,color,lineWidth)
-    cv2.line(img,tr,br,color,lineWidth)
-    cv2.line(img,br,bl,color,lineWidth)
-    cv2.line(img,bl,tl,color,lineWidth)
 
 def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startIndex=None, lossFunc=None, toEval=None):
     def __eval_metrics(data,target):
