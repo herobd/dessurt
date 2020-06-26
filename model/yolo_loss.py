@@ -502,9 +502,15 @@ def build_oversegmented_targets_multiscale(
 
                     #left and right points (directly over tile center)
                     li_y = tile_y
-                    li_x = (li_y-c_l)/s_l
                     ri_y = tile_y
-                    ri_x = (ri_y-c_r)/s_r
+                    if math.isinf(s_l):
+                        li_x = g_lx
+                    else:
+                        li_x = (li_y-c_l)/s_l
+                    if math.isinf(s_l):
+                        ri_x = g_rx
+                    else:
+                        ri_x = (ri_y-c_r)/s_r
                     print('li_x,y:{},{}, ri_x,y:{},{}, s_l:{}, c_l:{}'.format(li_x,li_y,ri_x,ri_y,s_l,c_l))
                     
                     L=li_x-tile_x #negative if left of tile center (just add predcition to center)
