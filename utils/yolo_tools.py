@@ -2,6 +2,8 @@ import torch
 #from model.yolo_loss import bbox_iou
 import math
 
+def non_max_sup_overseg(pred_boxes,thresh_conf=0.5, thresh_inter=0.5, hard_limit=300):
+    return non_max_sup_(pred_boxes,thresh_conf, thresh_inter, verticle_bias_intersection, hard_limit)
 def non_max_sup_iou(pred_boxes,thresh_conf=0.5, thresh_inter=0.5, hard_limit=300):
     return non_max_sup_(pred_boxes,thresh_conf, thresh_inter, max_intersection, hard_limit)
 def non_max_sup_dist(pred_boxes,thresh_conf=0.5, thresh_dist=0.9, hard_limit=300):
@@ -40,6 +42,37 @@ def non_max_sup_(pred_boxes,thresh_conf, thresh_loc, loc_metric, hard_limit):
         best = pred_boxes[b,[x[1] for x in above_thresh],:]
         to_return.append(best)#[:,rearr])
     return to_return
+
+#this is intended for the oversegmentation detector, where we care less about horizontal overlap (since these should be merged later on, and more about verticle overlap, since these should not be merged but discarded
+def verticle_bias_intersection(query_box, candidate_boxes):
+    q_x1, q_x2 = query_box[0]-query_box[4], query_box[0]+query_box[4]
+    q_y1, q_y2 = query_box[1]-query_box[3], query_box[1]+query_box[3]
+    q_yc = (q_y1+q_y2)/2
+    q_h = q_y2-q_y1
+    c_x1, c_x2 = candidate_boxes[:,0]-candidate_boxes[:,4], candidate_boxes[:,0]+candidate_boxes[:,4]
+    c_y1, c_y2 = candidate_boxes[:,1]-candidate_boxes[:,3], candidate_boxes[:,1]+candidate_boxes[:,3]
+    c_yc = (c_y1+c_y2)/2
+    c_h = c_y2-c_y1
+
+    inter_rect_x1 = torch.max(q_x1, c_x1)
+    inter_rect_x2 = torch.min(q_x2, c_x2)
+    inter_rect_y1 = torch.max(q_y1, c_y1)
+    inter_rect_y2 = torch.min(q_y2, c_y2)
+
+    inter_area = torch.clamp(inter_rect_x2 - inter_rect_x1 + 1, min=0) * torch.clamp(
+            inter_rect_y2 - inter_rect_y1 + 1, min=0 )
+
+    q_area = (q_x2 - q_x1 + 1) * (q_y2 - q_y1 + 1)
+    c_area = (c_x2 - c_x1 + 1) * (c_y2 - c_y1 + 1)
+    min_area = torch.min(q_area,c_area)
+    #import pdb; pdb.set_trace()
+
+    max_inter = inter_area/min_area
+    #max_inter[(q_yc-c_yc).abs()>torch.min(
+    #Apply bias
+    mult=3
+    max_inter *= (mult*(((q_yc-c_yc).abs()/torch.min(q_h,c_h))).pow(2)).clamp(min=0.5)
+    return max_inter
 
 
 def max_intersection(query_box, candidate_boxes):

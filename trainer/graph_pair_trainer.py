@@ -2140,6 +2140,8 @@ class GraphPairTrainer(BaseTrainer):
                 raise NotImplementedError('Cannot get [{}], unknown'.format(name))
         return losses, log, got
 
+
+
     def final_eval(self,targetBoxes,gtGroups,gt_groups_adj,outputBoxes,predGroups,predPairs,predTrans=None):
         log={}
         numClasses = len(self.data_loader.dataset.classMap)
