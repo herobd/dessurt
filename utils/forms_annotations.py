@@ -796,7 +796,10 @@ def formGroups(annotations):
                     #(annotations['byId'][pair[0]]['type']!='textMinor' or connectionNotParallel(annotations['byId'][pair[0]],annotations['byId'][pair[1]]) )
                 )
                 ):
+            #if you have the same label, if your joined para, if you are a minor text or circle that's in para
             #print('adding grouping between: {} and {}'.format(annotations['byId'][pair[0]]['type'],annotations['byId'][pair[1]]['type']))
+
+            #add to appropriate group or form a new one
             if pair[0] not in groupMap and pair[1] not in groupMap:
                 groups[curGroupId] = list(pair)
                 groupMap[pair[0]] = curGroupId

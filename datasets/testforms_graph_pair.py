@@ -19,7 +19,7 @@ def display(data):
     #print(img.shape)
     #print(data['pixel_gt']['table_pixels'].shape)
     if len(only)>0:
-        if data['imgName']!=only:
+        if only not in data['imgName']:
             return
     print(data['imgName'])
 
@@ -150,7 +150,7 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=FormsGraphPair(dirPath=dirPath,split='train',config={
+    data=FormsGraphPair(dirPath=dirPath,split='valid',config={
         'color':False,
         'crop_to_page':False,
         'rescale_range':[1,1],
