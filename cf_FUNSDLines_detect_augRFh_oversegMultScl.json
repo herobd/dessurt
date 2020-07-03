@@ -46,7 +46,9 @@
     "loss_params": {
         "overseg": {
             "ignore_thresh": 0.5,
-            "bad_conf_weight": 20.0
+            "bad_conf_weight": 20.0,
+            "tile_assign_mode": "split",
+            "multiclass": true
         }
     },
     "loss_weights":{"overseg":1.0},

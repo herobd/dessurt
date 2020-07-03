@@ -163,3 +163,10 @@ def plotRect(img,color,xyrhw,lineWidth=1):
     cv2.line(img,tr,br,color,lineWidth)
     cv2.line(img,br,bl,color,lineWidth)
     cv2.line(img,bl,tl,color,lineWidth)
+
+def inv_tanh(y):
+    if y<=-1: #implicit gradient clipping done here
+        return -2
+    elif y >=1:
+        return 2
+    return 0.5*(math.log((1+y)/(1-y)))

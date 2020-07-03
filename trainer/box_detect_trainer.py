@@ -389,6 +389,7 @@ class BoxDetectTrainer(BaseTrainer):
 
 
     def run(self,instance,get=[]):
+        print('==forms: {}'.format(instance['imgName']))
         index=0
         losses={}
         log={}
