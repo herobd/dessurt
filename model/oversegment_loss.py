@@ -13,6 +13,7 @@ import skimage.draw
 import cv2
 
 UNMASK_CENT_DIST_THRESH=0.1
+END_UNMASK_THRESH=0.05
 
 def norm_angle(a):
     if a>np.pi:
@@ -188,7 +189,6 @@ def build_oversegmented_targets_multiscale(
     nWs = grid_sizesW
     masks=[]
     shared_masks=[] #Do more then two (parallel) gts claim this cell?
-    assignments=[] #which gt index is assigned to which cell?
     conf_masks=[]
     t_Ls=[]
     t_Rs=[]
@@ -261,6 +261,9 @@ def build_oversegmented_targets_multiscale(
             nGT += 1
 
 
+            gr = target[b, t, 2]
+            isHorz = (gr>-np.pi/4 and gr<np.pi/4) or (gr<-3*np.pi/4 or gr>3*np.pi/4)
+            #TODO handle 45degree text better (predict on both anchors)
 
             #candidate_pos=[]
             #We need to decide which scale this is at.
@@ -271,9 +274,13 @@ def build_oversegmented_targets_multiscale(
                 gr = target[b, t, 2]
                 gh = target[b, t, 3] / scale[level][1]
 
-                #rh = gh*2 
-                rh = 2*gh/min(abs(math.cos(gr)),0.5)
+                #rh = gh*2
+                if isHorz:
+                    rh = 2*gh*math.cos(gr)
+                else:
+                    rh = 2*gh*math.sin(gr)
                 diff = abs(rh-1)
+                print('{} diff level {}: {}  rh:{}'.format(t,level,diff,rh))
                 if diff<closest_diff:
                     closest_diff = diff
                     closest = level
@@ -297,7 +304,6 @@ def build_oversegmented_targets_multiscale(
 
             gx = target[b, t, 0] / scale[level][0]
             gy = target[b, t, 1] / scale[level][1]
-            gr = target[b, t, 2]
             gw = target[b, t, 4] / scale[level][0]
             gh = target[b, t, 3] / scale[level][1]
 
@@ -310,8 +316,6 @@ def build_oversegmented_targets_multiscale(
             g_bx = target[b, t, 11] / scale[level][0]
             g_by = target[b, t, 12] / scale[level][1]
 
-            isHorz = (gr>-np.pi/4 and gr<np.pi/4) or (gr<-3*np.pi/4 or gr>3*np.pi/4)
-            #TODO handle 45degree text better (predict on both anchors)
 
             if VISUAL_DEBUG:
                 #Draw GT
@@ -356,11 +360,8 @@ def build_oversegmented_targets_multiscale(
             #TODO fix end points. Probably shouldn't include tile if we're barely on it.
 
             #we use the anti-ailiased to ignore close tiles
-            close_thresh=0.25
-            conf_mask[b,:,ignore_tile_ys,ignore_tile_xs]= torch.where(torch.from_numpy(weight_tile[None,...])>close_thresh,torch.zeros_like(conf_mask[b,:,ignore_tile_ys,ignore_tile_xs]),conf_mask[b,:,ignore_tile_ys,ignore_tile_xs])
-            # Get the best prediction
-            #pred_box = pred_boxes[b, best_n, gj, gi].unsqueeze(0)
-            # Masks
+            #close_thresh=0.1
+            #conf_mask[b,:,ignore_tile_ys,ignore_tile_xs]= torch.where(torch.from_numpy(weight_tile[None,...])>close_thresh,torch.zeros_like(conf_mask[b,:,ignore_tile_ys,ignore_tile_xs]),conf_mask[b,:,ignore_tile_ys,ignore_tile_xs])
 
             #shared_mask[b,0 if isHorz else 0,hit_tile_ys,hit_tile_xs] = torch.where(mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs]==1,mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs], shared_mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs]) #set to one everywhere that mask is already 1
             #mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs]= torch.where(shared_mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs]==1,torch.zeros_like(mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs]),torch.ones_like(mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs])) #set to 1 everywhere shared is 0, else set to 0
@@ -468,39 +469,31 @@ def build_oversegmented_targets_multiscale(
                 c_l = g_ly-s_t*g_lx
                 c_r = g_ry-s_t*g_rx
                 
-                #claimed_tiles = defaultdict(list)
-
-                #for ty,tx in zip(hit_tile_ys,hit_tile_xs):
-                #    tile_x = tx+0.5
-                #    tile_y = ty+0.5
-                #    if assign_mode=='split':
-                #        #Predict based on position of the text line
-                #        if isHorz:
-                #            if gy<=tile_y:
-                #                assigned = 0
-                #                not_assigned = 1
-                #            else:
-                #                assigned = 1
-                #                not_assigned = 0
-                #            if ((tile_x-g_lx<END_UNMASK_THRESH or g_rx-tile_x>END_MASK_THRESH) and
-                #                    len(hit_tile_ys)>1):
-                #                #it's a border tile, we'll just ignore it
-                #        else:
-                #            if gx<=tile_x:
-                #                assigned = 2
-                #                not_assigned = 3
-                #            else:
-                #                assigned = 3
-                #                not_assigned = 2
-                #    claimed_tiles[(level,ty,tx,assigned)].append(t)
-
-                #for (level,ty,tx,assigned),ts in claimed_tiles.items():
-                ##An optimization, to have the tile assigned to the bb with most area, but ensure every bb is getting a predcition from somewhere.
-                ##Is this the only tile for any gt bbs?
 
                 for ty,tx in zip(hit_tile_ys,hit_tile_xs): #kind of confusing, but here "tx ty" is for tile-i tile-j
                     tile_x = tx+0.5
                     tile_y = ty+0.5
+
+                    #top and bottom points (directly over tile center)
+                    ti_x = tile_x
+                    ti_y = s_t*ti_x+c_t
+                    bi_x = tile_x
+                    bi_y = s_b*bi_x+c_b
+                    
+
+                    #left and right points (directly over/parallel to tile center)
+                    li_y = tile_y
+                    ri_y = tile_y
+                    if math.isinf(s_l):
+                        li_x = g_lx
+                    else:
+                        li_x = (li_y-c_l)/s_l
+                    if math.isinf(s_l):
+                        ri_x = g_rx
+                    else:
+                        ri_x = (ri_y-c_r)/s_r
+                    #print('li_x,y:{},{}, ri_x,y:{},{}, s_l:{}, c_l:{}'.format(li_x,li_y,ri_x,ri_y,s_l,c_l))
+
                     if assign_mode=='split':
                         #Predict based on position of the text line
                         if isHorz:
@@ -510,10 +503,11 @@ def build_oversegmented_targets_multiscale(
                             else:
                                 assigned = 1
                                 not_assigned = 0
-                            if ((tile_x-g_lx<END_UNMASK_THRESH or g_rx-tile_x>END_MASK_THRESH) and
-                                    len(hit_tile_ys)>1):
+                            if (( (li_x>tile_x and tile_x+1-li_x<END_UNMASK_THRESH) or 
+                                  (tile_x>ri_x and ri_x-tile_x<END_UNMASK_THRESH) ) and
+                                 len(hit_tile_ys)>1):
                                 #it's a border tile, we'll just ignore it
-                                TODO
+                                continue
                         else:
                             if gx<=tile_x:
                                 assigned = 2
@@ -521,17 +515,27 @@ def build_oversegmented_targets_multiscale(
                             else:
                                 assigned = 3
                                 not_assigned = 2
+                            if (( (ti_y>tile_y and tile_y+1-ti_y<END_UNMASK_THRESH) or 
+                                  (tile_y>bi_y and bi_y-tile_y<END_UNMASK_THRESH) ) and
+                                 len(hit_tile_ys)>1):
+                                #it's a border tile, we'll just ignore it
+                                continue
                         if assignment[assigned,ty,tx]!=-1:
+                            print('shared at {}, {}'.format(tx,ty))
+                            shared_mask[b,assigned,ty,tx]=1
+                            other_t = assignment[assigned,ty,tx]
+                            #Uh oh, this half has been assigned already.
                             t_have_other_tiles = len(hit_tile_ys)>1
                             other_t_have_other_tiles = (assignment==other_t).sum()>1
 
-                            if other_t_have_tiles and not t_have_other_tiles:
+                            if other_t_have_other_tiles and not t_have_other_tiles:
                                 #I get it!
-                                TODO_but_check 
-                            elif not other_t_have_tiles and t_have_other_tiles:
+                                action='replace-other-t'
+                            elif not other_t_have_other_tiles and t_have_other_tiles:
                                 #Keep everything unchanged. My other tile(s) will predict this
-                                continue
-                            elif other_t_have_tiles and t_have_other_tiles:
+                                action='skip-t'
+                            elif other_t_have_other_tiles and t_have_other_tiles:
+                                #For which of us is this tile on the end of our BB?
                                 if isHorz:
                                     t_end = (li_x>=tx and li_x<=tx+1) or (ri_x>=tx and ri_x<=tx+1)
                                     other_li_x = target[b, t, 5] / scale[level][0]
@@ -551,6 +555,7 @@ def build_oversegmented_targets_multiscale(
                                     if other_t_end:
                                         other_top_side = other_ti_y>=ty and other_ti_y<=ty+1
                                 if t_end and other_t_end:
+                                    #Both ends? Great, if one of us has a large portion of our BB in this tile, we'll that one get predicted
                                     if isHorz:
                                         if left_side:
                                             t_fraction_in_tile = (tx+1-li_x)-(ri_x-li_x)
@@ -570,77 +575,52 @@ def build_oversegmented_targets_multiscale(
                                         else:
                                             other_t_fraction_in_tile = (other_bi_y-ty)-(other_bi_y-other_ti_y)
 
-                                    if t_precent_in_tile>0.5 and other_t_fraction_in_tile<0.5:
+                                    if t_fraction_in_tile>0.5 and other_t_fraction_in_tile<0.5:
                                         #I get it!
-                                        TODO
-                                    elif t_precent_in_tile<0.5 and other_t_fraction_in_tile>0.5:
+                                        action='replace-other-t'
+                                    elif t_fraction_in_tile<0.5 and other_t_fraction_in_tile>0.5:
                                         #let them get it
-                                        continue
+                                        action='skip-t'
+                                    else:
+                                        #We'll just unmask this. The behavoir isn't really important.
+                                        action='unmask'
                                 elif not t_end and other_t_end:
                                     #I get it!
-                                    TODO
+                                    action='replace-other-t'
                                 elif t_end and not other_t_end:
                                     #let them get it
-                                    continue
+                                    action='skip-t'
                                 else:
                                     #I don't know, unmask I guess
                                     #Or bump one up/down?
-                                    TODO
-                            #TODO left off. The below code is getting replaced. the TODOs and continues need to be consolidated to the appropriate action as below. li_x, etc need computed earlier
-
-                            #horizontal overlap, hopefully
-                            if (li_x>=tx and li_x<=tx+1) or (ri_x>=tx and ri_x<=tx+1):
-                                #yes this is the end so it should be horz overlap
-                                #encourage no prediction here
-                                mask[b,0:2 if isHorz else 2:4,ty,tx]=0
-                                targ_conf[b,0:2 if isHorz else 2:4,ty,tx]=0
-                                conf_mask[b,0:2 if isHorz else 2:4,ty,tx]=1
-                                shared_mask[b,0:2 if isHorz else 2:4,ty,tx]=1
-                                continue #That's it!
+                                    action='unmask'
                             else:
-                                assert(shared_mask[b,0:2 if isHorz else 2:4,ty,tx]==0) #not designed for 3
-                                shared_mask[b,0:2 if isHorz else 2:4,ty,tx]=1
-                                #import pdb;pdb.set_trace()
-                                #print("This shouldn't happen. check why")
-                                #if (isHorz and abs(tile_y-gy)<UNMASK_CENT_DIST_THRESH) or (not isHorz and abs(tile_x-gx)<UNMASK_CENT_DIST_THRESH):
-                                other_t = assignment[assigned,ty,tx]
-                                other_gx = target[b, other_t, 1] / scale[level][1]
-                                other_gy = target[b, other_t, 1] / scale[level][1]
-                                if isHorz:
-                                    swap_me = (assigned==0 and gy>other_gy) or (assigned==1 and gy<other_gy)
-                                else:
-                                    swap_me = (assigned==2 and gx>other_gx) or (assigned==3 and gx<other_gx)
-                                if swap_me:
-                                    #just predict using other head
-                                    tmp=assigned
-                                    assigned=not_assigned
-                                    not_assigned=tmp
-                                else:
-                                    #swap prev to other head
-                                    mask[b,not_assigned,ty,tx]=mask[b,assigned,ty,tx]
-                                    conf_mask[b,not_assigned,ty,tx]=conf_mask[b,assigned,ty,tx]
-                                    targ_conf[b,not_assigned,ty,tx]=targ_conf[b,assigned,ty,tx]
-                                    targ_cls[b,not_assigned,ty,tx]=targ_cls[b,assigned,ty,tx]
-                                    targ_r[b,not_assigned,ty,tx]=targ_r[b,assigned,ty,tx]
-                                    targ_T[b,not_assigned,ty,tx]=targ_T[b,assigned,ty,tx]
-                                    targ_B[b,not_assigned,ty,tx]=targ_B[b,assigned,ty,tx]
-                                    targ_L[b,not_assigned,ty,tx]=targ_L[b,assigned,ty,tx]
-                                    targ_R[b,not_assigned,ty,tx]=targ_R[b,assigned,ty,tx]
-                                print('overlap for x:{},y:{},w:{},h:{} and x:{},y:{},w:{},h:{}'.format(gx,gy,gw,gh,other_gx,other_gy,target[b, other_t, 4] / scale[level][0],target[b, other_t, 3] / scale[level][1]))
-                                print('decision: {}'.format('swap first' if swap_me else 'swap second'))
-                                assignment[assigned,ty,tx]=t
-                                mask[b,assigned,ty,tx]=1
-                                targ_conf[b,assigned,ty,tx]=1
-                                conf_mask[b,assigned,ty,tx]=1
+                                #Uuuhhhhhh, we both need this tile to predict us. Throw one to the other half. Hopefully this rarely happens.
+                                #For now, just unmask
+                                action='unmask'
+                                print('WARNING: Tile is only tile for two BBs. Currently unmasking')
 
-                        else:
-                            assignment[assigned,ty,tx]=t
-                            mask[b,assigned,ty,tx]=1
-                            targ_conf[b,assigned,ty,tx]=1
-                            conf_mask[b,assigned,ty,tx]=1
+                            if action=='skip-t':
+                                continue
+                            elif action=='replace-other-t':
+                                pass #I'll just overwrite it
+                            elif action=='unmask':
+                                mask[b,assigned,ty,tx]=0
+                                conf_mask[b,assigned,ty,tx]=0
+                                #assignment[assigned,ty,tx]=?
 
-                            if (isHorz and abs(tile_y-gy)<UNMASK_CENT_DIST_THRESH) or (not isHorz and abs(tile_x-gx)<UNMASK_CENT_DIST_THRESH):
-                                conf_mask[b,not_assigned,ty,tx]=0
+                                continue
+                            else:
+                                raise NotImplementedError('Unknown sharing action: {}'.format(action))
+
+                        #else:
+                        assignment[assigned,ty,tx]=t
+                        mask[b,assigned,ty,tx]=1
+                        targ_conf[b,assigned,ty,tx]=1
+                        conf_mask[b,assigned,ty,tx]=1
+
+                        if ((isHorz and abs(tile_y-(ti_y+bi_y)/2)<UNMASK_CENT_DIST_THRESH) or (not isHorz and abs(tile_x-(li_x+ri_x)/2)<UNMASK_CENT_DIST_THRESH)) and targ_conf[b,not_assigned,ty,tx]==0:
+                            conf_mask[b,not_assigned,ty,tx]= 0 
                     else:
                         raise NotImplementedError('Uknown tile assignment mode: {}'.format(assign_mode))
 
@@ -649,31 +629,13 @@ def build_oversegmented_targets_multiscale(
 
                     targ_cls[b, assigned, ty, tx] = target[b, t,13:]
                     targ_r[b, assigned, ty, tx] = math.asin(gr/np.pi)/np.pi
-                    #top and bottom points (directly over tile center)
-                    ti_x = tile_x
-                    ti_y = s_t*ti_x+c_t
-                    bi_x = tile_x
-                    bi_y = s_b*bi_x+c_b
-                    
+
                     T=ti_y-tile_y #negative if above tile center (just add predcition to center)
                     assert(abs(T)<MAX_H_PRED)
                     targ_T[b, assigned, ty, tx] = inv_tanh(T/MAX_H_PRED)
                     B=bi_y-tile_y 
                     assert(abs(B)<MAX_H_PRED)
                     targ_B[b, assigned, ty, tx] = inv_tanh(B/MAX_H_PRED)
-
-                    #left and right points (directly over/parallel to tile center)
-                    li_y = tile_y
-                    ri_y = tile_y
-                    if math.isinf(s_l):
-                        li_x = g_lx
-                    else:
-                        li_x = (li_y-c_l)/s_l
-                    if math.isinf(s_l):
-                        ri_x = g_rx
-                    else:
-                        ri_x = (ri_y-c_r)/s_r
-                    #print('li_x,y:{},{}, ri_x,y:{},{}, s_l:{}, c_l:{}'.format(li_x,li_y,ri_x,ri_y,s_l,c_l))
                     
                     L=li_x-tile_x #negative if left of tile center (just add predcition to center)
                     L = max(min(L,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
@@ -705,15 +667,15 @@ def build_oversegmented_targets_multiscale(
 
 
         if VISUAL_DEBUG:
-            fig = plt.figure()
-            axs=[]
             for level in range(len(nHs)):
+                print('draw level {}'.format(level))
                 #draw[level][0,0,:]=255
                 draw_level = draw[level]
                 for ty in range(nHs[level]):
                     for tx in range(nWs[level]):
                         d_tile_x = (tx+0.5)*VIZ_SIZE
                         d_tile_y = (ty+0.5)*VIZ_SIZE
+                        #for masks_m,ch in zip([t_confs],[2]):
                         for masks_m,ch in zip([conf_masks,t_confs],[1,2]):
                             if masks_m[level][b,0,ty,tx]:
                                 draw_level[ty*VIZ_SIZE+1:int((ty+0.5)*VIZ_SIZE),tx*VIZ_SIZE+1:(tx+1)*VIZ_SIZE,ch]+=60
@@ -725,6 +687,10 @@ def build_oversegmented_targets_multiscale(
                                 draw_level[ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,int((tx+0.5)*VIZ_SIZE):(tx+1)*VIZ_SIZE,ch]+=60
                         if (shared_masks[level][b,:,ty,tx]==1).any():
                             draw_level[ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,tx*VIZ_SIZE+1:(tx+1)*VIZ_SIZE,0]+=90
+                for ty in range(nHs[level]):
+                    for tx in range(nWs[level]):
+                        d_tile_x = (tx+0.5)*VIZ_SIZE
+                        d_tile_y = (ty+0.5)*VIZ_SIZE
                         for i,bright in zip(range(nA),[255,205,155,100]):
                             if masks[level][b,i,ty,tx]:
                                 if i==0:
@@ -743,12 +709,14 @@ def build_oversegmented_targets_multiscale(
                                 B= torch.tanh(t_Bs[level][b,i,ty,tx])*MAX_H_PRED
                                 L= torch.tanh(t_Ls[level][b,i,ty,tx])*MAX_W_PRED
                                 R= torch.tanh(t_Rs[level][b,i,ty,tx])*MAX_W_PRED
-                                cv2.line(draw_level,(int(d_tile_x-1+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x-1),int(d_tile_y+(T*VIZ_SIZE))),(bright,bright,0),1)
-                                cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x),int(d_tile_y+(B*VIZ_SIZE))),(bright,0,0),1)
-                                cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y-1+coff_y)),(int(d_tile_x+(L*VIZ_SIZE)),int(d_tile_y-1)),(bright,0,bright),1)
-                                cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x+(R*VIZ_SIZE)),int(d_tile_y)),(0,bright,bright),1)
+                                cv2.line(draw_level,(int(d_tile_x-1+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x-1+coff_x),int(d_tile_y+(T*VIZ_SIZE))),(bright,bright,0),1)
+                                cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x+coff_x),int(d_tile_y+(B*VIZ_SIZE))),(bright,0,0),1)
+                                cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y-1+coff_y)),(int(d_tile_x+(L*VIZ_SIZE)),int(d_tile_y-1+coff_y)),(bright,0,bright),1)
+                                cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x+(R*VIZ_SIZE)),int(d_tile_y+coff_y)),(0,bright,bright),1)
                                 
 
+                fig = plt.figure()
+                axs=[]
                 axs.append( plt.subplot() )
                 axs[-1].set_axis_off()
                 axs[-1].imshow(draw_level)
