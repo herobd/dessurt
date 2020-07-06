@@ -513,6 +513,7 @@ def build_oversegmented_targets_multiscale(
                             if ((tile_x-g_lx<END_UNMASK_THRESH or g_rx-tile_x>END_MASK_THRESH) and
                                     len(hit_tile_ys)>1):
                                 #it's a border tile, we'll just ignore it
+                                TODO
                         else:
                             if gx<=tile_x:
                                 assigned = 2
@@ -526,7 +527,7 @@ def build_oversegmented_targets_multiscale(
 
                             if other_t_have_tiles and not t_have_other_tiles:
                                 #I get it!
-                                TODO, but check 
+                                TODO_but_check 
                             elif not other_t_have_tiles and t_have_other_tiles:
                                 #Keep everything unchanged. My other tile(s) will predict this
                                 continue
