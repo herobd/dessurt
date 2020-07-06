@@ -7,8 +7,9 @@ import numpy as np
 from .net_builder import make_layers
 
 
-MAX_H_PRED=1.5
-MAX_W_PRED=0.55
+MAX_H_PRED=4.95 #This is an assumption about how large we need to predict TODO adjustt for multiscale
+MAX_W_PRED=1.55 #This is so we can reach the prediction to a cell that is being shared with a neighbor bb (which will not predict)
+NUM_ANCHORS=4 #2 for horz, 2 for vert. 2 allows prediction of overlapped bbs
 
 
 
@@ -21,7 +22,7 @@ class OverSegBoxDetector(nn.Module): #BaseModel
         self.numBBParams = 6 #conf,L-off,T-off,R-off,B-off,rot
         self.predNumNeighbors=False
         self.anchors=None
-        self.numAnchors=2
+        self.numAnchors=NUM_ANCHORS
 
         self.predPixelCount = config['number_of_pixel_types'] if 'number_of_pixel_types' in config else 0
 
