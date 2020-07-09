@@ -38,6 +38,47 @@ def fraction_in_tile(isHorz,left_side,tx,ty,li_x,ri_x,ti_y,bi_y):
 
     return t_fraction_in_tile
 
+def get_tiles(y1,x1,y2,x2):
+    #this gets the cells/tiles intersected by a line passing from one point to the other
+    #there are probably a lot faster implementations out there
+
+    max_tx = max(int(x2),int(x1))
+    min_tx = min(int(x2),int(x1))
+    max_ty = max(int(y2),int(y1))
+    min_ty = min(int(y2),int(y1))
+
+
+    #tiles_x = [min_x,max_x]
+    #tiles_y = [min_y,max_y]
+    tiles = set([(int(x1),int(y1)),(int(x2),int(y2))])
+    #print(tiles)
+    
+    if x1!=x2:
+        slope = (y1-y2)/(x1-x2)
+        c = y2 - x2*slope
+
+        if abs(slope)<=1:
+            for tx in range(min_tx+1,max_tx+1):
+                yi = tx*slope + c
+                #print('{}   {},{}'.format(slope,tx,yi))
+                tiles.add((tx,int(yi)))
+                tiles.add((tx-1,int(yi)))
+                #print(tiles)
+        else:
+            for ty in range(min_ty+1,max_ty+1):
+                xi = (ty-c)/slope
+                #print('{}   {},{}'.format(slope,xi,ty))
+                tiles.add((int(xi),ty))
+                tiles.add((int(xi),ty-1))
+                #print(tiles)
+
+        xs,ys = zip(*tiles)
+        return ys,xs
+    else:
+        ys = list(range(min_ty,max_ty+1))
+        return ys,[x1]*len(ys)
+
+
 class MultiScaleOversegmentLoss (nn.Module):
     def __init__(self, num_classes, rotation, scale, anchors, bad_conf_weight=1.25, multiclass=False,tile_assign_mode='split',close_anchor_rule='unmask'):
         super(MultiScaleOversegmentLoss, self).__init__()
@@ -369,9 +410,12 @@ def build_oversegmented_targets_multiscale(
                 if gw==0 or gh==0:
                     continue
                 #What tiles are relevant for predicting this? Just the center line? Do any tiles get an ignore (unmask)?
-                hit_tile_ys, hit_tile_xs = skimage.draw.line(int(g_ly),int(g_lx),int(g_ry),int(g_rx))
+                #hit_tile_ys, hit_tile_xs = skimage.draw.line(int(g_ly),int(g_lx),int(g_ry),int(g_rx))
                 #hit_tile_ys, hit_tile_xs = (y,x) for y,x in zip(hit_tile_ys, hit_tile_xs) if y>=0 and y<
                 ignore_tile_ys, ignore_tile_xs, weight_tile = skimage.draw.line_aa(int(g_ly),int(g_lx),int(g_ry),int(g_rx)) #This is nice, except I'm forced to pass integers in, perhaps this could be used for ignoring?
+
+                hit_tile_ys, hit_tile_xs = get_tiles(g_ly,g_lx,g_ry,g_rx)
+
                 hit_tile_ys = np.clip(hit_tile_ys,0,nH-1)
                 hit_tile_xs = np.clip(hit_tile_xs,0,nW-1)
                 ignore_tile_ys = np.clip(ignore_tile_ys,0,nH-1)
@@ -528,7 +572,7 @@ def build_oversegmented_targets_multiscale(
                                 c_l = g_by-s_l*g_bx
                                 c_r = g_ty-s_r*g_tx
                     
-
+                    print(list(zip(hit_tile_ys,hit_tile_xs)))
                     for ty,tx in zip(hit_tile_ys,hit_tile_xs): #kind of confusing, but here "tx ty" is for tile-i tile-j
                         tile_x = tx+0.5
                         tile_y = ty+0.5
@@ -540,34 +584,98 @@ def build_oversegmented_targets_multiscale(
                         bi_x = tile_x
                         bi_y = s_b*bi_x+c_b
 
-                        print('t:{},{}  ti:{},{}  bi:{},{}'.format(tx,ty,ti_x,ti_y,bi_x,bi_y))
+                        #print('t:{},{}  ti:{},{}  bi:{},{}'.format(tx,ty,ti_x,ti_y,bi_x,bi_y))
                         
 
                         #left and right points (directly over/parallel to tile center)
                         li_y = tile_y
                         ri_y = tile_y
-                        if math.isinf(s_l):
-                            li_x = c_l
-                        else:
-                            li_x = (li_y-c_l)/s_l
-                        if s_b!=0:
-                            lbi_x = (li_y-c_b)/s_b
-                            lti_x = (li_y-c_b)/s_b
-                            li_x = max(li_x,
-                                    lbi_x if lbi_x<tile_x else -float('inf'),
-                                    lti_x if lti_x<tile_x else -float('inf'))
-                        if math.isinf(s_r):
+
+                        #new way
+                        #The idea is to find the R (ri_x) that will maximize the IoU between the predicted box (axis aligned) and gt bb given the already selected ti_y and bi_y
+                        #This requires looking at how the bb lines intersect eachother and the horizontal boundaries (ti_y/bi_y)
+                        #We leverage the fact that at tile_x, the horizontal boundaries and the bb lines intersect (top and bottom)
+                        #print('{},{} at ri_x comp  s_t:{}'.format(tx,ty,s_t))
+                        if s_t==0:
                             ri_x = c_r
                         else:
-                            ri_x = (ri_y-c_r)/s_r
-                        if s_b!=0:
-                            rbi_x = (ri_y-c_b)/s_b
-                            rti_x = (ri_y-c_b)/s_b
-                            ri_x = min(ri_x,
-                                    rbi_x if rbi_x>tile_x else float('inf'),
-                                    rti_x if rti_x>tile_x else float('inf'))
+                            #find intersections
+                            if s_t>0: #slope down
+                                t_to_bh_inter_x = (bi_y-c_t)/s_t #intersection of gt bb top line to horizontal line at bi_y 
+                                t_to_r_inter_x = (c_r-c_t)/(s_t-s_r) #intersection of gt bb top and right lines
+                                ri_x = (t_to_bh_inter_x+tile_x)/2 #half way is optimal (iou type)
+                                if t_to_bh_inter_x>t_to_r_inter_x: 
+                                    #unless the optimal point is along the bb corner
+                                    rtri_x = (c_t-c_r+(bi_y-ti_y)/2)/(s_r-s_t) #this is optimal along corner
+                                    ri_x = min(ri_x,rtri_x)
+                            else: #slope up
+                                b_to_th_inter_x = (ti_y-c_b)/s_b #intersection of gt bb bot line to horizontal line at ti_y 
+                                b_to_r_inter_x = (c_r-c_b)/(s_b-s_r) #intersection of gt bb bot and right lines (corner)
+                                ri_x = (b_to_th_inter_x+tile_x)/2 #half way is optimal (iou type)
+                                if b_to_th_inter_x>b_to_r_inter_x: 
+                                    #unless the optimal point is along the bb corner
+                                    rtri_x = (c_r-c_b+(bi_y-ti_y)/2)/(s_b-s_r) #this is optimal along corner
+                                    ri_x = min(ri_x,rtri_x)
+                            if math.isinf(s_r):
+                                ri_x = min(ri_x,c_r)
+                            else:
+                                ri_x = min(ri_x,(ri_y-c_r)/s_r)
 
-                        print('li_x,y:{},{}, ri_x,y:{},{}, s_l:{}, c_l:{}'.format(li_x,li_y,ri_x,ri_y,s_l,c_l))
+                        #compute li_x
+                        if s_t==0:
+                            li_x = c_l
+                        else:
+                            #find intersections
+                            print('{},{} s_t:{}'.format(tx,ty,s_t))
+                            if s_t>0: #slope down (left-ways)
+                                t_to_bh_inter_x = (bi_y-c_t)/s_t #intersection of gt bb top line to horizontal line at bi_y 
+                                t_to_l_inter_x = (c_l-c_t)/(s_t-s_l) #intersection of gt bb top and right lines
+                                print('t_to_bh_inter_x:{}  t_to_l_inter_x:{}'.format(t_to_bh_inter_x,t_to_l_inter_x))
+                                li_x = (t_to_bh_inter_x+tile_x)/2 #half way is optimal (iou type)
+                                if t_to_bh_inter_x<t_to_l_inter_x: 
+                                    #unless the optimal point is along the bb corner
+                                    ltri_x = (c_t-c_l+(bi_y-ti_y)/2)/(s_l-s_t) #this is optimal along corner
+                                    li_x = max(li_x,ltri_x)
+                            else: #slope up
+                                b_to_th_inter_x = (ti_y-c_b)/s_b #intersection of gt bb bot line to horizontal line at ti_y 
+                                b_to_l_inter_x = (c_l-c_b)/(s_b-s_l) #intersection of gt bb bot and right lines (corner)
+                                #TODO ^ this seems wront
+                                print('b_to_th_inter_x:{}  b_to_l_inter_x:{}'.format(b_to_th_inter_x,b_to_l_inter_x))
+                                li_x = (b_to_th_inter_x+tile_x)/2 #half way is optimal (iou type)
+                                if b_to_th_inter_x<b_to_l_inter_x: 
+                                    #unless the optimal point is along the bb corner
+                                    ltri_x = (c_l-c_b+(bi_y-ti_y)/2)/(s_b-s_l) #this is optimal along corner
+                                    li_x = max(li_x,ltri_x)
+                            if math.isinf(s_l):
+                                li_x = max(li_x,c_l)
+                            else:
+                                li_x = max(li_x,(li_y-c_l)/s_l)
+                        #old way
+                        #intersect_check_y = (max(ty,ti_y)+min(ty+1,bi_y))/2
+                        #if math.isinf(s_l):
+                        #    li_x = c_l
+                        #else:
+                        #    li_x = (li_y-c_l)/s_l
+                        #if s_b!=0:
+                        #    lbi_x = (intersect_check_y-c_b)/s_b
+                        #    lti_x = (intersect_check_y-c_t)/s_t
+                        #    li_x = max(li_x,
+                        #            lbi_x if lbi_x<tile_x else -float('inf'),
+                        #            lti_x if lti_x<tile_x else -float('inf'))
+
+                        #if math.isinf(s_r):
+                        #    ri_x = c_r
+                        #else:
+                        #    ri_x = (ri_y-c_r)/s_r
+                        #if s_b!=0:
+                        #    rbi_x = (intersect_check_y-c_b)/s_b
+                        #    rti_x = (intersect_check_y-c_t)/s_t
+                        #    #print('initial ri_x:{}, rbi_x:{}, rti_x:{}'.format(ri_x,rbi_x,rti_x))
+                        #    ri_x = min(ri_x,
+                        #            rbi_x if rbi_x>tile_x else float('inf'),
+                        #            rti_x if rti_x>tile_x else float('inf'))
+
+                        #print('li_x,y:{},{}, ri_x,y:{},{}, s_b:{}, c_b:{}'.format(li_x,li_y,ri_x,ri_y,s_b,c_b))
 
                         if assign_mode=='split':
                             #Predict based on position of the text line
@@ -782,6 +890,7 @@ def build_oversegmented_targets_multiscale(
 
         if VISUAL_DEBUG:
             for level in range(len(nHs)):
+                colorIndex=0
                 print('draw level {}'.format(level))
                 #draw[level][0,0,:]=255
                 draw_level = draw[level]
@@ -807,8 +916,16 @@ def build_oversegmented_targets_multiscale(
                             draw_level[ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,int((tx+0.5)*VIZ_SIZE):(tx+1)*VIZ_SIZE,1]+=50
                             if t_confs[level][b,3,ty,tx]:
                                 draw_level[ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,int((tx+0.5)*VIZ_SIZE):(tx+1)*VIZ_SIZE,2]+=50
-                        if (shared_masks[level][b,:,ty,tx]==1).any():
-                            draw_level[ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,tx*VIZ_SIZE+1:(tx+1)*VIZ_SIZE,0]+=90
+                        #if (shared_masks[level][b,:,ty,tx]==1).any():
+                        #    draw_level[ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,tx*VIZ_SIZE+1:(tx+1)*VIZ_SIZE,0]+=90
+                        if shared_masks[level][b,0,ty,tx]:
+                            draw_level[ty*VIZ_SIZE+1:int((ty+0.5)*VIZ_SIZE),tx*VIZ_SIZE+1:(tx+1)*VIZ_SIZE,0]+=50
+                        if shared_masks[level][b,0,ty,tx]:
+                            draw_level[int((ty+0.5)*VIZ_SIZE):(ty+1)*VIZ_SIZE,tx*VIZ_SIZE+1:(tx+1)*VIZ_SIZE,0]+=50
+                        if shared_masks[level][b,2,ty,tx]:
+                            draw_level[ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,tx*VIZ_SIZE+1:int((tx+0.5)*VIZ_SIZE),0]+=50
+                        if shared_masks[level][b,3,ty,tx]:
+                            draw_level[ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,int((tx+0.5)*VIZ_SIZE):(tx+1)*VIZ_SIZE,0]+=50
                 for ty in range(nHs[level]):
                     for tx in range(nWs[level]):
                         d_tile_x = (tx+0.5)*VIZ_SIZE
@@ -831,10 +948,22 @@ def build_oversegmented_targets_multiscale(
                                 B= torch.tanh(t_Bs[level][b,i,ty,tx])*MAX_H_PRED
                                 L= torch.tanh(t_Ls[level][b,i,ty,tx])*MAX_W_PRED
                                 R= torch.tanh(t_Rs[level][b,i,ty,tx])*MAX_W_PRED
-                                cv2.line(draw_level,(int(d_tile_x-1+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x-1+coff_x),int(d_tile_y+(T*VIZ_SIZE))),(bright,bright,0),1)
-                                cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x+coff_x),int(d_tile_y+(B*VIZ_SIZE))),(bright,0,0),1)
-                                cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y-1+coff_y)),(int(d_tile_x+(L*VIZ_SIZE)),int(d_tile_y-1+coff_y)),(bright,0,bright),1)
-                                cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x+(R*VIZ_SIZE)),int(d_tile_y+coff_y)),(0,bright,bright),1)
+                                #cv2.line(draw_level,(int(d_tile_x-1+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x-1+coff_x),int(d_tile_y+(T*VIZ_SIZE))),(bright,bright,0),1)
+                                #cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x+coff_x),int(d_tile_y+(B*VIZ_SIZE))),(bright,0,0),1)
+                                #cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y-1+coff_y)),(int(d_tile_x+(L*VIZ_SIZE)),int(d_tile_y-1+coff_y)),(bright,0,bright),1)
+                                #cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x+(R*VIZ_SIZE)),int(d_tile_y+coff_y)),(0,bright,bright),1)
+                                
+                                draw_level[int(d_tile_y+coff_y)-1:int(d_tile_y+coff_y)+2,int(d_tile_x+coff_x)-1:int(d_tile_x+coff_x)+2]=draw_colors[colorIndex]
+                                drawT = int(d_tile_y+T*VIZ_SIZE)
+                                drawB = int(d_tile_y+B*VIZ_SIZE)
+                                drawL = int(d_tile_x+L*VIZ_SIZE)
+                                drawR = int(d_tile_x+R*VIZ_SIZE)
+                                #print('draw {} {} {} {}'.format(drawT,drawB,drawL,drawR))
+                                cv2.line(draw_level,(drawL,drawT),(drawR,drawT),draw_colors[colorIndex])
+                                cv2.line(draw_level,(drawR,drawT),(drawR,drawB),draw_colors[colorIndex])
+                                cv2.line(draw_level,(drawR,drawB),(drawL,drawB),draw_colors[colorIndex])
+                                cv2.line(draw_level,(drawL,drawB),(drawL,drawT),draw_colors[colorIndex])
+                                colorIndex = (colorIndex+1)%len(draw_colors)
                                 
 
                 fig = plt.figure()
