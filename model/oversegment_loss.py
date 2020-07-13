@@ -13,6 +13,7 @@ import skimage.draw
 import cv2
 
 UNMASK_CENT_DIST_THRESH=0.1
+END_BOUNDARY_THRESH=0.4
 END_UNMASK_THRESH=0.1
 SCALE_DIFF_THRESH=0.251
 
@@ -377,6 +378,12 @@ def build_oversegmented_targets_multiscale(
                 g_bx = target[b, t, 11] / scale[level][0]
                 g_by = target[b, t, 12] / scale[level][1]
 
+                tl,tr,br,bl = xyrhwToCorners(gx,gy,gr,gh,gw)
+                g_min_x = min(tl[0],tr[0],br[0],bl[0])
+                g_max_x = max(tl[0],tr[0],br[0],bl[0])
+                g_min_y = min(tl[1],tr[1],br[1],bl[1])
+                g_max_y = max(tl[1],tr[1],br[1],bl[1])
+
 
                 if VISUAL_DEBUG:
                     #Draw GT
@@ -385,7 +392,6 @@ def build_oversegmented_targets_multiscale(
                     #cv2.rectangle(draw[level],(gx,gy),(255,171,212),1
                     #print('{}'.format((gx,gy,gr,gh,gw)))
                     #plotRect(draw[level],(255,171,212),(gx,gy,gr,gh,gw))
-                    tl,tr,br,bl = xyrhwToCorners(gx,gy,gr,gh,gw)
                     #print('{} {} {} {}'.format(tl,tr,br,bl))
                     tl = (int(VIZ_SIZE*tl[0]),int(VIZ_SIZE*tl[1]))
                     tr = (int(VIZ_SIZE*tr[0]),int(VIZ_SIZE*tr[1]))
@@ -602,7 +608,7 @@ def build_oversegmented_targets_multiscale(
                         #        c_r = g_ty-s_r*g_tx
 
                     
-                    print(list(zip(hit_tile_xs,hit_tile_ys)))
+                    print('level:{}, r:{:.3f},  {}'.format(level,gr,list(zip(hit_tile_xs,hit_tile_ys))))
                     print('s_t/b:{}, c_t:{}, c_b:{},  s_l/r:{}, c_l:{}, c_r:{}'.format(s_t,c_t,c_b,s_l,c_l,c_r))
                     for cell_y,cell_x in zip(hit_tile_ys,hit_tile_xs): #kind of confusing, but here "tx ty" is for tile-i tile-j
                         if isHorz:
@@ -621,6 +627,13 @@ def build_oversegmented_targets_multiscale(
                         ti_y = s_t*ti_x+c_t
                         bi_x = tile_x
                         bi_y = s_b*bi_x+c_b
+
+                        if isHorz:
+                            ti_y = max(ti_y,g_min_y)
+                            bi_y = min(bi_y,g_max_y)
+                        else:
+                            ti_y = max(ti_y,g_min_x)
+                            bi_y = min(bi_y,g_max_x)
 
                         #print('t:{},{}  ti:{},{}  bi:{},{}'.format(tx,ty,ti_x,ti_y,bi_x,bi_y))
                         
@@ -726,10 +739,11 @@ def build_oversegmented_targets_multiscale(
                         #            rti_x if rti_x>tile_x else float('inf'))
 
                         #print(cell_x,cell_y)
-                        #if isHorz:
-                        #    print('li_x,y:{},{}, ri_x,y:{},{}, ti_x,y:{},{}, bi_x,y:{},{}'.format(li_x,li_y,ri_x,ri_y,ti_x,ti_y,bi_x,bi_y))
-                        #else:
-                        #    print('V li_x,y:{},{}, ri_x,y:{},{}, ti_x,y:{},{}, bi_x,y:{},{}'.format(li_y,li_x,ri_y,ri_x,ti_y,ti_x,bi_y,bi_x))
+                        if cell_x==8 and cell_y==10:
+                            if isHorz:
+                                print('li_x,y:{},{}, ri_x,y:{},{}, ti_x,y:{},{}, bi_x,y:{},{}'.format(li_x,li_y,ri_x,ri_y,ti_x,ti_y,bi_x,bi_y))
+                            else:
+                                print('V li_x,y:{},{}, ri_x,y:{},{}, ti_x,y:{},{}, bi_x,y:{},{}'.format(li_y,li_x,ri_y,ri_x,ti_y,ti_x,bi_y,bi_x))
 
                         if assign_mode=='split':
                             #Predict based on position of the text line
@@ -743,23 +757,19 @@ def build_oversegmented_targets_multiscale(
                             #print('left: {}>{}:{} and {}+1-{}={}'.format(li_x,tile_x,li_x>tile_x,tile_x,li_x,tile_x+1-li_x))
                             #print('left:  {}'.format(tx+1-li_x))
                             #print('right: {}'.format(ri_x-tx))
-                            if (( (li_x>tile_x and tx+1-li_x<END_UNMASK_THRESH) or 
-                                  (tile_x>ri_x and ri_x-tx<END_UNMASK_THRESH) ) and
-                                 len(hit_tile_ys)>1):
-                                #it's a border tile, we'll just ignore it
+
+                            #evaluate if this tile is just barely contributing. skip it if it is
+                            print('{},{}:  l:{},{}   r:{},{}'.format(cell_x,cell_y,li_x>tile_x and li_x<=tx+1 and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty,math.sqrt((tile_x-g_lx)**2 + (tile_y-g_ly)**2),tile_x>ri_x and ri_x>=tx and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty,math.sqrt((tile_x-g_rx)**2 + (tile_y-g_ry)**2)))
+                            if ( len(hit_tile_ys)>1 and
+                                (li_x>tile_x and li_x<=tx+1 and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty and math.sqrt((tile_x-g_lx)**2 + (tile_y-g_ly)**2)>END_BOUNDARY_THRESH) or
+                                (tile_x>ri_x and ri_x>=tx and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty and math.sqrt((tile_x-g_rx)**2 + (tile_y-g_ry)**2)>END_BOUNDARY_THRESH)):
                                 continue
-                            #else:
-                            #    if (li_x+ri_x)/1<=tile_x:
-                            #        assigned = 2
-                            #        not_assigned = 3
-                            #    else:
-                            #        assigned = 3
-                            #        not_assigned = 2
-                            #    if (( (ti_y>tile_y and tile_y+1-ti_y<END_UNMASK_THRESH) or 
-                            #          (tile_y>bi_y and bi_y-tile_y<END_UNMASK_THRESH) ) and
-                            #         len(hit_tile_ys)>1):
-                            #        #it's a border tile, we'll just ignore it
-                            #        continue
+
+                            #if (( (li_x>tile_x and tx+1-li_x<END_UNMASK_THRESH) or 
+                            #      (tile_x>ri_x and ri_x-tx<END_UNMASK_THRESH) ) and
+                            #     len(hit_tile_ys)>1):
+                            #    #it's a border tile, we'll just ignore it
+                            #    continue
                             if assignment[assigned,cell_y,cell_x]!=-1:
                                 if only_unmask:
                                     continue

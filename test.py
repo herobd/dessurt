@@ -29,19 +29,19 @@ pred_conf = [torch.zeros(1,1,1,1)]*3
 yb=100
 t=0
 targs=[]
-for h in range(8,50,4):
+for h in range(8,40,4):
     w = h*2
-    r = -math.pi*(4/6)
+    r = 0#-math.pi*(7/10)
     y = yb
-    for x in range(100,1300,120):
+    for x in range(100,1300,150):
         lx,ly,rx,ry,tx,ty,bx,by = calcPoints(x,y,r,h,w)
         targs.append([x,y,r,h,w,lx,ly,rx,ry,tx,ty,bx,by])
         t+=1
         y+=1
-        r += math.pi/6
+        r += math.pi/10
         if r>math.pi:
             r-=math.pi*2
-    yb+=2*h+25
+    yb+=1.5*(h+w)
 target_sizes= [t]
 target= torch.FloatTensor(1,t,13+1)
 for t,targ in enumerate(targs):
