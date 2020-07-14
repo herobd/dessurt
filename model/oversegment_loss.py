@@ -545,6 +545,10 @@ def build_oversegmented_targets_multiscale(
                             else:
                                 c_l = g_ly-s_l*g_lx
                                 c_r = g_ry-s_r*g_rx
+                            gt_left_x = g_lx
+                            gt_left_y = g_ly
+                            gt_right_x = g_rx
+                            gt_right_y = g_ry
                         else:
                             c_t = g_by-s_t*g_bx
                             c_b = g_ty-s_b*g_tx
@@ -554,6 +558,10 @@ def build_oversegmented_targets_multiscale(
                             else:
                                 c_l = g_ry-s_l*g_rx
                                 c_r = g_ly-s_r*g_lx
+                            gt_left_x = g_rx
+                            gt_left_y = g_ry
+                            gt_right_x = g_lx
+                            gt_right_y = g_ly
                     else:
                         #we're going to be inverting (x-y) everything to allow the same processing the horizontal lines use. 
                         if (g_ry-g_ly) !=0:
@@ -575,6 +583,10 @@ def build_oversegmented_targets_multiscale(
                             else:
                                 c_l = g_lx-s_l*g_ly
                                 c_r = g_rx-s_r*g_ry
+                            gt_left_x = g_ly
+                            gt_left_y = g_lx
+                            gt_right_x = g_ry
+                            gt_right_y = g_rx
                         else:
                             c_t = g_tx-s_t*g_ty
                             c_b = g_bx-s_b*g_by
@@ -584,6 +596,10 @@ def build_oversegmented_targets_multiscale(
                             else:
                                 c_l = g_rx-s_l*g_ry
                                 c_r = g_lx-s_r*g_ly
+                            gt_left_x = g_ry
+                            gt_left_y = g_rx
+                            gt_right_x = g_ly
+                            gt_right_y = g_lx
 
                         #old
                         #s_t=s_b=s_perp
@@ -759,10 +775,11 @@ def build_oversegmented_targets_multiscale(
                             #print('right: {}'.format(ri_x-tx))
 
                             #evaluate if this tile is just barely contributing. skip it if it is
-                            print('{},{}:  l:{},{}   r:{},{}'.format(cell_x,cell_y,li_x>tile_x and li_x<=tx+1 and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty,math.sqrt((tile_x-g_lx)**2 + (tile_y-g_ly)**2),tile_x>ri_x and ri_x>=tx and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty,math.sqrt((tile_x-g_rx)**2 + (tile_y-g_ry)**2)))
+                            #print('{},{}:  l:{},{}   r:{},{}'.format(cell_x,cell_y,li_x>tile_x and li_x<=tx+1 and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty,math.sqrt((tile_x-gt_left_x)**2 + (tile_y-gt_left_y)**2),tile_x>ri_x and ri_x>=tx and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty,math.sqrt((tile_x-gt_right_x)**2 + (tile_y-gt_right_y)**2)))
+                            #print('tile_x:{}, gt_left_x:{}, tile_y:{}, gt_left_y:{}'.format(tile_x,gt_left_x,tile_y,gt_left_y))
                             if ( len(hit_tile_ys)>1 and
-                                (li_x>tile_x and li_x<=tx+1 and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty and math.sqrt((tile_x-g_lx)**2 + (tile_y-g_ly)**2)>END_BOUNDARY_THRESH) or
-                                (tile_x>ri_x and ri_x>=tx and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty and math.sqrt((tile_x-g_rx)**2 + (tile_y-g_ry)**2)>END_BOUNDARY_THRESH)):
+                                (li_x>tile_x and li_x<=tx+1 and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty and math.sqrt((tile_x-gt_left_x)**2 + (tile_y-gt_left_y)**2)>END_BOUNDARY_THRESH) or
+                                (tile_x>ri_x and ri_x>=tx and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty and math.sqrt((tile_x-gt_right_x)**2 + (tile_y-gt_right_y)**2)>END_BOUNDARY_THRESH)):
                                 continue
 
                             #if (( (li_x>tile_x and tx+1-li_x<END_UNMASK_THRESH) or 
