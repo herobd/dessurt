@@ -755,11 +755,11 @@ def build_oversegmented_targets_multiscale(
                         #            rti_x if rti_x>tile_x else float('inf'))
 
                         #print(cell_x,cell_y)
-                        if cell_x==8 and cell_y==10:
-                            if isHorz:
-                                print('li_x,y:{},{}, ri_x,y:{},{}, ti_x,y:{},{}, bi_x,y:{},{}'.format(li_x,li_y,ri_x,ri_y,ti_x,ti_y,bi_x,bi_y))
-                            else:
-                                print('V li_x,y:{},{}, ri_x,y:{},{}, ti_x,y:{},{}, bi_x,y:{},{}'.format(li_y,li_x,ri_y,ri_x,ti_y,ti_x,bi_y,bi_x))
+                        #if cell_x==8 and cell_y==10:
+                        #    if isHorz:
+                        #        print('li_x,y:{},{}, ri_x,y:{},{}, ti_x,y:{},{}, bi_x,y:{},{}'.format(li_x,li_y,ri_x,ri_y,ti_x,ti_y,bi_x,bi_y))
+                        #    else:
+                        #        print('V li_x,y:{},{}, ri_x,y:{},{}, ti_x,y:{},{}, bi_x,y:{},{}'.format(li_y,li_x,ri_y,ri_x,ti_y,ti_x,bi_y,bi_x))
 
                         if assign_mode=='split':
                             #Predict based on position of the text line
@@ -775,7 +775,7 @@ def build_oversegmented_targets_multiscale(
                             #print('right: {}'.format(ri_x-tx))
 
                             #evaluate if this tile is just barely contributing. skip it if it is
-                            #print('{},{}:  l:{},{}   r:{},{}'.format(cell_x,cell_y,li_x>tile_x and li_x<=tx+1 and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty,math.sqrt((tile_x-gt_left_x)**2 + (tile_y-gt_left_y)**2),tile_x>ri_x and ri_x>=tx and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty,math.sqrt((tile_x-gt_right_x)**2 + (tile_y-gt_right_y)**2)))
+                            print('{},{}:  l:{},{}   r:{},{}'.format(cell_x,cell_y,li_x>tile_x and li_x<=tx+1 and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty,math.sqrt((tile_x-gt_left_x)**2 + (tile_y-gt_left_y)**2),tile_x>ri_x and ri_x>=tx and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty,math.sqrt((tile_x-gt_right_x)**2 + (tile_y-gt_right_y)**2)))
                             #print('tile_x:{}, gt_left_x:{}, tile_y:{}, gt_left_y:{}'.format(tile_x,gt_left_x,tile_y,gt_left_y))
                             if ( len(hit_tile_ys)>1 and
                                 (li_x>tile_x and li_x<=tx+1 and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty and math.sqrt((tile_x-gt_left_x)**2 + (tile_y-gt_left_y)**2)>END_BOUNDARY_THRESH) or
@@ -787,14 +787,16 @@ def build_oversegmented_targets_multiscale(
                             #     len(hit_tile_ys)>1):
                             #    #it's a border tile, we'll just ignore it
                             #    continue
-                            if assignment[assigned,cell_y,cell_x]!=-1:
+                            t_have_other_tiles = len(hit_tile_ys)>1
+                            if conf_mask[b,assigned,cell_y,cell_x]==0 and t_have_other_tiles:
+                                continue
+                            elif assignment[assigned,cell_y,cell_x]!=-1:
                                 if only_unmask:
                                     continue
                                 #print('shared at {}, {}'.format(tx,ty))
                                 shared_mask[b,assigned,cell_y,cell_x]=1
                                 other_t = assignment[assigned,cell_y,cell_x]
                                 #Uh oh, this half has been assigned already.
-                                t_have_other_tiles = len(hit_tile_ys)>1
                                 other_t_have_other_tiles = (assignment==other_t).sum()>1
 
                                 #print('{},{}: me have other:{}  other have other:{}'.format(tx,ty,t_have_other_tiles,other_t_have_other_tiles))
