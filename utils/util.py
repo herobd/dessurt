@@ -139,10 +139,10 @@ def decode_handwriting(out, idx_to_char):
     return list_of_pred, list_of_raw_pred
 
 def xyrhwToCorners(xc,yc,rot,h,w):
-    tr = ( (w*math.cos(rot)-h*math.sin(rot) + xc),  (w*math.sin(rot)+h*math.cos(rot) + yc) )
-    tl = ( (-w*math.cos(rot)-h*math.sin(rot) + xc), (-w*math.sin(rot)+h*math.cos(rot) + yc) )
-    br = ( (w*math.cos(rot)+h*math.sin(rot) + xc),  (w*math.sin(rot)-h*math.cos(rot) + yc) )
-    bl = ( (-w*math.cos(rot)+h*math.sin(rot) + xc), (-w*math.sin(rot)-h*math.cos(rot) + yc) )
+    tr = ( (w*math.cos(-rot)-h*math.sin(-rot) + xc),  (w*math.sin(-rot)+h*math.cos(-rot) + yc) )
+    tl = ( (-w*math.cos(-rot)-h*math.sin(-rot) + xc), (-w*math.sin(-rot)+h*math.cos(-rot) + yc) )
+    br = ( (w*math.cos(-rot)+h*math.sin(-rot) + xc),  (w*math.sin(-rot)-h*math.cos(-rot) + yc) )
+    bl = ( (-w*math.cos(-rot)+h*math.sin(-rot) + xc), (-w*math.sin(-rot)-h*math.cos(-rot) + yc) )
     return tl,tr,br,bl
 
 def plotRect(img,color,xyrhw,lineWidth=1):
