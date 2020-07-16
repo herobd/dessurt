@@ -1,34 +1,75 @@
-import numpy as np
+from model.oversegment_loss import build_oversegmented_targets_multiscale
+import torch
+import math,random
 
-def polyIntersect(poly1, poly2):
-    prevPoint = poly1[-1]
-    for point in poly1:
-        perpVec = np.array([ -(point[1]-prevPoint[1]), point[0]-prevPoint[0] ])
-        perpVec = perpVec/np.linalg.norm(perpVec)
+def calcPoints(x,y,r,h,w):
+    rx = x + math.cos(r)*w
+    ry = y - math.sin(r)*w
+    lx = x - math.cos(r)*w
+    ly = y + math.sin(r)*w
 
-        maxPoly1=np.dot(perpVec,poly1[0])
-        minPoly1=maxPoly1
-        for p in poly1:
-            p_onLine = np.dot(perpVec,p)
-            maxPoly1 = max(maxPoly1,p_onLine)
-            minPoly1 = min(minPoly1,p_onLine)
-        maxPoly2=np.dot(perpVec,poly2[0])
-        minPoly2=maxPoly2
-        for p in poly2:
-            p_onLine = np.dot(perpVec,p)
-            maxPoly2 = max(maxPoly2,p_onLine)
-            minPoly2 = min(minPoly2,p_onLine)
+    tx = x - math.sin(r)*h
+    ty = y - math.cos(r)*h
+    bx = x + math.sin(r)*h
+    by = y + math.cos(r)*h
 
-        print('{}<{} or {}>{} : {} or {}'.format(maxPoly1,minPoly2, minPoly1,maxPoly2,maxPoly1<minPoly2 , minPoly1>maxPoly2))
-        if (maxPoly1<minPoly2 or minPoly1>maxPoly2):
-            return False
-        prevPoint = point
-    return True
+    return lx,ly,rx,ry,tx,ty,bx,by
 
+num_classes=1
+H=1500
+W=1500
+scale = [ (16,16), (32,32), (64,64) ]
+grid_sizesH=[H//s[0] for s in scale]
+grid_sizesW=[W//s[0] for s in scale]
+pred_boxes = [torch.zeros(1,1,1,1,1)]*3
+pred_cls = [torch.zeros(1,1,1,1,1)]*3
+pred_conf = [torch.zeros(1,1,1,1)]*3
 
-a=[[1909, 802], [2224, 804], [2222, 2203], [1911, 2203]]
-b=[[382, 806], [2220, 806], [2220, 878], [382, 878]]
-c=[[2489, 3122], [4324, 3128], [4324, 3198], [2492, 3192]]
+targs=[]
+#varying sizes
+#yb=100
+#t=0
+#for h in range(8,40,4):
+#    w = h*2
+#    r = 0#-math.pi*(7/10)
+#    y = yb
+#    for x in range(100,1300,100):
+#        lx,ly,rx,ry,tx,ty,bx,by = calcPoints(x,y,r,h,w)
+#        targs.append([x,y,r,h,w,lx,ly,rx,ry,tx,ty,bx,by])
+#        t+=1
+#        y+=1
+#        #r += math.pi/10
+#        #if r>math.pi:
+#        #    r-=math.pi*2
+#        r = (random.random()*math.pi/2)-math.pi/4
+#    yb+=1.4*(h+w)
+t=50
+for i in range(t):
+    w = random.random()*1000+8
+    h = random.random()*50+8
+    x = random.random()*(H-200) +100
+    y = random.random()*(W-200) +100
+    #r = (random.random()*math.pi*2)-math.pi
+    sig = math.pi/24
+    if random.random()>0.2:
+        if random.random()>0.5:
+            r = random.gauss(0,sig)
+        else:
+            r = random.gauss(math.pi,sig)
+    else:
+        if random.random()>0.5:
+            r = random.gauss(math.pi/2,sig)
+        else:
+            r = random.gauss(-math.pi/2,sig)
+    if r>math.pi:
+        r-=math.pi*2
+    elif r<-math.pi:
+        r+=math.pi*2
+    lx,ly,rx,ry,tx,ty,bx,by = calcPoints(x,y,r,h,w)
+    targs.append([x,y,r,h,w,lx,ly,rx,ry,tx,ty,bx,by])
+target_sizes= [t]
+target= torch.FloatTensor(1,t,13+1)
+for t,targ in enumerate(targs):
+    target[0,t,:13]=torch.FloatTensor(targ)
 
-print(polyIntersect(a,b))
-print(polyIntersect(a,c))
+build_oversegmented_targets_multiscale(pred_boxes, pred_conf, pred_cls, target, target_sizes, num_classes, grid_sizesH, grid_sizesW,scale=scale, assign_mode='split', close_anchor_rule='unmask')
