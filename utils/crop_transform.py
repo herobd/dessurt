@@ -360,6 +360,11 @@ class CropBoxTransform(object):
                 self.degree_std_dev = crop_params['rot_degree_std_dev']
             else:
                 self.degree_std_dev = 1
+
+            if 'rot_freq' in crop_params:
+                self.rot_freq = crop_params['rot_freq']
+            else:
+                self.rot_freq=0.99
         else:
             self.rotate=False
             self.degree_std_dev = 0 
@@ -381,8 +386,11 @@ class CropBoxTransform(object):
 
         #rotation
         if self.rotate or self.flip_horz or self.flip_vert:
-            amount = np.random.normal(0,self.degree_std_dev)
-            amount = math.pi*amount/180
+            if self.rot_freq>np.random.uniform():
+                amount = np.random.normal(0,self.degree_std_dev)
+                amount = math.pi*amount/180
+            else:
+                amount = 0
             #M = cv2.getRotationMatrix2D((org_img.shape[1]/2,org_img.shape[0]/2),amount,1)
             rot = np.array([  [math.cos(amount), -math.sin(amount), 0],
                             [math.sin(amount), math.cos(amount), 0],

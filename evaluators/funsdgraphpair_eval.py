@@ -84,7 +84,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
     #dataT = __to_tensor(data,gpu)
     #print('{}: {} x {}'.format(imageName,data.shape[2],data.shape[3]))
     if useDetections=='gt':
-        losses, log, out = trainer.run(instance,True,get=toEval)
+        losses, log, out = trainer.newRun(instance,True,get=toEval)
     elif type(useDetections) is str:
         raise NotImplementedError('using saved detections not adjusted for new eval')
         dataset=config['DATASET']

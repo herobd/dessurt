@@ -20,7 +20,7 @@ from utils.yolo_tools import non_max_sup_iou, non_max_sup_dist
 from utils.util import decode_handwriting
 #from utils.string_utils import correctTrans
 import editdistance
-import math
+import math, os
 import random
 import json
 from collections import defaultdict
@@ -81,9 +81,18 @@ class PairingGroupingGraph(BaseModel):
         super(PairingGroupingGraph, self).__init__(config)
 
         if 'detector_checkpoint' in config:
-            checkpoint = torch.load(config['detector_checkpoint'], map_location=lambda storage, location: storage)
+            if os.path.exists(config['detector_checkpoint']):
+                checkpoint = torch.load(config['detector_checkpoint'], map_location=lambda storage, location: storage)
+            else:
+                checkpoint = None
+                print('Warning: unable to load {}'.format(config['detector_checkpoint']))
             detector_config = json.load(open(config['detector_config']))['model'] if 'detector_config' in config else checkpoint['config']['model']
-            if 'state_dict' in checkpoint:
+            if checkpoint is None:
+                self.detector = eval(checkpoint['config']['arch'])(detector_config)
+                for p in self.detector.parameters():
+                    import pdb;pdb.set_trace()
+                    p.something = float('nan') #ensure this gets changed
+            elif 'state_dict' in checkpoint:
                 self.detector = eval(checkpoint['config']['arch'])(detector_config)
                 self.detector.load_state_dict(checkpoint['state_dict'])
             else:
