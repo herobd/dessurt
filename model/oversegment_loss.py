@@ -13,6 +13,9 @@ import skimage.draw
 import cv2
 
 UNMASK_CENT_DIST_THRESH=0.1
+END_BOUNDARY_THRESH=0.4
+END_UNMASK_THRESH=0.1
+SCALE_DIFF_THRESH=0.251
 
 def norm_angle(a):
     if a>np.pi:
@@ -21,17 +24,72 @@ def norm_angle(a):
         return a+2*np.pi
     else:
         return a
+
+def fraction_in_tile(left_side,tx,ty,li_x,ri_x):#,ti_y,bi_y):
+    #if isHorz:
+    if left_side:
+        t_fraction_in_tile = (tx+1-li_x)/(ri_x-li_x)
+    else:
+        t_fraction_in_tile = (ri_x-tx)/(ri_x-li_x)
+    #else:
+    #    if top_side:
+    #        t_fraction_in_tile = (ty+1-ti_y)/(bi_y-ti_y)
+    #    else:
+    #        t_fraction_in_tile = (bi_y-ty)/(bi_y-ti_y)
+
+    return t_fraction_in_tile
+
+def get_tiles(y1,x1,y2,x2):
+    #this gets the cells/tiles intersected by a line passing from one point to the other
+    #there are probably a lot faster implementations out there
+
+    max_tx = max(int(x2),int(x1))
+    min_tx = min(int(x2),int(x1))
+    max_ty = max(int(y2),int(y1))
+    min_ty = min(int(y2),int(y1))
+
+
+    #tiles_x = [min_x,max_x]
+    #tiles_y = [min_y,max_y]
+    tiles = set([(int(x1),int(y1)),(int(x2),int(y2))])
+    #print(tiles)
+    
+    if x1!=x2:
+        slope = (y1-y2)/(x1-x2)
+        c = y2 - x2*slope
+
+        if abs(slope)<=1:
+            for tx in range(min_tx+1,max_tx+1):
+                yi = tx*slope + c
+                #print('{}   {},{}'.format(slope,tx,yi))
+                tiles.add((tx,int(yi)))
+                tiles.add((tx-1,int(yi)))
+                #print(tiles)
+        else:
+            for ty in range(min_ty+1,max_ty+1):
+                xi = (ty-c)/slope
+                #print('{}   {},{}'.format(slope,xi,ty))
+                tiles.add((int(xi),ty))
+                tiles.add((int(xi),ty-1))
+                #print(tiles)
+
+        xs,ys = zip(*tiles)
+        return ys,xs
+    else:
+        ys = list(range(min_ty,max_ty+1))
+        return ys,[int(x1)]*len(ys)
+
+
 class MultiScaleOversegmentLoss (nn.Module):
-    def __init__(self, num_classes, rotation, scale, anchors, ignore_thresh=0.5,use_special_loss=False,bad_conf_weight=1.25, multiclass=False,tile_assign_mode='split'):
+    def __init__(self, num_classes, rotation, scale, anchors, bad_conf_weight=1.25, multiclass=False,tile_assign_mode='split',close_anchor_rule='unmask'):
         super(MultiScaleOversegmentLoss, self).__init__()
-        self.ignore_thresh=ignore_thresh
         self.num_classes=num_classes
         assert(rotation)
         assert(anchors is None)
         self.num_anchors=NUM_ANCHORS
         self.tile_assign_mode=tile_assign_mode
+        self.close_anchor_rule=close_anchor_rule
         self.scales=scale
-        self.use_special_loss=use_special_loss
         self.bad_conf_weight=bad_conf_weight
         self.multiclass=multiclass
         self.mse_loss = nn.MSELoss(reduction='mean')  # Coordinate loss
@@ -90,10 +148,10 @@ class MultiScaleOversegmentLoss (nn.Module):
             num_classes=self.num_classes,
             grid_sizesH=nHs,
             grid_sizesW=nWs,
-            ignore_thresh=self.ignore_thresh,
             scale=self.scales,
             calcIOUAndDist=self.use_special_loss,
-            assign_mode = self.tile_assign_mode
+            assign_mode = self.tile_assign_mode,
+            close_anchor_rule = self.close_anchor_rule
         )
 
         #nProposals = int((pred_conf > 0).sum().item())
@@ -177,7 +235,7 @@ class MultiScaleOversegmentLoss (nn.Module):
 #This isn't totally anchor free, the model predicts horizontal and verticle text seperately.
 #The model predicts the centerpoint offset (normalized to tile size), rotation and height (2X tile size) and width (1x tile size)
 def build_oversegmented_targets_multiscale(
-    pred_boxes, pred_conf, pred_cls, target, target_sizes, num_classes, grid_sizesH, grid_sizesW, ignore_thresh, scale, calcIOUAndDist=False, target_angle=None,assign_mode='split'
+    pred_boxes, pred_conf, pred_cls, target, target_sizes, num_classes, grid_sizesH, grid_sizesW, scale, assign_mode='split', close_anchor_rule='unmask'
 ):
     VISUAL_DEBUG=True
     VIZ_SIZE=24
@@ -188,7 +246,6 @@ def build_oversegmented_targets_multiscale(
     nWs = grid_sizesW
     masks=[]
     shared_masks=[] #Do more then two (parallel) gts claim this cell?
-    assignments=[] #which gt index is assigned to which cell?
     conf_masks=[]
     t_Ls=[]
     t_Rs=[]
@@ -201,7 +258,7 @@ def build_oversegmented_targets_multiscale(
         nB = pred_boxes[level].size(0)
         mask = torch.zeros(nB, nA, nH, nW)
         masks.append(mask)
-        shared_mask = torch.zeros(nB, nA//2, nH, nW)
+        shared_mask = torch.zeros(nB, nA, nH, nW)
         shared_masks.append(shared_mask)
         conf_mask = torch.ones(nB, nA, nH, nW)
         conf_masks.append(conf_mask)
@@ -219,13 +276,7 @@ def build_oversegmented_targets_multiscale(
         t_Ts.append(targ_T)
         t_Bs.append(targ_B)
         t_rs.append(targ_r)
-    if target_angle is not None:
-        t_angle = torch.FloatTensor(nB, nA, nH, nW).fill_(0)
-    else:
-        t_angle=None
 
-
-    assert(not calcIOUAndDist)
 
     nGT = 0
     nPred = 0
@@ -251,7 +302,7 @@ def build_oversegmented_targets_multiscale(
                 #drawl[:,:,0]=90
                 draw.append(drawl)
 
-            draw_colors = [(255,0,0),(100,255,0),(255,100,0),(0,255,0),(200,200,0),(255,200,0),(200,255,0)]
+            draw_colors = [(255,0,0),(100,255,0),(0,0,255),(255,100,0),(0,255,0),(255,0,255),(200,200,0),(255,200,0),(200,255,0),(0,255,255)]
         on_pred_areaB=[]
         for level in range(len(nHs)):
             on_pred_areaB.append( torch.FloatTensor(pred_boxes[level].shape[1:4]).zero_() )
@@ -261,426 +312,677 @@ def build_oversegmented_targets_multiscale(
             nGT += 1
 
 
+            gr = target[b, t, 2]
+            isHorz = (gr>-np.pi/4 and gr<np.pi/4) or (gr<-3*np.pi/4 or gr>3*np.pi/4)
+            #TODO handle 45degree text better (predict on both anchors)
 
             #candidate_pos=[]
             #We need to decide which scale this is at.
             # I think the best is to simply choose the tile height that is closes to the (rotated) bb height
             closest_diff = 9999999999
+            all_diff=[]
             for level in range(len(nHs)):
 
                 gr = target[b, t, 2]
                 gh = target[b, t, 3] / scale[level][1]
 
-                #rh = gh*2 
-                rh = 2*gh/min(abs(math.cos(gr)),0.5)
+                #rh = gh*2
+                if isHorz:
+                    rh = abs(2*gh*math.cos(gr))
+                else:
+                    rh = abs(2*gh*math.sin(gr))
                 diff = abs(rh-1)
+                #print('{} diff level {}: {}  rh:{}'.format(t,level,diff,rh))
                 if diff<closest_diff:
                     closest_diff = diff
                     closest = level
-                #TODO we should mask out scales that are close
-            level = closest
+                all_diff.append(diff)
+                    
+            
+            unmask_levels=[]
+            if close_anchor_rule=='unmask':
+                if closest>0 and abs(all_diff[closest-1]-all_diff[closest])<SCALE_DIFF_THRESH:
+                    unmask_levels.append(closest-1)
+                if closest<len(nHs)-1 and abs(all_diff[closest+1]-all_diff[closest])<SCALE_DIFF_THRESH:
+                    unmask_levels.append(closest+1)
 
-            conf_mask = conf_masks[level]
-            shared_mask = shared_masks[level]
-            mask = masks[level]
-            assignment = assignments[level]
+            for level in ([closest]+unmask_levels):
+                only_unmask = level!=closest
 
-            nH = nHs[level]
-            nW = nWs[level]
-            targ_L = t_Ls[level]
-            targ_R = t_Rs[level]
-            targ_T = t_Ts[level]
-            targ_B = t_Bs[level]
-            targ_r = t_rs[level]
-            targ_conf = t_confs[level]
-            targ_cls = t_clss[level]
+                conf_mask = conf_masks[level]
+                shared_mask = shared_masks[level]
+                mask = masks[level]
+                assignment = assignments[level]
 
-            gx = target[b, t, 0] / scale[level][0]
-            gy = target[b, t, 1] / scale[level][1]
-            gr = target[b, t, 2]
-            gw = target[b, t, 4] / scale[level][0]
-            gh = target[b, t, 3] / scale[level][1]
+                nH = nHs[level]
+                nW = nWs[level]
+                targ_L = t_Ls[level]
+                targ_R = t_Rs[level]
+                targ_T = t_Ts[level]
+                targ_B = t_Bs[level]
+                targ_r = t_rs[level]
+                targ_conf = t_confs[level]
+                targ_cls = t_clss[level]
 
-            g_lx = target[b, t, 5] / scale[level][0]
-            g_ly = target[b, t, 6] / scale[level][1]
-            g_rx = target[b, t, 7] / scale[level][0]
-            g_ry = target[b, t, 8] / scale[level][1]
-            g_tx = target[b, t, 9] / scale[level][0]
-            g_ty = target[b, t, 10] / scale[level][1]
-            g_bx = target[b, t, 11] / scale[level][0]
-            g_by = target[b, t, 12] / scale[level][1]
+                gx = target[b, t, 0] / scale[level][0]
+                gy = target[b, t, 1] / scale[level][1]
+                gw = target[b, t, 4] / scale[level][0]
+                gh = target[b, t, 3] / scale[level][1]
 
-            isHorz = (gr>-np.pi/4 and gr<np.pi/4) or (gr<-3*np.pi/4 or gr>3*np.pi/4)
-            #TODO handle 45degree text better (predict on both anchors)
+                g_lx = target[b, t, 5] / scale[level][0]
+                g_ly = target[b, t, 6] / scale[level][1]
+                g_rx = target[b, t, 7] / scale[level][0]
+                g_ry = target[b, t, 8] / scale[level][1]
+                g_tx = target[b, t, 9] / scale[level][0]
+                g_ty = target[b, t, 10] / scale[level][1]
+                g_bx = target[b, t, 11] / scale[level][0]
+                g_by = target[b, t, 12] / scale[level][1]
 
-            if VISUAL_DEBUG:
-                #Draw GT
-
-                #draw_gy,draw_gx = skimage.draw.polygon([(g_lxI
-                #cv2.rectangle(draw[level],(gx,gy),(255,171,212),1
-                #print('{}'.format((gx,gy,gr,gh,gw)))
-                #plotRect(draw[level],(255,171,212),(gx,gy,gr,gh,gw))
                 tl,tr,br,bl = xyrhwToCorners(gx,gy,gr,gh,gw)
-                tl = (int(VIZ_SIZE*tl[0]),int(VIZ_SIZE*tl[1]))
-                tr = (int(VIZ_SIZE*tr[0]),int(VIZ_SIZE*tr[1]))
-                br = (int(VIZ_SIZE*br[0]),int(VIZ_SIZE*br[1]))
-                bl = (int(VIZ_SIZE*bl[0]),int(VIZ_SIZE*bl[1]))
-                color=(92, 38, 79)
-                lineWidth=2
-                cv2.line(draw[level],tl,tr,color,lineWidth)
-                cv2.line(draw[level],tr,br,color,lineWidth)
-                cv2.line(draw[level],br,bl,color,lineWidth)
-                cv2.line(draw[level],bl,tl,color,lineWidth)
+                g_min_x = min(tl[0],tr[0],br[0],bl[0])
+                g_max_x = max(tl[0],tr[0],br[0],bl[0])
+                g_min_y = min(tl[1],tr[1],br[1],bl[1])
+                g_max_y = max(tl[1],tr[1],br[1],bl[1])
 
 
-            gt_area = gw*gh
+                if VISUAL_DEBUG:
+                    #Draw GT
 
-            #gx1 = gx-gw
-            #gx2 = gx+gw
-            #gy1 = gy-gh
-            #gy2 = gy+gh
-        
-            if gw==0 or gh==0:
-                continue
-            #What tiles are relevant for predicting this? Just the center line? Do any tiles get an ignore (unmask)?
-            hit_tile_ys, hit_tile_xs = skimage.draw.line(int(g_ly),int(g_lx),int(g_ry),int(g_rx))
-            #hit_tile_ys, hit_tile_xs = (y,x) for y,x in zip(hit_tile_ys, hit_tile_xs) if y>=0 and y<
-            ignore_tile_ys, ignore_tile_xs, weight_tile = skimage.draw.line_aa(int(g_ly),int(g_lx),int(g_ry),int(g_rx)) #This is nice, except I'm forced to pass integers in, perhaps this could be used for ignoring?
-            hit_tile_ys = np.clip(hit_tile_ys,0,nH-1)
-            hit_tile_xs = np.clip(hit_tile_xs,0,nW-1)
-            ignore_tile_ys = np.clip(ignore_tile_ys,0,nH-1)
-            ignore_tile_xs = np.clip(ignore_tile_xs,0,nW-1)
+                    #draw_gy,draw_gx = skimage.draw.polygon([(g_lxI
+                    #cv2.rectangle(draw[level],(gx,gy),(255,171,212),1
+                    #print('{}'.format((gx,gy,gr,gh,gw)))
+                    #plotRect(draw[level],(255,171,212),(gx,gy,gr,gh,gw))
+                    #print('{} {} {} {}'.format(tl,tr,br,bl))
+                    tl = (int(VIZ_SIZE*tl[0]),int(VIZ_SIZE*tl[1]))
+                    tr = (int(VIZ_SIZE*tr[0]),int(VIZ_SIZE*tr[1]))
+                    br = (int(VIZ_SIZE*br[0]),int(VIZ_SIZE*br[1]))
+                    bl = (int(VIZ_SIZE*bl[0]),int(VIZ_SIZE*bl[1]))
+                    colorKey=(112, 58, 99)
+                    color=(92, 38, 79)
+                    lineWidth=2
+                    cv2.line(draw[level],tl,tr,color,lineWidth)
+                    cv2.line(draw[level],tr,br,color,lineWidth)
+                    cv2.line(draw[level],br,bl,color,lineWidth)
+                    cv2.line(draw[level],bl,tl,colorKey,lineWidth)
 
-            #all_tile_ys, all_tile_xs = skimage.draw.polygon(r,c,(nH,nW))
 
-            #TODO fix end points. Probably shouldn't include tile if we're barely on it.
+                gt_area = gw*gh
 
-            #we use the anti-ailiased to ignore close tiles
-            close_thresh=0.25
-            conf_mask[b,:,ignore_tile_ys,ignore_tile_xs]= torch.where(torch.from_numpy(weight_tile[None,...])>close_thresh,torch.zeros_like(conf_mask[b,:,ignore_tile_ys,ignore_tile_xs]),conf_mask[b,:,ignore_tile_ys,ignore_tile_xs])
-            # Get the best prediction
-            #pred_box = pred_boxes[b, best_n, gj, gi].unsqueeze(0)
-            # Masks
+                #gx1 = gx-gw
+                #gx2 = gx+gw
+                #gy1 = gy-gh
+                #gy2 = gy+gh
+            
+                if gw==0 or gh==0:
+                    continue
+                #What tiles are relevant for predicting this? Just the center line? Do any tiles get an ignore (unmask)?
+                #hit_tile_ys, hit_tile_xs = skimage.draw.line(int(g_ly),int(g_lx),int(g_ry),int(g_rx))
+                #hit_tile_ys, hit_tile_xs = (y,x) for y,x in zip(hit_tile_ys, hit_tile_xs) if y>=0 and y<
+                #ignore_tile_ys, ignore_tile_xs, weight_tile = skimage.draw.line_aa(int(g_ly),int(g_lx),int(g_ry),int(g_rx)) #This is nice, except I'm forced to pass integers in, perhaps this could be used for ignoring?
 
-            #shared_mask[b,0 if isHorz else 0,hit_tile_ys,hit_tile_xs] = torch.where(mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs]==1,mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs], shared_mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs]) #set to one everywhere that mask is already 1
-            #mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs]= torch.where(shared_mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs]==1,torch.zeros_like(mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs]),torch.ones_like(mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs])) #set to 1 everywhere shared is 0, else set to 0
-            #conf_mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs]=1
-            #mask[b, best_n, gj, gi1:gi2+1] = 1
-            #conf_mask[b, best_n, gj, gi1:gi2+1] = 1 #we ned to set this to 1 as we ignored it earylier
-            # Coordinates
+                hit_tile_ys, hit_tile_xs = get_tiles(g_ly,g_lx,g_ry,g_rx)
 
-            # While along rotation is more "correct", I think axis aligned prediction may generalize better given there are few heavily skewed instances of text.
-            if use_rotation_aligned_predictions:
+                hit_tile_ys = np.clip(hit_tile_ys,0,nH-1)
+                hit_tile_xs = np.clip(hit_tile_xs,0,nW-1)
+                #ignore_tile_ys = np.clip(ignore_tile_ys,0,nH-1)
+                #ignore_tile_xs = np.clip(ignore_tile_xs,0,nW-1)
 
-                #slope of topline
-                if (g_trx-g_tlx) !=0:
-                    s_t = (g_try-g_tly)/(g_trx-g_tlx)
-                else:
-                    s_t = float('inf')
-                c_t = g_tly-s_t*g_tlx
-                #slope of bottomline
-                if g_brx-g_blx !=0:
-                    s_b = (g_bry-g_bly)/(g_brx-g_blx)
-                else:
-                    s_b = float('inf')
-                c_b = g_bly-s_b*g_blx
-                s_p = math.tan(gr-np.pi/2) #slope, perpendicular
-                if s_p>9999999:
-                    s_p = float('inf')
-                assert((s_b == float('inf') and s_t == float('inf')) or abs(s_b-s_t)<0.00001)
-                assert((s_b == float('inf') and s_p==0) or (s_p==float('inf') and s_b==0) or abs(s_b-(1/s_p))<0.00001)
-                if not np.isinf(s_p) and not np.isinf(s_t):
-                    c_mid = tile_y-s_t*tile_x #assumes s_t and slope of mid line are the same
-                li_x = g_lx
-                li_y = g_ly
-                ri_x = g_rx
-                ri_y = g_ry
-                for index,(ty,tx) in enumerate(zip(hit_tile_ys,hit_tile_xs)):
-                    targ_r[b, 0 if isHorz else 1, ty, tx] = math.asin(gr/np.pi)/np.pi
+                #all_tile_ys, all_tile_xs = skimage.draw.polygon(r,c,(nH,nW))
 
-                    tile_x = tx+0.5
-                    tile_y = ty+0.5
+                #we use the anti-ailiased to ignore close tiles
+                #close_thresh=0.1
+                #conf_mask[b,:,ignore_tile_ys,ignore_tile_xs]= torch.where(torch.from_numpy(weight_tile[None,...])>close_thresh,torch.zeros_like(conf_mask[b,:,ignore_tile_ys,ignore_tile_xs]),conf_mask[b,:,ignore_tile_ys,ignore_tile_xs])
 
-                    #Calculate T top and B bottom boudaries (from tile center)
-                    if not np.isinf(s_p) and not np.isinf(s_t):
-                        c_p = tile_y-s_p*tile_x
-                        ti_x = (c_p-c_t)/(s_t-s_p)
-                        ti_y = s_p*ti_x+c_p
-                        bi_x = (c_p-c_b)/(s_b-s_p)
-                        bi_y = s_p*bi_x+c_p
-                    elif np.isinf(s_t):
-                        ti_x = g_tlx
-                        ti_y = tile_y
-                        bi_x = g_blx
-                        bi_y = tile_y
-                    elif np.isinf(s_p):
-                        ti_x = tile_x
-                        ti_y = g_tly
-                        bi_x = tile_x
-                        bi_y = g_bly
+                #shared_mask[b,0 if isHorz else 0,hit_tile_ys,hit_tile_xs] = torch.where(mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs]==1,mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs], shared_mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs]) #set to one everywhere that mask is already 1
+                #mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs]= torch.where(shared_mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs]==1,torch.zeros_like(mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs]),torch.ones_like(mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs])) #set to 1 everywhere shared is 0, else set to 0
+                #conf_mask[b,0 if isHorz else 1,hit_tile_ys,hit_tile_xs]=1
+                #mask[b, best_n, gj, gi1:gi2+1] = 1
+                #conf_mask[b, best_n, gj, gi1:gi2+1] = 1 #we ned to set this to 1 as we ignored it earylier
+                # Coordinates
+
+                # While along rotation is more "correct", I think axis aligned prediction may generalize better given there are few heavily skewed instances of text.
+                if use_rotation_aligned_predictions:
+
+                    #slope of topline
+                    if (g_trx-g_tlx) !=0:
+                        s_t = (g_try-g_tly)/(g_trx-g_tlx)
                     else:
-                        assert(False)
+                        s_t = float('inf')
+                    c_t = g_tly-s_t*g_tlx
+                    #slope of bottomline
+                    if g_brx-g_blx !=0:
+                        s_b = (g_bry-g_bly)/(g_brx-g_blx)
+                    else:
+                        s_b = float('inf')
+                    c_b = g_bly-s_b*g_blx
+                    s_p = math.tan(gr-np.pi/2) #slope, perpendicular
+                    if s_p>9999999:
+                        s_p = float('inf')
+                    assert((s_b == float('inf') and s_t == float('inf')) or abs(s_b-s_t)<0.00001)
+                    assert((s_b == float('inf') and s_p==0) or (s_p==float('inf') and s_b==0) or abs(s_b-(1/s_p))<0.00001)
+                    if not np.isinf(s_p) and not np.isinf(s_t):
+                        c_mid = tile_y-s_t*tile_x #assumes s_t and slope of mid line are the same
+                    li_x = g_lx
+                    li_y = g_ly
+                    ri_x = g_rx
+                    ri_y = g_ry
+                    for index,(ty,tx) in enumerate(zip(hit_tile_ys,hit_tile_xs)):
+                        targ_r[b, 0 if isHorz else 1, ty, tx] = math.asin(gr/np.pi)/np.pi
 
-                    T = math.sqrt((ti_x-tile_x)**2 + (ti_y-tile_y)**2)
-                    assert(T<MAX_H_PRED)
-                    if abs(norm_angle(math.atan2(-ti_y+tile_y,ti_x-tile_x) - (gr+np.pi/2)))>0.01: #These should be identicle if top line above tile center
-                        T *= -1
-                    targ_T[b, 0 if isHorz else 1, ty, tx] = inv_tanh(T/MAX_H_PRED)
+                        tile_x = tx+0.5
+                        tile_y = ty+0.5
 
-                    B = math.sqrt((bi_x-tile_x)**2 + (bi_y-tile_y)**2)
-                    assert(B<MAX_H_PRED)
-                    if abs(norm_angle(math.atan2(-bi_y+bile_y,bi_x-bile_x) - (gr-np.pi/2)))>0.01:
-                        B *= -1
-                    targ_B[b, 0 if isHorz else 1, ty, tx] = inv_tanh(B/MAX_H_PRED)
-
-                    #same thing for left and right, but we cap L and R at 1 TODO
-                    #Calculate L left and R right boudaries (from tile center)
-                    L = math.sqrt((li_x-tile_x)**2 + (li_y-tile_y)**2)
-                    L = min(MAX_W_PRED-0.01,L)
-                    if abs(norm_angle(math.atan2(-li_y+tile_y,li_x-tile_x) - (gr+np.pi)))>0.01: #These should be identicle if top line above tile center
-                        L *= -1
-                    targ_L[b, 0 if isHorz else 1, ty, tx] = inv_tanh(L/MAX_W_PRED)
-
-                    R = math.sqrt((ri_x-tile_x)**2 + (ri_y-tile_y)**2)
-                    R = min(MAX_W_PRED-0.01,R)
-                    if abs(norm_angle(math.atan2(-ri_y+tile_y,ri_x-tile_x) - gr))>0.01: #These should be identicle if top line above tile center
-                        R *= -1
-                    targ_R[b, 0 if isHorz else 1, ty, tx] = inv_tanh(R/MAX_W_PRED)
-
-                    tcls[b, 0 if isHorz else 1, ty, tx] = target[b, t,13:]
-                    tconf[b, 0 if isHorz else 1, ty, tx] = 1
-
-            else:
-                ##AXIS ALIGNED
-                #slopes (s_) and y-intersections (c_)
-                if (g_rx-g_lx) !=0:
-                    s_len = s_t = (g_ry-g_ly)/(g_rx-g_lx)
-                else:
-                    s_len = float('inf')
-                if (g_bx-g_tx) !=0:
-                    s_perp = s_t = (g_by-g_ty)/(g_bx-g_tx)
-                else:
-                    s_perp = float('inf')
-                s_t=s_b=s_len
-                s_l=s_r=s_perp
-                c_t = g_ty-s_t*g_tx
-                c_b = g_by-s_t*g_bx
-                c_l = g_ly-s_t*g_lx
-                c_r = g_ry-s_t*g_rx
-                
-                #claimed_tiles = defaultdict(list)
-
-                #for ty,tx in zip(hit_tile_ys,hit_tile_xs):
-                #    tile_x = tx+0.5
-                #    tile_y = ty+0.5
-                #    if assign_mode=='split':
-                #        #Predict based on position of the text line
-                #        if isHorz:
-                #            if gy<=tile_y:
-                #                assigned = 0
-                #                not_assigned = 1
-                #            else:
-                #                assigned = 1
-                #                not_assigned = 0
-                #            if ((tile_x-g_lx<END_UNMASK_THRESH or g_rx-tile_x>END_MASK_THRESH) and
-                #                    len(hit_tile_ys)>1):
-                #                #it's a border tile, we'll just ignore it
-                #        else:
-                #            if gx<=tile_x:
-                #                assigned = 2
-                #                not_assigned = 3
-                #            else:
-                #                assigned = 3
-                #                not_assigned = 2
-                #    claimed_tiles[(level,ty,tx,assigned)].append(t)
-
-                #for (level,ty,tx,assigned),ts in claimed_tiles.items():
-                ##An optimization, to have the tile assigned to the bb with most area, but ensure every bb is getting a predcition from somewhere.
-                ##Is this the only tile for any gt bbs?
-
-                for ty,tx in zip(hit_tile_ys,hit_tile_xs): #kind of confusing, but here "tx ty" is for tile-i tile-j
-                    tile_x = tx+0.5
-                    tile_y = ty+0.5
-                    if assign_mode=='split':
-                        #Predict based on position of the text line
-                        if isHorz:
-                            if gy<=tile_y:
-                                assigned = 0
-                                not_assigned = 1
-                            else:
-                                assigned = 1
-                                not_assigned = 0
-                            if ((tile_x-g_lx<END_UNMASK_THRESH or g_rx-tile_x>END_MASK_THRESH) and
-                                    len(hit_tile_ys)>1):
-                                #it's a border tile, we'll just ignore it
-                                TODO
+                        #Calculate T top and B bottom boudaries (from tile center)
+                        if not np.isinf(s_p) and not np.isinf(s_t):
+                            c_p = tile_y-s_p*tile_x
+                            ti_x = (c_p-c_t)/(s_t-s_p)
+                            ti_y = s_p*ti_x+c_p
+                            bi_x = (c_p-c_b)/(s_b-s_p)
+                            bi_y = s_p*bi_x+c_p
+                        elif np.isinf(s_t):
+                            ti_x = g_tlx
+                            ti_y = tile_y
+                            bi_x = g_blx
+                            bi_y = tile_y
+                        elif np.isinf(s_p):
+                            ti_x = tile_x
+                            ti_y = g_tly
+                            bi_x = tile_x
+                            bi_y = g_bly
                         else:
-                            if gx<=tile_x:
-                                assigned = 2
-                                not_assigned = 3
-                            else:
-                                assigned = 3
-                                not_assigned = 2
-                        if assignment[assigned,ty,tx]!=-1:
-                            t_have_other_tiles = len(hit_tile_ys)>1
-                            other_t_have_other_tiles = (assignment==other_t).sum()>1
+                            assert(False)
 
-                            if other_t_have_tiles and not t_have_other_tiles:
-                                #I get it!
-                                TODO_but_check 
-                            elif not other_t_have_tiles and t_have_other_tiles:
-                                #Keep everything unchanged. My other tile(s) will predict this
+                        T = math.sqrt((ti_x-tile_x)**2 + (ti_y-tile_y)**2)
+                        assert(T<MAX_H_PRED)
+                        if abs(norm_angle(math.atan2(-ti_y+tile_y,ti_x-tile_x) - (gr+np.pi/2)))>0.01: #These should be identicle if top line above tile center
+                            T *= -1
+                        targ_T[b, 0 if isHorz else 1, ty, tx] = inv_tanh(T/MAX_H_PRED)
+
+                        B = math.sqrt((bi_x-tile_x)**2 + (bi_y-tile_y)**2)
+                        assert(B<MAX_H_PRED)
+                        if abs(norm_angle(math.atan2(-bi_y+bile_y,bi_x-bile_x) - (gr-np.pi/2)))>0.01:
+                            B *= -1
+                        targ_B[b, 0 if isHorz else 1, ty, tx] = inv_tanh(B/MAX_H_PRED)
+
+                        #same thing for left and right, but we cap L and R at 1 TODO
+                        #Calculate L left and R right boudaries (from tile center)
+                        L = math.sqrt((li_x-tile_x)**2 + (li_y-tile_y)**2)
+                        L = min(MAX_W_PRED-0.01,L)
+                        if abs(norm_angle(math.atan2(-li_y+tile_y,li_x-tile_x) - (gr+np.pi)))>0.01: #These should be identicle if top line above tile center
+                            L *= -1
+                        targ_L[b, 0 if isHorz else 1, ty, tx] = inv_tanh(L/MAX_W_PRED)
+
+                        R = math.sqrt((ri_x-tile_x)**2 + (ri_y-tile_y)**2)
+                        R = min(MAX_W_PRED-0.01,R)
+                        if abs(norm_angle(math.atan2(-ri_y+tile_y,ri_x-tile_x) - gr))>0.01: #These should be identicle if top line above tile center
+                            R *= -1
+                        targ_R[b, 0 if isHorz else 1, ty, tx] = inv_tanh(R/MAX_W_PRED)
+
+                        tcls[b, 0 if isHorz else 1, ty, tx] = target[b, t,13:]
+                        tconf[b, 0 if isHorz else 1, ty, tx] = 1
+
+                else:
+
+                    ##AXIS ALIGNED
+                    #slopes (s_) and y-intersections (c_)
+                    if isHorz:
+                        if (g_rx-g_lx) !=0:
+                            s_len = (g_ry-g_ly)/(g_rx-g_lx)
+                        else:
+                            s_len = float('inf')
+                        if (g_bx-g_tx) !=0:
+                            s_perp = (g_by-g_ty)/(g_bx-g_tx)
+                        else:
+                            s_perp = float('inf')
+                        s_t=s_b=s_len
+                        s_l=s_r=s_perp
+                        if gr<np.pi/2 and gr>-np.pi/2:
+                            c_t = g_ty-s_t*g_tx
+                            c_b = g_by-s_b*g_bx
+                            if math.isinf(s_perp):
+                                c_l = g_lx
+                                c_r = g_rx
+                            else:
+                                c_l = g_ly-s_l*g_lx
+                                c_r = g_ry-s_r*g_rx
+                            gt_left_x = g_lx
+                            gt_left_y = g_ly
+                            gt_right_x = g_rx
+                            gt_right_y = g_ry
+                        else:
+                            c_t = g_by-s_t*g_bx
+                            c_b = g_ty-s_b*g_tx
+                            if math.isinf(s_perp):
+                                c_l = g_rx
+                                c_r = g_lx
+                            else:
+                                c_l = g_ry-s_l*g_rx
+                                c_r = g_ly-s_r*g_lx
+                            gt_left_x = g_rx
+                            gt_left_y = g_ry
+                            gt_right_x = g_lx
+                            gt_right_y = g_ly
+                    else:
+                        #we're going to be inverting (x-y) everything to allow the same processing the horizontal lines use. 
+                        if (g_ry-g_ly) !=0:
+                            s_len = (g_rx-g_lx)/(g_ry-g_ly)
+                        else:
+                            s_len = float('inf')
+                        if (g_by-g_ty) !=0:
+                            s_perp = (g_bx-g_tx)/(g_by-g_ty)
+                        else:
+                            s_perp = float('inf')
+                        s_t=s_b=s_len
+                        s_l=s_r=s_perp
+                        if gr<0 or gr>np.pi:
+                            c_t = g_bx-s_t*g_by
+                            c_b = g_tx-s_b*g_ty
+                            if math.isinf(s_perp):
+                                c_l = g_ly
+                                c_r = g_ry
+                            else:
+                                c_l = g_lx-s_l*g_ly
+                                c_r = g_rx-s_r*g_ry
+                            gt_left_x = g_ly
+                            gt_left_y = g_lx
+                            gt_right_x = g_ry
+                            gt_right_y = g_rx
+                        else:
+                            c_t = g_tx-s_t*g_ty
+                            c_b = g_bx-s_b*g_by
+                            if math.isinf(s_perp):
+                                c_l = g_ry
+                                c_r = g_ly
+                            else:
+                                c_l = g_rx-s_l*g_ry
+                                c_r = g_lx-s_r*g_ly
+                            gt_left_x = g_ry
+                            gt_left_y = g_rx
+                            gt_right_x = g_ly
+                            gt_right_y = g_lx
+
+                        #old
+                        #s_t=s_b=s_perp
+                        #s_l=s_r=s_len
+                        #if gr<0 and gr<np.pi:
+                        #    c_t = g_ry-s_t*g_rx
+                        #    c_b = g_ly-s_b*g_lx
+                        #    if math.isinf(s_perp):
+                        #        c_l = g_tx
+                        #        c_r = g_bx
+                        #    else:
+                        #        c_l = g_ty-s_l*g_tx
+                        #        c_r = g_by-s_r*g_bx
+                        #else:
+                        #    c_t = g_ly-s_t*g_lx
+                        #    c_b = g_ry-s_b*g_rx
+                        #    if math.isinf(s_perp):
+                        #        c_l = g_bx
+                        #        c_r = g_tx
+                        #    else:
+                        #        c_l = g_by-s_l*g_bx
+                        #        c_r = g_ty-s_r*g_tx
+
+                    
+                    print('level:{}, r:{:.3f},  {}'.format(level,gr,list(zip(hit_tile_xs,hit_tile_ys))))
+                    print('s_t/b:{}, c_t:{}, c_b:{},  s_l/r:{}, c_l:{}, c_r:{}'.format(s_t,c_t,c_b,s_l,c_l,c_r))
+                    for cell_y,cell_x in zip(hit_tile_ys,hit_tile_xs): #kind of confusing, but here "tx ty" is for tile-i tile-j
+                        if isHorz:
+                            tx = cell_x
+                            ty = cell_y
+                        else:
+                            tx = cell_y
+                            ty = cell_x
+
+                        tile_x = tx+0.5
+                        tile_y = ty+0.5
+
+                        #top and bottom points (directly over tile center)
+                        assert(not math.isinf(s_t))
+                        ti_x = tile_x
+                        ti_y = s_t*ti_x+c_t
+                        bi_x = tile_x
+                        bi_y = s_b*bi_x+c_b
+
+                        if isHorz:
+                            ti_y = max(ti_y,g_min_y)
+                            bi_y = min(bi_y,g_max_y)
+                        else:
+                            ti_y = max(ti_y,g_min_x)
+                            bi_y = min(bi_y,g_max_x)
+
+                        #print('t:{},{}  ti:{},{}  bi:{},{}'.format(tx,ty,ti_x,ti_y,bi_x,bi_y))
+                        
+
+                        #left and right points (directly over/parallel to tile center)
+                        li_y = tile_y
+                        ri_y = tile_y
+
+                        #new way
+                        #The idea is to find the R (ri_x) that will maximize the IoU between the predicted box (axis aligned) and gt bb given the already selected ti_y and bi_y
+                        #This requires looking at how the bb lines intersect eachother and the horizontal boundaries (ti_y/bi_y)
+                        #We leverage the fact that at tile_x, the horizontal boundaries and the bb lines intersect (top and bottom)
+                        #print('{},{} at ri_x comp  s_t:{}'.format(tx,ty,s_t))
+                        if s_t==0:
+                            ri_x = c_r
+                        else:
+                            #find intersections
+                            if s_t>0: #slope down
+                                t_to_bh_inter_x = (bi_y-c_t)/s_t #intersection of gt bb top line to horizontal line at bi_y 
+                                t_to_r_inter_x = (c_r-c_t)/(s_t-s_r) #intersection of gt bb top and right lines
+                                ri_x = (t_to_bh_inter_x+tile_x)/2 #half way is optimal (iou type)
+                                if t_to_bh_inter_x>t_to_r_inter_x: 
+                                    #unless the optimal point is along the bb corner
+                                    rtri_x = (c_t-c_r+(bi_y-ti_y)/2)/(s_r-s_t) #this is optimal along corner
+                                    ri_x = min(ri_x,rtri_x)
+                            else: #slope up
+                                ###
+                                #if cell_x==1 and cell_y==3:
+                                #    bix = (bi_y-c_r)/s_r
+                                #    tix = (ti_y-c_r)/s_r
+                                #    print((bi_y,bix),(ti_y,tix))
+                                #    cv2.line(draw[level],(int(VIZ_SIZE*bi_y),int(VIZ_SIZE*bix)),(int(VIZ_SIZE*ti_y),int(VIZ_SIZE*tix)),(255,255,255))
+                                #    bix = (bi_y-c_b)/s_b
+                                #    tix = (ti_y-c_b)/s_b
+                                #    print((bi_y,bix),(ti_y,tix))
+                                #    cv2.line(draw[level],(int(VIZ_SIZE*bi_y),int(VIZ_SIZE*bix)),(int(VIZ_SIZE*ti_y),int(VIZ_SIZE*tix)),(255,255,255))
+                                ###
+                                b_to_th_inter_x = (ti_y-c_b)/s_b #intersection of gt bb bot line to horizontal line at ti_y 
+                                b_to_r_inter_x = (c_r-c_b)/(s_b-s_r) #intersection of gt bb bot and right lines (corner)
+                                ri_x = (b_to_th_inter_x+tile_x)/2 #half way is optimal (iou type)
+                                if b_to_th_inter_x>b_to_r_inter_x: 
+                                    #unless the optimal point is along the bb corner
+                                    rtri_x = (c_r-c_b+(bi_y-ti_y)/2)/(s_b-s_r) #this is optimal along corner
+                                    #print('tri inside:{}, outside top:{}, bot:{}'.format(s_b*rtri_x+c_b-(s_r*rtri_x+c_r),s_r*rtri_x+c_r-ti_y,bi_y-(s_b*rtri_x+c_b)))
+                                    ri_x = min(ri_x,rtri_x)
+                                #print('b_to_th_inter_x:{}  b_to_r_inter_x:{} orri_x:{}  rtri_x:{}'.format(b_to_th_inter_x,b_to_r_inter_x,(b_to_th_inter_x+tile_x)/2,rtri_x if b_to_th_inter_x>b_to_r_inter_x else None))
+                            if math.isinf(s_r):
+                                ri_x = min(ri_x,c_r)
+                            #else:
+                            #    ri_x = min(ri_x,(ri_y-c_r)/s_r)
+
+                        #compute li_x
+                        if s_t==0:
+                            li_x = c_l
+                        else:
+                            #find intersections
+                            #print('{},{} s_t:{}'.format(tx,ty,s_t))
+                            if s_t<0: #slope down (left-ways)
+                                t_to_bh_inter_x = (bi_y-c_t)/s_t #intersection of gt bb top line to horizontal line at bi_y 
+                                t_to_l_inter_x = (c_l-c_t)/(s_t-s_l) #intersection of gt bb top and right lines
+                                #print('t_to_bh_inter_x:{}  t_to_l_inter_x:{}'.format(t_to_bh_inter_x,t_to_l_inter_x))
+                                li_x = (t_to_bh_inter_x+tile_x)/2 #half way is optimal (iou type)
+                                if t_to_bh_inter_x<t_to_l_inter_x: 
+                                    #unless the optimal point is along the bb corner
+                                    ltri_x = (c_t-c_l+(bi_y-ti_y)/2)/(s_l-s_t) #this is optimal along corner
+                                    li_x = max(li_x,ltri_x)
+                            else: #slope up
+                                b_to_th_inter_x = (ti_y-c_b)/s_b #intersection of gt bb bot line to horizontal line at ti_y 
+                                b_to_l_inter_x = (c_l-c_b)/(s_b-s_l) #intersection of gt bb bot and right lines (corner)
+                                #print('b_to_th_inter_x:{}  b_to_l_inter_x:{}'.format(b_to_th_inter_x,b_to_l_inter_x))
+                                li_x = (b_to_th_inter_x+tile_x)/2 #half way is optimal (iou type)
+                                if b_to_th_inter_x<b_to_l_inter_x: 
+                                    #unless the optimal point is along the bb corner
+                                    ltri_x = (c_l-c_b+(bi_y-ti_y)/2)/(s_b-s_l) #this is optimal along corner
+                                    li_x = max(li_x,ltri_x)
+                            if math.isinf(s_l):
+                                li_x = max(li_x,c_l)
+                            #else:
+                            #    li_x = max(li_x,(li_y-c_l)/s_l)
+                        #old way
+                        #intersect_check_y = (max(ty,ti_y)+min(ty+1,bi_y))/2
+                        #if math.isinf(s_l):
+                        #    li_x = c_l
+                        #else:
+                        #    li_x = (li_y-c_l)/s_l
+                        #if s_b!=0:
+                        #    lbi_x = (intersect_check_y-c_b)/s_b
+                        #    lti_x = (intersect_check_y-c_t)/s_t
+                        #    li_x = max(li_x,
+                        #            lbi_x if lbi_x<tile_x else -float('inf'),
+                        #            lti_x if lti_x<tile_x else -float('inf'))
+
+                        #if math.isinf(s_r):
+                        #    ri_x = c_r
+                        #else:
+                        #    ri_x = (ri_y-c_r)/s_r
+                        #if s_b!=0:
+                        #    rbi_x = (intersect_check_y-c_b)/s_b
+                        #    rti_x = (intersect_check_y-c_t)/s_t
+                        #    #print('initial ri_x:{}, rbi_x:{}, rti_x:{}'.format(ri_x,rbi_x,rti_x))
+                        #    ri_x = min(ri_x,
+                        #            rbi_x if rbi_x>tile_x else float('inf'),
+                        #            rti_x if rti_x>tile_x else float('inf'))
+
+                        #print(cell_x,cell_y)
+                        #if cell_x==8 and cell_y==10:
+                        #    if isHorz:
+                        #        print('li_x,y:{},{}, ri_x,y:{},{}, ti_x,y:{},{}, bi_x,y:{},{}'.format(li_x,li_y,ri_x,ri_y,ti_x,ti_y,bi_x,bi_y))
+                        #    else:
+                        #        print('V li_x,y:{},{}, ri_x,y:{},{}, ti_x,y:{},{}, bi_x,y:{},{}'.format(li_y,li_x,ri_y,ri_x,ti_y,ti_x,bi_y,bi_x))
+
+                        if assign_mode=='split':
+                            #Predict based on position of the text line
+                            #if isHorz:
+                            if (ti_y+bi_y)/2<=tile_y:
+                                assigned = 0 if isHorz else 2
+                                not_assigned = 1 if isHorz else 3
+                            else:
+                                assigned = 1 if isHorz else 3
+                                not_assigned = 0 if isHorz else 2
+
+                            #isLeftEnd = li_x<=tx+1 and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty
+                            #isRightEnd = tile_x>ri_x and ri_x>=tx and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty
+                            isLeftEnd = li_x>tile_x 
+                            isRightEnd = ri_x<tile_x 
+                            #print('left: {}>{}:{} and {}+1-{}={}'.format(li_x,tile_x,li_x>tile_x,tile_x,li_x,tile_x+1-li_x))
+                            #print('left:  {}'.format(tx+1-li_x))
+                            #print('right: {}'.format(ri_x-tx))
+
+                            #evaluate if this tile is just barely contributing. skip it if it is
+                            print('{},{}:  l:{},{}   r:{},{}'.format(cell_x,cell_y,isLeftEnd,math.sqrt((tile_x-gt_left_x)**2 + (tile_y-gt_left_y)**2),isRightEnd,math.sqrt((tile_x-gt_right_x)**2 + (tile_y-gt_right_y)**2)))
+                            #print('tile_x:{}, gt_left_x:{}, tile_y:{}, gt_left_y:{}'.format(tile_x,gt_left_x,tile_y,gt_left_y))
+                            if ( len(hit_tile_ys)>1 and
+                                (isLeftEnd and math.sqrt((tile_x-gt_left_x)**2 + (tile_y-gt_left_y)**2)>END_BOUNDARY_THRESH) or
+                                (isRightEnd and math.sqrt((tile_x-gt_right_x)**2 + (tile_y-gt_right_y)**2)>END_BOUNDARY_THRESH)):
                                 continue
-                            elif other_t_have_tiles and t_have_other_tiles:
-                                if isHorz:
+
+                            #if (( (li_x>tile_x and tx+1-li_x<END_UNMASK_THRESH) or 
+                            #      (tile_x>ri_x and ri_x-tx<END_UNMASK_THRESH) ) and
+                            #     len(hit_tile_ys)>1):
+                            #    #it's a border tile, we'll just ignore it
+                            #    continue
+                            t_have_other_tiles = len(hit_tile_ys)>1
+                            if conf_mask[b,assigned,cell_y,cell_x]==0 and t_have_other_tiles:
+                                continue
+                            elif assignment[assigned,cell_y,cell_x]!=-1:
+                                if only_unmask:
+                                    continue
+                                #print('shared at {}, {}'.format(tx,ty))
+                                shared_mask[b,assigned,cell_y,cell_x]=1
+                                other_t = assignment[assigned,cell_y,cell_x]
+                                #Uh oh, this half has been assigned already.
+                                other_t_have_other_tiles = (assignment==other_t).sum()>1
+
+                                #print('{},{}: me have other:{}  other have other:{}'.format(tx,ty,t_have_other_tiles,other_t_have_other_tiles))
+
+
+                                if other_t_have_other_tiles and not t_have_other_tiles:
+                                    #I get it!
+                                    action='replace-other-t'
+                                elif not other_t_have_other_tiles and t_have_other_tiles:
+                                    #Keep everything unchanged. My other tile(s) will predict this
+                                    action='skip-t'
+                                elif other_t_have_other_tiles and t_have_other_tiles:
+                                    #For which of us is this tile on the end of our BB?
+                                    #if isHorz:
                                     t_end = (li_x>=tx and li_x<=tx+1) or (ri_x>=tx and ri_x<=tx+1)
-                                    other_li_x = target[b, t, 5] / scale[level][0]
-                                    other_ri_x = target[b, t, 7] / scale[level][0]
+                                    if isHorz:
+                                        other_x1 = target[b, other_t, 5] / scale[level][0]
+                                        other_x2 = target[b, other_t, 7] / scale[level][0]
+                                    else:
+                                        other_x1 = target[b, other_t, 6] / scale[level][1]
+                                        other_x2 = target[b, other_t, 8] / scale[level][1]
+                                    other_li_x = min(other_x1,other_x2)
+                                    other_ri_x = max(other_x1,other_x2)
                                     other_t_end = (other_li_x>=tx and other_li_x<=tx+1) or (other_ri_x>=tx and other_ri_x<=tx+1)
                                     if t_end:
                                         left_side = li_x>=tx and li_x<=tx+1
                                     if other_t_end:
                                         other_left_side = other_li_x>=tx and other_li_x<=tx+1
-                                else:
-                                    t_end = (ti_y>=ty and ti_y<=ty+1) or (bi_y>=ty and bi_y<=ty+1)
-                                    other_ti_y = target[b, t, 10] / scale[level][1]
-                                    other_bi_y = target[b, t, 12] / scale[level][1]
-                                    other_t_end = (other_ti_y>=ty and other_ti_y<=ty+1) or (other_bi_y>=ty and other_bi_y<=ty+1)
-                                    if t_end:
-                                        top_side = ti_y>=ty and ti_y<=ty+1
-                                    if other_t_end:
-                                        other_top_side = other_ti_y>=ty and other_ti_y<=ty+1
-                                if t_end and other_t_end:
-                                    if isHorz:
-                                        if left_side:
-                                            t_fraction_in_tile = (tx+1-li_x)-(ri_x-li_x)
-                                        else:
-                                            t_fraction_in_tile = (ri_x-tx)-(ri_x-li_x)
-                                        if other_left_side:
-                                            other_t_fraction_in_tile = (tx+1-other_li_x)-(other_ri_x-other_li_x)
-                                        else:
-                                            other_t_fraction_in_tile = (other_ri_x-tx)-(other_ri_x-other_li_x)
-                                    else:
-                                        if top_side:
-                                            t_fraction_in_tile = (ty+1-ti_y)-(bi_y-ti_y)
-                                        else:
-                                            t_fraction_in_tile = (bi_y-ty)-(bi_y-ti_y)
-                                        if other_top_side:
-                                            other_t_fraction_in_tile = (ty+1-other_ti_y)-(other_bi_y-other_ti_y)
-                                        else:
-                                            other_t_fraction_in_tile = (other_bi_y-ty)-(other_bi_y-other_ti_y)
 
-                                    if t_precent_in_tile>0.5 and other_t_fraction_in_tile<0.5:
+                                    #other_ti_y = None #for convience
+                                    #other_bi_y = None #for convience
+                                    #else:
+                                    #    t_end = (ti_y>=ty and ti_y<=ty+1) or (bi_y>=ty and bi_y<=ty+1)
+                                    #    other_ti_y = target[b, other_t, 10] / scale[level][1]
+                                    #    other_bi_y = target[b, other_t, 12] / scale[level][1]
+                                    #    other_t_end = (other_ti_y>=ty and other_ti_y<=ty+1) or (other_bi_y>=ty and other_bi_y<=ty+1)
+                                    #    if t_end:
+                                    #        top_side = ti_y>=ty and ti_y<=ty+1
+                                    #    if other_t_end:
+                                    #        other_top_side = other_ti_y>=ty and other_ti_y<=ty+1
+
+                                    #    other_li_y = None #for convience
+                                    #    other_ri_y = None #for convience
+
+                                    #print('{},{}: me end:{}  other end:{}'.format(tx,ty,t_end,other_t_end))
+                                    if t_end and other_t_end:
+                                        #Both ends? Great, if one of us has a large portion of our BB in this tile, we'll that one get predicted
+                                        t_fraction_in_tile = fraction_in_tile(left_side,tx,ty,li_x,ri_x)#,ti_y,bi_y)
+                                        other_t_fraction_in_tile = fraction_in_tile(other_left_side,tx,ty,other_li_x,other_ri_x)#,other_ti_y,other_bi_y)
+
+                                        print('{},{}: me frac:{}  other frac:{}'.format(tx,ty,t_fraction_in_tile,other_t_fraction_in_tile))
+                                        if t_fraction_in_tile>0.4 and other_t_fraction_in_tile<0.33:
+                                            #I get it!
+                                            action='replace-other-t'
+                                        elif t_fraction_in_tile<0.33 and other_t_fraction_in_tile>0.4:
+                                            #let them get it
+                                            action='skip-t'
+                                        else:
+                                            #We'll just unmask this. The behavoir isn't really important.
+                                            action='unmask'
+                                    elif not t_end and other_t_end:
                                         #I get it!
-                                        TODO
-                                    elif t_precent_in_tile<0.5 and other_t_fraction_in_tile>0.5:
+                                        action='replace-other-t'
+                                    elif t_end and not other_t_end:
                                         #let them get it
-                                        continue
-                                elif not t_end and other_t_end:
-                                    #I get it!
-                                    TODO
-                                elif t_end and not other_t_end:
-                                    #let them get it
+                                        action='skip-t'
+                                    else:
+                                        #I don't know, unmask I guess
+                                        #Or bump one up/down?
+                                        action='unmask'
+                                else:
+                                    #Uuuhhhhhh, we both need this tile to predict us. Throw one to the other half. Hopefully this rarely happens.
+                                    t_fraction_in_tile = fraction_in_tile(left_side,tx,ty,li_x,ri_x,ti_y,bi_y)
+                                    other_t_fraction_in_tile = fraction_in_tile(other_left_side,tx,ty,other_li_x,other_ri_x,other_ti_y,other_bi_y)
+
+                                    if t_fraction_in_tile>0.5 and other_t_fraction_in_tile<0.5:
+                                        #I get it!
+                                        action='replace-other-t'
+                                    elif t_fraction_in_tile<0.5 and other_t_fraction_in_tile>0.5:
+                                        #let them get it
+                                        action='skip-t'
+                                    else:
+                                        #For now, just unmask
+                                        action='unmask'
+                                    print('WARNING: Tile is only tile for two BBs. Currently unmasking')
+
+                                if action=='skip-t':
+                                    continue
+                                elif action=='replace-other-t':
+                                    pass #I'll just overwrite it
+                                elif action=='unmask':
+                                    mask[b,assigned,cell_y,cell_x]=0
+                                    conf_mask[b,assigned,cell_y,cell_x]=0
+                                    #assignment[assigned,cell_y,cell_x]=?
+
                                     continue
                                 else:
-                                    #I don't know, unmask I guess
-                                    #Or bump one up/down?
-                                    TODO
-                            #TODO left off. The below code is getting replaced. the TODOs and continues need to be consolidated to the appropriate action as below. li_x, etc need computed earlier
+                                    raise NotImplementedError('Unknown sharing action: {}'.format(action))
 
-                            #horizontal overlap, hopefully
-                            if (li_x>=tx and li_x<=tx+1) or (ri_x>=tx and ri_x<=tx+1):
-                                #yes this is the end so it should be horz overlap
-                                #encourage no prediction here
-                                mask[b,0:2 if isHorz else 2:4,ty,tx]=0
-                                targ_conf[b,0:2 if isHorz else 2:4,ty,tx]=0
-                                conf_mask[b,0:2 if isHorz else 2:4,ty,tx]=1
-                                shared_mask[b,0:2 if isHorz else 2:4,ty,tx]=1
-                                continue #That's it!
+                            #else:
+                            if only_unmask and targ_conf[b,assigned,cell_y,cell_x]==0:
+                                conf_mask[b,assigned,cell_y,cell_x]= 0
                             else:
-                                assert(shared_mask[b,0:2 if isHorz else 2:4,ty,tx]==0) #not designed for 3
-                                shared_mask[b,0:2 if isHorz else 2:4,ty,tx]=1
-                                #import pdb;pdb.set_trace()
-                                #print("This shouldn't happen. check why")
-                                #if (isHorz and abs(tile_y-gy)<UNMASK_CENT_DIST_THRESH) or (not isHorz and abs(tile_x-gx)<UNMASK_CENT_DIST_THRESH):
-                                other_t = assignment[assigned,ty,tx]
-                                other_gx = target[b, other_t, 1] / scale[level][1]
-                                other_gy = target[b, other_t, 1] / scale[level][1]
-                                if isHorz:
-                                    swap_me = (assigned==0 and gy>other_gy) or (assigned==1 and gy<other_gy)
-                                else:
-                                    swap_me = (assigned==2 and gx>other_gx) or (assigned==3 and gx<other_gx)
-                                if swap_me:
-                                    #just predict using other head
-                                    tmp=assigned
-                                    assigned=not_assigned
-                                    not_assigned=tmp
-                                else:
-                                    #swap prev to other head
-                                    mask[b,not_assigned,ty,tx]=mask[b,assigned,ty,tx]
-                                    conf_mask[b,not_assigned,ty,tx]=conf_mask[b,assigned,ty,tx]
-                                    targ_conf[b,not_assigned,ty,tx]=targ_conf[b,assigned,ty,tx]
-                                    targ_cls[b,not_assigned,ty,tx]=targ_cls[b,assigned,ty,tx]
-                                    targ_r[b,not_assigned,ty,tx]=targ_r[b,assigned,ty,tx]
-                                    targ_T[b,not_assigned,ty,tx]=targ_T[b,assigned,ty,tx]
-                                    targ_B[b,not_assigned,ty,tx]=targ_B[b,assigned,ty,tx]
-                                    targ_L[b,not_assigned,ty,tx]=targ_L[b,assigned,ty,tx]
-                                    targ_R[b,not_assigned,ty,tx]=targ_R[b,assigned,ty,tx]
-                                print('overlap for x:{},y:{},w:{},h:{} and x:{},y:{},w:{},h:{}'.format(gx,gy,gw,gh,other_gx,other_gy,target[b, other_t, 4] / scale[level][0],target[b, other_t, 3] / scale[level][1]))
-                                print('decision: {}'.format('swap first' if swap_me else 'swap second'))
-                                assignment[assigned,ty,tx]=t
-                                mask[b,assigned,ty,tx]=1
-                                targ_conf[b,assigned,ty,tx]=1
-                                conf_mask[b,assigned,ty,tx]=1
+                                assignment[assigned,cell_y,cell_x]=t
+                                mask[b,assigned,cell_y,cell_x]=1
+                                targ_conf[b,assigned,cell_y,cell_x]=1
+                                conf_mask[b,assigned,cell_y,cell_x]=1
 
-                        else:
-                            assignment[assigned,ty,tx]=t
-                            mask[b,assigned,ty,tx]=1
-                            targ_conf[b,assigned,ty,tx]=1
-                            conf_mask[b,assigned,ty,tx]=1
-
-                            if (isHorz and abs(tile_y-gy)<UNMASK_CENT_DIST_THRESH) or (not isHorz and abs(tile_x-gx)<UNMASK_CENT_DIST_THRESH):
-                                conf_mask[b,not_assigned,ty,tx]=0
-                    else:
-                        raise NotImplementedError('Uknown tile assignment mode: {}'.format(assign_mode))
-
+                            if close_anchor_rule=='unmask':
+                                #if ((isHorz and abs(tile_y-(ti_y+bi_y)/2)<UNMASK_CENT_DIST_THRESH) or (not isHorz and abs(tile_x-(li_x+ri_x)/2)<UNMASK_CENT_DIST_THRESH)) and targ_conf[b,not_assigned,cell_y,cell_x]==0:
+                                if abs(tile_y-(ti_y+bi_y)/2)<UNMASK_CENT_DIST_THRESH and targ_conf[b,not_assigned,cell_y,cell_x]==0:
+                                    conf_mask[b,not_assigned,cell_y,cell_x]= 0 
                                 
+                                if assigned==0 and ((ti_y+bi_y)/2)-ty<UNMASK_CENT_DIST_THRESH and cell_y>0 and targ_conf[b,not_assigned,cell_y-1,cell_x]==0:
+                                    conf_mask[b,not_assigned,cell_y-1,cell_x]= 0
+                                elif assigned==1 and (ty+1)-((ti_y+bi_y)/2)<UNMASK_CENT_DIST_THRESH and cell_y<nH-1 and targ_conf[b,not_assigned,cell_y+1,cell_x]==0:
+                                    conf_mask[b,not_assigned,cell_y+1,cell_x]= 0
+                                if assigned==2 and ((ti_y+bi_y)/2)-ty<UNMASK_CENT_DIST_THRESH and cell_x>0 and targ_conf[b,not_assigned,cell_y,cell_x-1]==0:
+                                    conf_mask[b,not_assigned,cell_y,cell_x-1]= 0
+                                elif assigned==3 and (ty+1)-((ti_y+bi_y)/2)<UNMASK_CENT_DIST_THRESH and cell_x<nW-1 and targ_conf[b,not_assigned,cell_y,cell_x+1]==0:
+                                    conf_mask[b,not_assigned,cell_y,cell_x+1]= 0
+                                #elif assigned==2 and ((li_x+ri_x)/2)-tx<UNMASK_CENT_DIST_THRESH and tx>0 and targ_conf[b,not_assigned,cell_y,cell_x-1]==0:
+                                #    conf_mask[b,not_assigned,cell_y,cell_x-1]= 0
+                                #elif assigned==3 and tx-((li_x+ri_x)/2)<UNMASK_CENT_DIST_THRESH and tx<nW-1 and targ_conf[b,not_assigned,cell_y,cell_x+1]==0:
+                                #    conf_mask[b,not_assigned,cell_y,cell_x+1]= 0
+                        else:
+                            raise NotImplementedError('Uknown tile assignment mode: {}'.format(assign_mode))
+                        if only_unmask:
+                            continue
+                                    
 
 
-                    targ_cls[b, assigned, ty, tx] = target[b, t,13:]
-                    targ_r[b, assigned, ty, tx] = math.asin(gr/np.pi)/np.pi
-                    #top and bottom points (directly over tile center)
-                    ti_x = tile_x
-                    ti_y = s_t*ti_x+c_t
-                    bi_x = tile_x
-                    bi_y = s_b*bi_x+c_b
-                    
-                    T=ti_y-tile_y #negative if above tile center (just add predcition to center)
-                    assert(abs(T)<MAX_H_PRED)
-                    targ_T[b, assigned, ty, tx] = inv_tanh(T/MAX_H_PRED)
-                    B=bi_y-tile_y 
-                    assert(abs(B)<MAX_H_PRED)
-                    targ_B[b, assigned, ty, tx] = inv_tanh(B/MAX_H_PRED)
-
-                    #left and right points (directly over/parallel to tile center)
-                    li_y = tile_y
-                    ri_y = tile_y
-                    if math.isinf(s_l):
-                        li_x = g_lx
-                    else:
-                        li_x = (li_y-c_l)/s_l
-                    if math.isinf(s_l):
-                        ri_x = g_rx
-                    else:
-                        ri_x = (ri_y-c_r)/s_r
-                    #print('li_x,y:{},{}, ri_x,y:{},{}, s_l:{}, c_l:{}'.format(li_x,li_y,ri_x,ri_y,s_l,c_l))
-                    
-                    L=li_x-tile_x #negative if left of tile center (just add predcition to center)
-                    L = max(min(L,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
-                    targ_L[b, assigned, ty, tx] = inv_tanh(L/MAX_W_PRED)
-                    R=ri_x-tile_x 
-                    R = max(min(R,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
-                    targ_R[b, assigned, ty, tx] = inv_tanh(R/MAX_W_PRED)
+                        targ_cls[b, assigned, cell_y, cell_x] = target[b, t,13:]
+                        targ_r[b, assigned, cell_y, cell_x] = math.asin(gr/np.pi)/np.pi
+        
+                        if isHorz:
+                            T=ti_y-tile_y #negative if above tile center (just add predcition to center)
+                            #T = max(min(T,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
+                            assert(abs(T)<MAX_H_PRED)
+                            targ_T[b, assigned, cell_y, cell_x] = inv_tanh(T/MAX_H_PRED)
+                            B=bi_y-tile_y 
+                            #B = max(min(B,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
+                            assert(abs(B)<MAX_H_PRED)
+                            targ_B[b, assigned, cell_y, cell_x] = inv_tanh(B/MAX_H_PRED)
+                            
+                            L=li_x-tile_x #negative if left of tile center (just add predcition to center)
+                            L = max(min(L,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
+                            targ_L[b, assigned, cell_y, cell_x] = inv_tanh(L/MAX_W_PRED)
+                            R=ri_x-tile_x 
+                            R = max(min(R,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
+                            targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_W_PRED)
+                        else:
+                            T=ti_y-tile_y #negative if above tile center (just add predcition to center)
+                            #T = max(min(T,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
+                            assert(abs(T)<MAX_H_PRED)
+                            targ_T[b, assigned, cell_y, cell_x] = inv_tanh(T/MAX_H_PRED)
+                            B=bi_y-tile_y 
+                            #B = max(min(B,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
+                            assert(abs(B)<MAX_H_PRED)
+                            targ_B[b, assigned, cell_y, cell_x] = inv_tanh(B/MAX_H_PRED)
+                            L=ri_x-tile_x #negative if left of tile center (just add predcition to center)
+                            L = max(min(L,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
+                            #print('L:{} {}-{}={}'.format(L,ri_x,tile_x,ri_x-tile_x))
+                            targ_L[b, assigned, cell_y, cell_x] = inv_tanh(L/MAX_W_PRED)
+                            R=li_x-tile_x 
+                            R = max(min(R,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
+                            targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_W_PRED)
+                            #old
+                            #T=li_x-tile_x #negative if above tile center (just add predcition to center)
+                            #assert(abs(T)<MAX_H_PRED)
+                            #targ_T[b, assigned, cell_y, cell_x] = inv_tanh(T/MAX_H_PRED)
+                            #B=ri_x-tile_x
+                            #assert(abs(B)<MAX_H_PRED)
+                            #targ_B[b, assigned, cell_y, cell_x] = inv_tanh(B/MAX_H_PRED)
+                            #
+                            #L=ti_y-tile_y #negative if left of tile center (just add predcition to center)
+                            #L = max(min(L,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
+                            #targ_L[b, assigned, cell_y, cell_x] = inv_tanh(L/MAX_W_PRED)
+                            #R=bi_y-tile_y 
+                            #R = max(min(R,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
+                            #targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_W_PRED)
 
 
 
@@ -705,26 +1007,47 @@ def build_oversegmented_targets_multiscale(
 
 
         if VISUAL_DEBUG:
-            fig = plt.figure()
-            axs=[]
             for level in range(len(nHs)):
+                colorIndex=0
+                print('draw level {}'.format(level))
                 #draw[level][0,0,:]=255
                 draw_level = draw[level]
                 for ty in range(nHs[level]):
                     for tx in range(nWs[level]):
                         d_tile_x = (tx+0.5)*VIZ_SIZE
                         d_tile_y = (ty+0.5)*VIZ_SIZE
-                        for masks_m,ch in zip([conf_masks,t_confs],[1,2]):
-                            if masks_m[level][b,0,ty,tx]:
-                                draw_level[ty*VIZ_SIZE+1:int((ty+0.5)*VIZ_SIZE),tx*VIZ_SIZE+1:(tx+1)*VIZ_SIZE,ch]+=60
-                            if masks_m[level][b,1,ty,tx]:
-                                draw_level[int((ty+0.5)*VIZ_SIZE):(ty+1)*VIZ_SIZE,tx*VIZ_SIZE+1:(tx+1)*VIZ_SIZE,ch]+=60
-                            if masks_m[level][b,2,ty,tx]:
-                                draw_level[ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,tx*VIZ_SIZE+1:int((tx+0.5)*VIZ_SIZE),ch]+=60
-                            if masks_m[level][b,3,ty,tx]:
-                                draw_level[ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,int((tx+0.5)*VIZ_SIZE):(tx+1)*VIZ_SIZE,ch]+=60
-                        if (shared_masks[level][b,:,ty,tx]==1).any():
-                            draw_level[ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,tx*VIZ_SIZE+1:(tx+1)*VIZ_SIZE,0]+=90
+                        #for masks_m,ch in zip([t_confs],[2]):
+                        #for masks_m,ch in zip([conf_masks,t_confs],[1,2]):
+                        if conf_masks[level][b,0,ty,tx]:
+                            draw_level[ty*VIZ_SIZE+1:int((ty+0.5)*VIZ_SIZE),tx*VIZ_SIZE+1:(tx+1)*VIZ_SIZE,1]+=50
+                            if t_confs[level][b,0,ty,tx]:
+                                draw_level[ty*VIZ_SIZE+1:int((ty+0.5)*VIZ_SIZE),tx*VIZ_SIZE+1:(tx+1)*VIZ_SIZE,2]+=50
+                        if conf_masks[level][b,1,ty,tx]:
+                            draw_level[int((ty+0.5)*VIZ_SIZE):(ty+1)*VIZ_SIZE,tx*VIZ_SIZE+1:(tx+1)*VIZ_SIZE,1]+=50
+                            if t_confs[level][b,1,ty,tx]:
+                                draw_level[int((ty+0.5)*VIZ_SIZE):(ty+1)*VIZ_SIZE,tx*VIZ_SIZE+1:(tx+1)*VIZ_SIZE,2]+=50
+                        if conf_masks[level][b,2,ty,tx]:
+                            draw_level[ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,tx*VIZ_SIZE+1:int((tx+0.5)*VIZ_SIZE),1]+=50
+                            if t_confs[level][b,2,ty,tx]:
+                                draw_level[ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,tx*VIZ_SIZE+1:int((tx+0.5)*VIZ_SIZE),2]+=50
+                        if conf_masks[level][b,3,ty,tx]:
+                            draw_level[ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,int((tx+0.5)*VIZ_SIZE):(tx+1)*VIZ_SIZE,1]+=50
+                            if t_confs[level][b,3,ty,tx]:
+                                draw_level[ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,int((tx+0.5)*VIZ_SIZE):(tx+1)*VIZ_SIZE,2]+=50
+                        #if (shared_masks[level][b,:,ty,tx]==1).any():
+                        #    draw_level[ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,tx*VIZ_SIZE+1:(tx+1)*VIZ_SIZE,0]+=90
+                        if shared_masks[level][b,0,ty,tx]:
+                            draw_level[ty*VIZ_SIZE+1:int((ty+0.5)*VIZ_SIZE),tx*VIZ_SIZE+1:(tx+1)*VIZ_SIZE,0]+=50
+                        if shared_masks[level][b,0,ty,tx]:
+                            draw_level[int((ty+0.5)*VIZ_SIZE):(ty+1)*VIZ_SIZE,tx*VIZ_SIZE+1:(tx+1)*VIZ_SIZE,0]+=50
+                        if shared_masks[level][b,2,ty,tx]:
+                            draw_level[ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,tx*VIZ_SIZE+1:int((tx+0.5)*VIZ_SIZE),0]+=50
+                        if shared_masks[level][b,3,ty,tx]:
+                            draw_level[ty*VIZ_SIZE+1:(ty+1)*VIZ_SIZE,int((tx+0.5)*VIZ_SIZE):(tx+1)*VIZ_SIZE,0]+=50
+                for ty in range(nHs[level]):
+                    for tx in range(nWs[level]):
+                        d_tile_x = (tx+0.5)*VIZ_SIZE
+                        d_tile_y = (ty+0.5)*VIZ_SIZE
                         for i,bright in zip(range(nA),[255,205,155,100]):
                             if masks[level][b,i,ty,tx]:
                                 if i==0:
@@ -743,12 +1066,31 @@ def build_oversegmented_targets_multiscale(
                                 B= torch.tanh(t_Bs[level][b,i,ty,tx])*MAX_H_PRED
                                 L= torch.tanh(t_Ls[level][b,i,ty,tx])*MAX_W_PRED
                                 R= torch.tanh(t_Rs[level][b,i,ty,tx])*MAX_W_PRED
-                                cv2.line(draw_level,(int(d_tile_x-1+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x-1),int(d_tile_y+(T*VIZ_SIZE))),(bright,bright,0),1)
-                                cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x),int(d_tile_y+(B*VIZ_SIZE))),(bright,0,0),1)
-                                cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y-1+coff_y)),(int(d_tile_x+(L*VIZ_SIZE)),int(d_tile_y-1)),(bright,0,bright),1)
-                                cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x+(R*VIZ_SIZE)),int(d_tile_y)),(0,bright,bright),1)
+                                #cv2.line(draw_level,(int(d_tile_x-1+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x-1+coff_x),int(d_tile_y+(T*VIZ_SIZE))),(bright,bright,0),1)
+                                #cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x+coff_x),int(d_tile_y+(B*VIZ_SIZE))),(bright,0,0),1)
+                                #cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y-1+coff_y)),(int(d_tile_x+(L*VIZ_SIZE)),int(d_tile_y-1+coff_y)),(bright,0,bright),1)
+                                #cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x+(R*VIZ_SIZE)),int(d_tile_y+coff_y)),(0,bright,bright),1)
+                                
+                                draw_level[int(d_tile_y+coff_y)-1:int(d_tile_y+coff_y)+2,int(d_tile_x+coff_x)-1:int(d_tile_x+coff_x)+2]=draw_colors[colorIndex]
+                                if i==0 or i==1:
+                                    drawT = int(d_tile_y+T*VIZ_SIZE)
+                                    drawB = int(d_tile_y+B*VIZ_SIZE)
+                                    drawL = int(d_tile_x+L*VIZ_SIZE)
+                                    drawR = int(d_tile_x+R*VIZ_SIZE)
+                                elif i==2 or i==3:
+                                    drawL = int(d_tile_x+T*VIZ_SIZE)
+                                    drawR = int(d_tile_x+B*VIZ_SIZE)
+                                    drawB = int(d_tile_y+L*VIZ_SIZE)
+                                    drawT = int(d_tile_y+R*VIZ_SIZE)
+                                cv2.line(draw_level,(drawL,drawT),(drawR,drawT),draw_colors[colorIndex])
+                                cv2.line(draw_level,(drawR,drawT),(drawR,drawB),draw_colors[colorIndex])
+                                cv2.line(draw_level,(drawR,drawB),(drawL,drawB),draw_colors[colorIndex])
+                                cv2.line(draw_level,(drawL,drawB),(drawL,drawT),draw_colors[colorIndex])
+                                colorIndex = (colorIndex+1)%len(draw_colors)
                                 
 
+                fig = plt.figure()
+                axs=[]
                 axs.append( plt.subplot() )
                 axs[-1].set_axis_off()
                 axs[-1].imshow(draw_level)
