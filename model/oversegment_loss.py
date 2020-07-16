@@ -302,7 +302,7 @@ def build_oversegmented_targets_multiscale(
                 #drawl[:,:,0]=90
                 draw.append(drawl)
 
-            draw_colors = [(255,0,0),(100,255,0),(255,100,0),(0,255,0),(200,200,0),(255,200,0),(200,255,0)]
+            draw_colors = [(255,0,0),(100,255,0),(0,0,255),(255,100,0),(0,255,0),(255,0,255),(200,200,0),(255,200,0),(200,255,0),(0,255,255)]
         on_pred_areaB=[]
         for level in range(len(nHs)):
             on_pred_areaB.append( torch.FloatTensor(pred_boxes[level].shape[1:4]).zero_() )
@@ -770,16 +770,21 @@ def build_oversegmented_targets_multiscale(
                             else:
                                 assigned = 1 if isHorz else 3
                                 not_assigned = 0 if isHorz else 2
+
+                            #isLeftEnd = li_x<=tx+1 and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty
+                            #isRightEnd = tile_x>ri_x and ri_x>=tx and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty
+                            isLeftEnd = li_x>tile_x 
+                            isRightEnd = ri_x<tile_x 
                             #print('left: {}>{}:{} and {}+1-{}={}'.format(li_x,tile_x,li_x>tile_x,tile_x,li_x,tile_x+1-li_x))
                             #print('left:  {}'.format(tx+1-li_x))
                             #print('right: {}'.format(ri_x-tx))
 
                             #evaluate if this tile is just barely contributing. skip it if it is
-                            print('{},{}:  l:{},{}   r:{},{}'.format(cell_x,cell_y,li_x>tile_x and li_x<=tx+1 and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty,math.sqrt((tile_x-gt_left_x)**2 + (tile_y-gt_left_y)**2),tile_x>ri_x and ri_x>=tx and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty,math.sqrt((tile_x-gt_right_x)**2 + (tile_y-gt_right_y)**2)))
+                            print('{},{}:  l:{},{}   r:{},{}'.format(cell_x,cell_y,isLeftEnd,math.sqrt((tile_x-gt_left_x)**2 + (tile_y-gt_left_y)**2),isRightEnd,math.sqrt((tile_x-gt_right_x)**2 + (tile_y-gt_right_y)**2)))
                             #print('tile_x:{}, gt_left_x:{}, tile_y:{}, gt_left_y:{}'.format(tile_x,gt_left_x,tile_y,gt_left_y))
                             if ( len(hit_tile_ys)>1 and
-                                (li_x>tile_x and li_x<=tx+1 and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty and math.sqrt((tile_x-gt_left_x)**2 + (tile_y-gt_left_y)**2)>END_BOUNDARY_THRESH) or
-                                (tile_x>ri_x and ri_x>=tx and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty and math.sqrt((tile_x-gt_right_x)**2 + (tile_y-gt_right_y)**2)>END_BOUNDARY_THRESH)):
+                                (isLeftEnd and math.sqrt((tile_x-gt_left_x)**2 + (tile_y-gt_left_y)**2)>END_BOUNDARY_THRESH) or
+                                (isRightEnd and math.sqrt((tile_x-gt_right_x)**2 + (tile_y-gt_right_y)**2)>END_BOUNDARY_THRESH)):
                                 continue
 
                             #if (( (li_x>tile_x and tx+1-li_x<END_UNMASK_THRESH) or 
@@ -914,9 +919,9 @@ def build_oversegmented_targets_multiscale(
                                     conf_mask[b,not_assigned,cell_y-1,cell_x]= 0
                                 elif assigned==1 and (ty+1)-((ti_y+bi_y)/2)<UNMASK_CENT_DIST_THRESH and cell_y<nH-1 and targ_conf[b,not_assigned,cell_y+1,cell_x]==0:
                                     conf_mask[b,not_assigned,cell_y+1,cell_x]= 0
-                                if assigned==2 and ((ti_y+bi_y)/2)-ty<UNMASK_CENT_DIST_THRESH and cell_x>nW-1 and targ_conf[b,not_assigned,cell_y,cell_x-1]==0:
+                                if assigned==2 and ((ti_y+bi_y)/2)-ty<UNMASK_CENT_DIST_THRESH and cell_x>0 and targ_conf[b,not_assigned,cell_y,cell_x-1]==0:
                                     conf_mask[b,not_assigned,cell_y,cell_x-1]= 0
-                                elif assigned==3 and (ty+1)-((ti_y+bi_y)/2)<UNMASK_CENT_DIST_THRESH and cell_x>0 and targ_conf[b,not_assigned,cell_y,cell_x+1]==0:
+                                elif assigned==3 and (ty+1)-((ti_y+bi_y)/2)<UNMASK_CENT_DIST_THRESH and cell_x<nW-1 and targ_conf[b,not_assigned,cell_y,cell_x+1]==0:
                                     conf_mask[b,not_assigned,cell_y,cell_x+1]= 0
                                 #elif assigned==2 and ((li_x+ri_x)/2)-tx<UNMASK_CENT_DIST_THRESH and tx>0 and targ_conf[b,not_assigned,cell_y,cell_x-1]==0:
                                 #    conf_mask[b,not_assigned,cell_y,cell_x-1]= 0
@@ -934,9 +939,11 @@ def build_oversegmented_targets_multiscale(
         
                         if isHorz:
                             T=ti_y-tile_y #negative if above tile center (just add predcition to center)
+                            #T = max(min(T,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
                             assert(abs(T)<MAX_H_PRED)
                             targ_T[b, assigned, cell_y, cell_x] = inv_tanh(T/MAX_H_PRED)
                             B=bi_y-tile_y 
+                            #B = max(min(B,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
                             assert(abs(B)<MAX_H_PRED)
                             targ_B[b, assigned, cell_y, cell_x] = inv_tanh(B/MAX_H_PRED)
                             
@@ -948,9 +955,11 @@ def build_oversegmented_targets_multiscale(
                             targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_W_PRED)
                         else:
                             T=ti_y-tile_y #negative if above tile center (just add predcition to center)
+                            #T = max(min(T,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
                             assert(abs(T)<MAX_H_PRED)
                             targ_T[b, assigned, cell_y, cell_x] = inv_tanh(T/MAX_H_PRED)
                             B=bi_y-tile_y 
+                            #B = max(min(B,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
                             assert(abs(B)<MAX_H_PRED)
                             targ_B[b, assigned, cell_y, cell_x] = inv_tanh(B/MAX_H_PRED)
                             L=ri_x-tile_x #negative if left of tile center (just add predcition to center)
