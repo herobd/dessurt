@@ -1,6 +1,6 @@
 {
     "name": "FUNSDLines_detect_augRFh_oversegMultScl",
-    "cuda": false,
+    "cuda": true,
     "gpu": 0,
     "super_computer":false,
     "save_mode": "state_dict",
@@ -18,10 +18,11 @@
         "crop_params": {
             "crop_size":[700,1100],
             "pad":50,
-            "flip_horz": true,
-            "rot_degree_std_dev": 0.7
+            "flip_horz_ISBROKEN": false,
+            "rot_degree_std_dev": 1,
+            "rot_freq": 0.5
         },
-        "rotation": false
+        "rotation": true
 
 
     },
@@ -45,7 +46,6 @@
     },
     "loss_params": {
         "overseg": {
-            "ignore_thresh": 0.5,
             "bad_conf_weight": 20.0,
             "tile_assign_mode": "split",
             "multiclass": true
