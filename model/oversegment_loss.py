@@ -105,6 +105,12 @@ class MultiScaleOversegmentLoss (nn.Module):
         pred_boxes_scales=[]
         pred_conf_scales=[]
         pred_cls_scales=[]
+
+        x1_scales=[]
+        y1_scales=[]
+        x2_scales=[]
+        y2_scales=[]
+        r_scales=[]
         for level,prediction in enumerate(predictions):
             nB = prediction.size(0)
             nHs.append( prediction.size(2) )
@@ -121,7 +127,12 @@ class MultiScaleOversegmentLoss (nn.Module):
             y1 = prediction[..., 2] 
             x2 = prediction[..., 3]
             y2 = prediction[..., 4]
-            #r = prediction[..., 5]  # Rotation (not used here)
+            r = prediction[..., 5]  
+            x1_scales.append(x1)
+            y1_scales.append(y1)
+            x2_scales.append(x2)
+            y2_scales.append(y2)
+            r_scales.append(r)
             pred_conf = prediction[..., 0]  # Conf 
             pred_cls = prediction[..., 6:]  # Cls pred.
 
@@ -139,7 +150,7 @@ class MultiScaleOversegmentLoss (nn.Module):
             pred_conf_scales.append(pred_conf.cpu().data)
             pred_cls_scales.append(pred_cls.cpu().data)
 
-        nGT, masks, conf_masks, t_Ls, t_Ts, t_Rs, t_Bs, t_rs, tconf_scales, tcls_scales, tneighbors, pred_covered, gt_covered, recall, precision = build_oversegmented_targets_multiscale(
+        nGT, masks, conf_masks, t_Ls, t_Ts, t_Rs, t_Bs, t_rs, tconf_scales, tcls_scales, pred_covered, gt_covered, recall, precision = build_oversegmented_targets_multiscale(
             pred_boxes=pred_boxes_scales,
             pred_conf=pred_conf_scales,
             pred_cls=pred_cls_scales,
@@ -149,10 +160,18 @@ class MultiScaleOversegmentLoss (nn.Module):
             grid_sizesH=nHs,
             grid_sizesW=nWs,
             scale=self.scales,
-            calcIOUAndDist=self.use_special_loss,
             assign_mode = self.tile_assign_mode,
             close_anchor_rule = self.close_anchor_rule
         )
+        #pred_boxes_scales=[]
+        pred_conf_scales=[]
+        pred_cls_scales=[]
+        for level,prediction in enumerate(predictions):
+            pred_conf = prediction[..., 0]  # Conf 
+            pred_cls = prediction[..., 6:]  # Cls pred.
+            #pred_boxes_scales.append(pred_boxes.cpu().data)
+            pred_conf_scales.append(pred_conf)
+            pred_cls_scales.append(pred_cls)
 
         #nProposals = int((pred_conf > 0).sum().item())
         #recall = float(nCorrect / nGT) if nGT else 1
@@ -181,11 +200,11 @@ class MultiScaleOversegmentLoss (nn.Module):
 
         # Mask outputs to ignore non-existing objects
         loss_conf=0
-        for pred_conf,tconf,conf_mask_falsel in zip(pred_conf_scales,tconf_scales,conf_mask_false):
+        for pred_conf,tconf,conf_mask_falsel in zip(pred_conf_scales,tconf_scales,conf_masks_false):
             loss_conf += self.bce_loss(pred_conf[conf_mask_falsel], tconf[conf_mask_falsel])
         loss_conf *= self.bad_conf_weight
         if target is not None and nGT>0:
-            for pred_conf,tconf,conf_mask_truel in zip(pred_conf_scales,tconf_scales,conf_mask_true):
+            for pred_conf,tconf,conf_mask_truel in zip(pred_conf_scales,tconf_scales,conf_masks_true):
                 loss_conf += self.bce_loss(pred_conf[conf_mask_truel], tconf[conf_mask_truel])
 
             loss_L=0
@@ -194,14 +213,15 @@ class MultiScaleOversegmentLoss (nn.Module):
             loss_B=0
             loss_r=0
             for level in range(len(t_Ls)):
-                loss_L += self.mse_loss(x1[level][mask], t_Ls[level][mask])
-                loss_T += self.mse_loss(y1[level][mask], t_Ts[level][mask])
-                loss_R += self.mse_loss(x2[level][mask], t_Rs[level][mask])
-                loss_B += self.mse_loss(y2[level][mask], t_Bs[level][mask])
-                loss_r += self.mse_loss(r[level][mask], t_rs[level][mask])
+                mask = masks[level]
+                loss_L += self.mse_loss(x1_scales[level][mask], t_Ls[level][mask])
+                loss_T += self.mse_loss(y1_scales[level][mask], t_Ts[level][mask])
+                loss_R += self.mse_loss(x2_scales[level][mask], t_Rs[level][mask])
+                loss_B += self.mse_loss(y2_scales[level][mask], t_Bs[level][mask])
+                loss_r += self.mse_loss(r_scales[level][mask], t_rs[level][mask])
 
             loss_cls=0
-            for pred_cls,tcls in zip(pred_cls_scales,tcls_scales):
+            for pred_cls,tcls,mask in zip(pred_cls_scales,tcls_scales,masks):
                 if self.multiclass:
                     loss_cls += self.bce_loss(pred_cls[mask], tcls[mask].float())
                 else:
@@ -237,7 +257,7 @@ class MultiScaleOversegmentLoss (nn.Module):
 def build_oversegmented_targets_multiscale(
     pred_boxes, pred_conf, pred_cls, target, target_sizes, num_classes, grid_sizesH, grid_sizesW, scale, assign_mode='split', close_anchor_rule='unmask'
 ):
-    VISUAL_DEBUG=True
+    VISUAL_DEBUG=False
     VIZ_SIZE=24
     use_rotation_aligned_predictions=False
     nC = num_classes
@@ -302,7 +322,7 @@ def build_oversegmented_targets_multiscale(
                 #drawl[:,:,0]=90
                 draw.append(drawl)
 
-            draw_colors = [(255,0,0),(100,255,0),(255,100,0),(0,255,0),(200,200,0),(255,200,0),(200,255,0)]
+            draw_colors = [(255,0,0),(100,255,0),(0,0,255),(255,100,0),(0,255,0),(255,0,255),(200,200,0),(255,200,0),(200,255,0),(0,255,255)]
         on_pred_areaB=[]
         for level in range(len(nHs)):
             on_pred_areaB.append( torch.FloatTensor(pred_boxes[level].shape[1:4]).zero_() )
@@ -624,9 +644,9 @@ def build_oversegmented_targets_multiscale(
                         #        c_r = g_ty-s_r*g_tx
 
                     
-                    print('level:{}, r:{:.3f},  {}'.format(level,gr,list(zip(hit_tile_xs,hit_tile_ys))))
-                    print('s_t/b:{}, c_t:{}, c_b:{},  s_l/r:{}, c_l:{}, c_r:{}'.format(s_t,c_t,c_b,s_l,c_l,c_r))
-                    for cell_y,cell_x in zip(hit_tile_ys,hit_tile_xs): #kind of confusing, but here "tx ty" is for tile-i tile-j
+                    #print('level:{}, r:{:.3f},  {}'.format(level,gr,list(zip(hit_tile_xs,hit_tile_ys))))
+                    #print('s_t/b:{}, c_t:{}, c_b:{},  s_l/r:{}, c_l:{}, c_r:{}'.format(s_t,c_t,c_b,s_l,c_l,c_r))
+                    for cell_index,(cell_y,cell_x) in enumerate(zip(hit_tile_ys,hit_tile_xs)): #kind of confusing, but here "tx ty" is for tile-i tile-j
                         if isHorz:
                             tx = cell_x
                             ty = cell_y
@@ -755,11 +775,10 @@ def build_oversegmented_targets_multiscale(
                         #            rti_x if rti_x>tile_x else float('inf'))
 
                         #print(cell_x,cell_y)
-                        if cell_x==8 and cell_y==10:
-                            if isHorz:
-                                print('li_x,y:{},{}, ri_x,y:{},{}, ti_x,y:{},{}, bi_x,y:{},{}'.format(li_x,li_y,ri_x,ri_y,ti_x,ti_y,bi_x,bi_y))
-                            else:
-                                print('V li_x,y:{},{}, ri_x,y:{},{}, ti_x,y:{},{}, bi_x,y:{},{}'.format(li_y,li_x,ri_y,ri_x,ti_y,ti_x,bi_y,bi_x))
+                        #if isHorz:
+                        #    print('li_x,y:{},{}, ri_x,y:{},{}, ti_x,y:{},{}, bi_x,y:{},{}'.format(li_x,li_y,ri_x,ri_y,ti_x,ti_y,bi_x,bi_y))
+                        #else:
+                        #    print('V li_x,y:{},{}, ri_x,y:{},{}, ti_x,y:{},{}, bi_x,y:{},{}'.format(li_y,li_x,ri_y,ri_x,ti_y,ti_x,bi_y,bi_x))
 
                         if assign_mode=='split':
                             #Predict based on position of the text line
@@ -770,16 +789,19 @@ def build_oversegmented_targets_multiscale(
                             else:
                                 assigned = 1 if isHorz else 3
                                 not_assigned = 0 if isHorz else 2
-                            #print('left: {}>{}:{} and {}+1-{}={}'.format(li_x,tile_x,li_x>tile_x,tile_x,li_x,tile_x+1-li_x))
-                            #print('left:  {}'.format(tx+1-li_x))
-                            #print('right: {}'.format(ri_x-tx))
+
+                            #isLeftEnd = li_x<=tx+1 and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty
+                            #isRightEnd = tile_x>ri_x and ri_x>=tx and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty
+                            isLeftEnd = li_x>tile_x 
+                            isRightEnd = ri_x<tile_x 
 
                             #evaluate if this tile is just barely contributing. skip it if it is
-                            #print('{},{}:  l:{},{}   r:{},{}'.format(cell_x,cell_y,li_x>tile_x and li_x<=tx+1 and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty,math.sqrt((tile_x-gt_left_x)**2 + (tile_y-gt_left_y)**2),tile_x>ri_x and ri_x>=tx and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty,math.sqrt((tile_x-gt_right_x)**2 + (tile_y-gt_right_y)**2)))
+                            #print('{},{}:  l:{},{}   r:{},{}'.format(cell_x,cell_y,isLeftEnd,math.sqrt((tile_x-gt_left_x)**2 + (tile_y-gt_left_y)**2),isRightEnd,math.sqrt((tile_x-gt_right_x)**2 + (tile_y-gt_right_y)**2)))
+                            #print('tile_x:{}, li_x:{}, ri_x:{}, gt_left_x:{}, gt_right_x:{}'.format(tile_x,li_x,ri_x,gt_left_x,gt_right_x))
                             #print('tile_x:{}, gt_left_x:{}, tile_y:{}, gt_left_y:{}'.format(tile_x,gt_left_x,tile_y,gt_left_y))
                             if ( len(hit_tile_ys)>1 and
-                                (li_x>tile_x and li_x<=tx+1 and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty and math.sqrt((tile_x-gt_left_x)**2 + (tile_y-gt_left_y)**2)>END_BOUNDARY_THRESH) or
-                                (tile_x>ri_x and ri_x>=tx and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty and math.sqrt((tile_x-gt_right_x)**2 + (tile_y-gt_right_y)**2)>END_BOUNDARY_THRESH)):
+                                (isLeftEnd and math.sqrt((tile_x-gt_left_x)**2 + (tile_y-gt_left_y)**2)>END_BOUNDARY_THRESH) or
+                                (isRightEnd and math.sqrt((tile_x-gt_right_x)**2 + (tile_y-gt_right_y)**2)>END_BOUNDARY_THRESH)):
                                 continue
 
                             #if (( (li_x>tile_x and tx+1-li_x<END_UNMASK_THRESH) or 
@@ -787,14 +809,17 @@ def build_oversegmented_targets_multiscale(
                             #     len(hit_tile_ys)>1):
                             #    #it's a border tile, we'll just ignore it
                             #    continue
-                            if assignment[assigned,cell_y,cell_x]!=-1:
+                            t_have_other_tiles = len(hit_tile_ys)-cell_index + (assignment==t).sum()>1
+                            if conf_mask[b,assigned,cell_y,cell_x]==0 and t_have_other_tiles:
+                                continue
+                                #print('{},{} skipped as already unmasked'.format(cell_x,cell_y))
+                            elif assignment[assigned,cell_y,cell_x]!=-1:
                                 if only_unmask:
                                     continue
                                 #print('shared at {}, {}'.format(tx,ty))
                                 shared_mask[b,assigned,cell_y,cell_x]=1
                                 other_t = assignment[assigned,cell_y,cell_x]
                                 #Uh oh, this half has been assigned already.
-                                t_have_other_tiles = len(hit_tile_ys)>1
                                 other_t_have_other_tiles = (assignment==other_t).sum()>1
 
                                 #print('{},{}: me have other:{}  other have other:{}'.format(tx,ty,t_have_other_tiles,other_t_have_other_tiles))
@@ -845,7 +870,7 @@ def build_oversegmented_targets_multiscale(
                                         t_fraction_in_tile = fraction_in_tile(left_side,tx,ty,li_x,ri_x)#,ti_y,bi_y)
                                         other_t_fraction_in_tile = fraction_in_tile(other_left_side,tx,ty,other_li_x,other_ri_x)#,other_ti_y,other_bi_y)
 
-                                        print('{},{}: me frac:{}  other frac:{}'.format(tx,ty,t_fraction_in_tile,other_t_fraction_in_tile))
+                                        #print('{},{}: me frac:{}  other frac:{}'.format(tx,ty,t_fraction_in_tile,other_t_fraction_in_tile))
                                         if t_fraction_in_tile>0.4 and other_t_fraction_in_tile<0.33:
                                             #I get it!
                                             action='replace-other-t'
@@ -867,10 +892,16 @@ def build_oversegmented_targets_multiscale(
                                         action='unmask'
                                 else:
                                     #Uuuhhhhhh, we both need this tile to predict us. Throw one to the other half. Hopefully this rarely happens.
-                                    t_fraction_in_tile = fraction_in_tile(left_side,tx,ty,li_x,ri_x,ti_y,bi_y)
-                                    other_t_fraction_in_tile = fraction_in_tile(other_left_side,tx,ty,other_li_x,other_ri_x,other_ti_y,other_bi_y)
+                                    t_fraction_in_tile = fraction_in_tile(left_side,tx,ty,li_x,ri_x)
+                                    other_t_fraction_in_tile = fraction_in_tile(other_left_side,tx,ty,other_li_x,other_ri_x)
 
-                                    if t_fraction_in_tile>0.5 and other_t_fraction_in_tile<0.5:
+                                    if abs(tile_y-(ti_y+bi_y)/2)<UNMASK_CENT_DIST_THRESH and targ_conf[b,not_assigned,cell_y,cell_x]==0:
+                                        #if I'm close, I'll just jump to othr
+                                        tmp=assigned
+                                        assigned=not_assigned
+                                        not_assigned=tmp
+                                        action='replace-other-t'
+                                    elif t_fraction_in_tile>0.5 and other_t_fraction_in_tile<0.5:
                                         #I get it!
                                         action='replace-other-t'
                                     elif t_fraction_in_tile<0.5 and other_t_fraction_in_tile>0.5:
@@ -880,7 +911,7 @@ def build_oversegmented_targets_multiscale(
                                         #For now, just unmask
                                         action='unmask'
                                     print('WARNING: Tile is only tile for two BBs. Currently unmasking')
-
+                                #print(action)
                                 if action=='skip-t':
                                     continue
                                 elif action=='replace-other-t':
@@ -888,7 +919,8 @@ def build_oversegmented_targets_multiscale(
                                 elif action=='unmask':
                                     mask[b,assigned,cell_y,cell_x]=0
                                     conf_mask[b,assigned,cell_y,cell_x]=0
-                                    #assignment[assigned,cell_y,cell_x]=?
+                                    if assignment[assigned,cell_y,cell_x]!=-1:
+                                        assignment[assigned,cell_y,cell_x]=-2
 
                                     continue
                                 else:
@@ -912,9 +944,9 @@ def build_oversegmented_targets_multiscale(
                                     conf_mask[b,not_assigned,cell_y-1,cell_x]= 0
                                 elif assigned==1 and (ty+1)-((ti_y+bi_y)/2)<UNMASK_CENT_DIST_THRESH and cell_y<nH-1 and targ_conf[b,not_assigned,cell_y+1,cell_x]==0:
                                     conf_mask[b,not_assigned,cell_y+1,cell_x]= 0
-                                if assigned==2 and ((ti_y+bi_y)/2)-ty<UNMASK_CENT_DIST_THRESH and cell_x>nW-1 and targ_conf[b,not_assigned,cell_y,cell_x-1]==0:
+                                if assigned==2 and ((ti_y+bi_y)/2)-ty<UNMASK_CENT_DIST_THRESH and cell_x>0 and targ_conf[b,not_assigned,cell_y,cell_x-1]==0:
                                     conf_mask[b,not_assigned,cell_y,cell_x-1]= 0
-                                elif assigned==3 and (ty+1)-((ti_y+bi_y)/2)<UNMASK_CENT_DIST_THRESH and cell_x>0 and targ_conf[b,not_assigned,cell_y,cell_x+1]==0:
+                                elif assigned==3 and (ty+1)-((ti_y+bi_y)/2)<UNMASK_CENT_DIST_THRESH and cell_x<nW-1 and targ_conf[b,not_assigned,cell_y,cell_x+1]==0:
                                     conf_mask[b,not_assigned,cell_y,cell_x+1]= 0
                                 #elif assigned==2 and ((li_x+ri_x)/2)-tx<UNMASK_CENT_DIST_THRESH and tx>0 and targ_conf[b,not_assigned,cell_y,cell_x-1]==0:
                                 #    conf_mask[b,not_assigned,cell_y,cell_x-1]= 0
@@ -929,12 +961,16 @@ def build_oversegmented_targets_multiscale(
 
                         targ_cls[b, assigned, cell_y, cell_x] = target[b, t,13:]
                         targ_r[b, assigned, cell_y, cell_x] = math.asin(gr/np.pi)/np.pi
-        
+ 
+                        #assert(ti_y==ti_y and bi_y==bi_y and ri_x==ri_x and li_x ==li_x)
+                        #assert(not (math.isinf(ti_y) or math.isinf(bi_y) or math.isinf(ri_x) or math.isinf(li_x)))
                         if isHorz:
                             T=ti_y-tile_y #negative if above tile center (just add predcition to center)
+                            #T = max(min(T,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
                             assert(abs(T)<MAX_H_PRED)
                             targ_T[b, assigned, cell_y, cell_x] = inv_tanh(T/MAX_H_PRED)
                             B=bi_y-tile_y 
+                            #B = max(min(B,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
                             assert(abs(B)<MAX_H_PRED)
                             targ_B[b, assigned, cell_y, cell_x] = inv_tanh(B/MAX_H_PRED)
                             
@@ -946,9 +982,11 @@ def build_oversegmented_targets_multiscale(
                             targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_W_PRED)
                         else:
                             T=ti_y-tile_y #negative if above tile center (just add predcition to center)
+                            #T = max(min(T,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
                             assert(abs(T)<MAX_H_PRED)
                             targ_T[b, assigned, cell_y, cell_x] = inv_tanh(T/MAX_H_PRED)
                             B=bi_y-tile_y 
+                            #B = max(min(B,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
                             assert(abs(B)<MAX_H_PRED)
                             targ_B[b, assigned, cell_y, cell_x] = inv_tanh(B/MAX_H_PRED)
                             L=ri_x-tile_x #negative if left of tile center (just add predcition to center)
@@ -1071,6 +1109,10 @@ def build_oversegmented_targets_multiscale(
                                     drawR = int(d_tile_x+B*VIZ_SIZE)
                                     drawB = int(d_tile_y+L*VIZ_SIZE)
                                     drawT = int(d_tile_y+R*VIZ_SIZE)
+                                #assert(drawL>=-VIZ_SIZE and drawL<=draw_level.shape[1]+VIZ_SIZE)
+                                #assert(drawR>=-VIZ_SIZE and drawR<=draw_level.shape[1]+VIZ_SIZE)
+                                #assert(drawT>=-VIZ_SIZE and drawT<=draw_level.shape[0]+VIZ_SIZE)
+                                #assert(drawB>=-VIZ_SIZE and drawB<=draw_level.shape[0]+VIZ_SIZE)
                                 cv2.line(draw_level,(drawL,drawT),(drawR,drawT),draw_colors[colorIndex])
                                 cv2.line(draw_level,(drawR,drawT),(drawR,drawB),draw_colors[colorIndex])
                                 cv2.line(draw_level,(drawR,drawB),(drawL,drawB),draw_colors[colorIndex])
@@ -1092,7 +1134,7 @@ def build_oversegmented_targets_multiscale(
     for level in range(len(nHs)):
         nPred += (pred_conf[level][b]>0).sum()
 
-    assert(False and 'TODO verify this works! Have you crafted corner cases?')
+    #assert(False and 'TODO verify this works! Have you crafted corner cases?')
     return nGT, masks, conf_masks, t_Ls, t_Ts, t_Rs, t_Bs, t_rs, t_confs, t_clss, on_pred_area/nPred, covered_gt_area/nGT, recall/nGT, precision/nPred
 
 def bbox_coverage_axis_rot(box_gt, pred_boxes):

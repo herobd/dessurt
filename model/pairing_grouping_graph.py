@@ -20,7 +20,7 @@ from utils.yolo_tools import non_max_sup_iou, non_max_sup_dist
 from utils.util import decode_handwriting
 #from utils.string_utils import correctTrans
 import editdistance
-import math
+import math, os
 import random
 import json
 from collections import defaultdict
@@ -81,9 +81,18 @@ class PairingGroupingGraph(BaseModel):
         super(PairingGroupingGraph, self).__init__(config)
 
         if 'detector_checkpoint' in config:
-            checkpoint = torch.load(config['detector_checkpoint'], map_location=lambda storage, location: storage)
+            if os.path.exists(config['detector_checkpoint']):
+                checkpoint = torch.load(config['detector_checkpoint'], map_location=lambda storage, location: storage)
+            else:
+                checkpoint = None
+                print('Warning: unable to load {}'.format(config['detector_checkpoint']))
             detector_config = json.load(open(config['detector_config']))['model'] if 'detector_config' in config else checkpoint['config']['model']
-            if 'state_dict' in checkpoint:
+            if checkpoint is None:
+                self.detector = eval(checkpoint['config']['arch'])(detector_config)
+                for p in self.detector.parameters():
+                    import pdb;pdb.set_trace()
+                    p.something = float('nan') #ensure this gets changed
+            elif 'state_dict' in checkpoint:
                 self.detector = eval(checkpoint['config']['arch'])(detector_config)
                 self.detector.load_state_dict(checkpoint['state_dict'])
             else:
@@ -628,14 +637,16 @@ class PairingGroupingGraph(BaseModel):
                 
                 for gIter,graphnet in enumerate(self.graphnets[1:]):
 
-                    #print('before edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(edgeFeats.size(),useBBs.size(),nodeFeats.size(),len(edgeIndexes)))
+                    #print('!D! {} before edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(gIter,edgeFeats.size(),useBBs.size(),nodeFeats.size(),len(edgeIndexes)))
+                    #print('      graph num edges: {}'.format(graph[1].size()))
                     useBBs,graph,groups,edgeIndexes,bbTrans=self.mergeAndGroup(
                             self.mergeThresh[gIter],self.keepEdgeThresh[gIter],self.groupThresh[gIter],
                             edgeIndexes,edgeOuts,groups,nodeFeats,edgeFeats,uniFeats,useBBs,bbTrans,image)
                     #print('graph 1-:   bbs:{}, nodes:{}, edges:{}'.format(useBBs.size(0),len(groups),len(edgeIndexes)))
                     if len(edgeIndexes)==0:
                         break #we have no graph, so we can just end here
-                    #print('after  edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(graph[2].size(),useBBs.size(),graph[0].size(),len(edgeIndexes)))
+                    #print('!D! after  edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(graph[2].size(),useBBs.size(),graph[0].size(),len(edgeIndexes)))
+                    #print('      graph num edges: {}'.format(graph[1].size()))
                     nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = graphnet(graph)
                     #edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
                     useBBs = self.updateBBs(useBBs,groups,nodeOuts)
@@ -646,9 +657,11 @@ class PairingGroupingGraph(BaseModel):
                     allEdgeIndexes.append(edgeIndexes)
 
                 ##Final state of the graph
+                #print('!D! F before edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(edgeFeats.size(),useBBs.size(),nodeFeats.size(),len(edgeIndexes)))
                 useBBs,graph,groups,edgeIndexes,bbTrans=self.mergeAndGroup(
                         self.mergeThresh[-1],self.keepEdgeThresh[-1],self.groupThresh[-1],
                         edgeIndexes,edgeOuts.detach(),groups,nodeFeats.detach(),edgeFeats.detach(),uniFeats.detach() if uniFeats is not None else None,useBBs.detach(),bbTrans,image)
+                #print('!D! after  edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(graph[2].size(),useBBs.size(),graph[0].size(),len(edgeIndexes)))
                 final=(useBBs.cpu().detach(),groups,edgeIndexes,bbTrans)
 
 
@@ -889,8 +902,13 @@ class PairingGroupingGraph(BaseModel):
             #We'll adjust the edges to acount for merges as well as prune edges and get ready for grouping
             #temp = oldEdgeIndexes
             #oldEdgeIndexes = []
+
+            #Prune and adjust the edges (to groups)
             groupEdges=[]
             edgeFeats = []
+
+            D_numOldEdges=len(oldEdgeIndexes)
+            D_numOldAboveThresh=(relPreds>keepEdgeThresh).sum()
             for i,(n0,n1) in enumerate(oldEdgeIndexes):
                 if relPreds[i]>keepEdgeThresh:
                     if n0 in oldGroupToNew:
@@ -909,6 +927,8 @@ class PairingGroupingGraph(BaseModel):
                     #else:
                     #    It disapears
             oldEdgeIndexes=None
+
+            #print('!D! original edges:{}, above thresh:{}, kept edges:{}'.format(D_numOldEdges,D_numOldAboveThresh,len(edgeFeats)))
              
         else:
             bbs=oldBBs
@@ -980,6 +1000,7 @@ class PairingGroupingGraph(BaseModel):
 
             newNodeFeats[g0] += newNodeFeats[g1] #self.groupNodeFunc(newNodeFeats[g0],newNodeFeats[g1])
             del newNodeFeats[g1]
+        #print('!D! num edges after grouping {}'.format(len(groupEdges)))
     
         newEdgeFeats = [self.groupEdgeFunc(feats) for feats in edgeFeats]
 
