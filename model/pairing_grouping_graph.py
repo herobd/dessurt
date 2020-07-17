@@ -1700,12 +1700,12 @@ class PairingGroupingGraph(BaseModel):
         features[:,:,7:14]/=self.normalizeVert
         features[:,:,14:19]/=(self.normalizeVert+self.normalizeHorz)/2
         features = features.view(bbs.size(0)**2,26+numClassFeat*2)
-        time = timeit.default_timer()-tic
+        #t#time = timeit.default_timer()-tic
         #t#print('   candidates feats: {}'.format(time))
-        self.opt_cand.append(time)
-        if len(self.opt_cand)>30:
-            #t#print('   candidates feats running mean: {}'.format(np.mean(self.opt_cand)))
-            self.opt_cand = self.opt_cand[1:]
+        #t#self.opt_cand.append(time)
+        #t#if len(self.opt_cand)>30:
+        #t#    print('   candidates feats running mean: {}'.format(np.mean(self.opt_cand)))
+        #t#    self.opt_cand = self.opt_cand[1:]
         #t#tic=timeit.default_timer()
         rel_pred = self.rel_prop_nn(features.to(device))
         rel_pred2d = rel_pred.view(bbs.size(0),bbs.size(0))
