@@ -1,24 +1,30 @@
 {
-    "name": "FUNSDLines_pair_graphAtt2P2_smallContext_prop_readGTHand",
+    "name": "NAFG_pair_graphAtt2P2EvenLower_smallContext_prop",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
-    "super_computer":true,
+    "super_computer":false,
     "data_loader": {
-        "data_set_name": "FUNSDGraphPair",
-        "data_dir": "../data/FUNSD",
+        "data_set_name": "FormsGraphPair",
+        "special_dataset": null,
+        "data_dir": "../data/forms",
         "batch_size": 1,
         "shuffle": true,
         "num_workers": 2,
-        "split_to_lines": true,
         "crop_to_page":false,
         "color":false,
-        "rescale_range": [0.8,1.2],
+        "rescale_range": [0.4,0.65],
         "crop_params": {
-            "crop_size":[800,800],
-	    "pad":50
-        }
+            "crop_size":[652,1608],
+	    "pad":0
+        },
+        "no_blanks": true,
+        "swap_circle":true,
+        "no_graphics":true,
+        "cache_resized_images": true,
+        "rotation": false,
+        "only_opposite_pairs": true
 
 
     },
@@ -62,7 +68,7 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 900000,
+        "iterations": 625000,
         "save_dir": "saved/",
         "val_step": 5000,
         "save_step": 25000,
@@ -84,17 +90,13 @@
         "max_use_pred": 0.5,
         "use_all_bb_pred_for_rel_loss": true,
 
-        "freeze_param_names": ["text_rec"],
-
         "use_learning_schedule": true,
-        "adapt_lr": false,
-
-        "use_gt_trans": true,
-        "save_images_every": 50
+        "adapt_lr": false
     },
     "arch": "PairingGroupingGraph", 
     "model": {
-        "detector_checkpoint": "saved/FUNSDLines_detect_augRFh_staggerLighter_NN/checkpoint-latest.pth",
+        "xxdetector_checkpoint": "saved/Forms18_augRFh_staggerLight_NN/checkpoint-iteration200000.pth.tar",
+        "detector_checkpoint": "saved/Forms21_augRFh_staggerLighter_NN/checkpoint-iteration150000.pth.tar",
         "conf_thresh": 0.5,
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
@@ -125,7 +127,7 @@
         "fix_bi_dir": true,
         "graph_config": [{
             "arch": "MetaGraphNet",
-            "in_channels": 384,
+            "in_channels": 256,
             "node_out": 5,
             "edge_out": 4,
             "num_layers": 2,
@@ -135,11 +137,11 @@
             "encode_type": "attention",
 	    "merge_thresh": 0.7,
             "group_thresh": 0.9,
-            "keep_edge_thresh": 0.4
+            "keep_edge_thresh": 0.05
         },
         {
             "arch": "MetaGraphNet",
-            "in_channels": 384,
+            "in_channels": 256,
             "node_out": 5,
             "edge_out": 4,
             "num_layers": 2,
@@ -150,22 +152,6 @@
 	    "merge_thresh": 0.6,
             "group_thresh": 0.6,
             "keep_edge_thresh": 0.5
-        }],
-
-        "text_rec": {
-            "model": "SmallCRNN",
-            "num_char": 131,
-            "norm": "batch",
-            "use_softmax": true,
-            "batch_size": 8,
-            "pad_text_height": true,
-            "hw_with_style_file": "saved/allfontSmall_ocr_softmax/checkpoint-latest.pth",
-            "input_height": 24,
-            "char_set": "../data/english_char_set.json",
-            "embedding": "hand",
-            "num_feats": 128
-        }
-
-
+        }]
     }
 }
