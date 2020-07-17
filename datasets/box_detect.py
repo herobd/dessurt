@@ -236,6 +236,7 @@ class BoxDetectDataset(torch.utils.data.Dataset):
         with open(annotationPath) as annFile:
             annotations = json.loads(annFile.read())
 
+
         ##tic=timeit.default_timer()
         np_img = cv2.imread(imagePath, 1 if self.color else 0)#/255.0
         if np_img is None or np_img.shape[0]==0:
@@ -261,15 +262,19 @@ class BoxDetectDataset(torch.utils.data.Dataset):
                 partial_rescale = partial_rescale*(self.max_dim_thresh/max_dim)
                 print('{} exceed thresh: {}: {}, new {}: {}'.format(imageName,s,max_dim,rescaled*partial_rescale,partial_rescale*max(np_img.shape[0],np_img.shape[1])))
                 s = rescaled*partial_rescale
+        #print('! dataset transformed {}'.format(np_img.shape))
 
         
         
         ##tic=timeit.default_timer()
         #np_img = cv2.resize(np_img,(target_dim1, target_dim0), interpolation = cv2.INTER_CUBIC)
-        np_img = cv2.resize(np_img,(0,0),
-                fx=partial_rescale,
-                fy=partial_rescale,
-                interpolation = cv2.INTER_CUBIC)
+        if np_img is not None:
+            #print('! dataset not none...')
+            np_img = cv2.resize(np_img,(0,0),
+                    fx=partial_rescale,
+                    fy=partial_rescale,
+                    interpolation = cv2.INTER_CUBIC)
+        #print('! dataset resize')
         if not self.color:
             np_img=np_img[...,None] #add 'color' channel
         ##print('resize: {}  [{}, {}]'.format(timeit.default_timer()-tic,np_img.shape[0],np_img.shape[1]))

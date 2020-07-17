@@ -1,4 +1,4 @@
-
+import timeit
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
@@ -98,6 +98,7 @@ class MultiScaleOversegmentLoss (nn.Module):
         self.mse_loss = nn.MSELoss(reduction='mean')  # Num neighbor regression
 
     def forward(self,predictions, target, target_sizes, target_num_neighbors=None ):
+        #t#ticAll=timeit.default_timer()
 
         nA = self.num_anchors
         nHs=[]
@@ -112,6 +113,8 @@ class MultiScaleOversegmentLoss (nn.Module):
         y2_scales=[]
         r_scales=[]
         for level,prediction in enumerate(predictions):
+            #t#tic=timeit.default_timer()
+
             nB = prediction.size(0)
             nHs.append( prediction.size(2) )
             nH = prediction.size(2)
@@ -149,6 +152,8 @@ class MultiScaleOversegmentLoss (nn.Module):
             pred_boxes_scales.append(pred_boxes.cpu().data)
             pred_conf_scales.append(pred_conf.cpu().data)
             pred_cls_scales.append(pred_cls.cpu().data)
+
+        #t#print('time setup A: '+str(timeit.default_timer()-tic))
 
         nGT, masks, conf_masks, t_Ls, t_Ts, t_Rs, t_Bs, t_rs, tconf_scales, tcls_scales, pred_covered, gt_covered, recall, precision = build_oversegmented_targets_multiscale(
             pred_boxes=pred_boxes_scales,
@@ -228,9 +233,10 @@ class MultiScaleOversegmentLoss (nn.Module):
                     loss_cls +=  self.ce_loss(pred_cls[mask], torch.argmax(tcls[mask], 1)) 
 
             loss = loss_L + loss_T + loss_R + loss_B + loss_r + loss_conf + loss_cls
+            #t#print('time FULL: '+str(timeit.default_timer()-ticAll))
             return (
                 loss,
-                loss_L.item()+loss_T.item()+loss_R.item()+loss_B.item(),
+                (loss_L.item()+loss_T.item()+loss_R.item()+loss_B.item())/4,
                 loss_conf.item(),
                 loss_cls.item(),
                 loss_r.item(),
@@ -240,6 +246,7 @@ class MultiScaleOversegmentLoss (nn.Module):
                 pred_covered
             )
         else:
+            #t#print('time FULL: '+str(timeit.default_timer()-ticAll))
             return (
                 loss_conf,
                 0,
@@ -257,6 +264,8 @@ class MultiScaleOversegmentLoss (nn.Module):
 def build_oversegmented_targets_multiscale(
     pred_boxes, pred_conf, pred_cls, target, target_sizes, num_classes, grid_sizesH, grid_sizesW, scale, assign_mode='split', close_anchor_rule='unmask'
 ):
+    #t#tic=timeit.default_timer()
+
     VISUAL_DEBUG=False
     VIZ_SIZE=24
     use_rotation_aligned_predictions=False
@@ -274,6 +283,8 @@ def build_oversegmented_targets_multiscale(
     t_rs=[]
     t_confs=[]
     t_clss=[]
+
+    #opt: could retain these so they don't need reallocated
     for level,(nH, nW) in enumerate(zip(nHs,nWs)):
         nB = pred_boxes[level].size(0)
         mask = torch.zeros(nB, nA, nH, nW)
@@ -297,6 +308,7 @@ def build_oversegmented_targets_multiscale(
         t_Bs.append(targ_B)
         t_rs.append(targ_r)
 
+    #t#print('time setup B: '+str(timeit.default_timer()-tic))
 
     nGT = 0
     nPred = 0
@@ -307,6 +319,7 @@ def build_oversegmented_targets_multiscale(
     #nCorrect = 0
     #import pdb; pdb.set_trace()
     for b in range(nB):
+        #t#tic=timeit.default_timer()
         assignments=[]
         for nH,nW in zip(nHs,nWs):
             assignment = torch.IntTensor(nA, nH, nW).fill_(-1)
@@ -326,9 +339,21 @@ def build_oversegmented_targets_multiscale(
         on_pred_areaB=[]
         for level in range(len(nHs)):
             on_pred_areaB.append( torch.FloatTensor(pred_boxes[level].shape[1:4]).zero_() )
+
+        #t#times_setup_and_level_select=[]
+        #t#times_level_setup=[]
+        #t#times_tile_hit=[]
+        #t#times_lines=[]
+        #t#times_border=[]
+        #t#times_split_and_end=[]
+        #t#times_handle_multi=[]
+        #t#times_unmask_end=[]
+        #t#times_assign=[]
+        #t#times_overlaps=[]
         #For oversegmented, we need to identify all tiles (not just on) that correspon to gt
         #That brings up an interesting alternative: limit all predictions to their local tile (width). Proba not now...
         for t in range(target_sizes[b]): #range(target.shape[1]):
+            #t#tic2=timeit.default_timer()
             nGT += 1
 
 
@@ -366,7 +391,10 @@ def build_oversegmented_targets_multiscale(
                 if closest<len(nHs)-1 and abs(all_diff[closest+1]-all_diff[closest])<SCALE_DIFF_THRESH:
                     unmask_levels.append(closest+1)
 
+            #t#times_setup_and_level_select.append(timeit.default_timer()-tic2)
+
             for level in ([closest]+unmask_levels):
+                #t#tic2=timeit.default_timer()
                 only_unmask = level!=closest
 
                 conf_mask = conf_masks[level]
@@ -435,6 +463,8 @@ def build_oversegmented_targets_multiscale(
             
                 if gw==0 or gh==0:
                     continue
+                #t#times_level_setup.append(timeit.default_timer()-tic2)
+                #t#tic2=timeit.default_timer()
                 #What tiles are relevant for predicting this? Just the center line? Do any tiles get an ignore (unmask)?
                 #hit_tile_ys, hit_tile_xs = skimage.draw.line(int(g_ly),int(g_lx),int(g_ry),int(g_rx))
                 #hit_tile_ys, hit_tile_xs = (y,x) for y,x in zip(hit_tile_ys, hit_tile_xs) if y>=0 and y<
@@ -446,6 +476,8 @@ def build_oversegmented_targets_multiscale(
                 hit_tile_xs = np.clip(hit_tile_xs,0,nW-1)
                 #ignore_tile_ys = np.clip(ignore_tile_ys,0,nH-1)
                 #ignore_tile_xs = np.clip(ignore_tile_xs,0,nW-1)
+                #t#times_tile_hit.append(timeit.default_timer()-tic2)
+                #t#tic2=timeit.default_timer()
 
                 #all_tile_ys, all_tile_xs = skimage.draw.polygon(r,c,(nH,nW))
 
@@ -646,7 +678,9 @@ def build_oversegmented_targets_multiscale(
                     
                     #print('level:{}, r:{:.3f},  {}'.format(level,gr,list(zip(hit_tile_xs,hit_tile_ys))))
                     #print('s_t/b:{}, c_t:{}, c_b:{},  s_l/r:{}, c_l:{}, c_r:{}'.format(s_t,c_t,c_b,s_l,c_l,c_r))
+                    #t#times_lines.append(timeit.default_timer()-tic2)
                     for cell_index,(cell_y,cell_x) in enumerate(zip(hit_tile_ys,hit_tile_xs)): #kind of confusing, but here "tx ty" is for tile-i tile-j
+                        #t#tic2=timeit.default_timer()
                         if isHorz:
                             tx = cell_x
                             ty = cell_y
@@ -779,6 +813,8 @@ def build_oversegmented_targets_multiscale(
                         #    print('li_x,y:{},{}, ri_x,y:{},{}, ti_x,y:{},{}, bi_x,y:{},{}'.format(li_x,li_y,ri_x,ri_y,ti_x,ti_y,bi_x,bi_y))
                         #else:
                         #    print('V li_x,y:{},{}, ri_x,y:{},{}, ti_x,y:{},{}, bi_x,y:{},{}'.format(li_y,li_x,ri_y,ri_x,ti_y,ti_x,bi_y,bi_x))
+                        #t#times_border.append(timeit.default_timer()-tic2)
+                        #t#tic2=timeit.default_timer()
 
                         if assign_mode=='split':
                             #Predict based on position of the text line
@@ -803,6 +839,8 @@ def build_oversegmented_targets_multiscale(
                                 (isLeftEnd and math.sqrt((tile_x-gt_left_x)**2 + (tile_y-gt_left_y)**2)>END_BOUNDARY_THRESH) or
                                 (isRightEnd and math.sqrt((tile_x-gt_right_x)**2 + (tile_y-gt_right_y)**2)>END_BOUNDARY_THRESH)):
                                 continue
+                            #t#times_split_and_end.append(timeit.default_timer()-tic2)
+                            #t#tic2=timeit.default_timer()
 
                             #if (( (li_x>tile_x and tx+1-li_x<END_UNMASK_THRESH) or 
                             #      (tile_x>ri_x and ri_x-tx<END_UNMASK_THRESH) ) and
@@ -892,8 +930,26 @@ def build_oversegmented_targets_multiscale(
                                         action='unmask'
                                 else:
                                     #Uuuhhhhhh, we both need this tile to predict us. Throw one to the other half. Hopefully this rarely happens.
-                                    t_fraction_in_tile = fraction_in_tile(left_side,tx,ty,li_x,ri_x)
-                                    other_t_fraction_in_tile = fraction_in_tile(other_left_side,tx,ty,other_li_x,other_ri_x)
+                                    t_end = (li_x>=tx and li_x<=tx+1) or (ri_x>=tx and ri_x<=tx+1)
+                                    if isHorz:
+                                        other_x1 = target[b, other_t, 5] / scale[level][0]
+                                        other_x2 = target[b, other_t, 7] / scale[level][0]
+                                    else:
+                                        other_x1 = target[b, other_t, 6] / scale[level][1]
+                                        other_x2 = target[b, other_t, 8] / scale[level][1]
+                                    other_li_x = min(other_x1,other_x2)
+                                    other_ri_x = max(other_x1,other_x2)
+                                    other_t_end = (other_li_x>=tx and other_li_x<=tx+1) or (other_ri_x>=tx and other_ri_x<=tx+1)
+                                    if t_end:
+                                        left_side = li_x>=tx and li_x<=tx+1
+                                        t_fraction_in_tile = fraction_in_tile(left_side,tx,ty,li_x,ri_x)
+                                    else:
+                                        t_fraction_in_tile = 1/(ri_x-li_x)
+                                    if other_t_end:
+                                        other_left_side = other_li_x>=tx and other_li_x<=tx+1
+                                        other_t_fraction_in_tile = fraction_in_tile(other_left_side,tx,ty,other_li_x,other_ri_x)
+                                    else:
+                                        other_t_fraction_in_tile = 1/(other_ri_x-other_li_x)
 
                                     if abs(tile_y-(ti_y+bi_y)/2)<UNMASK_CENT_DIST_THRESH and targ_conf[b,not_assigned,cell_y,cell_x]==0:
                                         #if I'm close, I'll just jump to othr
@@ -913,6 +969,7 @@ def build_oversegmented_targets_multiscale(
                                     print('WARNING: Tile is only tile for two BBs. Currently unmasking')
                                 #print(action)
                                 if action=='skip-t':
+                                    #t#times_handle_multi.append(timeit.default_timer()-tic2)
                                     continue
                                 elif action=='replace-other-t':
                                     pass #I'll just overwrite it
@@ -922,11 +979,14 @@ def build_oversegmented_targets_multiscale(
                                     if assignment[assigned,cell_y,cell_x]!=-1:
                                         assignment[assigned,cell_y,cell_x]=-2
 
+                                    #t#times_handle_multi.append(timeit.default_timer()-tic2)
                                     continue
                                 else:
                                     raise NotImplementedError('Unknown sharing action: {}'.format(action))
 
                             #else:
+                            #t#times_handle_multi.append(timeit.default_timer()-tic2)
+                            #t#tic2=timeit.default_timer()
                             if only_unmask and targ_conf[b,assigned,cell_y,cell_x]==0:
                                 conf_mask[b,assigned,cell_y,cell_x]= 0
                             else:
@@ -957,6 +1017,8 @@ def build_oversegmented_targets_multiscale(
                         if only_unmask:
                             continue
                                     
+                        #t#times_unmask_end.append(timeit.default_timer()-tic2)
+                        #t#tic2=timeit.default_timer()
 
 
                         targ_cls[b, assigned, cell_y, cell_x] = target[b, t,13:]
@@ -1010,12 +1072,13 @@ def build_oversegmented_targets_multiscale(
                             #R=bi_y-tile_y 
                             #R = max(min(R,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
                             #targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_W_PRED)
+                        #t#times_assign.append(timeit.default_timer()-tic2)
 
 
 
 
+            #t#tic2=timeit.default_timer()
             # Calculate overlaps between ground truth and best matching prediction
-            drawn_level=level
             for level in range(len(nHs)):
                 class_selector = torch.logical_and(pred_cls[level][b].argmax(dim=3)==torch.argmax(target[b,t,13:]), pred_conf[level][b]>0)
                 pred_right_label_boxes = pred_boxes[level][b][class_selector] #this is already normalized to tile space
@@ -1031,6 +1094,7 @@ def build_oversegmented_targets_multiscale(
                 #import pdb; pdb.set_trace()
                 #if iou > 0.5 and pred_label == torch.argmax(target[b,t,13:]) and score > 0:
                 #    nCorrect += 1
+            #t#times_overlaps.append(timeit.default_timer()-tic2)
 
 
         if VISUAL_DEBUG:
@@ -1131,11 +1195,35 @@ def build_oversegmented_targets_multiscale(
             on_pred_area += on_pred_areaB[level].sum()
             #nPred += on_pred_areaB[level].size(0)
             precision += (on_pred_areaB[level]>0.5).sum()
+        #t#print('time all batch{}: {}'.format(b,timeit.default_timer()-tic))
+        #t#print('  times_setup_and_level_select: {}   std: {}, count{}'.format(np.mean(times_setup_and_level_select),np.std(times_setup_and_level_select),len(times_setup_and_level_select)))
+        #t#print('  times_level_setup: {}   std: {}, count{}'.format(np.mean(times_level_setup),np.std(times_level_setup),len(times_level_setup)))
+        #t#print('  times_tile_hit: {}   std: {}, count{}'.format(np.mean(times_tile_hit),np.std(times_tile_hit),len(times_tile_hit)))
+        #t#print('  times_lines: {}   std: {}, count{}'.format(np.mean(times_lines),np.std(times_lines),len(times_lines)))
+        #t#print('  times_border: {}   std: {}, count{}'.format(np.mean(times_border),np.std(times_border),len(times_border)))
+        #t#print('  times_split_and_end: {}   std: {}, count{}'.format(np.mean(times_split_and_end),np.std(times_split_and_end),len(times_split_and_end)))
+        #t#print('  times_handle_multi: {}   std: {}, count{}'.format(np.mean(times_handle_multi),np.std(times_handle_multi),len(times_handle_multi)))
+        #t#print('  times_unmask_end: {}   std: {}, count{}'.format(np.mean(times_unmask_end),np.std(times_unmask_end),len(times_unmask_end)))
+        #t#print('  times_assign: {}   std: {}, count{}'.format(np.mean(times_assign),np.std(times_assign),len(times_assign)))
+        #t#print('  times_overlaps: {}   std: {}, count{}'.format(np.mean(times_overlaps),np.std(times_overlaps),len(times_overlaps)))
     for level in range(len(nHs)):
         nPred += (pred_conf[level][b]>0).sum()
 
     #assert(False and 'TODO verify this works! Have you crafted corner cases?')
-    return nGT, masks, conf_masks, t_Ls, t_Ts, t_Rs, t_Bs, t_rs, t_confs, t_clss, on_pred_area/nPred, covered_gt_area/nGT, recall/nGT, precision/nPred
+    return (nGT, 
+            masks,
+            conf_masks, 
+            t_Ls, 
+            t_Ts, 
+            t_Rs, 
+            t_Bs, 
+            t_rs, 
+            t_confs, 
+            t_clss, 
+            on_pred_area/nPred if nPred>0 else 0, 
+            covered_gt_area/nGT if nGT>0 else 0, 
+            recall/nGT if nGT>0 else 1, 
+            precision/nPred if nPred>0 else 1 )
 
 def bbox_coverage_axis_rot(box_gt, pred_boxes):
     """
@@ -1146,7 +1234,7 @@ def bbox_coverage_axis_rot(box_gt, pred_boxes):
     agglom = None
     for i in range(pred_boxes.size(0)):
         pred_poly = Polygon([pred_boxes[i,0:2],(pred_boxes[i,2],pred_boxes[i,1]),pred_boxes[i,2:4],(pred_boxes[i,0],pred_boxes[i,3])])
-        if gt_poly.intersects(pred_poly):
+        if gt_poly.intersects(pred_poly) and pred_poly.area>0:
             inter = gt_poly.intersection(pred_poly)
             pred_areas.append(inter.area/pred_poly.area)
             if agglom is None:
