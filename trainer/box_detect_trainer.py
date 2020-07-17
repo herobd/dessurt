@@ -407,7 +407,7 @@ class BoxDetectTrainer(BaseTrainer):
         if 'box' in self.loss:
             this_loss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,targetBoxes_sizes,target_num_neighbors)
 
-            losses['boxLoss']=this_loss.item()
+            losses['boxLoss']=this_loss#.item()
             log['position_loss']=position_loss
             log['conf_loss']=conf_loss
             log['class_loss']=class_loss
@@ -416,7 +416,7 @@ class BoxDetectTrainer(BaseTrainer):
         elif 'overseg' in self.loss:
             this_loss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered = self.loss['overseg'](outputOffsets,targetBoxes,targetBoxes_sizes)
 
-            losses['oversegLoss']=this_loss.item()
+            losses['oversegLoss']=this_loss#.item()
             log['recall']=recall
             log['precision']=precision
             log['gt_covered']=gt_covered
