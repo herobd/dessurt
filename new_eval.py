@@ -380,7 +380,7 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                                 for name,lst in typeLists.items():
                                     val_metrics_list[typ][name]+=lst
                                     val_comb_metrics[typ]+=lst
-                            else:
+                            elif typeLists is not None:
                                 if type(typeLists) is float or type(typeLists) is int:
                                     typeLists = [typeLists]
                                 val_comb_metrics[typ]+=typeLists
