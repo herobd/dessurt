@@ -157,7 +157,7 @@ class GraphPairTrainer(BaseTrainer):
         #self.model.eval()
         #print("WARNING EVAL")
 
-        ##tic=timeit.default_timer()
+        #t#tic=timeit.default_timer()
         batch_idx = (iteration-1) % len(self.data_loader)
         try:
             thisInstance = self.data_loader_iter.next()
@@ -167,9 +167,9 @@ class GraphPairTrainer(BaseTrainer):
         if not self.model.detector.predNumNeighbors:
             thisInstance['num_neighbors']=None
         ##toc=timeit.default_timer()
-        ##print('data: '+str(toc-tic))
+        #t#print('time train data: {}'.format(timeit.default_timer()-tic))
         
-        ##tic=timeit.default_timer()
+        #t#tic=timeit.default_timer()
 
         self.optimizer.zero_grad()
 
@@ -178,7 +178,7 @@ class GraphPairTrainer(BaseTrainer):
         #loss = self.loss(output, target)
         index=0
         losses={}
-        ##tic=timeit.default_timer()
+        ###t#tic=timeit.default_timer()
 
         #if self.iteration % self.save_step == 0:
         #    targetPoints={}
@@ -195,6 +195,8 @@ class GraphPairTrainer(BaseTrainer):
             losses, run_log, out = self.newRun(thisInstance,useGT,threshIntur)
         else:
             losses, run_log, out = self.run(thisInstance,useGT,threshIntur)
+        #t#print('time train run: {}'.format(timeit.default_timer()-tic))
+        #t#tic=timeit.default_timer()
         loss=0
         for name in losses.keys():
             losses[name] *= self.lossWeights[name[:-4]]
@@ -205,6 +207,7 @@ class GraphPairTrainer(BaseTrainer):
 
         torch.nn.utils.clip_grad_value_(self.model.parameters(),1)
         self.optimizer.step()
+        #t#print('time train backprop: {}'.format(timeit.default_timer()-tic))
         meangrad=0
         count=0
         for m in self.model.parameters():
@@ -251,7 +254,7 @@ class GraphPairTrainer(BaseTrainer):
     #    #self.model.eval()
     #    #print("WARNING EVAL")
 
-    #    ##tic=timeit.default_timer()
+    #    ###t#tic=timeit.default_timer()
     #    batch_idx = (iteration-1) % len(self.data_loader)
     #    try:
     #        thisInstance = self.data_loader_iter.next()
@@ -263,7 +266,7 @@ class GraphPairTrainer(BaseTrainer):
     #    ##toc=timeit.default_timer()
     #    ##print('data: '+str(toc-tic))
     #    
-    #    ##tic=timeit.default_timer()
+    #    ###t#tic=timeit.default_timer()
 
     #    self.optimizer.zero_grad()
 
@@ -272,7 +275,7 @@ class GraphPairTrainer(BaseTrainer):
     #    #loss = self.loss(output, target)
     #    index=0
     #    losses={}
-    #    ##tic=timeit.default_timer()
+    #    ###t#tic=timeit.default_timer()
 
     #    #if self.iteration % self.save_step == 0:
     #    #    targetPoints={}
@@ -436,7 +439,7 @@ class GraphPairTrainer(BaseTrainer):
     #        
     #    ##toc=timeit.default_timer()
     #    ##print('loss: '+str(toc-tic))
-    #    ##tic=timeit.default_timer()
+    #    ###t#tic=timeit.default_timer()
     #    if not self.debug:
     #        predPairingShouldBeTrue= predPairingShouldBeFalse=outputBoxes=outputOffsets=relPred=image=targetBoxes=relLossFalse=None
     #    if relLoss is not None:
@@ -466,7 +469,7 @@ class GraphPairTrainer(BaseTrainer):
     #    ##toc=timeit.default_timer()
     #    ##print('bac: '+str(toc-tic))
 
-    #    #tic=timeit.default_timer()
+    #    ##t#tic=timeit.default_timer()
     #    metrics={}
     #    #index=0
     #    #for name, target in targetBoxes.items():
@@ -521,8 +524,8 @@ class GraphPairTrainer(BaseTrainer):
         ls=''
         for key,val in log.items():
             ls += key
-            if type(val) is float:
-                ls +=': {:.6f},\t'.format(val)
+            if type(val) is float or type(val) is np.float64:
+                ls +=': {:.3f},\t'.format(val)
             else:
                 ls +=': {},\t'.format(val)
         self.logger.info('Train '+ls)
@@ -1368,7 +1371,7 @@ class GraphPairTrainer(BaseTrainer):
                 propPredsNeg = None
 
             if len(adj)>0:
-                propRecall = truePropPred/len(adj)
+                propRecall = truePropPred/(len(adj)*2)
             else:
                 propRecall = 1
             #if falsePropPred>0:
@@ -1752,6 +1755,7 @@ class GraphPairTrainer(BaseTrainer):
                 gtTrans=None
         else:
             gtTrans = None
+        #t#tic=timeit.default_timer()
         if useGT and targetBoxes is not None:
             allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred, final = self.model(
                                     image,
@@ -1791,6 +1795,8 @@ class GraphPairTrainer(BaseTrainer):
                     hard_detect_limit=self.train_hard_detect_limit,
                     gtTrans = gtTrans)
             #gtPairing,predPairing = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred)
+        #t#print('time run model: {}'.format(timeit.default_timer()-tic))
+        #t#tic=timeit.default_timer()
         ### TODO code prealigned
         losses=defaultdict(lambda:0)
         log={}
@@ -1804,7 +1810,7 @@ class GraphPairTrainer(BaseTrainer):
                 #nodePred=allNodePred[graphIteration]
                 #edgeIndexes=allEdgeIndexes[graphIteration]
                 #predGroups=allPredGroups[graphIteration]
-
+                tic2=timeit.default_timer()
                 predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, bbFullHit, proposedInfoI, logIter, edgePredTypes = self.newAlignEdgePred(
                         targetBoxes,
                         adj,
@@ -1819,30 +1825,32 @@ class GraphPairTrainer(BaseTrainer):
                         self.thresh_group[graphIteration],
                         self.thresh_error[graphIteration]
                         )
+                #t#print('time run g{} newAlignEdgePred: {}'.format(graphIteration,timeit.default_timer()-tic2))
                 allEdgePredTypes.append(edgePredTypes)
                 if graphIteration==0:
                     proposedInfo=proposedInfoI
-                logIter['rel_pred_mean'] = edgePred[:,-1,0].mean().item()
-                logIter['rel_pred_std'] = edgePred[:,-1,0].std().item()
-                logIter['merge_pred_mean'] = edgePred[:,-1,1].mean().item()
-                logIter['merge_pred_std'] = edgePred[:,-1,1].std().item()
-                logIter['group_pred_mean'] = edgePred[:,-1,2].mean().item()
-                logIter['group_pred_std'] = edgePred[:,-1,2].std().item()
+                #logIter['rel_pred_mean'] = edgePred[:,-1,0].mean().item()
+                #logIter['rel_pred_std'] = edgePred[:,-1,0].std().item()
+                #logIter['merge_pred_mean'] = edgePred[:,-1,1].mean().item()
+                #logIter['merge_pred_std'] = edgePred[:,-1,1].std().item()
+                #logIter['group_pred_mean'] = edgePred[:,-1,2].mean().item()
+                #logIter['group_pred_std'] = edgePred[:,-1,2].std().item()
             
-                rel_preds_typ=defaultdict(list)
-                for i,typ in edgePredTypes[0].items():
-                    typ = typ[1]
-                    rel_preds_typ[typ].append(edgePred[i,-1,0].item())
-                for typ, scores in rel_preds_typ.items():
-                    logIter['rel_pred_{}_mean'.format(typ)] = np.mean(scores)
-                    logIter['rel_pred_{}_std'.format(typ)] = np.std(scores)
-                group_preds_typ=defaultdict(list)
-                for i,typ in edgePredTypes[2].items():
-                    typ = typ[1]
-                    group_preds_typ[typ].append(edgePred[i,-1,2].item())
-                for typ, scores in group_preds_typ.items():
-                    logIter['group_pred_{}_mean'.format(typ)] = np.mean(scores)
-                    logIter['group_pred_{}_std'.format(typ)] = np.std(scores)
+                #rel_preds_typ=defaultdict(list)
+                #for i,typ in edgePredTypes[0].items():
+                #    typ = typ[1]
+                #    rel_preds_typ[typ].append(edgePred[i,-1,0].item())
+                #for typ, scores in rel_preds_typ.items():
+                #    logIter['rel_pred_{}_mean'.format(typ)] = np.mean(scores)
+                #    logIter['rel_pred_{}_std'.format(typ)] = np.std(scores)
+                #group_preds_typ=defaultdict(list)
+                #for i,typ in edgePredTypes[2].items():
+                #    typ = typ[1]
+                #    group_preds_typ[typ].append(edgePred[i,-1,2].item())
+                #for typ, scores in group_preds_typ.items():
+                #    logIter['group_pred_{}_mean'.format(typ)] = np.mean(scores)
+                #    logIter['group_pred_{}_std'.format(typ)] = np.std(scores)
+
                 #create aligned GT
                 #this was wrong...
                     #first, remove unmatched predicitons that didn't overlap (weren't close) to any targets
@@ -1988,12 +1996,16 @@ class GraphPairTrainer(BaseTrainer):
                     else:
                         targSize =0 
                     #import pdb;pdb.set_trace()
+
+                    tic2=timeit.default_timer()
                     boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
                     losses['boxLoss'] += boxLoss
                     logIter['bb_position_loss'] = position_loss
                     logIter['bb_conf_loss'] = conf_loss
                     logIter['bb_class_loss'] = class_loss
                     logIter['bb_nn_loss'] = nn_loss
+
+                    #t#print('time run box_loss: {}'.format(timeit.default_timer()-tic2))
 
                     #boxLoss *= self.lossWeights['box']
                     #if relLoss is not None:
@@ -2068,6 +2080,8 @@ class GraphPairTrainer(BaseTrainer):
                     Fm[np.isnan(Fm)]=0
                     log['bb_Fm_avg_{}'.format(graphIteration)]=Fm.mean()
 
+        #t#print('time run all_losses: {}'.format(timeit.default_timer()-tic))
+        #t#tic=timeit.default_timer()
         #print final state of graph
         if self.save_images_every>0 and self.iteration%self.save_images_every==0:
             path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b','final'))#instance['name'],graphIteration))
