@@ -528,7 +528,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
             nn_acc_d /= predNN.size(0)
             toRet['{}: nn_acc_detector'.format(gIter)] = nn_acc_d
 
-        print('\n{} ap:{}\tnumMissedByDetect:{}\tmissedByHuer:{}'.format(imageName,rel_ap,numMissedByDetect,numMissedByHeur))
+        #print('\n{} ap:{}\tnumMissedByDetect:{}\tmissedByHuer:{}'.format(imageName,rel_ap,numMissedByDetect,numMissedByHeur))
 
     if outDir is not None:
         path = os.path.join(outDir,'{}_final.png'.format(imageName))
