@@ -250,6 +250,8 @@ class BoxDetectTrainer(BaseTrainer):
         total_val_metrics = np.zeros(len(self.metrics))
         total_gt_covered=0
         total_pred_covered=0
+        total_precision=0
+        total_recall=0
         losses={}
         mAP = 0
         mAP_count = 0
@@ -264,7 +266,7 @@ class BoxDetectTrainer(BaseTrainer):
         mPrecision = np.zeros(numClasses)
 
         with torch.no_grad():
-            losses = defaultdict(lambda: 0)
+            #losses = defaultdict(lambda: 0)
             for batch_idx, instance in enumerate(self.valid_data_loader):
                 if not self.model.predNumNeighbors:
                     del instance['num_neighbors']
@@ -272,61 +274,66 @@ class BoxDetectTrainer(BaseTrainer):
                 batchSize = data.size(0)
                 #print('data: {}'.format(data.size()))
                 #outputBoxes,outputOffsets, outputLines, outputOffsetsLines, outputPoints, outputPixels = self.model(data)
-                losses,run_log,got = self.run(instance,get=['bbs'])
+                losses,run_log,got = self.run(instance,get=['bbs'],val=True)
+                if 'overseg' in self.loss:
+                    total_gt_covered+=run_log['gt_covered']
+                    total_pred_covered+=run_log['pred_covered']
+                    total_precision+=run_log['precision']
+                    total_recall+=run_log['recall']
+
                 #loss = self.loss(output, target)
-                loss = 0
+                #loss = 0
                 index=0
                 
-                if 'box' in self.loss:
-                    #this_loss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,targetBoxes_sizes,target_num_neighbors)
-                    #loss+=this_loss*self.loss_weight['box']
-                    #total_position_loss+=position_loss
-                    #total_conf_loss+=conf_loss
-                    #tota_class_loss+=class_loss
-                    #tota_num_neighbor_loss+=nn_loss
-                    #losses['val_box_loss']+=this_loss.item()
-                    outputBoxes = got['bbs']
-                
-                    threshConf = max(self.thresh_conf*outputBoxes[:,:,0].max().item(),0.5)
-                    if self.model.rotation:
-                        outputBoxes = non_max_sup_dist(outputBoxes.cpu(),threshConf,1.2/self.thresh_intersect)
-                    else:
-                        outputBoxes = non_max_sup_iou(outputBoxes.cpu(),threshConf,self.thresh_intersect)
-                    if targetBoxes is not None:
-                        targetBoxes = targetBoxes.cpu()
+                #if 'box' in self.loss:
+                #    #this_loss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,targetBoxes_sizes,target_num_neighbors)
+                #    #loss+=this_loss*self.loss_weight['box']
+                #    #total_position_loss+=position_loss
+                #    #total_conf_loss+=conf_loss
+                #    #tota_class_loss+=class_loss
+                #    #tota_num_neighbor_loss+=nn_loss
+                #    #losses['val_box_loss']+=this_loss.item()
+                #    outputBoxes = got['bbs']
+                #
+                #    threshConf = max(self.thresh_conf*outputBoxes[:,:,0].max().item(),0.5)
+                #    if self.model.rotation:
+                #        outputBoxes = non_max_sup_dist(outputBoxes.cpu(),threshConf,1.2/self.thresh_intersect)
+                #    else:
+                #        outputBoxes = non_max_sup_iou(outputBoxes.cpu(),threshConf,self.thresh_intersect)
+                #    if targetBoxes is not None:
+                #        targetBoxes = targetBoxes.cpu()
 
-                    for b in range(batchSize):
-                        #if self.model.predNumNeighbors:
-                        #    useOutputBoxes=torch.cat((outputBoxes[b][:,0:6],outputBoxes[b][:,7:]),dim=1)
-                        #else:
-                        #    useOutputBoxes=outputBoxes[b]
-                        if targetBoxes is not None:
-                            target_for_b = targetBoxes[b,:targetBoxes_sizes[b],:]
-                        else:
-                            target_for_b = torch.empty(0)
+                #    for b in range(batchSize):
+                #        #if self.model.predNumNeighbors:
+                #        #    useOutputBoxes=torch.cat((outputBoxes[b][:,0:6],outputBoxes[b][:,7:]),dim=1)
+                #        #else:
+                #        #    useOutputBoxes=outputBoxes[b]
+                #        if targetBoxes is not None:
+                #            target_for_b = targetBoxes[b,:targetBoxes_sizes[b],:]
+                #        else:
+                #            target_for_b = torch.empty(0)
 
-                        if self.model.rotation:
-                            ap_5, prec_5, recall_5 =AP_dist(target_for_b,outputBoxes[b],0.9,numClasses,beforeCls=extraPreds)
-                        else:
-                            ap_5, prec_5, recall_5 =AP_iou(target_for_b,outputBoxes[b],0.5,numClasses,beforeCls=extraPreds)
-                        if ap_5 is not None:
-                            mAP+=ap_5
-                            mAP_count+=1
-                        mRecall += np.array(recall_5,dtype=np.float)#/len(outputBoxes)
-                        mPrecision += np.array(prec_5,dtype=np.float)#/len(outputBoxes)
-                elif 'overseg' in self.loss:
-                    this_loss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered = self.loss['overseg'](outputOffsets,targetBoxes,targetBoxes_sizes)
+                #        if self.model.rotation:
+                #            ap_5, prec_5, recall_5 =AP_dist(target_for_b,outputBoxes[b],0.9,numClasses,beforeCls=extraPreds)
+                #        else:
+                #            ap_5, prec_5, recall_5 =AP_iou(target_for_b,outputBoxes[b],0.5,numClasses,beforeCls=extraPreds)
+                #        if ap_5 is not None:
+                #            mAP+=ap_5
+                #            mAP_count+=1
+                #        mRecall += np.array(recall_5,dtype=np.float)#/len(outputBoxes)
+                #        mPrecision += np.array(prec_5,dtype=np.float)#/len(outputBoxes)
+                #elif 'overseg' in self.loss:
+                #    this_loss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered = self.loss['overseg'](outputOffsets,targetBoxes,targetBoxes_sizes)
 
-                    total_val_loss+=this_loss.item()
-                    mRecall+=recall
-                    mPrecision+=precision
-                    total_gt_covered+=gt_covered
-                    total_pred_covered+=pred_covered
-                    total_position_loss+=position_loss
-                    total_rot_loss+=rot_loss
-                    total_conf_loss+=conf_loss
-                    total_class_loss+=class_loss
-                index=0
+                #    total_val_loss+=this_loss.item()
+
+                #    total_gt_covered+=gt_covered
+                #    total_pred_covered+=pred_covered
+                #    total_position_loss+=position_loss
+                #    total_rot_loss+=rot_loss
+                #    total_conf_loss+=conf_loss
+                #    total_class_loss+=class_loss
+                #index=0
                 for name, target in targetLines.items():
                     #print('line')
                     predictions = outputOffsetsLines[index]
@@ -350,7 +357,9 @@ class BoxDetectTrainer(BaseTrainer):
                     loss+=this_loss*self.loss_weight['pixel']
                     losses['val_pixelLoss']+=this_loss.item()
 
-                total_val_loss += loss.item()
+                loss=0
+                for name,val in losses.items():
+                    total_val_loss += val.item()
                 loss=None
                 this_loss=None
                 data=None
@@ -361,35 +370,37 @@ class BoxDetectTrainer(BaseTrainer):
                 outputPoints=None
                 outputPixels=None
                 #total_val_metrics += self._eval_metrics(output, target)
-        for name in losses:
-            losses[name]/=len(self.valid_data_loader)
+        #for name in losses:
+        #    losses[name]/=len(self.valid_data_loader)
         if mAP_count==0:
             mAP_count=1
         ret=  {
             'val_loss': total_val_loss / len(self.valid_data_loader),
-            'val_metrics': (total_val_metrics / len(self.valid_data_loader)).tolist(),
-            'val_recall':(mRecall/(batchSize*len(self.valid_data_loader))).tolist(),
-            'val_precision':(mPrecision/(batchSize*len(self.valid_data_loader))).tolist(),
-            'val_Fm':(mPrecision.mean()+mRecall.mean())/(2*batchSize*len(self.valid_data_loader)),
-            'val_mAP':mAP/mAP_count,
-            'val_position_loss':total_position_loss / len(self.valid_data_loader),
-            'val_conf_loss':total_conf_loss / len(self.valid_data_loader),
-            'val_class_loss':tota_class_loss / len(self.valid_data_loader),
-            'val_num_neighbor_loss':tota_num_neighbor_loss / len(self.valid_data_loader),
+            #'val_metrics': (total_val_metrics / len(self.valid_data_loader)).tolist(),
+            #'val_recall':(mRecall/(batchSize*len(self.valid_data_loader))).tolist(),
+            #'val_precision':(mPrecision/(batchSize*len(self.valid_data_loader))).tolist(),
+            #'val_Fm':(mPrecision.mean()+mRecall.mean())/(2*batchSize*len(self.valid_data_loader)),
+            #'val_mAP':mAP/mAP_count,
+            #'val_position_loss':total_position_loss / len(self.valid_data_loader),
+            #'val_conf_loss':total_conf_loss / len(self.valid_data_loader),
+            #'val_class_loss':tota_class_loss / len(self.valid_data_loader),
+            #'val_num_neighbor_loss':tota_num_neighbor_loss / len(self.valid_data_loader),
             **losses
         }
         if 'overseg' in self.loss:
-            ret['total_gt_covered'] = total_gt_covered / len(self.valid_data_loader)
-            ret['total_pred_covered'] = total_pred_covered / len(self.valid_data_loader)
-            ret['total_rot_loss'] = total_rot_loss / len(self.valid_data_loader)
+            ret['val_gt_covered'] = total_gt_covered / len(self.valid_data_loader)
+            ret['val_pred_covered'] = total_pred_covered / len(self.valid_data_loader)
+            ret['val_precision'] = total_precision / len(self.valid_data_loader)
+            ret['val_recall'] = total_recall / len(self.valid_data_loader)
+            #ret['total_rot_loss'] = total_rot_loss / len(self.valid_data_loader)
         return ret
 
 
 
 
 
-    def run(self,instance,get=[]):
-        print('==forms: {}'.format(instance['imgName']))
+    def run(self,instance,get=[],val=False):
+        #print('==forms: {}'.format(instance['imgName']))
         index=0
         losses={}
         log={}
@@ -414,13 +425,16 @@ class BoxDetectTrainer(BaseTrainer):
             #print('boxLoss:{}'.format(this_loss))
 #display(instance)
         elif 'overseg' in self.loss:
-            this_loss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered = self.loss['overseg'](outputOffsets,targetBoxes,targetBoxes_sizes)
+            if val:
+                this_loss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered = self.loss['overseg'](outputOffsets,targetBoxes,targetBoxes_sizes,calc_stats=True)
 
+                log['recall']=recall
+                log['precision']=precision
+                log['gt_covered']=gt_covered
+                log['pred_covered']=pred_covered
+            else:
+                this_loss, position_loss, conf_loss, class_loss, rot_loss = self.loss['overseg'](outputOffsets,targetBoxes,targetBoxes_sizes)
             losses['oversegLoss']=this_loss#.item()
-            log['recall']=recall
-            log['precision']=precision
-            log['gt_covered']=gt_covered
-            log['pred_covered']=pred_covered
             log['position_loss']=position_loss
             log['conf_loss']=conf_loss
             log['class_loss']=class_loss
