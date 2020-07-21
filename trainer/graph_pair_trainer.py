@@ -157,7 +157,7 @@ class GraphPairTrainer(BaseTrainer):
         #self.model.eval()
         #print("WARNING EVAL")
 
-        tic=timeit.default_timer()
+        #t#tic=timeit.default_timer()
         batch_idx = (iteration-1) % len(self.data_loader)
         try:
             thisInstance = self.data_loader_iter.next()
@@ -167,9 +167,9 @@ class GraphPairTrainer(BaseTrainer):
         if not self.model.detector.predNumNeighbors:
             thisInstance['num_neighbors']=None
         ##toc=timeit.default_timer()
-        print('time train data: {}'.format(timeit.default_timer()-tic))
+        #t#print('time train data: {}'.format(timeit.default_timer()-tic))
         
-        tic=timeit.default_timer()
+        #t#tic=timeit.default_timer()
 
         self.optimizer.zero_grad()
 
@@ -178,7 +178,7 @@ class GraphPairTrainer(BaseTrainer):
         #loss = self.loss(output, target)
         index=0
         losses={}
-        ##tic=timeit.default_timer()
+        ###t#tic=timeit.default_timer()
 
         #if self.iteration % self.save_step == 0:
         #    targetPoints={}
@@ -195,8 +195,8 @@ class GraphPairTrainer(BaseTrainer):
             losses, run_log, out = self.newRun(thisInstance,useGT,threshIntur)
         else:
             losses, run_log, out = self.run(thisInstance,useGT,threshIntur)
-        print('time train run: {}'.format(timeit.default_timer()-tic))
-        tic=timeit.default_timer()
+        #t#print('time train run: {}'.format(timeit.default_timer()-tic))
+        #t#tic=timeit.default_timer()
         loss=0
         for name in losses.keys():
             losses[name] *= self.lossWeights[name[:-4]]
@@ -207,7 +207,7 @@ class GraphPairTrainer(BaseTrainer):
 
         torch.nn.utils.clip_grad_value_(self.model.parameters(),1)
         self.optimizer.step()
-        print('time train backprop: {}'.format(timeit.default_timer()-tic))
+        #t#print('time train backprop: {}'.format(timeit.default_timer()-tic))
         meangrad=0
         count=0
         for m in self.model.parameters():
@@ -254,7 +254,7 @@ class GraphPairTrainer(BaseTrainer):
     #    #self.model.eval()
     #    #print("WARNING EVAL")
 
-    #    ##tic=timeit.default_timer()
+    #    ###t#tic=timeit.default_timer()
     #    batch_idx = (iteration-1) % len(self.data_loader)
     #    try:
     #        thisInstance = self.data_loader_iter.next()
@@ -266,7 +266,7 @@ class GraphPairTrainer(BaseTrainer):
     #    ##toc=timeit.default_timer()
     #    ##print('data: '+str(toc-tic))
     #    
-    #    ##tic=timeit.default_timer()
+    #    ###t#tic=timeit.default_timer()
 
     #    self.optimizer.zero_grad()
 
@@ -275,7 +275,7 @@ class GraphPairTrainer(BaseTrainer):
     #    #loss = self.loss(output, target)
     #    index=0
     #    losses={}
-    #    ##tic=timeit.default_timer()
+    #    ###t#tic=timeit.default_timer()
 
     #    #if self.iteration % self.save_step == 0:
     #    #    targetPoints={}
@@ -439,7 +439,7 @@ class GraphPairTrainer(BaseTrainer):
     #        
     #    ##toc=timeit.default_timer()
     #    ##print('loss: '+str(toc-tic))
-    #    ##tic=timeit.default_timer()
+    #    ###t#tic=timeit.default_timer()
     #    if not self.debug:
     #        predPairingShouldBeTrue= predPairingShouldBeFalse=outputBoxes=outputOffsets=relPred=image=targetBoxes=relLossFalse=None
     #    if relLoss is not None:
@@ -469,7 +469,7 @@ class GraphPairTrainer(BaseTrainer):
     #    ##toc=timeit.default_timer()
     #    ##print('bac: '+str(toc-tic))
 
-    #    #tic=timeit.default_timer()
+    #    ##t#tic=timeit.default_timer()
     #    metrics={}
     #    #index=0
     #    #for name, target in targetBoxes.items():
@@ -1755,7 +1755,7 @@ class GraphPairTrainer(BaseTrainer):
                 gtTrans=None
         else:
             gtTrans = None
-        tic=timeit.default_timer()
+        #t#tic=timeit.default_timer()
         if useGT and targetBoxes is not None:
             allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred, final = self.model(
                                     image,
@@ -1795,8 +1795,8 @@ class GraphPairTrainer(BaseTrainer):
                     hard_detect_limit=self.train_hard_detect_limit,
                     gtTrans = gtTrans)
             #gtPairing,predPairing = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred)
-        print('time run model: {}'.format(timeit.default_timer()-tic))
-        tic=timeit.default_timer()
+        #t#print('time run model: {}'.format(timeit.default_timer()-tic))
+        #t#tic=timeit.default_timer()
         ### TODO code prealigned
         losses=defaultdict(lambda:0)
         log={}
@@ -1825,7 +1825,7 @@ class GraphPairTrainer(BaseTrainer):
                         self.thresh_group[graphIteration],
                         self.thresh_error[graphIteration]
                         )
-                print('time run g{} newAlignEdgePred: {}'.format(graphIteration,timeit.default_timer()-tic2))
+                #t#print('time run g{} newAlignEdgePred: {}'.format(graphIteration,timeit.default_timer()-tic2))
                 allEdgePredTypes.append(edgePredTypes)
                 if graphIteration==0:
                     proposedInfo=proposedInfoI
@@ -2005,7 +2005,7 @@ class GraphPairTrainer(BaseTrainer):
                     logIter['bb_class_loss'] = class_loss
                     logIter['bb_nn_loss'] = nn_loss
 
-                    print('time run box_loss: {}'.format(timeit.default_timer()-tic2))
+                    #t#print('time run box_loss: {}'.format(timeit.default_timer()-tic2))
 
                     #boxLoss *= self.lossWeights['box']
                     #if relLoss is not None:
@@ -2080,8 +2080,8 @@ class GraphPairTrainer(BaseTrainer):
                     Fm[np.isnan(Fm)]=0
                     log['bb_Fm_avg_{}'.format(graphIteration)]=Fm.mean()
 
-        print('time run all_losses: {}'.format(timeit.default_timer()-tic))
-        tic=timeit.default_timer()
+        #t#print('time run all_losses: {}'.format(timeit.default_timer()-tic))
+        #t#tic=timeit.default_timer()
         #print final state of graph
         if self.save_images_every>0 and self.iteration%self.save_images_every==0:
             path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b','final'))#instance['name'],graphIteration))
