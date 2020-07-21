@@ -9,6 +9,7 @@ from matplotlib import pyplot as plt
 from model.overseg_box_detector import MAX_H_PRED, MAX_W_PRED, NUM_ANCHORS
 from utils.util import plotRect, xyrhwToCorners, inv_tanh
 from shapely.geometry import Polygon
+import shapely
 import skimage.draw
 import cv2
 
@@ -97,8 +98,10 @@ class MultiScaleOversegmentLoss (nn.Module):
         self.ce_loss = nn.CrossEntropyLoss(reduction='mean')  # Class loss
         self.mse_loss = nn.MSELoss(reduction='mean')  # Num neighbor regression
 
-    def forward(self,predictions, target, target_sizes, target_num_neighbors=None ):
-        #t#ticAll=timeit.default_timer()
+        self.OPT_FULL=[]
+
+    def forward(self,predictions, target, target_sizes, calc_stats=False):
+        ticAll=timeit.default_timer()
 
         nA = self.num_anchors
         nHs=[]
@@ -166,7 +169,8 @@ class MultiScaleOversegmentLoss (nn.Module):
             grid_sizesW=nWs,
             scale=self.scales,
             assign_mode = self.tile_assign_mode,
-            close_anchor_rule = self.close_anchor_rule
+            close_anchor_rule = self.close_anchor_rule,
+            calc_stats=calc_stats
         )
         #pred_boxes_scales=[]
         pred_conf_scales=[]
@@ -233,36 +237,61 @@ class MultiScaleOversegmentLoss (nn.Module):
                     loss_cls +=  self.ce_loss(pred_cls[mask], torch.argmax(tcls[mask], 1)) 
 
             loss = loss_L + loss_T + loss_R + loss_B + loss_r + loss_conf + loss_cls
-            #t#print('time FULL: '+str(timeit.default_timer()-ticAll))
-            return (
-                loss,
-                (loss_L.item()+loss_T.item()+loss_R.item()+loss_B.item())/4,
-                loss_conf.item(),
-                loss_cls.item(),
-                loss_r.item(),
-                recall,
-                precision,
-                gt_covered,
-                pred_covered
-            )
+
+            #t#time = timeit.default_timer()-ticAll
+            #t#print('time FULL: '+str(time))
+            #t#self.OPT_FULL.append(time)
+            #t#if len(self.OPT_FULL)>20:
+            #t#    print('time mean FULL: {}'.format(np.mean(self.OPT_FULL))) #old 4.7, overlap removed down to 1
+            #t#if len(self.OPT_FULL)>100:
+            #t#    self.OPT_FULL=self.OPT_FULL[1:]
+            if calc_stats:
+                return (
+                    loss,
+                    (loss_L.item()+loss_T.item()+loss_R.item()+loss_B.item())/4,
+                    loss_conf.item(),
+                    loss_cls.item(),
+                    loss_r.item(),
+                    recall,
+                    precision,
+                    gt_covered,
+                    pred_covered
+                )
+            else:
+                return (
+                    loss,
+                    (loss_L.item()+loss_T.item()+loss_R.item()+loss_B.item())/4,
+                    loss_conf.item(),
+                    loss_cls.item(),
+                    loss_r.item()
+                    )
         else:
             #t#print('time FULL: '+str(timeit.default_timer()-ticAll))
-            return (
-                loss_conf,
-                0,
-                loss_conf.item(),
-                0,
-                0,
-                recall,
-                precision,
-                gt_covered,
-                pred_covered
-            )
+            if calc_stats:
+                return (
+                    loss_conf,
+                    0,
+                    loss_conf.item(),
+                    0,
+                    0,
+                    recall,
+                    precision,
+                    gt_covered,
+                    pred_covered
+                )
+            else:
+                return (
+                    loss_conf,
+                    0,
+                    loss_conf.item(),
+                    0,
+                    0
+                    )
 
 #This isn't totally anchor free, the model predicts horizontal and verticle text seperately.
 #The model predicts the centerpoint offset (normalized to tile size), rotation and height (2X tile size) and width (1x tile size)
 def build_oversegmented_targets_multiscale(
-    pred_boxes, pred_conf, pred_cls, target, target_sizes, num_classes, grid_sizesH, grid_sizesW, scale, assign_mode='split', close_anchor_rule='unmask'
+    pred_boxes, pred_conf, pred_cls, target, target_sizes, num_classes, grid_sizesH, grid_sizesW, scale, assign_mode='split', close_anchor_rule='unmask', calc_stats=False
 ):
     #t#tic=timeit.default_timer()
 
@@ -1079,22 +1108,26 @@ def build_oversegmented_targets_multiscale(
 
             #t#tic2=timeit.default_timer()
             # Calculate overlaps between ground truth and best matching prediction
-            for level in range(len(nHs)):
-                class_selector = torch.logical_and(pred_cls[level][b].argmax(dim=3)==torch.argmax(target[b,t,13:]), pred_conf[level][b]>0)
-                pred_right_label_boxes = pred_boxes[level][b][class_selector] #this is already normalized to tile space
-                #convert?
-             
-                gt_area_covered, pred_area_covered = bbox_coverage_axis_rot((gx,gy,gr,gh,gw), pred_right_label_boxes)
-                covered_gt_area += gt_area_covered/gt_area
-                if gt_area_covered/gt_area>0.5:
-                    recall+=1
-                on_pred_areaB[level][class_selector] = torch.max(on_pred_areaB[level][class_selector],torch.FloatTensor(pred_area_covered))
-                #pred_label = torch.argmax(pred_cls[b, best_n, gj, gi])
-                #score = pred_conf[b, best_n, gj, gi]
-                #import pdb; pdb.set_trace()
-                #if iou > 0.5 and pred_label == torch.argmax(target[b,t,13:]) and score > 0:
-                #    nCorrect += 1
-            #t#times_overlaps.append(timeit.default_timer()-tic2)
+            if calc_stats:
+                for level in range(len(nHs)):
+                    class_selector = torch.logical_and(pred_cls[level][b].argmax(dim=3)==torch.argmax(target[b,t,13:]), pred_conf[level][b]>0)
+                    pred_right_label_boxes = pred_boxes[level][b][class_selector] #this is already normalized to tile space
+                    #convert?
+                 
+                    gt_area_covered, pred_area_covered = bbox_coverage_axis_rot((gx,gy,gr,gh,gw), pred_right_label_boxes)
+                    if gt_area_covered is not None:
+                        covered_gt_area += gt_area_covered/gt_area
+                        if gt_area_covered/gt_area>0.5:
+                            recall+=1
+                        on_pred_areaB[level][class_selector] = torch.max(on_pred_areaB[level][class_selector],torch.FloatTensor(pred_area_covered))
+                    else:
+                        nGT-=1
+                    #pred_label = torch.argmax(pred_cls[b, best_n, gj, gi])
+                    #score = pred_conf[b, best_n, gj, gi]
+                    #import pdb; pdb.set_trace()
+                    #if iou > 0.5 and pred_label == torch.argmax(target[b,t,13:]) and score > 0:
+                    #    nCorrect += 1
+                #t#times_overlaps.append(timeit.default_timer()-tic2)
 
 
         if VISUAL_DEBUG:
@@ -1245,7 +1278,11 @@ def bbox_coverage_axis_rot(box_gt, pred_boxes):
             pred_areas.append(0)
 
     if agglom is not None:
-        return agglom.intersection(gt_poly).area/gt_poly.area, pred_areas
+        try:
+            return agglom.intersection(gt_poly).area/gt_poly.area, pred_areas
+        except shapely.errors.TopologicalError:
+            print("Unknown shapely error, agglom points {}".format(len(agglom.exterior.coords)))
+            return None, None
     else:
         return 0, pred_areas
 
