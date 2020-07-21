@@ -642,7 +642,7 @@ class PairingGroupingGraph(BaseModel):
                 for gIter,graphnet in enumerate(self.graphnets[1:]):
 
                     #print('!D! {} before edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(gIter,edgeFeats.size(),useBBs.size(),nodeFeats.size(),len(edgeIndexes)))
-                    #print('      graph num edges: {}'.format(graph[1].size()))
+                    ##t#print('      graph num edges: {}'.format(graph[1].size()))
                     useBBs,graph,groups,edgeIndexes,bbTrans=self.mergeAndGroup(
                             self.mergeThresh[gIter],self.keepEdgeThresh[gIter],self.groupThresh[gIter],
                             edgeIndexes,edgeOuts,groups,nodeFeats,edgeFeats,uniFeats,useBBs,bbTrans,image)
@@ -650,7 +650,7 @@ class PairingGroupingGraph(BaseModel):
                     if len(edgeIndexes)==0:
                         break #we have no graph, so we can just end here
                     #print('!D! after  edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(graph[2].size(),useBBs.size(),graph[0].size(),len(edgeIndexes)))
-                    #print('      graph num edges: {}'.format(graph[1].size()))
+                    ##t#print('      graph num edges: {}'.format(graph[1].size()))
                     nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = graphnet(graph)
                     #edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
                     useBBs = self.updateBBs(useBBs,groups,nodeOuts)
@@ -1606,7 +1606,8 @@ class PairingGroupingGraph(BaseModel):
                 numOfNeighbors=numOfNeighbors.to(relFeats.device)
 
             #rel_features = (candidates,relFeats)
-            #adjacencyMatrix = Non
+            #adjacencyMatrix = None
+
             #t#time = timeit.default_timer()-tic
             #t#print('   create graph: {}'.format(time)) #old 0.37
             #t#self.opt_createG.append(time)
