@@ -1194,12 +1194,12 @@ class PairingGroupingGraph(BaseModel):
             bbs_index2 = bbs[[c[1] for c in candidates]]
             tlX_index1 = tlX[[c[0] for c in candidates]]
             tlX_index2 = tlX[[c[1] for c in candidates]]
-            trX_index1 = tlX[[c[0] for c in candidates]]
-            trX_index2 = tlX[[c[1] for c in candidates]]
-            blX_index1 = tlX[[c[0] for c in candidates]]
-            blX_index2 = tlX[[c[1] for c in candidates]]
-            brX_index1 = tlX[[c[0] for c in candidates]]
-            brX_index2 = tlX[[c[1] for c in candidates]]
+            trX_index1 = trX[[c[0] for c in candidates]]
+            trX_index2 = trX[[c[1] for c in candidates]]
+            blX_index1 = blX[[c[0] for c in candidates]]
+            blX_index2 = blX[[c[1] for c in candidates]]
+            brX_index1 = brX[[c[0] for c in candidates]]
+            brX_index2 = brX[[c[1] for c in candidates]]
             tlY_index1 = tlY[[c[0] for c in candidates]]
             tlY_index2 = tlY[[c[1] for c in candidates]]
             trY_index1 = trY[[c[0] for c in candidates]]
@@ -1226,9 +1226,9 @@ class PairingGroupingGraph(BaseModel):
                                         blY_index1,blY_index2,
                                         brY_index1,brY_index2],dim=0), dim=0 )
             max_X = torch.min(max_X+self.expandedRelContext,torch.FloatTensor([imageWidth-1]))
-            min_X = torch.max(max_X-self.expandedRelContext,torch.FloatTensor([0]))
+            min_X = torch.max(min_X-self.expandedRelContext,torch.FloatTensor([0]))
             max_Y = torch.min(max_Y+self.expandedRelContext,torch.FloatTensor([imageHeight-1]))
-            min_Y = torch.max(max_Y-self.expandedRelContext,torch.FloatTensor([0]))
+            min_Y = torch.max(min_Y-self.expandedRelContext,torch.FloatTensor([0]))
             rois[:,1]=min_X
             rois[:,2]=min_Y
             rois[:,3]=max_X
@@ -1242,7 +1242,7 @@ class PairingGroupingGraph(BaseModel):
                 maxY = max(tlY[index1],tlY[index2],trY[index1],trY[index2],blY[index1],blY[index2],brY[index1],brY[index2])
                 minY = min(tlY[index1],tlY[index2],trY[index1],trY[index2],blY[index1],blY[index2],brY[index1],brY[index2])
                 if self.expandedRelContext is not None:
-                    maxX = min(maxX.item()+self.expandedRelContext,torch.FloatTensor([imageWidth-1]))
+                    maxX = min(maxX.item()+self.expandedRelContext,imageWidth-1)
                     minX = max(minX.item()-self.expandedRelContext,0)
                     maxY = min(maxY.item()+self.expandedRelContext,torch.FloatTensor([imageHeight-1]))
                     minY = max(minY.item()-self.expandedRelContext,0)
@@ -1372,44 +1372,44 @@ class PairingGroupingGraph(BaseModel):
             else:
                 ixs=[4,6,2,8,8+self.numBBTypes,5,7,3,8+self.numBBTypes,8+self.numBBTypes+self.numBBTypes,0,1]
             
-            shapeFeats[:,ixs[0]] = 2*bbs_index1[3]/self.normalizeVert #bb preds half height/width
-            shapeFeats[:,ixs[1]] = 2*bbs_index1[4]/self.normalizeHorz
-            shapeFeats[:,ixs[2]] = bbs_index1[2]/math.pi
-            shapeFeats[:,ixs[3]:ixs[4]] = bbs_index1[extraPred+5:]# torch.sigmoid(bbs_index1[extraPred+5:])
+            shapeFeats[:,ixs[0]] = 2*bbs_index1[:,3]/self.normalizeVert #bb preds half height/width
+            shapeFeats[:,ixs[1]] = 2*bbs_index1[:,4]/self.normalizeHorz
+            shapeFeats[:,ixs[2]] = bbs_index1[:,2]/math.pi
+            shapeFeats[:,ixs[3]:ixs[4]] = bbs_index1[:,extraPred+5:]# torch.sigmoid(bbs_index1[:,extraPred+5:])
 
-            shapeFeats[:,ixs[5]] = 2*bbs_index2[3]/self.normalizeVert
-            shapeFeats[:,ixs[6]] = 2*bbs_index2[4]/self.normalizeHorz
-            shapeFeats[:,ixs[7]] = bbs_index2[2]/math.pi
-            shapeFeats[:,ixs[8]:ixs[9]] = bbs_index2[extraPred+5:]#torch.sigmoid(bbs_index2[extraPred+5:])
+            shapeFeats[:,ixs[5]] = 2*bbs_index2[:,3]/self.normalizeVert
+            shapeFeats[:,ixs[6]] = 2*bbs_index2[:,4]/self.normalizeHorz
+            shapeFeats[:,ixs[7]] = bbs_index2[:,2]/math.pi
+            shapeFeats[:,ixs[8]:ixs[9]] = bbs_index2[:,extraPred+5:]#torch.sigmoid(bbs_index2[:,extraPred+5:])
 
-            shapeFeats[:,ixs[10]] = (bbs_index1[0]-bbs_index2[0])/self.normalizeHorz
-            shapeFeats[:,ixs[11]] = (bbs_index1[1]-bbs_index2[1])/self.normalizeVert
+            shapeFeats[:,ixs[10]] = (bbs_index1[:,0]-bbs_index2[:,0])/self.normalizeHorz
+            shapeFeats[:,ixs[11]] = (bbs_index1[:,1]-bbs_index2[:,1])/self.normalizeVert
             if self.useShapeFeats!='old':
                 startCorners = 8+self.numBBTypes+self.numBBTypes
-                shapeFeats[:,startCorners +0] = math.sqrt( (tlX_index1-tlX_index2)**2 + (tlY_index1-tlY_index2)**2 )/self.normalizeDist
-                shapeFeats[:,startCorners +1] = math.sqrt( (trX_index1-trX_index2)**2 + (trY_index1-trY_index2)**2 )/self.normalizeDist
-                shapeFeats[:,startCorners +3] = math.sqrt( (brX_index1-brX_index2)**2 + (brY_index1-brY_index2)**2 )/self.normalizeDist
-                shapeFeats[:,startCorners +2] = math.sqrt( (blX_index1-blX_index2)**2 + (blY_index1-blY_index2)**2 )/self.normalizeDist
+                shapeFeats[:,startCorners +0] = torch.sqrt( (tlX_index1-tlX_index2)**2 + (tlY_index1-tlY_index2)**2 )/self.normalizeDist
+                shapeFeats[:,startCorners +1] = torch.sqrt( (trX_index1-trX_index2)**2 + (trY_index1-trY_index2)**2 )/self.normalizeDist
+                shapeFeats[:,startCorners +3] = torch.sqrt( (brX_index1-brX_index2)**2 + (brY_index1-brY_index2)**2 )/self.normalizeDist
+                shapeFeats[:,startCorners +2] = torch.sqrt( (blX_index1-blX_index2)**2 + (blY_index1-blY_index2)**2 )/self.normalizeDist
                 startNN =startCorners+4
             else:
                 startNN = 8+self.numBBTypes+self.numBBTypes
             if self.detector.predNumNeighbors:
-                shapeFeats[:,startNN +0] = bbs_index1[5]
-                shapeFeats[:,startNN +1] = bbs_index2[5]
+                shapeFeats[:,startNN +0] = bbs_index1[:,5]
+                shapeFeats[:,startNN +1] = bbs_index2[:,5]
                 startPos=startNN+2
             else:
                 startPos=startNN
             if self.usePositionFeature:
                 if self.usePositionFeature=='absolute':
-                    shapeFeats[:,startPos +0] = (bbs_index1[0]-imageWidth/2)/(5*self.normalizeHorz)
-                    shapeFeats[:,startPos +1] = (bbs_index1[1]-imageHeight/2)/(10*self.normalizeVert)
-                    shapeFeats[:,startPos +2] = (bbs_index2[0]-imageWidth/2)/(5*self.normalizeHorz)
-                    shapeFeats[:,startPos +3] = (bbs_index2[1]-imageHeight/2)/(10*self.normalizeVert)
+                    shapeFeats[:,startPos +0] = (bbs_index1[:,0]-imageWidth/2)/(5*self.normalizeHorz)
+                    shapeFeats[:,startPos +1] = (bbs_index1[:,1]-imageHeight/2)/(10*self.normalizeVert)
+                    shapeFeats[:,startPos +2] = (bbs_index2[:,0]-imageWidth/2)/(5*self.normalizeHorz)
+                    shapeFeats[:,startPos +3] = (bbs_index2[:,1]-imageHeight/2)/(10*self.normalizeVert)
                 else:
-                    shapeFeats[:,startPos +0] = (bbs_index1[0]-imageWidth/2)/(imageWidth/2)
-                    shapeFeats[:,startPos +1] = (bbs_index1[1]-imageHeight/2)/(imageHeight/2)
-                    shapeFeats[:,startPos +2] = (bbs_index2[0]-imageWidth/2)/(imageWidth/2)
-                    shapeFeats[:,startPos +3] = (bbs_index2[1]-imageHeight/2)/(imageHeight/2)
+                    shapeFeats[:,startPos +0] = (bbs_index1[:,0]-imageWidth/2)/(imageWidth/2)
+                    shapeFeats[:,startPos +1] = (bbs_index1[:,1]-imageHeight/2)/(imageHeight/2)
+                    shapeFeats[:,startPos +2] = (bbs_index2[:,0]-imageWidth/2)/(imageWidth/2)
+                    shapeFeats[:,startPos +3] = (bbs_index2[:,1]-imageHeight/2)/(imageHeight/2)
         ##
         ##old
         for i,(index1, index2) in enumerate(candidates):
@@ -1566,10 +1566,10 @@ class PairingGroupingGraph(BaseModel):
             min_X,_ = torch.min(torch.stack([tlX,trX,blX,brX],dim=0),dim=0) 
             max_X,_ = torch.max(torch.stack([tlX,trX,blX,brX],dim=0),dim=0) 
             if self.expandedBBContext is not None:
-                maxX = torch.min(max_X+self.expandedBBContext,torch.FloatTensor([imageWidth-1]))
-                minX = torch.max(min_X-self.expandedBBContext,torch.FloatTensor([0]))
-                maxY = torch.min(max_Y+self.expandedBBContext,torch.FloatTensor([imageHeight-1]))
-                minY = torch.max(min_Y-self.expandedBBContext,torch.FloatTensor([0]))
+                max_X = torch.min(max_X+self.expandedBBContext,torch.FloatTensor([imageWidth-1]))
+                min_X = torch.max(min_X-self.expandedBBContext,torch.FloatTensor([0]))
+                max_Y = torch.min(max_Y+self.expandedBBContext,torch.FloatTensor([imageHeight-1]))
+                min_Y = torch.max(min_Y-self.expandedBBContext,torch.FloatTensor([0]))
             rois[:,1]=min_X
             rois[:,2]=min_Y
             rois[:,3]=max_X
@@ -1616,10 +1616,10 @@ class PairingGroupingGraph(BaseModel):
             ##old
             old_rois = torch.zeros((bbs.size(0),5))
             for i in range(bbs.size(0)):
-                minY = round(min(tlY[i].item(),trY[i].item(),blY[i].item(),brY[i].item()))
-                maxY = round(max(tlY[i].item(),trY[i].item(),blY[i].item(),brY[i].item()))
-                minX = round(min(tlX[i].item(),trX[i].item(),blX[i].item(),brX[i].item()))
-                maxX = round(max(tlX[i].item(),trX[i].item(),blX[i].item(),brX[i].item()))
+                minY = (min(tlY[i].item(),trY[i].item(),blY[i].item(),brY[i].item()))
+                maxY = (max(tlY[i].item(),trY[i].item(),blY[i].item(),brY[i].item()))
+                minX = (min(tlX[i].item(),trX[i].item(),blX[i].item(),brX[i].item()))
+                maxX = (max(tlX[i].item(),trX[i].item(),blX[i].item(),brX[i].item()))
                 if self.expandedBBContext is not None:
                     maxX = min(maxX+self.expandedBBContext,torch.FloatTensor([imageWidth-1]))
                     minX = max(minX-self.expandedBBContext,0)
@@ -1680,7 +1680,7 @@ class PairingGroupingGraph(BaseModel):
                     #debug_images.append(crop)
             ##old end
             #debug opt
-            DEBUG_diff = torch.abs(old_rois - rois)<0.0001
+            DEBUG_diff = torch.abs(old_rois - rois)<1
             assert(DEBUG_diff.all())
             DEBUG_diff = torch.abs(old_bb_shapeFeats - bb_shapeFeats)<0.0001
             assert(DEBUG_diff.all())
