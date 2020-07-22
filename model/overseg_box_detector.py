@@ -124,15 +124,27 @@ class OverSegBoxDetector(nn.Module): #BaseModel
             for i in range(self.numAnchors):
 
                 offset = i*(self.numBBParams+self.numBBTypes)
-
-                stackedPred = [
-                    torch.sigmoid(y[:,0+offset:1+offset,:,:]),                              #0. confidence
-                    torch.tanh(y[:,1+offset:2+offset,:,:])*self.scale[level][0]*MAX_W_PRED + priors_1, #1. x1
-                    torch.tanh(y[:,2+offset:3+offset,:,:])*self.scale[level][1]*MAX_H_PRED + priors_0, #2. y1
-                    torch.tanh(y[:,3+offset:4+offset,:,:])*self.scale[level][0]*MAX_W_PRED + priors_1, #3. x2
-                    torch.tanh(y[:,4+offset:5+offset,:,:])*self.scale[level][1]*MAX_H_PRED + priors_0, #4. y2
-                    torch.sin(y[:,5+offset:6+offset,:,:]*np.pi)*np.pi,        #5. rotation (radians)
-                ]
+                
+                if i<2: #horizontal text
+                    stackedPred = [
+                        torch.sigmoid(y[:,0+offset:1+offset,:,:]),                              #0. confidence
+                        torch.tanh(y[:,1+offset:2+offset,:,:])*self.scale[level][0]*MAX_W_PRED + priors_1, #1. x1
+                        torch.tanh(y[:,2+offset:3+offset,:,:])*self.scale[level][1]*MAX_H_PRED + priors_0, #2. y1
+                        torch.tanh(y[:,3+offset:4+offset,:,:])*self.scale[level][0]*MAX_W_PRED + priors_1, #3. x2
+                        torch.tanh(y[:,4+offset:5+offset,:,:])*self.scale[level][1]*MAX_H_PRED + priors_0, #4. y2
+                        torch.sin(y[:,5+offset:6+offset,:,:]*np.pi)*np.pi,        #5. rotation (radians)
+                    ]
+                elif i<4: #verticle text
+                    stackedPred = [
+                        torch.sigmoid(y[:,0+offset:1+offset,:,:]),                              #0. confidence
+                        torch.tanh(y[:,2+offset:3+offset,:,:])*self.scale[level][0]*MAX_H_PRED + priors_1, #1. x1
+                        torch.tanh(y[:,1+offset:2+offset,:,:])*self.scale[level][1]*MAX_W_PRED + priors_0, #2. y1
+                        torch.tanh(y[:,4+offset:5+offset,:,:])*self.scale[level][0]*MAX_H_PRED + priors_1, #3. x2
+                        torch.tanh(y[:,3+offset:4+offset,:,:])*self.scale[level][1]*MAX_W_PRED + priors_0, #4. y2
+                        torch.sin(y[:,5+offset:6+offset,:,:]*np.pi)*np.pi,        #5. rotation (radians)
+                    ]
+                else:
+                    assert(False)
 
 
                 for j in range(self.numBBTypes):
