@@ -1115,6 +1115,7 @@ def build_oversegmented_targets_multiscale(
                     #convert?
                  
                     gt_area_covered, pred_area_covered = bbox_coverage_axis_rot((gx,gy,gr,gh,gw), pred_right_label_boxes)
+                    assert(pred_area_covered.max()<=1)
                     if gt_area_covered is not None:
                         covered_gt_area += gt_area_covered/gt_area
                         if gt_area_covered/gt_area>0.5:
@@ -1228,6 +1229,7 @@ def build_oversegmented_targets_multiscale(
             on_pred_area += on_pred_areaB[level].sum()
             #nPred += on_pred_areaB[level].size(0)
             precision += (on_pred_areaB[level]>0.5).sum()
+            nPred += (pred_conf[level][b]>0).sum()
         #t#print('time all batch{}: {}'.format(b,timeit.default_timer()-tic))
         #t#print('  times_setup_and_level_select: {}   std: {}, count{}'.format(np.mean(times_setup_and_level_select),np.std(times_setup_and_level_select),len(times_setup_and_level_select)))
         #t#print('  times_level_setup: {}   std: {}, count{}'.format(np.mean(times_level_setup),np.std(times_level_setup),len(times_level_setup)))
@@ -1239,8 +1241,6 @@ def build_oversegmented_targets_multiscale(
         #t#print('  times_unmask_end: {}   std: {}, count{}'.format(np.mean(times_unmask_end),np.std(times_unmask_end),len(times_unmask_end)))
         #t#print('  times_assign: {}   std: {}, count{}'.format(np.mean(times_assign),np.std(times_assign),len(times_assign)))
         #t#print('  times_overlaps: {}   std: {}, count{}'.format(np.mean(times_overlaps),np.std(times_overlaps),len(times_overlaps)))
-    for level in range(len(nHs)):
-        nPred += (pred_conf[level][b]>0).sum()
 
     #assert(False and 'TODO verify this works! Have you crafted corner cases?')
     return (nGT, 

@@ -542,11 +542,10 @@ class GraphPairTrainer(BaseTrainer):
         """
         self.model.eval()
         val_metrics = {}#defaultdict(lambda: 0.0)
-        val_count = defaultdict(lambda: 0)
+        val_count = defaultdict(lambda: 1)
 
 
         with torch.no_grad():
-            losses = defaultdict(lambda: 0)
             for batch_idx, instance in enumerate(self.valid_data_loader):
                 if not self.model.detector.predNumNeighbors:
                     instance['num_neighbors']=None

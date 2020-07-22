@@ -33,6 +33,30 @@ def plotRect(img,color,xyrhw,lineW=1):
     cv2.line(img,tr,br,color,lineW)
     cv2.line(img,br,bl,color,lineW)
     cv2.line(img,bl,tl,color,lineW)
+def plotRectAndAngle(img,color,x1y1x2y2r,lineW=1):
+    x1=x1y1x2y2r[0].item()
+    y1=x1y1x2y2r[1].item()
+    x2=x1y1x2y2r[2].item()
+    y2=x1y1x2y2r[3].item()
+    rot=x1y1x2y2r[4].item()
+    tl = (round(x1),round(y1))
+    tr = (round(x2),round(y1))
+    bl = (round(x1),round(y2))
+    br = (round(x2),round(y2))
+    cv2.line(img,tl,tr,color,lineW)
+    cv2.line(img,tr,br,color,lineW)
+    cv2.line(img,br,bl,color,lineW)
+    cv2.line(img,bl,tl,color,lineW)
+
+    xc=(x1+x2)/2
+    yc=(y1+y2)/2
+    m = min(x2-x1,y2-y1)/2
+    xoff = math.cos(rot)*m
+    yoff = -math.sin(rot)*m #neg because coord plane is flipped
+    #xoffB = -math.cos(rot)*m
+    #yoffB = math.cos(rot)*m 
+    cv2.line(img,(round(xc+xoff),round(yc+yoff)),(round(xc-xoff),round(yc-yoff)),color,lineW)
+
 
 def FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startIndex=None, lossFunc=None, toEval=None):
     def __eval_metrics(data,target):
@@ -42,8 +66,10 @@ def FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startInd
                 acc_metrics[ind,i] += metric(output[ind:ind+1], target[ind:ind+1])
         return acc_metrics
 
-
+    if toEval is None:
+        toEval=['bbs']
     THRESH = config['THRESH'] if 'THRESH' in config else 0.92
+    axis_aligned_prediction=config['arch']=='OverSegBoxDetector'
     #print(type(instance['pixel_gt']))
     #if type(instance['pixel_gt']) == list:
     #    print(instance)
@@ -103,8 +129,12 @@ def FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startInd
     if 'bbs' in out:
         outputBBs = out['bbs']
         maxConf = outputBBs[:,:,0].max().item()
-        threshConf = max(maxConf*THRESH,0.5)
-        if trainer.model.rotation:
+        #threshConf = max(maxConf*THRESH,0.5)
+        threshConf = maxConf*THRESH
+        if axis_aligned_prediction:
+            #outputBBs = non_max_sup_overseg_multiscale(outputBBs.cpu(),threshConf,0.4)
+            outputBBs = non_max_sup_iou(outputBBs.cpu(),threshConf,0.7,hard_limit=999000)
+        elif trainer.model.rotation:
             outputBBs = non_max_sup_dist(outputBBs.cpu(),threshConf,3)
         else:
             outputBBs = non_max_sup_iou(outputBBs.cpu(),threshConf,0.4)
@@ -159,7 +189,9 @@ def FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startInd
                 assert(batchSize==1)
                 scale=scale[0]
                 if targetBBs is not None:
-                    if trainer.model.rotation:
+                    if axis_aligned_prediction:
+                        pass#?
+                    elif trainer.model.rotation:
                         targIndex, predWithNoIntersection = getTargIndexForPreds_dist(targetBBs[b],torch.from_numpy(bbs),1.1,numClasses,extraPreds)
                     else:
                         targIndex, predWithNoIntersection = getTargIndexForPreds_iou(targetBBs[b],torch.from_numpy(bbs),0.4,numClasses,extraPreds)
@@ -287,7 +319,10 @@ def FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startInd
                             lineW=2
                         else:
                             lineW=1
-                        plotRect(image,color,bbs[j,1:6],lineW)
+                        if axis_aligned_prediction:
+                            plotRectAndAngle(image,color,bbs[j,1:6],lineW)
+                        else:
+                            plotRect(image,color,bbs[j,1:6],lineW)
                         if trainer.model.predNumNeighbors and not pretty:
                             x=int(bbs[j,1])
                             y=int(bbs[j,2]-bbs[j,4])
