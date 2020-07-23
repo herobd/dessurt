@@ -100,7 +100,7 @@ def FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startInd
     #dataT = __to_tensor(data,gpu)
     #print('{}: {} x {}'.format(imageName,data.shape[2],data.shape[3]))
     #outputBBs, outputOffsets, outputLines, outputOffsetLines, outputPoints, outputPixels = model(dataT)
-    losses,log,out = trainer.run(instance,get=toEval)
+    losses,log,out = trainer.run(instance,get=toEval,val=True)
     #if outputPixels is not None:
     #    outputPixels = torch.sigmoid(outputPixels)
     index=0

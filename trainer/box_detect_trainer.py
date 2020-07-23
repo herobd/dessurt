@@ -305,12 +305,16 @@ class BoxDetectTrainer(BaseTrainer):
 #display(instance)
         elif 'overseg' in self.loss:
             if val:
-                this_loss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered = self.loss['overseg'](outputOffsets,targetBoxes,targetBoxes_sizes,calc_stats=True)
+                this_loss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered, recall_noclass, precision_noclass, gt_covered_noclass, pred_covered_noclass = self.loss['overseg'](outputOffsets,targetBoxes,targetBoxes_sizes,calc_stats=True)
 
                 log['recall']=recall
                 log['precision']=precision
                 log['gt_covered']=gt_covered
                 log['pred_covered']=pred_covered
+                log['recall_noclass']=recall_noclass
+                log['precision_noclass']=precision_noclass
+                log['gt_covered_noclass']=gt_covered_noclass
+                log['pred_covered_noclass']=pred_covered_noclass
             else:
                 this_loss, position_loss, conf_loss, class_loss, rot_loss = self.loss['overseg'](outputOffsets,targetBoxes,targetBoxes_sizes)
             losses['oversegLoss']=this_loss#.item()
