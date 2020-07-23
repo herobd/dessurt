@@ -1115,7 +1115,7 @@ def build_oversegmented_targets_multiscale(
                     #convert?
                  
                     gt_area_covered, pred_area_covered = bbox_coverage_axis_rot((gx,gy,gr,gh,gw), pred_right_label_boxes)
-                    assert(pred_area_covered.max()<=1)
+                    assert(len(pred_area_covered)==0 or max(pred_area_covered)<=1)
                     if gt_area_covered is not None:
                         covered_gt_area += gt_area_covered/gt_area
                         if gt_area_covered/gt_area>0.5:

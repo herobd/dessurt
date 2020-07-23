@@ -250,7 +250,7 @@ class BoxDetectTrainer(BaseTrainer):
                 if not self.model.predNumNeighbors:
                     del instance['num_neighbors']
                 data, targetBoxes, targetBoxes_sizes, targetLines, targetLines_sizes, targetPoints, targetPoints_sizes, targetPixels,target_num_neighbors = self._to_tensor(instance)
-                losses,run_log,got = self.run(instance,get=['bbs'],val=True)
+                losses,log_run,got = self.run(instance,get=['bbs'],val=True)
                 for name,value in log_run.items():
                     if value is not None:
                         val_name = 'val_'+name

@@ -8,7 +8,7 @@ from model.alignment_loss import alignment_loss
 import math
 from model.loss import *
 from collections import defaultdict
-from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist, getTargIndexForPreds_iou, getTargIndexForPreds_dist
+from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist, getTargIndexForPreds_iou, getTargIndexForPreds_dist, non_max_sup_overseg, non_max_sup_keep_overlap_iou
 import json
 
 #THRESH=0.5
@@ -129,11 +129,23 @@ def FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startInd
     if 'bbs' in out:
         outputBBs = out['bbs']
         maxConf = outputBBs[:,:,0].max().item()
-        #threshConf = max(maxConf*THRESH,0.5)
-        threshConf = maxConf*THRESH
+        threshConf = max(maxConf*THRESH,0.5)
+        #threshConf = maxConf*THRESH
         if axis_aligned_prediction:
-            #outputBBs = non_max_sup_overseg_multiscale(outputBBs.cpu(),threshConf,0.4)
-            outputBBs = non_max_sup_iou(outputBBs.cpu(),threshConf,0.7,hard_limit=999000)
+            threshed_outputBBs = []
+            for b in range(batchSize):
+                threshed_outputBBs.append(outputBBs[b,outputBBs[b,:,0]>threshConf].cpu())
+            outputBBs = threshed_outputBBs
+
+            #Uhh, I don't know if there is an effiecient method to prune out reduntant predictions, as you have to recompute things every time you prune one. For now, I won't worry about it
+            #outputBBs = non_max_sup_keep_overlap_iou(outputBBs.cpu(),threshConf,0.4)
+            
+            #outputBBs = non_max_sup_iou(outputBBs.cpu(),threshConf,2,hard_limit=999000)
+            #iou threshed, but also need to optimize to maintain overlap...
+            #precompute all iou, and thus intersections
+            #order by conf,#
+            #   examine offending (over iou thresh) boxes, reverse conf (lowest up)
+            #       does this the only bridge between me and another box?
         elif trainer.model.rotation:
             outputBBs = non_max_sup_dist(outputBBs.cpu(),threshConf,3)
         else:

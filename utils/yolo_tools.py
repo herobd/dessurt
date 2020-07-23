@@ -1,6 +1,8 @@
 import torch
 #from model.yolo_loss import bbox_iou
 import math
+import timeit
+import numpy as np
 
 def non_max_sup_overseg(pred_boxes,thresh_conf=0.5, thresh_inter=0.5, hard_limit=300):
     return non_max_sup_(pred_boxes,thresh_conf, thresh_inter, verticle_bias_intersection, hard_limit)
@@ -43,6 +45,121 @@ def non_max_sup_(pred_boxes,thresh_conf, thresh_loc, loc_metric, hard_limit):
         to_return.append(best)#[:,rearr])
     return to_return
 
+def non_max_sup_keep_overlap_iou(pred_boxes,thresh_conf, thresh_loc, hard_limit=9999):
+    times_batch=[]
+    times_above_thresh=[]
+    times_all_iou=[]
+    times_bridge_first=[]
+    times_zip_sort=[]
+    times_for_loc_measures=[]
+    times_remove=[]
+    times_bridge_second=[]
+
+    to_return=[]
+    for b in range(pred_boxes.shape[0]):
+        tic_b=timeit.default_timer()
+
+        
+        #all_iou = ... or only on above_thresh?
+        
+        #TODO the creation of above_thresh could be faster
+        above_thresh = []
+        for i in range(pred_boxes.shape[1]):
+            if pred_boxes[b,i,0]>thresh_conf:
+                above_thresh.append( (pred_boxes[b,i,0], i) )
+        above_thresh.sort(key=lambda a: a[0], reverse=True)
+        above_thresh = above_thresh[:hard_limit]
+        above_thresh = [x[1] for x in above_thresh]
+        abv_thr_bbs = pred_boxes[b,above_thresh]
+
+        times_above_thresh.append(timeit.default_timer()-tic_b)
+        tic=timeit.default_timer()
+
+        all_iou = allIOU(abv_thr_bbs,abv_thr_bbs,x1y1x2y2=True)
+
+        times_all_iou.append(timeit.default_timer()-tic)
+        tic=timeit.default_timer()
+
+        adj_b = all_iou>0
+        adj = adj_b.type(torch.IntTensor)
+        bridged_to = torch.where(adj_b,torch.zeros_like(adj),torch.matmul(adj,adj)) #which bbs a bb is bridged to by another bb (but is not directly overlapping with)
+
+        adj_b = None
+        #this is some graph theory. adj^N=A is a matrix showing at A[i,j] how many paths there are from node i to node j
+        #We use this to track which bbs are exclusive bridges, that is, they overlap two bbs and no other bb overlaps both of those bbs
+        times_bridge_first.append(timeit.default_timer()-tic)
+
+        li = 0
+        to_remove_all = set()
+        while li<len(above_thresh):
+            #print('b:{}/{}, li:{}/{}'.format(b,pred_boxes.shape[0],li,len(above_thresh)))
+            if li in to_remove_all:
+                li+=1
+                continue
+
+            tic=timeit.default_timer()
+
+            loc_measures = all_iou[li] #loc_metric(pred_boxes[b,i,1:6],pred_boxes[b,[x[1] for x in above_thresh[li+1:]],1:6])
+            #loc_measures = list(enumerate(loc_measures)).sort(key=lambda a: a[1])
+            loc_measures = list(zip(range(li+1,len(above_thresh)),loc_measures[li+1:],abv_thr_bbs[li+1:,0]))
+            loc_measures.sort(key=lambda a: a[2])
+
+            times_zip_sort.append(timeit.default_timer()-tic)
+            tic=timeit.default_timer()
+
+            to_remove=[]
+            for loc_i,iou,loc_conf in loc_measures:
+                if iou>thresh_loc:
+                    #Is this an exclusive bridge?
+                    bridging = (adj[loc_i]-adj[li])==1 #where this is 1, I am a bridge
+                    if not ((bridged_to[li]==1) & bridging).any():
+                        #loc_i is not an exlusive bridge
+                        to_remove.append(loc_i)
+                        bridged_to[li,bridging]-=1
+
+            times_for_loc_measures.append(timeit.default_timer()-tic)
+            tic=timeit.default_timer()
+            
+            if len(to_remove)>0:
+                to_remove_all.update(to_remove)
+                for index in to_remove:
+                    #del above_thresh[index]
+                    all_iou[index,:]=0
+                    all_iou[:,index]=0
+
+                times_remove.append(timeit.default_timer()-tic)
+                tic=timeit.default_timer()
+
+                #recompute bridging after removeal
+                adj_b = all_iou>0
+                adj = adj_b.type(torch.IntTensor)
+                bridged_to = torch.where(adj_b,torch.zeros_like(adj),torch.matmul(adj,adj))
+                adj_b = None
+
+                times_bridge_second.append(timeit.default_timer()-tic)
+            li+=1
+
+    
+        print('removing: {}.'.format(len(to_remove_all)))
+        to_remove_all = list(to_remove_all)
+        to_remove_all.sort(reverse=True)
+        for index in to_remove_all:
+            del above_thresh[index]
+        best = pred_boxes[b,above_thresh,:]
+        to_return.append(best)#[:,rearr])
+
+        times_batch.append(timeit.default_timer()-tic_b)
+
+    print('times_batch mean:{}, total:{}'.format(np.mean(times_batch),np.sum(times_batch)))
+    print('times_above_thresh mean:{}, total:{}'.format(np.mean(times_above_thresh),np.sum(times_above_thresh)))
+    print('times_all_iou mean:{}, total:{}'.format(np.mean(times_all_iou),np.sum(times_all_iou)))
+    print('times_bridge_first mean:{}, total:{}'.format(np.mean(times_bridge_first),np.sum(times_bridge_first)))
+    print('times_zip_sort mean:{}, total:{}'.format(np.mean(times_zip_sort),np.sum(times_zip_sort)))
+    print('times_for_loc_measures mean:{}, total:{}'.format(np.mean(times_for_loc_measures),np.sum(times_for_loc_measures)))
+    print('times_remove mean:{}, total:{}'.format(np.mean(times_remove),np.sum(times_remove)))
+    print('times_bridge_second mean:{}, total:{}'.format(np.mean(times_bridge_second),np.sum(times_bridge_second)))
+
+    return to_return
 #this is intended for the oversegmentation detector, where we care less about horizontal overlap (since these should be merged later on, and more about verticle overlap, since these should not be merged but discarded
 def verticle_bias_intersection(query_box, candidate_boxes):
     q_x1, q_x2 = query_box[0]-query_box[4], query_box[0]+query_box[4]
@@ -140,11 +257,21 @@ def dist_neg(query_box, candidate_boxes):
            )/normalization)**2
     return dist*-1
 
-def allIOU(boxes1,boxes2, boxes1XYWH=[0,1,4,3]):
-    b1_x1, b1_x2 = boxes1[:,boxes1XYWH[0]]-boxes1[:,boxes1XYWH[2]], boxes1[:,boxes1XYWH[0]]+boxes1[:,boxes1XYWH[2]]
-    b1_y1, b1_y2 = boxes1[:,boxes1XYWH[1]]-boxes1[:,boxes1XYWH[3]], boxes1[:,boxes1XYWH[1]]+boxes1[:,boxes1XYWH[3]]
-    b2_x1, b2_x2 = boxes2[:,0]-boxes2[:,4], boxes2[:,0]+boxes2[:,4]
-    b2_y1, b2_y2 = boxes2[:,1]-boxes2[:,3], boxes2[:,1]+boxes2[:,3]
+def allIOU(boxes1,boxes2, boxes1XYWH=[0,1,4,3],x1y1x2y2=False):
+    if x1y1x2y2:
+        b1_x1=boxes1[:,0]
+        b1_y1=boxes1[:,1]
+        b1_x2=boxes1[:,2]
+        b1_y2=boxes1[:,3]
+        b2_x1=boxes2[:,0]
+        b2_y1=boxes2[:,1]
+        b2_x2=boxes2[:,2]
+        b2_y2=boxes2[:,3]
+    else:
+        b1_x1, b1_x2 = boxes1[:,boxes1XYWH[0]]-boxes1[:,boxes1XYWH[2]], boxes1[:,boxes1XYWH[0]]+boxes1[:,boxes1XYWH[2]]
+        b1_y1, b1_y2 = boxes1[:,boxes1XYWH[1]]-boxes1[:,boxes1XYWH[3]], boxes1[:,boxes1XYWH[1]]+boxes1[:,boxes1XYWH[3]]
+        b2_x1, b2_x2 = boxes2[:,0]-boxes2[:,4], boxes2[:,0]+boxes2[:,4]
+        b2_y1, b2_y2 = boxes2[:,1]-boxes2[:,3], boxes2[:,1]+boxes2[:,3]
 
     #expand to make two dimensional, allowing every instance of boxes1
     #to be compared with every intsance of boxes2
