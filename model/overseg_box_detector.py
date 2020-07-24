@@ -75,6 +75,7 @@ class OverSegBoxDetector(nn.Module): #BaseModel
                     scaleX/=2
                     scaleY/=2
                 elif type(a) is str and a[0:4]=='long': #long pool
+                    raise NotImplementedError('Making assumptions elsewhere same dim')
                     scaleX*=3
                     scaleY*=2
             self.scale.append((scaleX,scaleY))
@@ -183,6 +184,31 @@ class OverSegBoxDetector(nn.Module): #BaseModel
 
         return bbPredictions, offsetPredictions_scales, None,None,None, pixelPreds #, avg_conf_per_anchor
 
+    def setForGraphPairing(self,beginningOfLast=False,featuresFromHere=-1,featuresFromScale=-2,f2Here=None,f2Scale=None):
+        assert(len(featuresFromScale)==2 and featuresFromScale[0]>=0 and featuresFromScale[1]>=0)
+        assert(f2Scale is None or (len(f2Scale)==2 and f2Scale[0]>=0 and f2Scale[1]>=0))
+        def save_feats(module,input,output):
+            self.saved_features=output
+        if beginningOfLast:
+            self.net_down_modules[1][-2][0].register_forward_hook(save_final) #after max pool
+            self.last_channels= self.last_channels//2 #HACK
+        else:
+            typ = type( self.net_down_modules[featuresFromScale[0]][featuresFromScale[1]][featuresFromHere])
+            if typ == torch.nn.modules.activation.ReLU or typ == torch.nn.modules.MaxPool2d:
+                self.net_down_modules[featuresFromScale[0]][featuresFromScale[1]][featuresFromHere].register_forward_hook(save_feats)
+                self.save_scale = 2**featuresFromScale[1] * (self.scale[featuresFromScale[0]-1][0] if featuresFromScale[0]>0 else 1)
+            else:
+                print('Layer {},{} of the final conv block was specified, but it is not a ReLU layer. Did you choose the right layer?'.format(featuresFromScale,featuresFromHere))
+                exit()
+        if f2Here is not None:
+            def save_feats2(module,input,output):
+                self.saved_features2=output
+            typ = type( self.net_down_modules[f2Scale[0]][f2Scale[1]][f2Here])
+            if typ == torch.nn.modules.activation.ReLU or typ==torch.nn.modules.MaxPool2d:
+                self.net_down_modules[f2Scale[0]][f2Scale[1]][f2Here].register_forward_hook(save_feats2)
+                self.save2_scale = 2**f2Scale[1] * (self.scale[f2Scale[0]-1][0] if f2Scale[0]>0 else 1)
+            else:
+                print('Layer {},{} of the final conv block was specified, but it is not a ReLU layer. Did you choose the right layer?'.format(f2Scale,f2Here))
     def summary(self):
         """
         Model summary

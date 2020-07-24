@@ -171,8 +171,12 @@ class PairingGroupingGraph(BaseModel):
         self.normalizeHorz=config['normalize_horz'] if 'normalize_horz' in config else 400
         self.normalizeVert=config['normalize_vert'] if 'normalize_vert' in config else 50
         self.normalizeDist=(self.normalizeHorz+self.normalizeVert)/2
-
-        assert(self.detector.scale[0]==self.detector.scale[1])
+        
+        if type(self.detector.scale[0]) is int:
+            assert(self.detector.scale[0]==self.detector.scale[1])
+        else:
+            for level_sc in self.detector.scale:
+                assert(level_sc[0]==level_sc[1])
         if useBeginningOfLast:
             detect_save_scale = self.detector.scale[0]
         else:
@@ -537,8 +541,13 @@ class PairingGroupingGraph(BaseModel):
         ###
 
         if self.rotation:
-            assert(False) #pretty sure this is untested...
-            bbPredictions = non_max_sup_dist(bbPredictions.cpu(),self.used_threshConf,2.5,hard_detect_limit)
+            #TODO make this actually check for overseg...
+            threshed_bbPredictions = []
+            #for b in range(batchSize):
+            threshed_bbPredictions.append(bbPredictions[0,bbPredictions[0,:,0]>self.used_threshConf].cpu())
+            bbPredictions = threshed_bbPredictions
+            #assert(False) #pretty sure this is untested...
+            #bbPredictions = non_max_sup_dist(bbPredictions.cpu(),self.used_threshConf,2.5,hard_detect_limit)
         else:
             bbPredictions = non_max_sup_iou(bbPredictions.cpu(),self.used_threshConf,0.4,hard_detect_limit)
         #I'm assuming batch size of one
