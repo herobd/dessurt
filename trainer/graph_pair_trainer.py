@@ -28,11 +28,18 @@ class GraphPairTrainer(BaseTrainer):
         else:
             self.loss_params={}
         self.lossWeights = config['loss_weights'] if 'loss_weights' in config else {"box": 1, "rel":1}
-        self.loss['box'] = self.loss['box'](**self.loss_params['box'], 
-                num_classes=model.numBBTypes, 
-                rotation=model.rotation, 
-                scale=model.scale,
-                anchors=model.anchors)
+        if 'box' in self.loss:
+            self.loss['box'] = self.loss['box'](**self.loss_params['box'], 
+                    num_classes=model.numBBTypes, 
+                    rotation=model.rotation, 
+                    scale=model.scale,
+                    anchors=model.anchors)
+        elif 'overseg' in self.loss:
+            self.loss['overseg'] = self.loss['overseg'](**self.loss_params['overseg'],
+                    num_classes=model.numBBTypes,
+                    rotation=model.rotation,
+                    scale=model.scale,
+                    anchors=model.anchors)
         self.batch_size = data_loader.batch_size
         self.data_loader = data_loader
         self.data_loader_iter = iter(data_loader)
@@ -1142,8 +1149,13 @@ class GraphPairTrainer(BaseTrainer):
             else:
                 targSize =0 
             #import pdb;pdb.set_trace()
-            boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
-            losses['boxLoss'] = boxLoss
+
+            if 'box' in self.loss:
+                boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
+                losses['boxLoss'] = boxLoss
+            else:
+                oversegLoss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered, recall_noclass, precision_noclass, gt_covered_noclass, pred_covered_noclass = self.loss['overseg'](outputOffsets,targetBoxes,[targSize],calc_stats=calc_stats)
+                losses['oversegLoss'] = oversegLoss
             #boxLoss *= self.lossWeights['box']
             #if relLoss is not None:
             #    loss = relLoss + boxLoss
@@ -1504,12 +1516,19 @@ class GraphPairTrainer(BaseTrainer):
                     #import pdb;pdb.set_trace()
 
                     tic2=timeit.default_timer()
-                    boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
-                    losses['boxLoss'] += boxLoss
-                    logIter['bb_position_loss'] = position_loss
-                    logIter['bb_conf_loss'] = conf_loss
-                    logIter['bb_class_loss'] = class_loss
-                    logIter['bb_nn_loss'] = nn_loss
+                    if 'box' in self.loss:
+                        boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
+                        losses['boxLoss'] += boxLoss
+                        logIter['bb_position_loss'] = position_loss
+                        logIter['bb_conf_loss'] = conf_loss
+                        logIter['bb_class_loss'] = class_loss
+                        logIter['bb_nn_loss'] = nn_loss
+                    else:
+                        oversegLoss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered, recall_noclass, precision_noclass, gt_covered_noclass, pred_covered_noclass = self.loss['overseg'](outputOffsets,targetBoxes,[targSize],calc_stats=calc_stats)
+                        losses['oversegLoss'] = oversegLoss
+                        logIter['bb_position_loss'] = position_loss
+                        logIter['bb_conf_loss'] = conf_loss
+                        logIter['bb_class_loss'] = class_loss
 
                     #t#print('time run box_loss: {}'.format(timeit.default_timer()-tic2))
 
