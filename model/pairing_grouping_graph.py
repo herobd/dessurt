@@ -697,31 +697,39 @@ class PairingGroupingGraph(BaseModel):
     #This rewrites the confidence and class predictions based on the (re)predictions from the graph network
     def updateBBs(self,bbs,groups,nodeOuts):
         if self.curvedBBs:
-            TODO
-        if len(bbs)>1:
-            nodeConfPred = torch.sigmoid(nodeOuts[:,-1,self.nodeIdxConf:self.nodeIdxConf+1]).cpu()
-            bbConfPred = torch.FloatTensor(bbs.size(0),1)
-            for i,group in enumerate(groups):
-                bbConfPred[group] = nodeConfPred[i].detach()
-            if self.include_bb_conf:
-                bbs[:,0:1] = bbConfPred
-            else:
-                bbs = torch.cat((bbConfPred,bbs.cpu()),dim=1)
-        elif bbs.size(0)==1 and not self.include_bb_conf:
-            bbs = torch.cat((torch.FloatTensor(1,1).fill_(1).to(bbs.device),bbs),dim=2)
-
-        if self.predNN:
-            raise NotImplementedError('Have not implemented num neighbor pred for new graph method')
-            
-        if self.predClass:
+            nodeConfPred = torch.sigmoid(nodeOuts[:,-1,self.nodeIdxConf]).cpu().detach()
             startIndex = 5+self.nodeIdxClass
             endIndex = 5+self.nodeIdxClassEnd
-            #if not useGTBBs:
-            nodeClassPred = torch.sigmoid(nodeOuts[:,-1,self.nodeIdxClass:self.nodeIdxClassEnd].detach()).cpu()
-            bbClasPred = torch.FloatTensor(bbs.size(0),self.nodeIdxClassEnd-self.nodeIdxClass)
+            nodeClassPred = torch.sigmoid(nodeOuts[:,-1,self.nodeIdxClass:self.nodeIdxClassEnd].detach()).cpu().detach()
             for i,group in enumerate(groups):
-                bbClasPred[group] = nodeClassPred[i].detach()
-            bbs[:,startIndex:endIndex] = bbClasPred
+                for bbId in group:
+                    bbs[bbId].conf= nodeConfPred[i]
+                    bbs[bbId].cls = nodeClassPred[i]
+        else:
+            if len(bbs)>1:
+                nodeConfPred = torch.sigmoid(nodeOuts[:,-1,self.nodeIdxConf:self.nodeIdxConf+1]).cpu()
+                bbConfPred = torch.FloatTensor(bbs.size(0),1)
+                for i,group in enumerate(groups):
+                    bbConfPred[group] = nodeConfPred[i].detach()
+                if self.include_bb_conf:
+                    bbs[:,0:1] = bbConfPred
+                else:
+                    bbs = torch.cat((bbConfPred,bbs.cpu()),dim=1)
+            elif bbs.size(0)==1 and not self.include_bb_conf:
+                bbs = torch.cat((torch.FloatTensor(1,1).fill_(1).to(bbs.device),bbs),dim=2)
+
+            if self.predNN:
+                raise NotImplementedError('Have not implemented num neighbor pred for new graph method')
+                
+            if self.predClass:
+                startIndex = 5+self.nodeIdxClass
+                endIndex = 5+self.nodeIdxClassEnd
+                #if not useGTBBs:
+                nodeClassPred = torch.sigmoid(nodeOuts[:,-1,self.nodeIdxClass:self.nodeIdxClassEnd].detach()).cpu()
+                bbClasPred = torch.FloatTensor(bbs.size(0),self.nodeIdxClassEnd-self.nodeIdxClass)
+                for i,group in enumerate(groups):
+                    bbClasPred[group] = nodeClassPred[i].detach()
+                bbs[:,startIndex:endIndex] = bbClasPred
         return bbs
 
     #This merges two bounding box predictions, assuming they were oversegmented
@@ -1082,10 +1090,10 @@ class PairingGroupingGraph(BaseModel):
                 newTrans = ''
                 #Something to get read-order correct, assuming groups only vertical, so sorting by y-position
                 if self.useCurvedBBs:
-                    raise NotImplementedError('todo')
+                    groupTrans = [(bbs[bbId].getReadPosition(),bbTrans[bbId]) for bbId in bbIds]
                 else:
                     groupTrans = [(bbs[bbId,yIndex].item(),bbTrans[bbId]) for bbId in bbIds]
-                    groupTrans.sort(key=lambda a:a[0])
+                groupTrans.sort(key=lambda a:a[0])
                 newNodeTrans.append(' '.join([t[1] for t in groupTrans]))
         newEdges = [(oldToIdx[g0],oldToIdx[g1]) for s,g0,g1 in groupEdges]
         assert(len(newEdgeFeats)==len(newEdges))
@@ -1333,8 +1341,7 @@ class PairingGroupingGraph(BaseModel):
             if self.use_fixed_masks:
                 for bbIdx in range(bbs.size(0)):
                     if self.useCurvedBBs:
-                        #TODO
-                        raise NotImplementedError('todo')
+                        rr, cc = draw.polygon(bbs[bbIdx].polyYs(),bbs[bbIdx].polyXs(), [imageHeight,imageWidth])
                     else:
                         rr, cc = draw.polygon([tlY[bbIdx],trY[bbIdx],brY[bbIdx],blY[bbIdx]],[tlX[bbIdx],trX[bbIdx],brX[bbIdx],blX[bbIdx]], [imageHeight,imageWidth])
                     allMasks[rr,cc]=1
@@ -1359,28 +1366,37 @@ class PairingGroupingGraph(BaseModel):
             w_m = self.pool2_w/feature_w
             h_m = self.pool2_h/feature_h
 
-            tlX1 = (tlX_index1-rois[:,1])*w_m
-            trX1 = (trX_index1-rois[:,1])*w_m
-            brX1 = (brX_index1-rois[:,1])*w_m
-            blX1 = (blX_index1-rois[:,1])*w_m
-            tlY1 = (tlY_index1-rois[:,2])*h_m
-            trY1 = (trY_index1-rois[:,2])*h_m
-            brY1 = (brY_index1-rois[:,2])*h_m
-            blY1 = (blY_index1-rois[:,2])*h_m
-            tlX2 = (tlX_index2-rois[:,1])*w_m
-            trX2 = (trX_index2-rois[:,1])*w_m
-            brX2 = (brX_index2-rois[:,1])*w_m
-            blX2 = (blX_index2-rois[:,1])*w_m
-            tlY2 = (tlY_index2-rois[:,2])*h_m
-            trY2 = (trY_index2-rois[:,2])*h_m
-            brY2 = (brY_index2-rois[:,2])*h_m
-            blY2 = (blY_index2-rois[:,2])*h_m
+            if not self.useCurvedBBs:
+                tlX1 = (tlX_index1-rois[:,1])*w_m
+                trX1 = (trX_index1-rois[:,1])*w_m
+                brX1 = (brX_index1-rois[:,1])*w_m
+                blX1 = (blX_index1-rois[:,1])*w_m
+                tlY1 = (tlY_index1-rois[:,2])*h_m
+                trY1 = (trY_index1-rois[:,2])*h_m
+                brY1 = (brY_index1-rois[:,2])*h_m
+                blY1 = (blY_index1-rois[:,2])*h_m
+                tlX2 = (tlX_index2-rois[:,1])*w_m
+                trX2 = (trX_index2-rois[:,1])*w_m
+                brX2 = (brX_index2-rois[:,1])*w_m
+                blX2 = (blX_index2-rois[:,1])*w_m
+                tlY2 = (tlY_index2-rois[:,2])*h_m
+                trY2 = (trY_index2-rois[:,2])*h_m
+                brY2 = (brY_index2-rois[:,2])*h_m
+                blY2 = (blY_index2-rois[:,2])*h_m
 
         for i,(index1, index2) in enumerate(candidates):
             if self.useShapeFeats!='only':
                 if self.useCurvedBBs:
-                    raise NotImplementedError('todo')
-                    #need to scale and offset the points
+                    rr, cc = draw.polygon(
+                            (bbs[index1].polyYs()-rois[index1,2])*h_m[index1],
+                            (bbs[index1].polyXs()-rois[index1,1])*w_m[index1], 
+                            [self.pool2_h,self.pool2_w])
+                    masks[i,0,rr,cc]=1
+                    rr, cc = draw.polygon(
+                            (bbs[index2].polyYs()-rois[index2,2])*h_m[index2],
+                            (bbs[index2].polyXs()-rois[index2,1])*w_m[index2], 
+                            [self.pool2_h,self.pool2_w])
+                    masks[i,1,rr,cc]=1
                 else:
                     rr, cc = draw.polygon(
                                 [round(tlY1[i].item()),round(trY1[i].item()),
@@ -1409,6 +1425,58 @@ class PairingGroupingGraph(BaseModel):
 
         if self.useShapeFeats:
             if self.useCurvedBBs:
+
+                shapeFeats[:,0] = torch.FloatTensor([bb.height() for bb in bbs_index1])/self.normalizeVert #height
+                shapeFeats[:,1] = torch.FloatTensor([bb.height() for bb in bbs_index2])/self.normalizeVert
+                shapeFeats[:,2] = torch.FloatTensor([bb.width() for bb in bbs_index1])/self.normalizeHorz #width
+                shapeFeats[:,3] = torch.FloatTensor([bb.width() for bb in bbs_index2])/self.normalizeHorz
+                shapeFeats[:,4] = torch.FloatTensor([bb.angle() for bb in bbs_index1])/math.pi
+                shapeFeats[:,5] = torch.FloatTensor([bb.angle() for bb in bbs_index2])/math.pi
+                leftX1 = torch.FloatTensor([bb.leftX() for bb in bbs_index1])
+                leftY1 = torch.FloatTensor([bb.leftY() for bb in bbs_index1])
+                leftX2 = torch.FloatTensor([bb.leftX() for bb in bbs_index2])
+                leftY2 = torch.FloatTensor([bb.leftY() for bb in bbs_index2])
+                rightX1 = torch.FloatTensor([bb.rightX() for bb in bbs_index1])
+                rightY1 = torch.FloatTensor([bb.rightY() for bb in bbs_index1])
+                rightX2 = torch.FloatTensor([bb.rightX() for bb in bbs_index2])
+                rightY2 = torch.FloatTensor([bb.rightY() for bb in bbs_index2])
+                shapeFeats[:,6] = torch.sqrt( (leftX1-leftX2)**2 + (leftY1-leftY2)**2 )/self.normalizeDist
+                shapeFeats[:,7] = torch.sqrt( (rightX1-rightX2)**2 + (rightY1-rightY2)**2 )/self.normalizeDist
+                shapeFeats[:,8] = torch.sqrt( (leftX1-rightX2)**2 + (leftY1-rightY2)**2 )/self.normalizeDist
+                shapeFeats[:,9] = torch.sqrt( (rightX1-leftX2)**2 + (rightY1-leftY2)**2 )/self.normalizeDist
+                centriodX1 = torch.FloatTensor([bb.centriodX() for bb in bbs_index1])
+                centriodY1 = torch.FloatTensor([bb.centriodY() for bb in bbs_index1])
+                centriodX2 = torch.FloatTensor([bb.centriodX() for bb in bbs_index2])
+                centriodY2 = torch.FloatTensor([bb.centriodY() for bb in bbs_index2])
+                shapeFeats[:,10] = torch.sqrt( (centriodX1-centriodX2)**2 + (centriodY1-centriodY2)**2 )/self.normalizeDist
+
+                #classes
+
+                #shapeFeats[:,2] = bbs1_feats[1]/self.normalizeHorz #width
+                #shapeFeats[:,3] = bbs2_feats[1]/self.normalizeHorz
+                #shapeFeats[:,4] = bbs1_feats[2]/math.pi #rot
+                #shapeFeats[:,5] = bbs2_feats[2]/math.pi #rot
+                #shapeFeats[:,5] = torch.sqrt( (bbs1_feats[3]-bbs2_feats[3]/)**2 + ()**2 )/self.normalizeDist
+
+                for i, index1,index2 in enumerate(candidates):
+
+                    shapeFeats[i,0] = bbs[index1].length()/self.normalizeHorz
+                    shapeFeats[i,1] = bbs[index2].length()/self.normalizeHorz
+                    shapeFeats[i,2] = bbs[index1].height()/self.normalizeVert
+                    shapeFeats[i,3] = bbs[index2].height()/self.normalizeVert
+                    shapeFeats[i,4] = bbs[index1].angle()/math.pi
+                    shapeFeats[i,5] = bbs[index2].angle()/math.pi
+
+                    lx1,ly1 = bbs[index1].leftPoint()
+                    lx2,ly2 = bbs[index2].leftPoint()
+                    rx1,ry1 = bbs[index1].rightPoint()
+                    rx2,ry2 = bbs[index2].rightPoint()
+                    shapeFeats[i,6] = math.sqrt( 
+
+                    shapeFeats[i,xa:ya] = bbs[index1].cls
+                    shapeFeats[i,xb:yb] = bbs[index2].cls
+
+
                 raise NotImplementedError('todo')
             else:
                 if type(self.pairer) is BinaryPairReal and type(self.pairer.shape_layers) is not nn.Sequential:
