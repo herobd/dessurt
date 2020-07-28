@@ -147,7 +147,7 @@ class MultiScaleOversegmentLoss (nn.Module):
 
             # Add offset and scale with anchors
             pred_boxes = FloatTensor(prediction[..., :4].shape)
-            pred_boxes[..., 0] = torch.tanh(x1.data)*MAX_W_PRED+0.5 + grid_x
+            pred_boxes[..., 0] = torch.tanh(x1.data)*MAX_W_PRED+0.5 + grid_x #level?
             pred_boxes[..., 1] = torch.tanh(y1.data)*MAX_H_PRED+0.5 + grid_y
             pred_boxes[..., 2] = torch.tanh(x2.data)*MAX_W_PRED+0.5 + grid_x
             pred_boxes[..., 3] = torch.tanh(y2.data)*MAX_H_PRED+0.5 + grid_y
@@ -158,7 +158,7 @@ class MultiScaleOversegmentLoss (nn.Module):
 
         #t#print('time setup A: '+str(timeit.default_timer()-tic))
 
-        nGT, masks, conf_masks, t_Ls, t_Ts, t_Rs, t_Bs, t_rs, tconf_scales, tcls_scales, pred_covered, gt_covered, recall, precision = build_oversegmented_targets_multiscale(
+        nGT, masks, conf_masks, t_Ls, t_Ts, t_Rs, t_Bs, t_rs, tconf_scales, tcls_scales, pred_covered, gt_covered, recall, precision, pred_covered_noclass, gt_covered_noclass, recall_noclass, precision_noclass = build_oversegmented_targets_multiscale(
             pred_boxes=pred_boxes_scales,
             pred_conf=pred_conf_scales,
             pred_cls=pred_cls_scales,
@@ -210,11 +210,13 @@ class MultiScaleOversegmentLoss (nn.Module):
         # Mask outputs to ignore non-existing objects
         loss_conf=0
         for pred_conf,tconf,conf_mask_falsel in zip(pred_conf_scales,tconf_scales,conf_masks_false):
-            loss_conf += self.bce_loss(pred_conf[conf_mask_falsel], tconf[conf_mask_falsel])
+            if conf_mask_falsel.any():
+                loss_conf += self.bce_loss(pred_conf[conf_mask_falsel], tconf[conf_mask_falsel])
         loss_conf *= self.bad_conf_weight
         if target is not None and nGT>0:
             for pred_conf,tconf,conf_mask_truel in zip(pred_conf_scales,tconf_scales,conf_masks_true):
-                loss_conf += self.bce_loss(pred_conf[conf_mask_truel], tconf[conf_mask_truel])
+                if conf_mask_truel.any():
+                    loss_conf += self.bce_loss(pred_conf[conf_mask_truel], tconf[conf_mask_truel])
 
             loss_L=0
             loss_T=0
@@ -223,18 +225,20 @@ class MultiScaleOversegmentLoss (nn.Module):
             loss_r=0
             for level in range(len(t_Ls)):
                 mask = masks[level]
-                loss_L += self.mse_loss(x1_scales[level][mask], t_Ls[level][mask])
-                loss_T += self.mse_loss(y1_scales[level][mask], t_Ts[level][mask])
-                loss_R += self.mse_loss(x2_scales[level][mask], t_Rs[level][mask])
-                loss_B += self.mse_loss(y2_scales[level][mask], t_Bs[level][mask])
-                loss_r += self.mse_loss(r_scales[level][mask], t_rs[level][mask])
+                if mask.any():
+                    loss_L += self.mse_loss(x1_scales[level][mask], t_Ls[level][mask])
+                    loss_T += self.mse_loss(y1_scales[level][mask], t_Ts[level][mask])
+                    loss_R += self.mse_loss(x2_scales[level][mask], t_Rs[level][mask])
+                    loss_B += self.mse_loss(y2_scales[level][mask], t_Bs[level][mask])
+                    loss_r += self.mse_loss(r_scales[level][mask], t_rs[level][mask])
 
             loss_cls=0
             for pred_cls,tcls,mask in zip(pred_cls_scales,tcls_scales,masks):
-                if self.multiclass:
-                    loss_cls += self.bce_loss(pred_cls[mask], tcls[mask].float())
-                else:
-                    loss_cls +=  self.ce_loss(pred_cls[mask], torch.argmax(tcls[mask], 1)) 
+                if mask.any():
+                    if self.multiclass:
+                        loss_cls += self.bce_loss(pred_cls[mask], tcls[mask].float())
+                    else:
+                        loss_cls +=  self.ce_loss(pred_cls[mask], torch.argmax(tcls[mask], 1)) 
 
             loss = loss_L + loss_T + loss_R + loss_B + loss_r + loss_conf + loss_cls
 
@@ -255,7 +259,11 @@ class MultiScaleOversegmentLoss (nn.Module):
                     recall,
                     precision,
                     gt_covered,
-                    pred_covered
+                    pred_covered,
+                    recall_noclass,
+                    precision_noclass,
+                    gt_covered_noclass,
+                    pred_covered_noclass
                 )
             else:
                 return (
@@ -277,7 +285,11 @@ class MultiScaleOversegmentLoss (nn.Module):
                     recall,
                     precision,
                     gt_covered,
-                    pred_covered
+                    pred_covered,
+                    recall_noclass,
+                    precision_noclass,
+                    gt_covered_noclass,
+                    pred_covered_noclass
                 )
             else:
                 return (
@@ -296,6 +308,7 @@ def build_oversegmented_targets_multiscale(
     #t#tic=timeit.default_timer()
 
     VISUAL_DEBUG=False
+    HIT_THRESH=0.5
     VIZ_SIZE=24
     use_rotation_aligned_predictions=False
     nC = num_classes
@@ -345,6 +358,10 @@ def build_oversegmented_targets_multiscale(
     on_pred_area = 0
     precision = 0
     recall = 0
+    covered_gt_area_all = 0
+    on_pred_area_all = 0
+    precision_all = 0
+    recall_all = 0
     #nCorrect = 0
     #import pdb; pdb.set_trace()
     for b in range(nB):
@@ -366,8 +383,12 @@ def build_oversegmented_targets_multiscale(
 
             draw_colors = [(255,0,0),(100,255,0),(0,0,255),(255,100,0),(0,255,0),(255,0,255),(200,200,0),(255,200,0),(200,255,0),(0,255,255)]
         on_pred_areaB=[]
+        on_pred_areaB_all=[]
+        covered_gt_areaB=torch.FloatTensor(target_sizes[b]).zero_()
+        covered_gt_areaB_all=torch.FloatTensor(target_sizes[b]).zero_()
         for level in range(len(nHs)):
             on_pred_areaB.append( torch.FloatTensor(pred_boxes[level].shape[1:4]).zero_() )
+            on_pred_areaB_all.append( torch.FloatTensor(pred_boxes[level].shape[1:4]).zero_() )
 
         #t#times_setup_and_level_select=[]
         #t#times_level_setup=[]
@@ -1110,17 +1131,33 @@ def build_oversegmented_targets_multiscale(
             # Calculate overlaps between ground truth and best matching prediction
             if calc_stats:
                 for level in range(len(nHs)):
+                    gx = target[b, t, 0] / scale[level][0]
+                    gy = target[b, t, 1] / scale[level][1]
+                    gw = target[b, t, 4] / scale[level][0]
+                    gh = target[b, t, 3] / scale[level][1]
+
                     class_selector = torch.logical_and(pred_cls[level][b].argmax(dim=3)==torch.argmax(target[b,t,13:]), pred_conf[level][b]>0)
+                    all_selector = pred_conf[level][b]>0
                     pred_right_label_boxes = pred_boxes[level][b][class_selector] #this is already normalized to tile space
+                    pred_right_label_boxes_all = pred_boxes[level][b][all_selector] #this is already normalized to tile space
                     #convert?
                  
                     gt_area_covered, pred_area_covered = bbox_coverage_axis_rot((gx,gy,gr,gh,gw), pred_right_label_boxes)
+                    gt_area_covered_all, pred_area_covered_all = bbox_coverage_axis_rot((gx,gy,gr,gh,gw), pred_right_label_boxes_all)
+                    #print(pred_area_covered_all)
                     assert(len(pred_area_covered)==0 or max(pred_area_covered)<=1)
                     if gt_area_covered is not None:
-                        covered_gt_area += gt_area_covered/gt_area
-                        if gt_area_covered/gt_area>0.5:
-                            recall+=1
+                        #covered_gt_area += gt_area_covered
+                        #covered_gt_area_all += gt_area_covered_all
+
+                        covered_gt_areaB[t] = max(gt_area_covered,covered_gt_areaB[t])
+                        covered_gt_areaB_all[t] = max(gt_area_covered_all,covered_gt_areaB_all[t])
+                        #if gt_area_covered>0.5:
+                        #    recall+=1
+                        #if gt_area_covered_all>0.5:
+                        #    recall_all+=1
                         on_pred_areaB[level][class_selector] = torch.max(on_pred_areaB[level][class_selector],torch.FloatTensor(pred_area_covered))
+                        on_pred_areaB_all[level][all_selector] = torch.max(on_pred_areaB_all[level][all_selector],torch.FloatTensor(pred_area_covered_all))
                     else:
                         nGT-=1
                     #pred_label = torch.argmax(pred_cls[b, best_n, gj, gi])
@@ -1225,11 +1262,18 @@ def build_oversegmented_targets_multiscale(
                 axs[-1].imshow(draw_level)
             plt.show()
 
-        for level in range(len(nHs)):
-            on_pred_area += on_pred_areaB[level].sum()
-            #nPred += on_pred_areaB[level].size(0)
-            precision += (on_pred_areaB[level]>0.5).sum()
-            nPred += (pred_conf[level][b]>0).sum()
+        if calc_stats:
+            for level in range(len(nHs)):
+                on_pred_area += on_pred_areaB[level].sum().item()
+                on_pred_area_all += on_pred_areaB_all[level].sum().item()
+                #nPred += on_pred_areaB[level].size(0)
+                precision += (on_pred_areaB[level]>HIT_THRESH).sum().item()
+                precision_all += (on_pred_areaB_all[level]>HIT_THRESH).sum().item()
+                nPred += (pred_conf[level][b]>0).sum().item()
+            covered_gt_area += covered_gt_areaB.sum().item()
+            recall += (covered_gt_areaB>HIT_THRESH).sum().item()
+            covered_gt_area_all += covered_gt_areaB_all.sum().item()
+            recall_all += (covered_gt_areaB_all>HIT_THRESH).sum().item()
         #t#print('time all batch{}: {}'.format(b,timeit.default_timer()-tic))
         #t#print('  times_setup_and_level_select: {}   std: {}, count{}'.format(np.mean(times_setup_and_level_select),np.std(times_setup_and_level_select),len(times_setup_and_level_select)))
         #t#print('  times_level_setup: {}   std: {}, count{}'.format(np.mean(times_level_setup),np.std(times_level_setup),len(times_level_setup)))
@@ -1256,7 +1300,12 @@ def build_oversegmented_targets_multiscale(
             on_pred_area/nPred if nPred>0 else 0, 
             covered_gt_area/nGT if nGT>0 else 0, 
             recall/nGT if nGT>0 else 1, 
-            precision/nPred if nPred>0 else 1 )
+            precision/nPred if nPred>0 else 1,
+            on_pred_area_all/nPred if nPred>0 else 0, 
+            covered_gt_area_all/nGT if nGT>0 else 0, 
+            recall_all/nGT if nGT>0 else 1, 
+            precision_all/nPred if nPred>0 else 1,
+            )
 
 def bbox_coverage_axis_rot(box_gt, pred_boxes):
     """
