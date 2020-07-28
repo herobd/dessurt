@@ -519,6 +519,7 @@ class GraphPairTrainer(BaseTrainer):
             if targetBoxes is not None:
                 targetBoxes = targetBoxes.cpu()
                 if self.model.rotation:
+                    assert(False and 'untested')
                     targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
                 else:
                     targIndex, fullHit, overSegmented = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,hard_thresh=False,fixed=self.fixedAlign)
@@ -848,7 +849,8 @@ class GraphPairTrainer(BaseTrainer):
                 gtGroup0 = getGTGroup(ts0,gtGroups)
                 gtGroup1 = getGTGroup(ts1,gtGroups)
                 if t0>=0 and t1>=0:
-                    if (min(t0,t1),max(t0,t1)) in adj:
+                    #if (min(t0,t1),max(t0,t1)) in adj:
+                    if (t0,t1) in adj or (t1,t0) in adj: #the model computes both
                         #if self.useBadBBPredForRelLoss!='fixed' or (fullHit[n0] and fullHit[n1]):
                         if fullHit[n0] and fullHit[n1]:
                             #matches+=1
@@ -1007,7 +1009,7 @@ class GraphPairTrainer(BaseTrainer):
 
         return predsPos,predsNeg, recall, prec, prec, computeAP(scores), proposedInfo
 
-
+    #old
     def run(self,instance,useGT,threshIntur=None,get=[]):
         numClasses = self.model.numBBTypes
         if 'no_blanks' in self.config['validation'] and not self.config['data_loader']['no_blanks']:
