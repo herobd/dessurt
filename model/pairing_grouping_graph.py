@@ -1824,11 +1824,10 @@ class PairingGroupingGraph(BaseModel):
         features[:,:,26:26+numClassFeat] = classFeat1
         features[:,:,26+numClassFeat:] = classFeat2
 
-        #rel_pred = self.rel_prop_nn(features,7,7,5) #7 x, 7 y, 5 xy, for normalizing
         features[:,:,0:7]/=self.normalizeHorz
         features[:,:,7:14]/=self.normalizeVert
         features[:,:,14:19]/=(self.normalizeVert+self.normalizeHorz)/2
-        features = features.view(bbs.size(0)**2,26+numClassFeat*2)
+        features = features.view(bbs.size(0)**2,26+numClassFeat*2) #flatten
         #t#time = timeit.default_timer()-tic
         #t#print('   candidates feats: {}'.format(time))
         #t#self.opt_cand.append(time)
@@ -1837,7 +1836,7 @@ class PairingGroupingGraph(BaseModel):
         #t#    self.opt_cand = self.opt_cand[1:]
         #t#tic=timeit.default_timer()
         rel_pred = self.rel_prop_nn(features.to(device))
-        rel_pred2d = rel_pred.view(bbs.size(0),bbs.size(0))
+        rel_pred2d = rel_pred.view(bbs.size(0),bbs.size(0)) #unflatten
         actual_rels = [(i,j) for i in range(bbs.size(0)) for j in range(i+1,bbs.size(0))]
         rels_ordered = [ ((rel_pred2d[rel[0],rel[1]].item()+rel_pred2d[rel[1],rel[0]].item())/2,rel) for rel in actual_rels ]
         rels = [(i,j) for i in range(bbs.size(0)) for j in range(bbs.size(0))]
