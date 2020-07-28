@@ -512,6 +512,7 @@ class GraphPairTrainer(BaseTrainer):
             if targetBoxes is not None:
                 targetBoxes = targetBoxes.cpu()
                 if self.model.rotation:
+                    assert(False and 'untested')
                     targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
                 else:
                     targIndex, fullHit, overSegmented = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,hard_thresh=False,fixed=self.fixedAlign)
