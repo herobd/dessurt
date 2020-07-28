@@ -28,9 +28,8 @@ from collections import defaultdict
 import timeit
 import cv2
 
-MAX_CANDIDATES=325 #450
-MAX_GRAPH_SIZE=370
-#max seen 428, so why'd it crash on 375?
+MAX_CANDIDATES=2000
+MAX_GRAPH_SIZE=4000
 
 def correctTrans(pred,predBB,gt,gtBB):
     thresh=100
