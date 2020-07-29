@@ -847,7 +847,7 @@ class PairingGroupingGraph(BaseModel):
                                 toMergeBBs[mergeNewId0]=newToMergeBB
                                 #print('merge {} and {} (d), because of {} and {}'.format(mergeNewId0,mergeNewId1,bbId0,bbId1))
                                 del toMergeBBs[mergeNewId1]
-                            else:
+                        else:
                             bbId0 = oldGroups[n0][0]
                             bbId1 = oldGroups[n1][0]
                             if bbId0 in oldToNewBBIndexes:
@@ -1452,29 +1452,6 @@ class PairingGroupingGraph(BaseModel):
 
                 #classes
 
-                #shapeFeats[:,2] = bbs1_feats[1]/self.normalizeHorz #width
-                #shapeFeats[:,3] = bbs2_feats[1]/self.normalizeHorz
-                #shapeFeats[:,4] = bbs1_feats[2]/math.pi #rot
-                #shapeFeats[:,5] = bbs2_feats[2]/math.pi #rot
-                #shapeFeats[:,5] = torch.sqrt( (bbs1_feats[3]-bbs2_feats[3]/)**2 + ()**2 )/self.normalizeDist
-
-                for i, index1,index2 in enumerate(candidates):
-
-                    shapeFeats[i,0] = bbs[index1].length()/self.normalizeHorz
-                    shapeFeats[i,1] = bbs[index2].length()/self.normalizeHorz
-                    shapeFeats[i,2] = bbs[index1].height()/self.normalizeVert
-                    shapeFeats[i,3] = bbs[index2].height()/self.normalizeVert
-                    shapeFeats[i,4] = bbs[index1].angle()/math.pi
-                    shapeFeats[i,5] = bbs[index2].angle()/math.pi
-
-                    lx1,ly1 = bbs[index1].leftPoint()
-                    lx2,ly2 = bbs[index2].leftPoint()
-                    rx1,ry1 = bbs[index1].rightPoint()
-                    rx2,ry2 = bbs[index2].rightPoint()
-                    shapeFeats[i,6] = math.sqrt( 
-
-                    shapeFeats[i,xa:ya] = bbs[index1].cls
-                    shapeFeats[i,xb:yb] = bbs[index2].cls
 
 
                 raise NotImplementedError('todo')
