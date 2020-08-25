@@ -106,67 +106,18 @@ class OverSegBoxDetector(nn.Module): #BaseModel
 
 
         #priors_0 = Variable(torch.arange(0,y.size(2)).type_as(img.data), requires_grad=False)[None,:,None]
+        bbPredictions = build_box_predictions(ys,self.scale,img.device,self.numAnchors,self.numBBParams,self.numBBTypes)
+
         offsetPredictions_scales=[]
-        bbPredictions_scales=[]
         for level,y in enumerate(ys):
-            priors_0 = torch.arange(0,y.size(2)).type_as(img.data)[None,:,None]
-            priors_0 = (priors_0 + 0.5) * self.scale[level][1] #self.base_0
-            priors_0 = priors_0.expand(y.size(0), priors_0.size(1), y.size(3))
-            priors_0 = priors_0[:,None,:,:].to(img.device)
-
-            #priors_1 = Variable(torch.arange(0,y.size(3)).type_as(img.data), requires_grad=False)[None,None,:]
-            priors_1 = torch.arange(0,y.size(3)).type_as(img.data)[None,None,:]
-            priors_1 = (priors_1 + 0.5) * self.scale[level][0] #elf.base_1
-            priors_1 = priors_1.expand(y.size(0), y.size(2), priors_1.size(2))
-            priors_1 = priors_1[:,None,:,:].to(img.device)
-
             pred_offsets=[] #we seperate anchor predictions here. And compute actual bounding boxes
-            pred_boxes=[]
             for i in range(self.numAnchors):
 
                 offset = i*(self.numBBParams+self.numBBTypes)
-                
-                if i<2: #horizontal text
-                    stackedPred = [
-                        torch.sigmoid(y[:,0+offset:1+offset,:,:]),                              #0. confidence
-                        torch.tanh(y[:,1+offset:2+offset,:,:])*self.scale[level][0]*MAX_W_PRED + priors_1, #1. x1
-                        torch.tanh(y[:,2+offset:3+offset,:,:])*self.scale[level][1]*MAX_H_PRED + priors_0, #2. y1
-                        torch.tanh(y[:,3+offset:4+offset,:,:])*self.scale[level][0]*MAX_W_PRED + priors_1, #3. x2
-                        torch.tanh(y[:,4+offset:5+offset,:,:])*self.scale[level][1]*MAX_H_PRED + priors_0, #4. y2
-                        torch.sin(y[:,5+offset:6+offset,:,:]*np.pi)*np.pi,        #5. rotation (radians)
-                    ]
-                elif i<4: #verticle text
-                    stackedPred = [
-                        torch.sigmoid(y[:,0+offset:1+offset,:,:]),                              #0. confidence
-                        torch.tanh(y[:,2+offset:3+offset,:,:])*self.scale[level][0]*MAX_H_PRED + priors_1, #1. x1
-                        torch.tanh(y[:,1+offset:2+offset,:,:])*self.scale[level][1]*MAX_W_PRED + priors_0, #2. y1
-                        torch.tanh(y[:,4+offset:5+offset,:,:])*self.scale[level][0]*MAX_H_PRED + priors_1, #3. x2
-                        torch.tanh(y[:,3+offset:4+offset,:,:])*self.scale[level][1]*MAX_W_PRED + priors_0, #4. y2
-                        torch.sin(y[:,5+offset:6+offset,:,:]*np.pi)*np.pi,        #5. rotation (radians)
-                    ]
-                else:
-                    assert(False)
-
-
-                for j in range(self.numBBTypes):
-                    stackedPred.append(torch.sigmoid(y[:,6+j+offset:7+j+offset,:,:]))         #x. class prediction
-                    #stackedOffsets.append(y[:,6+j+offset:7+j+offset,:,:])         #x. class prediction
-                pred_boxes.append(torch.cat(stackedPred, dim=1))
-                #pred_offsets.append(torch.cat(stackedOffsets, dim=1))
                 pred_offsets.append(y[:,offset:offset+self.numBBParams+self.numBBTypes,:,:])
             offsetPredictions = torch.stack(pred_offsets, dim=1)
             offsetPredictions = offsetPredictions.permute(0,1,3,4,2).contiguous()
             offsetPredictions_scales.append(offsetPredictions)
-
-            bbPredictions = torch.stack(pred_boxes, dim=1)
-            bbPredictions = bbPredictions.transpose(2,4).contiguous()#from [batch, anchors, channel, rows, cols] to [batch, anchros, cols, rows, channels]
-            bbPredictions = bbPredictions.view(bbPredictions.size(0),bbPredictions.size(1),-1,bbPredictions.size(4))#flatten to [batch, anchors, instances, channel]
-            #avg_conf_per_anchor = bbPredictions[:,:,:,0].mean(dim=0).mean(dim=1)
-            bbPredictions = bbPredictions.view(bbPredictions.size(0),-1,bbPredictions.size(3)) #[batch, instances+anchors, channel]
-            bbPredictions_scales.append(bbPredictions)
-
-        bbPredictions = torch.cat(bbPredictions_scales,dim=1) #stack the scales
-        bbPredictions_scales=None
 
         pixelPreds=None
         if self.predPixelCount>0:
@@ -240,3 +191,65 @@ class OverSegBoxDetector(nn.Module): #BaseModel
         def save_layer4(module,input,output):
             self.debug4=output.cpu()
         self.net_down_modules[4].register_forward_hook(save_layer4)
+
+
+
+
+
+def build_box_predictions(ys,scale,device,numAnchors,numBBParams,numBBTypes):
+    bbPredictions_scales=[]
+    for level,y in enumerate(ys):
+        priors_0 = torch.arange(0,y.size(2)).type(torch.float)[None,:,None]
+        priors_0 = (priors_0 + 0.5) * scale[level][1] #self.base_0
+        priors_0 = priors_0.expand(y.size(0), priors_0.size(1), y.size(3))
+        priors_0 = priors_0[:,None,:,:].to(device)
+
+        #priors_1 = Variable(torch.arange(0,y.size(3)).type_as(img.data), requires_grad=False)[None,None,:]
+        priors_1 = torch.arange(0,y.size(3)).type(torch.float)[None,None,:]
+        priors_1 = (priors_1 + 0.5) * scale[level][0] #elf.base_1
+        priors_1 = priors_1.expand(y.size(0), y.size(2), priors_1.size(2))
+        priors_1 = priors_1[:,None,:,:].to(device)
+
+        pred_boxes=[]
+        for i in range(numAnchors):
+
+            offset = i*(numBBParams+numBBTypes)
+            
+            if i<2: #horizontal text
+                stackedPred = [
+                    torch.sigmoid(y[:,0+offset:1+offset,:,:]),                              #0. confidence
+                    torch.tanh(y[:,1+offset:2+offset,:,:])*scale[level][0]*MAX_W_PRED + priors_1, #1. x1
+                    torch.tanh(y[:,2+offset:3+offset,:,:])*scale[level][1]*MAX_H_PRED + priors_0, #2. y1
+                    torch.tanh(y[:,3+offset:4+offset,:,:])*scale[level][0]*MAX_W_PRED + priors_1, #3. x2
+                    torch.tanh(y[:,4+offset:5+offset,:,:])*scale[level][1]*MAX_H_PRED + priors_0, #4. y2
+                    torch.sin(y[:,5+offset:6+offset,:,:]*np.pi)*np.pi,        #5. rotation (radians)
+                ]
+            elif i<4: #verticle text
+                stackedPred = [
+                    torch.sigmoid(y[:,0+offset:1+offset,:,:]),                              #0. confidence
+                    torch.tanh(y[:,2+offset:3+offset,:,:])*scale[level][0]*MAX_H_PRED + priors_1, #1. x1
+                    torch.tanh(y[:,1+offset:2+offset,:,:])*scale[level][1]*MAX_W_PRED + priors_0, #2. y1
+                    torch.tanh(y[:,4+offset:5+offset,:,:])*scale[level][0]*MAX_H_PRED + priors_1, #3. x2
+                    torch.tanh(y[:,3+offset:4+offset,:,:])*scale[level][1]*MAX_W_PRED + priors_0, #4. y2
+                    torch.sin(y[:,5+offset:6+offset,:,:]*np.pi)*np.pi,        #5. rotation (radians)
+                ]
+            else:
+                assert(False)
+
+
+            for j in range(numBBTypes):
+                stackedPred.append(torch.sigmoid(y[:,6+j+offset:7+j+offset,:,:]))         #x. class prediction
+                #stackedOffsets.append(y[:,6+j+offset:7+j+offset,:,:])         #x. class prediction
+            pred_boxes.append(torch.cat(stackedPred, dim=1))
+
+        bbPredictions = torch.stack(pred_boxes, dim=1)
+        bbPredictions = bbPredictions.transpose(2,4).contiguous()#from [batch, anchors, channel, rows, cols] to [batch, anchros, cols, rows, channels]
+        bbPredictions = bbPredictions.view(bbPredictions.size(0),bbPredictions.size(1),-1,bbPredictions.size(4))#flatten to [batch, anchors, instances, channel]
+        #avg_conf_per_anchor = bbPredictions[:,:,:,0].mean(dim=0).mean(dim=1)
+        bbPredictions = bbPredictions.view(bbPredictions.size(0),-1,bbPredictions.size(3)) #[batch, instances+anchors, channel]
+        bbPredictions_scales.append(bbPredictions)
+
+    bbPredictions = torch.cat(bbPredictions_scales,dim=1) #stack the scales
+    bbPredictions_scales=None
+    return bbPredictions
+
