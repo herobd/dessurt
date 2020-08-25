@@ -51,7 +51,10 @@
 #plt.plot(x,y,'.')
 #plt.show()
 from model.oversegment_loss import build_oversegmented_targets_multiscale
-import torch
+from model.overseg_box_detector import build_box_predictions
+from utils.bb_merging import TextLine
+import torch, cv2
+import numpy as np
 import math,random
 
 def calcPoints(x,y,r,h,w):
@@ -66,10 +69,27 @@ def calcPoints(x,y,r,h,w):
     by = y + math.cos(r)*h
 
     return lx,ly,rx,ry,tx,ty,bx,by
+def calcCorners(x,y,r,h,w):
+    tlX = -w*math.cos(r) -h*math.sin(r) +x
+    tlY = -h*math.cos(r) +w*math.sin(r) +y
+    trX =  w*math.cos(r) -h*math.sin(r) +x
+    trY = -h*math.cos(r) -w*math.sin(r) +y
+    brX =  w*math.cos(r) +h*math.sin(r) +x
+    brY =  h*math.cos(r) -w*math.sin(r) +y
+    blX = -w*math.cos(r) +h*math.sin(r) +x
+    blY =  h*math.cos(r) +w*math.sin(r) +y
+    return [[tlX,tlY],[trX,trY],[brX,brY],[blX,blY]]
 
-num_classes=1
-H=1500
-W=1500
+def drawPoly(img,pts,color,thck=1):
+    for i in range(-1,len(pts)-1):
+        cv2.line(img,(int(pts[i][0]),int(pts[i][1])),(int(pts[i+1][0]),int(pts[i+1][1])),color,thck)
+
+num_classes=2
+numBBTypes=2
+numAnchors=4
+numBBParams=6
+H=300
+W=300
 #scale = [ (16,16), (32,32), (64,64) ]
 scale = [ (32,32), (64,64) ]
 grid_sizesH=[H//s[0] for s in scale]
@@ -82,11 +102,11 @@ targs=[]
 #varying sizes
 yb=100
 t=0
-for h in range(8,15,4):
+for h in range(40,41,4):
     w = h*2
-    r = 0#-math.pi*(7/10)
+    r = math.pi/4#-math.pi*(7/10)
     y = yb
-    for x in range(100,300,300):
+    for x in range(88,300,300):
         lx,ly,rx,ry,tx,ty,bx,by = calcPoints(x,y,r,h,w)
         targs.append([x,y,r,h,w,lx,ly,rx,ry,tx,ty,bx,by])
         t+=1
@@ -128,4 +148,57 @@ target= torch.FloatTensor(1,t,13+1)
 for t,targ in enumerate(targs):
     target[0,t,:13]=torch.FloatTensor(targ)
 
-build_oversegmented_targets_multiscale(pred_boxes, pred_conf, pred_cls, target, target_sizes, num_classes, grid_sizesH, grid_sizesW,scale=scale, assign_mode='split', close_anchor_rule='unmask')
+nGT, masks, conf_masks, t_Ls, t_Ts, t_Rs, t_Bs, t_rs, tconf_scales, tcls_scales, pred_covered, gt_covered, recall, precision, pred_covered_noclass, gt_covered_noclass, recall_noclass, precision_noclass = build_oversegmented_targets_multiscale(pred_boxes, pred_conf, pred_cls, target, target_sizes, num_classes, grid_sizesH, grid_sizesW,scale=scale, assign_mode='split', close_anchor_rule='unmask')
+
+
+# Handle target variables
+t_Ls = [t.type(torch.FloatTensor) for t in t_Ls]
+t_Ts = [t.type(torch.FloatTensor) for t in t_Ts]
+t_Rs = [t.type(torch.FloatTensor) for t in t_Rs]
+t_Bs = [t.type(torch.FloatTensor) for t in t_Bs]
+t_rs = [t.type(torch.FloatTensor) for t in t_rs]
+tconf_scales = [t.type(torch.FloatTensor) for t in tconf_scales]
+tcls_scales = [t.type(torch.FloatTensor) for t in tcls_scales]
+
+ys = []
+for level in range(len(t_Ls)):
+    level_y = torch.cat([ torch.stack([tconf_scales[level],t_Ls[level],t_Ts[level],t_Rs[level], t_Bs[level],t_rs[level]],dim=2), tcls_scales[level].permute(0,1,4,2,3)], dim=2)
+    ys.append(level_y.view(level_y.size(0),level_y.size(1)*level_y.size(2),level_y.size(3),level_y.size(4)))
+
+    print('level_y: {}'.format(level_y[level_y[:,0]>0.5]))
+gt_boxes = build_box_predictions(ys,scale,ys[0].device,numAnchors,numBBParams,numBBTypes)
+for level in range(len(t_Ls)):
+    print('gt: {}'.format(gt_boxes[level][0,gt_boxes[level][0,:,0]>0.5]))
+
+img = np.zeros([H,W,3])
+for t in targs:
+    corners = calcCorners(*t[0:5])
+    #cv2.polylines(img,np.array([[t[5],t[10]],[t[7],t[10]],[t[7],t[12]],[t[5],t[12]]],np.int32).reshape((-1,1,2)),True,(0,255,0),3)
+    #drawPoly(img,[[t[5],t[10]],[t[7],t[10]],[t[7],t[12]],[t[5],t[12]]],(0,255,0),3)
+    #print([[t[5],t[10]],[t[7],t[10]],[t[7],t[12]],[t[5],t[12]]])
+    drawPoly(img,corners,(0,255,0),3)
+
+
+all_textlines=[]
+for bb in gt_boxes[0]:
+    if bb[0]>0.5:
+        #all_textlines.append(TextLine(torch.FloatTensor([1,t[5],t[10],t[7],t[12],0,0,1])))
+        #cv2.rectangle(img,(t[5],t[10]),(t[7],t[12]),(0,0,255),1)
+        all_textlines.append(TextLine(torch.FloatTensor(bb)))
+        #cv2.rectangle(img,bb[1:3].numpy(),bb[3:5].numpy(),(0,0,255))
+        #cv2.line(img,(round(bb[1].item()),round(bb[2].item())),(round(bb[3].item()),round(bb[4].item())),(0,0,255))
+        cv2.rectangle(img,(round(bb[1].item()),round(bb[2].item())),(round(bb[3].item()),round(bb[4].item())),(0,0,255),2)
+        print(bb)
+
+first_textline=all_textlines[0]
+for tl in all_textlines[1:]:
+    first_textline.merge(tl)
+
+#cv2.polylines(img,np.array(first_textline.polyPoints(),np.int32).reshape((-1,1,2)),True,(255,0,0),1)
+drawPoly(img,first_textline.polyPoints(),(255,0,0),1)
+for p in first_textline.polyPoints():
+    img[int(p[1]),int(p[0]),1]=255
+print(first_textline.polyPoints())
+
+cv2.imshow('x',img)
+cv2.waitKey()

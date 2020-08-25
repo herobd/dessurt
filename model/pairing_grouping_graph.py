@@ -793,6 +793,7 @@ class PairingGroupingGraph(BaseModel):
 
     #Use the graph network's predictions to merge oversegmented detections and group nodes into a single node
     def mergeAndGroup(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePreds,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image):
+        assert(not self.useCurvedBBs or len(oldBBs)==0 or type(oldBBs[0]) is TextLine)
         newBBs={}
         #newBBs_line={}
         newBBIdCounter=0
@@ -803,6 +804,7 @@ class PairingGroupingGraph(BaseModel):
         ##Prevent all nodes from merging during first iterations (bad init):
         if not(mergePreds.mean()>mergeThresh*0.99 and edgePreds.size(0)>5):
         
+            #check for merges, where we will combine two BBs into one
             for i,(n0,n1) in enumerate(oldEdgeIndexes):
                 #mergePred = edgePreds[i,-1,1]
                 
@@ -816,7 +818,8 @@ class PairingGroupingGraph(BaseModel):
                                 bb0ToMerge = toMergeBBs[mergeNewId0]
                             else:
                                 mergeNewId0 = None
-                                bb0 = ToMerge(oldBBs[bbId0].cpu())
+                                bb0ToMerge = ToMerge(oldBBs[bbId0].cpu())
+
                             if bbId1 in oldToNewBBIndexes:
                                 mergeNewId1 = oldToNewBBIndexes[bbId1]
                                 bb1ToMerge = toMergeBBs[mergeNewId1]
@@ -847,7 +850,7 @@ class PairingGroupingGraph(BaseModel):
                                 toMergeBBs[mergeNewId0]=newToMergeBB
                                 #print('merge {} and {} (d), because of {} and {}'.format(mergeNewId0,mergeNewId1,bbId0,bbId1))
                                 del toMergeBBs[mergeNewId1]
-                            else:
+                        else:
                             bbId0 = oldGroups[n0][0]
                             bbId1 = oldGroups[n1][0]
                             if bbId0 in oldToNewBBIndexes:
@@ -1449,6 +1452,19 @@ class PairingGroupingGraph(BaseModel):
                 centriodX2 = torch.FloatTensor([bb.centriodX() for bb in bbs_index2])
                 centriodY2 = torch.FloatTensor([bb.centriodY() for bb in bbs_index2])
                 shapeFeats[:,10] = torch.sqrt( (centriodX1-centriodX2)**2 + (centriodY1-centriodY2)**2 )/self.normalizeDist
+                shapeFeats[:,11] = torch.sqrt( (centriodX1-leftX2)**2 + (centriodY1-leftY2)**2 )/self.normalizeDist
+                shapeFeats[:,12] = torch.sqrt( (centriodX1-rightX2)**2 + (centriodY1-rightY2)**2 )/self.normalizeDist
+                shapeFeats[:,13] = torch.sqrt( (centriodX2-leftX1)**2 + (centriodY2-leftY1)**2 )/self.normalizeDist
+                shapeFeats[:,14] = torch.sqrt( (centriodX2-rightX1)**2 + (centriodY2-rightY1)**2 )/self.normalizeDist
+                shapeFeats[:,15] = torch.FloatTensor([bb.angleStd() for bb in bbs_index1])
+                shapeFeats[:,16] = torch.FloatTensor([bb.angleStd() for bb in bbs_index2])
+
+                shapeFeats[:,17] = torch.FloatTensor([bb1.getReadPos()-bb2.getReadPos() for bb1,bb2 in zip(bbs_index1,bbs_index2)])//self.normalizeDist #read pos
+
+                #TODO
+                #overlap feature?
+
+                #x y diff
 
                 #classes
 
@@ -1471,7 +1487,9 @@ class PairingGroupingGraph(BaseModel):
                     lx2,ly2 = bbs[index2].leftPoint()
                     rx1,ry1 = bbs[index1].rightPoint()
                     rx2,ry2 = bbs[index2].rightPoint()
-                    shapeFeats[i,6] = math.sqrt( 
+                    shapeFeats[i,6] = math.sqrt( (lx1-rx2)**2 + (ly1-ry1)**2) 
+                    assert(False)
+                    #TODO, add more features!
 
                     shapeFeats[i,xa:ya] = bbs[index1].cls
                     shapeFeats[i,xb:yb] = bbs[index2].cls

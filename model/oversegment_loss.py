@@ -242,6 +242,12 @@ class MultiScaleOversegmentLoss (nn.Module):
 
             loss = loss_L + loss_T + loss_R + loss_B + loss_r + loss_conf + loss_cls
 
+            if False and build_gt_detections:
+                ys = []
+                for level in range(len(t_Ls)):
+                    ys.append(torch.cat([torch.ones_like(t_Ls[level]),t_Ls[level],t_Ts[level],t_Rs[level], t_Bs[level],t_rs[level]],dim=1))
+                gt_boxes = build_box_predictions(ys,self.scale,img.device,self.numAnchors,self.numBBParams,self.numBBTypes)
+
             #t#time = timeit.default_timer()-ticAll
             #t#print('time FULL: '+str(time))
             #t#self.OPT_FULL.append(time)
