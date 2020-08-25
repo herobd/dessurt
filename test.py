@@ -102,6 +102,7 @@ targs=[]
 #varying sizes
 yb=100
 t=0
+<<<<<<< HEAD
 for h in range(40,41,4):
     w = h*2
     r = math.pi/4#-math.pi*(7/10)
@@ -111,11 +112,11 @@ for h in range(40,41,4):
         targs.append([x,y,r,h,w,lx,ly,rx,ry,tx,ty,bx,by])
         t+=1
         y+=1
-        #r += math.pi/10
-        #if r>math.pi:
-        #    r-=math.pi*2
+        r += math.pi/10
+        if r>math.pi:
+            r-=math.pi*2
         #r = (random.random()*math.pi/2)-math.pi/4
-    yb+=0.5*(h+w)
+    yb+=1.1*(h+w)
 
 #Totally random
 #t=50

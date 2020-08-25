@@ -410,6 +410,8 @@ def build_oversegmented_targets_multiscale(
         #That brings up an interesting alternative: limit all predictions to their local tile (width). Proba not now...
         for t in range(target_sizes[b]): #range(target.shape[1]):
             #t#tic2=timeit.default_timer()
+            #print('DEBUG t:{}'.format(t))
+            num_assigned=0
             nGT += 1
 
 
@@ -450,6 +452,7 @@ def build_oversegmented_targets_multiscale(
             #t#times_setup_and_level_select.append(timeit.default_timer()-tic2)
 
             for level in ([closest]+unmask_levels):
+                #print('DEBUG    leve:{}'.format(level))
                 #t#tic2=timeit.default_timer()
                 only_unmask = level!=closest
 
@@ -518,6 +521,7 @@ def build_oversegmented_targets_multiscale(
                 #gy2 = gy+gh
             
                 if gw==0 or gh==0:
+                    #print('DEBUG: 0 sized bb')
                     continue
                 #t#times_level_setup.append(timeit.default_timer()-tic2)
                 #t#tic2=timeit.default_timer()
@@ -530,6 +534,8 @@ def build_oversegmented_targets_multiscale(
 
                 hit_tile_ys = np.clip(hit_tile_ys,0,nH-1)
                 hit_tile_xs = np.clip(hit_tile_xs,0,nW-1)
+                hits = [(y,x) for y,x in zip(hit_tile_ys,hit_tile_xs) if (y>=0 and y<nH and x>=0 and x<nW)]
+                hit_tile_ys,hit_tile_xs = zip(*hits)
                 #ignore_tile_ys = np.clip(ignore_tile_ys,0,nH-1)
                 #ignore_tile_xs = np.clip(ignore_tile_xs,0,nW-1)
                 #t#times_tile_hit.append(timeit.default_timer()-tic2)
@@ -642,6 +648,10 @@ def build_oversegmented_targets_multiscale(
                             s_perp = (g_by-g_ty)/(g_bx-g_tx)
                         else:
                             s_perp = float('inf')
+                        if not math.isinf(s_perp) and not math.isinf(s_len):
+                            s_len= (s_len-1/s_perp)/2
+                            s_prep= -1/s_len
+
                         s_t=s_b=s_len
                         s_l=s_r=s_perp
                         if gr<np.pi/2 and gr>-np.pi/2:
@@ -680,6 +690,9 @@ def build_oversegmented_targets_multiscale(
                             s_perp = (g_bx-g_tx)/(g_by-g_ty)
                         else:
                             s_perp = float('inf')
+                        if not math.isinf(s_perp) and not math.isinf(s_len):
+                            s_len= (s_len-1/s_perp)/2
+                            s_prep= -1/s_len
                         s_t=s_b=s_len
                         s_l=s_r=s_perp
                         if gr<0 or gr>np.pi:
@@ -734,6 +747,10 @@ def build_oversegmented_targets_multiscale(
                     
                     #print('level:{}, r:{:.3f},  {}'.format(level,gr,list(zip(hit_tile_xs,hit_tile_ys))))
                     #print('s_t/b:{}, c_t:{}, c_b:{},  s_l/r:{}, c_l:{}, c_r:{}'.format(s_t,c_t,c_b,s_l,c_l,c_r))
+                    if isHorz:
+                        DEBUG_max_x = max(hit_tile_xs)
+                    else:
+                        DEBUG_max_x = max(hit_tile_ys)
                     #t#times_lines.append(timeit.default_timer()-tic2)
                     for cell_index,(cell_y,cell_x) in enumerate(zip(hit_tile_ys,hit_tile_xs)): #kind of confusing, but here "tx ty" is for tile-i tile-j
                         #t#tic2=timeit.default_timer()
@@ -773,7 +790,7 @@ def build_oversegmented_targets_multiscale(
                         #This requires looking at how the bb lines intersect eachother and the horizontal boundaries (ti_y/bi_y)
                         #We leverage the fact that at tile_x, the horizontal boundaries and the bb lines intersect (top and bottom)
                         #print('{},{} at ri_x comp  s_t:{}'.format(tx,ty,s_t))
-                        if s_t==0:
+                        if s_t==0 or math.isinf(s_l):
                             ri_x = c_r
                         else:
                             #find intersections
@@ -812,7 +829,7 @@ def build_oversegmented_targets_multiscale(
                             #    ri_x = min(ri_x,(ri_y-c_r)/s_r)
 
                         #compute li_x
-                        if s_t==0:
+                        if s_t==0 or math.isinf(s_l):
                             li_x = c_l
                         else:
                             #find intersections
@@ -886,14 +903,17 @@ def build_oversegmented_targets_multiscale(
                             #isRightEnd = tile_x>ri_x and ri_x>=tx and (ti_y+bi_y)/2<=ty+1 and (ti_y+bi_y)/2>=ty
                             isLeftEnd = li_x>tile_x 
                             isRightEnd = ri_x<tile_x 
+                            #print('isLeftEnd: {} = {} > {}'.format(isLeftEnd,li_x,tile_x))
+                            #print('isRightEnd: {} = {} < {}'.format(isRightEnd,ri_x,tile_x))
 
                             #evaluate if this tile is just barely contributing. skip it if it is
                             #print('{},{}:  l:{},{}   r:{},{}'.format(cell_x,cell_y,isLeftEnd,math.sqrt((tile_x-gt_left_x)**2 + (tile_y-gt_left_y)**2),isRightEnd,math.sqrt((tile_x-gt_right_x)**2 + (tile_y-gt_right_y)**2)))
                             #print('tile_x:{}, li_x:{}, ri_x:{}, gt_left_x:{}, gt_right_x:{}'.format(tile_x,li_x,ri_x,gt_left_x,gt_right_x))
                             #print('tile_x:{}, gt_left_x:{}, tile_y:{}, gt_left_y:{}'.format(tile_x,gt_left_x,tile_y,gt_left_y))
-                            if ( len(hit_tile_ys)>1 and
+                            if ( len(hit_tile_ys)>1 and (
                                 (isLeftEnd and math.sqrt((tile_x-gt_left_x)**2 + (tile_y-gt_left_y)**2)>END_BOUNDARY_THRESH) or
-                                (isRightEnd and math.sqrt((tile_x-gt_right_x)**2 + (tile_y-gt_right_y)**2)>END_BOUNDARY_THRESH)):
+                                (isRightEnd and math.sqrt((tile_x-gt_right_x)**2 + (tile_y-gt_right_y)**2)>END_BOUNDARY_THRESH))):
+                                #print('DEBUG: 1')
                                 continue
                             #t#times_split_and_end.append(timeit.default_timer()-tic2)
                             #t#tic2=timeit.default_timer()
@@ -905,10 +925,12 @@ def build_oversegmented_targets_multiscale(
                             #    continue
                             t_have_other_tiles = len(hit_tile_ys)-cell_index + (assignment==t).sum()>1
                             if conf_mask[b,assigned,cell_y,cell_x]==0 and t_have_other_tiles:
+                                #print('DEBUG: 2')
                                 continue
                                 #print('{},{} skipped as already unmasked'.format(cell_x,cell_y))
                             elif assignment[assigned,cell_y,cell_x]!=-1:
                                 if only_unmask:
+                                    #print('DEBUG: 3')
                                     continue
                                 #print('shared at {}, {}'.format(tx,ty))
                                 shared_mask[b,assigned,cell_y,cell_x]=1
@@ -1026,6 +1048,7 @@ def build_oversegmented_targets_multiscale(
                                 #print(action)
                                 if action=='skip-t':
                                     #t#times_handle_multi.append(timeit.default_timer()-tic2)
+                                    #print('DEBUG: 4')
                                     continue
                                 elif action=='replace-other-t':
                                     pass #I'll just overwrite it
@@ -1036,6 +1059,7 @@ def build_oversegmented_targets_multiscale(
                                         assignment[assigned,cell_y,cell_x]=-2
 
                                     #t#times_handle_multi.append(timeit.default_timer()-tic2)
+                                    #print('DEBUG: 5')
                                     continue
                                 else:
                                     raise NotImplementedError('Unknown sharing action: {}'.format(action))
@@ -1071,6 +1095,7 @@ def build_oversegmented_targets_multiscale(
                         else:
                             raise NotImplementedError('Uknown tile assignment mode: {}'.format(assign_mode))
                         if only_unmask:
+                            #print('DEBUG: 6')
                             continue
                                     
                         #t#times_unmask_end.append(timeit.default_timer()-tic2)
@@ -1082,6 +1107,7 @@ def build_oversegmented_targets_multiscale(
  
                         #assert(ti_y==ti_y and bi_y==bi_y and ri_x==ri_x and li_x ==li_x)
                         #assert(not (math.isinf(ti_y) or math.isinf(bi_y) or math.isinf(ri_x) or math.isinf(li_x)))
+                        num_assigned +=1
                         if isHorz:
                             T=ti_y-tile_y #negative if above tile center (just add predcition to center)
                             #T = max(min(T,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
