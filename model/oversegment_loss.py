@@ -1108,7 +1108,7 @@ def build_oversegmented_targets_multiscale(
                         #assert(ti_y==ti_y and bi_y==bi_y and ri_x==ri_x and li_x ==li_x)
                         #assert(not (math.isinf(ti_y) or math.isinf(bi_y) or math.isinf(ri_x) or math.isinf(li_x)))
                         num_assigned +=1
-                        if isHorz:
+                        if True or isHorz:
                             T=ti_y-tile_y #negative if above tile center (just add predcition to center)
                             #T = max(min(T,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
                             assert(abs(T)<MAX_H_PRED)
