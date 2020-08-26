@@ -102,10 +102,9 @@ targs=[]
 #varying sizes
 yb=100
 t=0
-<<<<<<< HEAD
 for h in range(40,41,4):
     w = h*2
-    r = math.pi/4#-math.pi*(7/10)
+    r = math.pi/10#-math.pi*(7/10)
     y = yb
     for x in range(88,300,300):
         lx,ly,rx,ry,tx,ty,bx,by = calcPoints(x,y,r,h,w)
@@ -166,10 +165,12 @@ for level in range(len(t_Ls)):
     level_y = torch.cat([ torch.stack([tconf_scales[level],t_Ls[level],t_Ts[level],t_Rs[level], t_Bs[level],t_rs[level]],dim=2), tcls_scales[level].permute(0,1,4,2,3)], dim=2)
     ys.append(level_y.view(level_y.size(0),level_y.size(1)*level_y.size(2),level_y.size(3),level_y.size(4)))
 
-    print('level_y: {}'.format(level_y[level_y[:,0]>0.5]))
+    display_y = level_y[0].permute(2,3,0,1).contiguous().view(-1,level_y.size(2))
+
+    print('level_y: {}'.format(display_y[display_y[:,0]>0.5]))
 gt_boxes = build_box_predictions(ys,scale,ys[0].device,numAnchors,numBBParams,numBBTypes)
-for level in range(len(t_Ls)):
-    print('gt: {}'.format(gt_boxes[level][0,gt_boxes[level][0,:,0]>0.5]))
+assert((gt_boxes[0,gt_boxes[0,:,0]>0.5,2] < gt_boxes[0,gt_boxes[0,:,0]>0.5,4]).all())
+print('gt: {}'.format(gt_boxes[0,gt_boxes[0,:,0]>0.5]))
 
 img = np.zeros([H,W,3])
 for t in targs:
@@ -199,7 +200,7 @@ for tl in all_textlines[1:]:
 drawPoly(img,first_textline.polyPoints(),(255,0,0),1)
 for p in first_textline.polyPoints():
     img[int(p[1]),int(p[0]),1]=255
-print(first_textline.polyPoints())
+print('final poly: {}'.format(first_textline.polyPoints()))
 
 cv2.imshow('x',img)
 cv2.waitKey()
