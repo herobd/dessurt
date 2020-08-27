@@ -89,7 +89,7 @@ numBBTypes=2
 numAnchors=4
 numBBParams=6
 H=300
-W=300
+W=700
 #scale = [ (16,16), (32,32), (64,64) ]
 scale = [ (32,32), (64,64) ]
 grid_sizesH=[H//s[0] for s in scale]
@@ -100,22 +100,33 @@ pred_conf = [torch.zeros(1,1,1,1)]*3
 
 targs=[]
 #varying sizes
-yb=100
-t=0
-for h in range(40,41,4):
-    w = h*2
-    r = math.pi/10#-math.pi*(7/10)
-    y = yb
-    for x in range(88,300,300):
-        lx,ly,rx,ry,tx,ty,bx,by = calcPoints(x,y,r,h,w)
-        targs.append([x,y,r,h,w,lx,ly,rx,ry,tx,ty,bx,by])
-        t+=1
-        y+=1
-        r += math.pi/10
-        if r>math.pi:
-            r-=math.pi*2
-        #r = (random.random()*math.pi/2)-math.pi/4
-    yb+=1.1*(h+w)
+#yb=100
+#t=0
+#for h in range(40,41,4):
+#    w = h*3
+#    r = math.pi/10#-math.pi*(7/10)
+#    y = yb
+#    for x in range(150,300,300):
+#        lx,ly,rx,ry,tx,ty,bx,by = calcPoints(x,y,r,h,w)
+#        targs.append([x,y,r,h,w,lx,ly,rx,ry,tx,ty,bx,by])
+#        t+=1
+#        y+=1
+#        r += math.pi/10
+#        if r>math.pi:
+#            r-=math.pi*2
+#        #r = (random.random()*math.pi/2)-math.pi/4
+#    yb+=1.1*(h+w)
+
+boxes = [
+        [150,100,math.pi/10,40,120],
+        [299,105,math.pi/20,40,40],
+        [345,80,-math.pi/40,40,80],
+        #[140,100,0,40,120]
+        ]
+t=len(boxes)
+for x,y,r,h,w in boxes:
+    lx,ly,rx,ry,tx,ty,bx,by = calcPoints(x,y,r,h,w)
+    targs.append([x,y,r,h,w,lx,ly,rx,ry,tx,ty,bx,by])
 
 #Totally random
 #t=50
@@ -167,10 +178,10 @@ for level in range(len(t_Ls)):
 
     display_y = level_y[0].permute(2,3,0,1).contiguous().view(-1,level_y.size(2))
 
-    print('level_y: {}'.format(display_y[display_y[:,0]>0.5]))
+    #print('level_y: {}'.format(display_y[display_y[:,0]>0.5]))
 gt_boxes = build_box_predictions(ys,scale,ys[0].device,numAnchors,numBBParams,numBBTypes)
 assert((gt_boxes[0,gt_boxes[0,:,0]>0.5,2] < gt_boxes[0,gt_boxes[0,:,0]>0.5,4]).all())
-print('gt: {}'.format(gt_boxes[0,gt_boxes[0,:,0]>0.5]))
+#print('gt: {}'.format(gt_boxes[0,gt_boxes[0,:,0]>0.5]))
 
 img = np.zeros([H,W,3])
 for t in targs:
