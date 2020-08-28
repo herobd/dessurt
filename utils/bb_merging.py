@@ -72,7 +72,8 @@ class TextLine:
         if horz:
             primitive_rects = self.all_primitive_rects
         else:
-            primitive_rects = [ [[r[2][1],r[2][0]],[r[1][1],r[1][0]],[r[0][1],r[0][0]],[r[3][1],r[3][0]]] for r in self.all_primitive_rects]
+            primitive_rects = [ [[r[0][1],r[0][0]],[r[3][1],r[3][0]],[r[2][1],r[2][0]],[r[1][1],r[1][0]]] for r in self.all_primitive_rects]
+        #print ('primitive {}'.format(primitive_rects))
 
         #get outer points
         #select windows of points
@@ -85,6 +86,11 @@ class TextLine:
 
         primitive_rects_top = list(primitive_rects)
         primitive_rects_top.sort(key=lambda rect:rect[0][0])
+        #remove duplicates (or near duplicates)
+        toremove = [i for i in range(len(primitive_rects_top)-1) if abs(primitive_rects_top[i][0][0]-primitive_rects_top[i+1][0][0])<0.001 and abs(primitive_rects_top[i][0][1]-primitive_rects_top[i+1][0][1])<0.001 and abs(primitive_rects_top[i][1][0]-primitive_rects_top[i+1][1][0])<0.001 and abs(primitive_rects_top[i][1][1]-primitive_rects_top[i+1][1][1])<0.001]
+        toremove.reverse()
+        for r in toremove:
+            del primitive_rects_top[r]
         top_points=[primitive_rects_top[0][0]]
         last_point_top=primitive_rects_top[0][0]
         for rect in primitive_rects_top:
@@ -95,9 +101,11 @@ class TextLine:
                     top_points.append( rect[1] )
                     top_points.append( [rect[1][0],last_point_top[1]] )
                 #otherwise it doesn't matter
+                assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
             else:
                 if rect[0][0]>=last_point_top[0]: #this rectangle starts after the ast
                     top_points.append(rect[0]) #just add it
+                    assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
                 elif rect[0][1]<last_point_top[1]: #if the rect/line im adding is above
                     if top_points[-2][0]>rect[0][0]: #if prior line was clipped, we need to work with the intersection point top_points[-2]
                         if top_points[-3][1]>rect[0][1]:
@@ -109,10 +117,12 @@ class TextLine:
                             intersect_point=[top_points[-3][0],rect[0][1]]
                             top_points[-2]=intersect_point
                             top_points.pop()
+                        assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
                     else:
                         intersect_point = [rect[0][0],last_point_top[1]]
                         top_points[-1]=intersect_point
                         top_points.append(rect[0])
+                        assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
                 elif rect[0][1]>last_point_top[1]: #if the rect/line im adding is below
                     if top_points[-2][0]>rect[0][0]:
                         if top_points[-3][1]>rect[0][1]:
@@ -123,20 +133,31 @@ class TextLine:
                             intersect_point_2 = [top_points[-2][0],rect[0][1]]
                             top_points[-1]=intersect_point_2
                             top_points+=last_two_points
+                            assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
                         intersection_point_1 = [top_points[-1][0],rect[1][1]]
                         top_points.append(intersection_point_1)
+                        assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
 
                     else:
                         intersect_point = [last_point_top[0],rect[0][1]]
                         top_points.append(intersect_point)
-                else:
-                    #it's straight across, we'll just average the two overlapped points to provide a good midpoint
-                    top_points[-1]=[(top_points[-1][0]+rect[0][0])/2,(top_points[-1][1]+rect[0][1])/2]
+                        assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
+                #else:
+                #    #it's straight across, we'll just average the two outside points to provide a good midpoint
+                #    #import pdb;pdb.set_trace()
+                #    top_points[-1]=[(top_points[-2][0]+rect[1][0])/2,(top_points[-2][1]+rect[1][1])/2]
+                #    assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
             top_points.append(rect[1])
+            assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
             last_point_top = top_points[-1]
 
         primitive_rects_bot = list(primitive_rects)
         primitive_rects_bot.sort(key=lambda rect:rect[3][0])
+        #remove duplicates (or near duplicates)
+        toremove = [i for i in range(len(primitive_rects_bot)-1) if abs(primitive_rects_bot[i][3][0]-primitive_rects_bot[i+1][3][0])<0.001 and abs(primitive_rects_bot[i][3][1]-primitive_rects_bot[i+1][3][1])<0.001 and abs(primitive_rects_bot[i][2][0]-primitive_rects_bot[i+1][2][0])<0.001 and abs(primitive_rects_bot[i][2][1]-primitive_rects_bot[i+1][2][1])<0.001]
+        toremove.reverse()
+        for r in toremove:
+            del primitive_rects_bot[r]
         bot_points=[primitive_rects_bot[0][3]]
         last_point_bot=primitive_rects_bot[0][3]
         for rect in primitive_rects_bot:
@@ -183,13 +204,13 @@ class TextLine:
                     else:
                         intersect_point = [last_point_bot[0],rect[3][1]]
                         bot_points.append(intersect_point)
-                else:
-                    #it's straight across, we'll just average the two overlapped points to provide a good midpoint
-                    bot_points[-1]=[(bot_points[-1][0]+rect[3][0])/2,(bot_points[-1][1]+rect[3][1])/2]
+                #else:
+                #    #it's straight across, we'll just average the two overlapped points to provide a good midpoint
+                #    bot_points[-1]=[(bot_points[-2][0]+rect[2][0])/2,(bot_points[-2][1]+rect[2][1])/2]
 
             bot_points.append(rect[2])
-            assert( bot_points[-1][1]<118 or  bot_points[-1][1]>119) #This point shouldn't be added, it's above where we are (somehow)
             last_point_bot = bot_points[-1]
+            #print('\n')
             #print(bot_points)
 
 
@@ -214,28 +235,68 @@ class TextLine:
 
         #top_points.reverse()
         #bot_points.reverse()
-        print('top ps {}'.format(top_points))
-        print('bot ps {}'.format(bot_points))
-        top_points=np.array(top_points)
-        bot_points=np.array(bot_points)
+
+
+        #print('top ps {}'.format(top_points))
+        #print('bot ps {}'.format(bot_points))
 
         #smooth
         #for i in range(1,len(top_points)-1):
         #    new_top_points.append((top_points[i-1]+top_points[i]+top_points
         top_total_distance=0
         for i in range(len(top_points)-1):
-            top_total_distance += math.sqrt((top_points[i][0]-top_points[i-1][0])**2 + (top_points[i][1]-top_points[i-1][1])**2)
+            top_total_distance += math.sqrt((top_points[i][0]-top_points[i+1][0])**2 + (top_points[i][1]-top_points[i+1][1])**2)
         bot_total_distance=0
         for i in range(len(bot_points)-1):
-            bot_total_distance += math.sqrt((bot_points[i][0]-bot_points[i-1][0])**2 + (bot_points[i][1]-bot_points[i-1][1])**2)
+            bot_total_distance += math.sqrt((bot_points[i][0]-bot_points[i+1][0])**2 + (bot_points[i][1]-bot_points[i+1][1])**2)
 
         #step size is average "height"
-        step_size = np.linalg.norm(top_points.mean(axis=0)-bot_points.mean(axis=0))
+        top_points_np=np.array(top_points)
+        bot_points_np=np.array(bot_points)
+        step_size = np.linalg.norm(top_points_np.mean(axis=0)-bot_points_np.mean(axis=0))
+        top_points_np= bot_points_np= None
 
-        step_size_bot = (2*step_size/top_total_distance)/(1/top_total_distance + 1/bot_total_distance)
-        step_size_top = (2*step_size/bot_total_distance)/(1/top_total_distance + 1/bot_total_distance)
+        step_size_top= (2*step_size/top_total_distance)/(1/top_total_distance + 1/bot_total_distance)
+        step_size_bot = (2*step_size/bot_total_distance)/(1/top_total_distance + 1/bot_total_distance)
 
         assert(abs(step_size_bot+step_size_top-2*step_size)<0.001)
+
+        #we'll check for large gaps (long lines) and split them. This should help the later chunking
+        #toadd=[ for i in range(len(top_points)-1) if ]
+        toadd=[]
+        max_length = step_size_top/2
+        for i in range(len(top_points)-1):
+            dist = math.sqrt((top_points[i][0]-top_points[i+1][0])**2 + (top_points[i][1]-top_points[i+1][1])**2)
+            lengths = math.floor(dist/max_length)
+            if lengths>0:
+                subdist = dist/lengths
+                for t in np.arange(1/lengths,0.999999999,1/lengths):
+                    x = t*top_points[i+1][0] + (1-t)*top_points[i][0]
+                    y = t*top_points[i+1][1] + (1-t)*top_points[i][1]
+                    toadd.append((i,[x,y]))
+        toadd.reverse()
+        #print('adding {} points to top'.format(len(toadd)))
+        for i,p in toadd:
+            top_points.insert(i,p)
+
+        toadd=[]
+        max_length = step_size_bot/2
+        for i in range(len(bot_points)-1):
+            dist = math.sqrt((bot_points[i][0]-bot_points[i+1][0])**2 + (bot_points[i][1]-bot_points[i+1][1])**2)
+            lengths = math.floor(dist/max_length)
+            if lengths>0:
+                subdist = dist/lengths
+                for t in np.arange(1/lengths,0.999999999,1/lengths):
+                    x = t*bot_points[i+1][0] + (1-t)*bot_points[i][0]
+                    y = t*bot_points[i+1][1] + (1-t)*bot_points[i][1]
+                    toadd.append((i,[x,y]))
+        toadd.reverse()
+        #print('adding {} points to bot'.format(len(toadd)))
+        for i,p in toadd:
+            bot_points.insert(i,p)
+
+        top_points=np.array(top_points)
+        bot_points=np.array(bot_points)
 
         final_points=[]
         
@@ -313,7 +374,7 @@ class TextLine:
         bot_end_point = [mag_bot,mag_bot*s+bot_new_c]
         final_points.append([top_end_point,bot_end_point])
 
-        print('final pair points: {}'.format(final_points))
+        #print('final pair points: {}'.format(final_points))
         if horz:
             if readright:
                 self.point_pairs = final_points
@@ -327,7 +388,7 @@ class TextLine:
                 final_points.reverse()
                 self.point_pairs = [[[t[1],t[0]],[b[1],b[0]]] for t,b in final_points]
 
-        top_points,bot_points = zip(*final_points)
+        top_points,bot_points = zip(*self.point_pairs)
         top_points=list(top_points)
         bot_points=list(bot_points)
         bot_points.reverse()
@@ -335,163 +396,6 @@ class TextLine:
 
 
 
-    def old_compute(self):
-        self.median_angle = np.median(self.all_angles)
-        primitive_rects = self.all_primitive_rects
-        
-        horz=upright=True
-
-        if horz and upright:
-            centriods = [rect.mean(axis=0) for rect in primitive_rects]
-            combine = list(zip(centriods,primitive_rects))
-            combine.sort(key=lambda c: c[0][0])
-            centroids,primitive_rects = zip(* combine)
-            top_points = [(rect[0]+rect[1])/2 for rect in primitive_rects]
-            bot_points = [(rect[2]+rect[3])/2 for rect in primitive_rects]
-
-            #average neighbors
-            new_top_points = [(top_points[i]+top_points[i+1])/2 for i in range(len(top_points)-1)]
-            new_bot_points = [(bot_points[i]+bot_points[i+1])/2 for i in range(len(bot_points)-1)]
-            #average agian for points too close?
-            height_based_thresh = (np.mean(new_bot_points,axis=0)[1] - np.mean(new_top_points,axis=0)[1])/5
-            i=0
-            while True:
-                if np.linalg.norm(new_top_points[i]-new_top_points[i+1])<height_based_thresh:
-                    new_top_points = new_top_points[:i-1]+[(new_top_points[i]+new_top_points[i+1])/2] + new_top_points[i+2:]
-                i+=1
-                if i >= len(new_top_points)-1:
-                    break
-
-            #now, calculate new endpoints based on angle created by last two points.
-            ##TOP##
-
-            #left endpoint calulation
-            slope_at_left_end = (new_top_points[0][1]-new_top_points[1][1])/(new_top_points[0][0]-new_top_points[1][0])
-            #assert(not math.isinf(slope_at_left_end))
-            if abs(slope_at_left_end)>0.0001:
-                left_c = centroids[0][1] - slope_at_left_end*centroids[0][0]
-                #identify corner lines
-                #left_wall_interesction = (primitive_rects[0][0],slope*primitive_rects[0][0]+left_c)
-                top_wall_intersection = (primitive_rects[0][0][1]-left_c)/slope_at_left_end
-                bot_wall_intersection = (primitive_rects[0][3][1]-left_c)/slope_at_left_end
-                left_end_x = max(primitive_rects[0][0][0],min(top_wall_intersection,bot_wall_intersection))
-
-                #calculate cs (y intercept)
-                left_c = centroids[0][1] - slope_at_left_end*centroids[0][0] #center line
-                left_top_c = new_top_points[0][1] - slope_at_left_end*new_top_points[0][0] #top line
-
-                left_wall_c_interesction_x = primitive_rects[0][0][0]
-                left_wall_c_interesction_y = slope_at_left_end*left_wall_c_interesction_x+left_c
-                left_c_cutoff_x = (left_wall_c_interesction_y+(1/slope_at_left_end)*left_wall_c_interesction_x -left_top_c)/(slope_at_left_end+1/slope_at_left_end)
-
-                #calcuate middle line intersections
-                top_wall_c_intersection_x = (primitive_rects[0][0][1]-left_c)/slope_at_left_end
-                top_wall_c_intersection_y = slope_at_left_end*top_wall_c_intersection_x + left_c
-                #top line at same distance
-                top_c_cutoff_x = (top_wall_c_intersection_y+(1/slope_at_left_end)*top_wall_c_intersection_x -left_top_c)/(slope_at_left_end+1/slope_at_left_end)
-
-                bot_wall_c_intersection_x = (primitive_rects[0][3][1]-left_c)/slope_at_left_end
-                bot_wall_c_intersection_y = slope_at_left_end*bot_wall_c_intersection_x + left_c
-                bot_c_cutoff_x = (bot_wall_c_intersection_y+(1/slope_at_left_end)*bot_wall_c_intersection_x -left_top_c)/(slope_at_left_end+1/slope_at_left_end)
-
-                #top line intersections
-                top_wall_top_intersection_x = (primitive_rects[0][0][1]-left_top_c)/slope_at_left_end
-                bot_wall_top_intersection_x = (primitive_rects[0][3][1]-left_top_c)/slope_at_left_end
-
-                left_end_x = max(
-                        min(left_c_cutoff_x,max(top_c_cutoff_x,bot_c_cutoff_x)),
-                        min(primitive_rects[0][0][0],max(top_wall_top_intersection_x,bot_wall_top_intersection_x)))
-            else: #if is left wall
-                left_end_x = primitive_rects[0][0][0]
-            #extrapolate to endpoint
-            left_end_y = slope_at_left_end*left_end_x + (new_top_points[0][1]-slope_at_left_end*new_top_points[0][0])
-            print(left_end_y)
-
-            #right endpoint calulation
-            slope_at_right_end = (new_top_points[-1][1]-new_top_points[-2][1])/(new_top_points[-1][0]-new_top_points[-2][0])
-            if abs(slope_at_right_end)>0.0001:
-                #We'll calculate a few different possible stopping points at take the furthest
-                # + the right wall of the BB
-                # + this top line's intersection with the top and bottom walls of the BB
-                # + clipping the top line parallel-wise (same distance) with the center line's intersection with the top and bottom walls
-                print('cent :{}'.format(centroids[-1]))
-                print(primitive_rects[-1])
-                #calculate cs (y intercept)
-                right_c = centroids[-1][1] - slope_at_right_end*centroids[-1][0]
-                right_top_c = new_top_points[-1][1] - slope_at_right_end*new_top_points[-1][0]
-
-                right_wall_c_interesction_x = primitive_rects[-1][1][0]
-                right_wall_c_interesction_y = slope_at_right_end*right_wall_c_interesction_x+right_c
-                right_c_cutoff_x = (right_wall_c_interesction_y+(1/slope_at_right_end)*right_wall_c_interesction_x -right_top_c)/(slope_at_right_end+1/slope_at_right_end)
-
-                #calcuate middle line intersections
-                top_wall_c_intersection_x = (primitive_rects[-1][1][1]-right_c)/slope_at_right_end
-                top_wall_c_intersection_y = slope_at_right_end*top_wall_c_intersection_x + right_c
-                #top line at same distance
-                top_c_cutoff_x = (top_wall_c_intersection_y+(1/slope_at_right_end)*top_wall_c_intersection_x -right_top_c)/(slope_at_right_end+1/slope_at_right_end)
-
-                bot_wall_c_intersection_x = (primitive_rects[-1][2][1]-right_c)/slope_at_right_end
-                bot_wall_c_intersection_y = slope_at_right_end*bot_wall_c_intersection_x + right_c
-                bot_c_cutoff_x = (bot_wall_c_intersection_y+(1/slope_at_right_end)*bot_wall_c_intersection_x -right_top_c)/(slope_at_right_end+1/slope_at_right_end)
-
-                #top line intersections
-                top_wall_top_intersection_x = (primitive_rects[-1][1][1]-right_top_c)/slope_at_right_end
-                bot_wall_top_intersection_x = (primitive_rects[-1][2][1]-right_top_c)/slope_at_right_end
-
-                right_end_x = max(
-                        min(right_c_cutoff_x,max(top_c_cutoff_x,bot_c_cutoff_x)),
-                        min(primitive_rects[-1][1][0],max(top_wall_top_intersection_x,bot_wall_top_intersection_x)))
-            else: 
-                #this is a flat line, we want to just us the horiontal extent of the last BB
-                right_end_x = primitive_rects[-1][1][0]
-            #extrapolate to endpoint
-            right_end_y = slope_at_right_end*right_end_x + (new_top_points[-1][1]-slope_at_right_end*new_top_points[-1][0])
-
-            new_top_points = [np.array([left_end_x,left_end_y])] + new_top_points + [np.array([right_end_x,right_end_y])]
-
-            ###BOTTOM##
-
-            #average agian for points too close?
-            i=0
-            while True:
-                if np.linalg.norm(new_bot_points[i]-new_bot_points[i+1])<height_based_thresh:
-                    new_bot_points = new_bot_points[:i-1]+[(new_bot_points[i]+new_bot_points[i+1])/2] + new_bot_points[i+2:]
-                i+=1
-                if i >= len(new_bot_points)-1:
-                    break
-
-            #left endpoint calulation
-            slope_at_left_end = (new_bot_points[0][1]-new_bot_points[1][1])/(new_bot_points[0][0]-new_bot_points[1][0])
-            if abs(slope_at_left_end)>0.0001:
-                left_c = centroids[0][1] - slope_at_left_end*centroids[0][0]
-                #identify corner lines
-                #left_wall_interesction = (primitive_rects[0][0],slope*primitive_rects[0][0]+left_c)
-                top_wall_intersection = (primitive_rects[0][0][1]-left_c)/slope_at_left_end
-                bot_wall_intersection = (primitive_rects[0][3][1]-left_c)/slope_at_left_end
-                left_end_x = max(primitive_rects[0][3][0],min(bot_wall_intersection,bot_wall_intersection))
-            else: #if is left wall
-                left_end_x = primitive_rects[0][3][0]
-            #extrapolate to endpoint
-            left_end_y = slope_at_left_end*left_end_x + (new_bot_points[0][1]-slope_at_left_end*new_bot_points[0][0])
-
-            #right endpoint calulation
-            slope_at_right_end = (new_bot_points[-1][1]-new_bot_points[-2][1])/(new_bot_points[-1][0]-new_bot_points[-2][0])
-            if abs(slope_at_right_end)>0.0001:
-                right_c = centroids[-1][1] - slope_at_right_end*centroids[-1][0]
-                #identify corner lines
-                #right_wall_interesction = (primitive_rects[0][0],slope*primitive_rects[0][0]+right_c)
-                top_wall_intersection = (primitive_rects[-1][1][1]-right_c)/slope_at_right_end
-                bot_wall_intersection = (primitive_rects[-1][2][1]-right_c)/slope_at_right_end
-                right_end_x = min(primitive_rects[-1][2][0],max(bot_wall_intersection,bot_wall_intersection))
-            else: #if is right wall
-                right_end_x = primitive_rects[-1][2][0]
-            #extrapolate to endpoint
-            right_end_y = slope_at_right_end*right_end_x + (new_bot_points[-1][1]-slope_at_right_end*new_bot_points[-1][0])
-
-            new_bot_points = [np.array([left_end_x,left_end_y])] + new_bot_points + [np.array([right_end_x,right_end_y])]
-
-            new_bot_points.reverse()
-            self.poly_points = new_top_points + new_bot_points
 
     def getReadPosition(self):
         if self.median_angle is None:
@@ -555,3 +459,7 @@ class TextLine:
         if self.poly_points is None:
             self.compute()
         return self.poly_points
+    def pairPoints(self):
+        if self.point_pairs is None:
+            self.compute()
+        return self.point_pairs

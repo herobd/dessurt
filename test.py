@@ -118,9 +118,9 @@ targs=[]
 #    yb+=1.1*(h+w)
 
 boxes = [
-        [150,100,math.pi/10,40,120],
-        [299,105,math.pi/20,40,40],
-        [345,80,-math.pi/40,40,80],
+        [150,110,-math.pi*7/10,40,120],
+        #[299,105,math.pi/20,40,40],
+        #[345,80,-math.pi/40,40,80],
         #[140,100,0,40,120]
         ]
 t=len(boxes)
@@ -209,8 +209,12 @@ for tl in all_textlines[1:]:
 
 #cv2.polylines(img,np.array(first_textline.polyPoints(),np.int32).reshape((-1,1,2)),True,(255,0,0),1)
 drawPoly(img,first_textline.polyPoints(),(255,0,0),1)
-for p in first_textline.polyPoints():
-    img[int(p[1]),int(p[0]),1]=255
+#for p in first_textline.polyPoints():
+#    img[int(p[1]),int(p[0]),1]=255
+for t,b in first_textline.pairPoints():
+    color = [100+random.randint(0,154),100+random.randint(0,154),100+random.randint(0,154)]
+    img[int(t[1]-1):int(t[1]+1),int(t[0]-1):int(t[0]+1),:]=color
+    img[int(b[1]-1):int(b[1]+1),int(b[0]-1):int(b[0]+1),:]=color
 print('final poly: {}'.format(first_textline.polyPoints()))
 
 cv2.imshow('x',img)
