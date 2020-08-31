@@ -2,34 +2,16 @@ import torch
 import numpy as np
 import math
 
-#This assumes overget x1,y1,x2,y2,r prediciton
-class ToMerge:
-    def __init__(bb,include_bb_conf):
-        self.include_bb_conf=include_bb_conf
-        if include_bb_conf:
-            self.locIdx=1
-            self.classIdx=6
-        else:
-            self.locIdx=0
-            self.classIdx=5
-        #x0,y0,
-
-    def merge(other):
-        gertf
-
-    def finalBB():
-        #is this a horz, vert, or diagonal line?
-        medAngle = np.median([bb[self.locIdx+2] for bb in self.bbs])
-
-        #order points along angle. But we n
-
-        if horz and upright:
-            #get left most and right most
-            pass
-
-        #self.bbs.sort(key=lan...)
-        return dfkgj
-
+def xyrwh_TextLine(bb):
+    assert(False and "untested")
+    x,y,r,w,h = bb[1:6]
+    theta = math.atan2(h,w)
+    theta_final = theta-r
+    x1 = x -L*math.cos(theta_final)
+    y1 = x +L*math.sin(theta_final)
+    x2 = x +L*math.cos(theta_final)
+    y2 = x -L*math.sin(theta_final)
+    return TextLine(torch.FloatTensor([bb[0],x1,y1,x2,y2,r,*bb[6:]]))
 
 class TextLine:
     def __init__(self,pred_bb_info):
@@ -463,3 +445,31 @@ class TextLine:
         if self.point_pairs is None:
             self.compute()
         return self.point_pairs
+
+
+    def getGrid(self,height):
+        if self.point_pairs is None:
+            self.compute()
+
+        chunks=[]
+        for i in range(len(self.point_pairs)-1):
+            tl,bl = self.point_pairs[i]
+            tr,br = self.point_pairs[i+1]
+
+            hAvg = ( math.sqrt((tl[0]-bl[0])**2 + (tl[1]-bl[1])**2) + math.sqrt((tr[0]-br[0])**2 + (tr[1]-br[1])**2) )/2
+            wAvg = ( math.sqrt((tl[0]-tr[0])**2 + (tl[1]-tr[1])**2) + math.sqrt((bl[0]-br[0])**2 + (bl[1]-br[1])**2) )/2
+            scale = height/hAvg
+            width = round(wAvg*scale)
+
+            T = cv.getPerspectiveTransform([[0,0],[width-1,0],[width-1,height-1],[0,height-1]],[tl,tr,br,bl])
+
+            ys = torch.arange(height).view(height,1,1).expand(height,width,1)
+            xs = torch.arange(width).view(1,width,1).expand(height,width,1)
+            orig_points = torch.cat([xs,ys],dim=2)
+
+            new_points = T.mm(orig_points)
+            chunks.append(new_points)
+
+        return torch.cat(chunks,dim=1)
+
+
