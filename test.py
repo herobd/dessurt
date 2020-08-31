@@ -204,8 +204,9 @@ for bb in gt_boxes[0]:
         print(bb)
 
 first_textline=all_textlines[0]
-for tl in all_textlines[1:]:
-    first_textline.merge(tl)
+
+#for tl in all_textlines[1:]:
+#    first_textline.merge(tl)
 
 #cv2.polylines(img,np.array(first_textline.polyPoints(),np.int32).reshape((-1,1,2)),True,(255,0,0),1)
 drawPoly(img,first_textline.polyPoints(),(255,0,0),1)

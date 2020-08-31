@@ -18,6 +18,7 @@ from skimage import draw
 from model.net_builder import make_layers, getGroupSize
 from utils.yolo_tools import non_max_sup_iou, non_max_sup_dist
 from utils.util import decode_handwriting
+from utils.bb_merging import TextLine, xyrwh_TextLine
 #from utils.string_utils import correctTrans
 import editdistance
 import math, os
@@ -596,6 +597,8 @@ class PairingGroupingGraph(BaseModel):
                 #fake some confifence values
                 conf = torch.rand(useBBs.size(0),1)*0.33 +0.66
                 useBBs = torch.cat((conf.to(useBBs.device),useBBs),dim=1)
+
+        useBBs=useBBs.detach()
         if useGTBBs and self.useCurvedBBs:
             useBBs = xyrwhToCurved(useBBs)
         elif self.useCurvedBBs:
@@ -1210,10 +1213,10 @@ class PairingGroupingGraph(BaseModel):
     def createGraph(self,bbs,features,features2,imageHeight,imageWidth,text_emb=None,flip=None,debug_image=None):
         #t#tic=timeit.default_timer()
         if self.relationshipProposal == 'line_of_sight':
-            candidates = self.selectLineOfSightEdges(bbs.detach(),imageHeight,imageWidth)
+            candidates = self.selectLineOfSightEdges(bbs,imageHeight,imageWidth)
             rel_prop_scores = None
         elif self.relationshipProposal == 'feature_nn':
-            candidates, rel_prop_scores = self.selectFeatureNNEdges(bbs.detach(),imageHeight,imageWidth,features.device)
+            candidates, rel_prop_scores = self.selectFeatureNNEdges(bbs,imageHeight,imageWidth,features.device)
             bbs=bbs[:,1:] #discard confidence, we kept it so the proposer could see them
         #t#print('   candidate: {}'.format(timeit.default_timer()-tic))
         if len(candidates)==0:
@@ -1787,133 +1790,170 @@ class PairingGroupingGraph(BaseModel):
     def selectFeatureNNEdges(self,bbs,imageHeight,imageWidth,device):
         if bbs.size(0)<2:
             return []
+        
+        if self.cuvedBBs:
+            #0: tlXDiff
+            #1: trXDiff
+            #2: brXDiff
+            #3: blXDiff
+            #4: centerXDiff
+            #5: w1
+            #6: w2
+            #7: tlYDiff
+            #8: trYDiff
+            #9: brYDiff
+            #10: blYDiff
+            #11: centerYDiff
+            #12: h1
+            #13: h2
+            #14: tlDist
+            #15: trDist
+            #16: brDist
+            #17: blDist
+            #18: centDist
+            #19: rel pos X1
+            #20: rel pos Y1
+            #21: rel pos X2
+            #22: rel pos Y2
+            #23: line of sight
+            #24: conf1
+            #25: conf2
+            #26-n: classpred1
+            #n+1-m: classpred2
+            line_of_sight = self.selectLineOfSightEdges(bbs,imageHeight,imageWidth,return_all=True)
+            numClassFeat = bbs[0].cls.size(0)
+            
+            x,y,r,h,w,tl, tr, br, bl = torch.FloatTensor([bb.getFeatureInfo() for bb in bbs]).permute(1,0)
+            #TODO left off
 
-        #features: tlXDiff,trXDiff,brXDiff,blXDiff,tlYDiff,trYDiff,brYDiff,blYDiff, centerXDiff, centerYDiff, absX, absY, h1, w1, h2, w2, classpred1, classpred2, line of sight (binary)
+            features = torch.FloatTensor(len(bb),len(bbs), 26+numClassFeat*2)
+        else:
+            #features: tlXDiff,trXDiff,brXDiff,blXDiff,tlYDiff,trYDiff,brYDiff,blYDiff, centerXDiff, centerYDiff, absX, absY, h1, w1, h2, w2, classpred1, classpred2, line of sight (binary)
 
-        #0: tlXDiff
-        #1: trXDiff
-        #2: brXDiff
-        #3: blXDiff
-        #4: centerXDiff
-        #5: w1
-        #6: w2
-        #7: tlYDiff
-        #8: trYDiff
-        #9: brYDiff
-        #10: blYDiff
-        #11: centerYDiff
-        #12: h1
-        #13: h2
-        #14: tlDist
-        #15: trDist
-        #16: brDist
-        #17: blDist
-        #18: centDist
-        #19: rel pos X1
-        #20: rel pos Y1
-        #21: rel pos X2
-        #22: rel pos Y2
-        #23: line of sight
-        #24: conf1
-        #25: conf2
-        #26-n: classpred1
-        #n+1-m: classpred2
+            #0: tlXDiff
+            #1: trXDiff
+            #2: brXDiff
+            #3: blXDiff
+            #4: centerXDiff
+            #5: w1
+            #6: w2
+            #7: tlYDiff
+            #8: trYDiff
+            #9: brYDiff
+            #10: blYDiff
+            #11: centerYDiff
+            #12: h1
+            #13: h2
+            #14: tlDist
+            #15: trDist
+            #16: brDist
+            #17: blDist
+            #18: centDist
+            #19: rel pos X1
+            #20: rel pos Y1
+            #21: rel pos X2
+            #22: rel pos Y2
+            #23: line of sight
+            #24: conf1
+            #25: conf2
+            #26-n: classpred1
+            #n+1-m: classpred2
 
-        conf = bbs[:,0]
-        x = bbs[:,1]
-        y = bbs[:,2]
-        r = bbs[:,3]
-        h = bbs[:,4]
-        w = bbs[:,5]
-        classFeat = bbs[:,6:]
-        numClassFeat = classFeat.size(1)
-        cos_r = torch.cos(r)
-        sin_r = torch.sin(r)
-        tlX = -w*cos_r + -h*sin_r +x
-        tlY =  w*sin_r + -h*cos_r +y
-        trX =  w*cos_r + -h*sin_r +x
-        trY = -w*sin_r + -h*cos_r +y
-        brX =  w*cos_r + h*sin_r +x
-        brY = -w*sin_r + h*cos_r +y
-        blX = -w*cos_r + h*sin_r +x
-        blY =  w*sin_r + h*cos_r +y
+            conf = bbs[:,0]
+            x = bbs[:,1]
+            y = bbs[:,2]
+            r = bbs[:,3]
+            h = bbs[:,4]
+            w = bbs[:,5]
+            classFeat = bbs[:,6:]
+            numClassFeat = classFeat.size(1)
+            cos_r = torch.cos(r)
+            sin_r = torch.sin(r)
+            tlX = -w*cos_r + -h*sin_r +x
+            tlY =  w*sin_r + -h*cos_r +y
+            trX =  w*cos_r + -h*sin_r +x
+            trY = -w*sin_r + -h*cos_r +y
+            brX =  w*cos_r + h*sin_r +x
+            brY = -w*sin_r + h*cos_r +y
+            blX = -w*cos_r + h*sin_r +x
+            blY =  w*sin_r + h*cos_r +y
 
-        #t#tic=timeit.default_timer()
-        line_of_sight = self.selectLineOfSightEdges(bbs,imageHeight,imageWidth,return_all=True)
-        #t#print('   candidates line-of-sight: {}'.format(timeit.default_timer()-tic))
-        #t#tic=timeit.default_timer()
-        conf1 = conf[:,None].expand(-1,conf.size(0))
-        conf2 = conf[None,:].expand(conf.size(0),-1)
-        x1 = x[:,None].expand(-1,x.size(0))
-        x2 = x[None,:].expand(x.size(0),-1)
-        y1 = y[:,None].expand(-1,y.size(0))
-        y2 = y[None,:].expand(y.size(0),-1)
-        r1 = r[:,None].expand(-1,r.size(0))
-        r2 = r[None,:].expand(r.size(0),-1)
-        h1 = h[:,None].expand(-1,h.size(0))
-        h2 = h[None,:].expand(h.size(0),-1)
-        w1 = w[:,None].expand(-1,w.size(0))
-        w2 = w[None,:].expand(w.size(0),-1)
-        classFeat1 = classFeat[:,None].expand(-1,classFeat.size(0),-1)
-        classFeat2 = classFeat[None,:].expand(classFeat.size(0),-1,-1)
-        cos_r1 = cos_r[:,None].expand(-1,cos_r.size(0))
-        cos_r2 = cos_r[None,:].expand(cos_r.size(0),-1)
-        sin_r1 = sin_r[:,None].expand(-1,sin_r.size(0))
-        sin_r2 = sin_r[None,:].expand(sin_r.size(0),-1)
-        tlX1 = tlX[:,None].expand(-1,tlX.size(0))
-        tlX2 = tlX[None,:].expand(tlX.size(0),-1)
-        tlY1 = tlY[:,None].expand(-1,tlY.size(0))
-        tlY2 = tlY[None,:].expand(tlY.size(0),-1)
-        trX1 = trX[:,None].expand(-1,trX.size(0))
-        trX2 = trX[None,:].expand(trX.size(0),-1)
-        trY1 = trY[:,None].expand(-1,trY.size(0))
-        trY2 = trY[None,:].expand(trY.size(0),-1)
-        brX1 = brX[:,None].expand(-1,brX.size(0))
-        brX2 = brX[None,:].expand(brX.size(0),-1)
-        brY1 = brY[:,None].expand(-1,brY.size(0))
-        brY2 = brY[None,:].expand(brY.size(0),-1)
-        blX1 = blX[:,None].expand(-1,blX.size(0))
-        blX2 = blX[None,:].expand(blX.size(0),-1)
-        blY1 = blY[:,None].expand(-1,blY.size(0))
-        blY2 = blY[None,:].expand(blY.size(0),-1)
-        features = torch.FloatTensor(bbs.size(0),bbs.size(0), 26+numClassFeat*2)
-        features[:,:,0] = tlX1-tlX2
-        features[:,:,1] = trX1-trX2
-        features[:,:,2] = brX1-brX2
-        features[:,:,3] = blX1-blX2
-        features[:,:,4] = x1-x2
-        features[:,:,5] = w1
-        features[:,:,6] = w2
-        features[:,:,7] = tlY1-tlY2
-        features[:,:,8] = trY1-trY2
-        features[:,:,9] = brY1-brY2
-        features[:,:,10] = blY1-blY2
-        features[:,:,11] = y1-y2
-        features[:,:,12] = h1
-        features[:,:,13] = h2
-        features[:,:,14] = torch.sqrt((tlY1-tlY2)**2 + (tlX1-tlX2)**2)
-        features[:,:,15] = torch.sqrt((trY1-trY2)**2 + (trX1-trX2)**2)
-        features[:,:,16] = torch.sqrt((brY1-brY2)**2 + (brX1-brX2)**2)
-        features[:,:,17] = torch.sqrt((blY1-blY2)**2 + (blX1-blX2)**2)
-        features[:,:,18] = torch.sqrt((y1-y2)**2 + (x1-x2)**2)
-        features[:,:,19] = x1/imageWidth
-        features[:,:,20] = y1/imageHeight
-        features[:,:,21] = x2/imageWidth
-        features[:,:,22] = y2/imageHeight
-        #features[:,:,23] = 1 if (index1,index2) in line_of_sight else 0
-        features[:,:,23].zero_()
-        for index1,index2 in line_of_sight:
-            features[index1,index2,23]=1
-            features[index2,index1,23]=1
-        features[:,:,24] = conf1
-        features[:,:,25] = conf2
-        features[:,:,26:26+numClassFeat] = classFeat1
-        features[:,:,26+numClassFeat:] = classFeat2
+            #t#tic=timeit.default_timer()
+            line_of_sight = self.selectLineOfSightEdges(bbs,imageHeight,imageWidth,return_all=True)
+            #t#print('   candidates line-of-sight: {}'.format(timeit.default_timer()-tic))
+            #t#tic=timeit.default_timer()
+            conf1 = conf[:,None].expand(-1,conf.size(0))
+            conf2 = conf[None,:].expand(conf.size(0),-1)
+            x1 = x[:,None].expand(-1,x.size(0))
+            x2 = x[None,:].expand(x.size(0),-1)
+            y1 = y[:,None].expand(-1,y.size(0))
+            y2 = y[None,:].expand(y.size(0),-1)
+            r1 = r[:,None].expand(-1,r.size(0))
+            r2 = r[None,:].expand(r.size(0),-1)
+            h1 = h[:,None].expand(-1,h.size(0))
+            h2 = h[None,:].expand(h.size(0),-1)
+            w1 = w[:,None].expand(-1,w.size(0))
+            w2 = w[None,:].expand(w.size(0),-1)
+            classFeat1 = classFeat[:,None].expand(-1,classFeat.size(0),-1)
+            classFeat2 = classFeat[None,:].expand(classFeat.size(0),-1,-1)
+            cos_r1 = cos_r[:,None].expand(-1,cos_r.size(0))
+            cos_r2 = cos_r[None,:].expand(cos_r.size(0),-1)
+            sin_r1 = sin_r[:,None].expand(-1,sin_r.size(0))
+            sin_r2 = sin_r[None,:].expand(sin_r.size(0),-1)
+            tlX1 = tlX[:,None].expand(-1,tlX.size(0))
+            tlX2 = tlX[None,:].expand(tlX.size(0),-1)
+            tlY1 = tlY[:,None].expand(-1,tlY.size(0))
+            tlY2 = tlY[None,:].expand(tlY.size(0),-1)
+            trX1 = trX[:,None].expand(-1,trX.size(0))
+            trX2 = trX[None,:].expand(trX.size(0),-1)
+            trY1 = trY[:,None].expand(-1,trY.size(0))
+            trY2 = trY[None,:].expand(trY.size(0),-1)
+            brX1 = brX[:,None].expand(-1,brX.size(0))
+            brX2 = brX[None,:].expand(brX.size(0),-1)
+            brY1 = brY[:,None].expand(-1,brY.size(0))
+            brY2 = brY[None,:].expand(brY.size(0),-1)
+            blX1 = blX[:,None].expand(-1,blX.size(0))
+            blX2 = blX[None,:].expand(blX.size(0),-1)
+            blY1 = blY[:,None].expand(-1,blY.size(0))
+            blY2 = blY[None,:].expand(blY.size(0),-1)
+            features = torch.FloatTensor(bbs.size(0),bbs.size(0), 26+numClassFeat*2)
+            features[:,:,0] = tlX1-tlX2
+            features[:,:,1] = trX1-trX2
+            features[:,:,2] = brX1-brX2
+            features[:,:,3] = blX1-blX2
+            features[:,:,4] = x1-x2
+            features[:,:,5] = w1
+            features[:,:,6] = w2
+            features[:,:,7] = tlY1-tlY2
+            features[:,:,8] = trY1-trY2
+            features[:,:,9] = brY1-brY2
+            features[:,:,10] = blY1-blY2
+            features[:,:,11] = y1-y2
+            features[:,:,12] = h1
+            features[:,:,13] = h2
+            features[:,:,14] = torch.sqrt((tlY1-tlY2)**2 + (tlX1-tlX2)**2)
+            features[:,:,15] = torch.sqrt((trY1-trY2)**2 + (trX1-trX2)**2)
+            features[:,:,16] = torch.sqrt((brY1-brY2)**2 + (brX1-brX2)**2)
+            features[:,:,17] = torch.sqrt((blY1-blY2)**2 + (blX1-blX2)**2)
+            features[:,:,18] = torch.sqrt((y1-y2)**2 + (x1-x2)**2)
+            features[:,:,19] = x1/imageWidth
+            features[:,:,20] = y1/imageHeight
+            features[:,:,21] = x2/imageWidth
+            features[:,:,22] = y2/imageHeight
+            #features[:,:,23] = 1 if (index1,index2) in line_of_sight else 0
+            features[:,:,23].zero_()
+            for index1,index2 in line_of_sight:
+                features[index1,index2,23]=1
+                features[index2,index1,23]=1
+            features[:,:,24] = conf1
+            features[:,:,25] = conf2
+            features[:,:,26:26+numClassFeat] = classFeat1
+            features[:,:,26+numClassFeat:] = classFeat2
 
-        features[:,:,0:7]/=self.normalizeHorz
-        features[:,:,7:14]/=self.normalizeVert
-        features[:,:,14:19]/=(self.normalizeVert+self.normalizeHorz)/2
-        features = features.view(bbs.size(0)**2,26+numClassFeat*2) #flatten
+            features[:,:,0:7]/=self.normalizeHorz
+            features[:,:,7:14]/=self.normalizeVert
+            features[:,:,14:19]/=(self.normalizeVert+self.normalizeHorz)/2
+            features = features.view(bbs.size(0)**2,26+numClassFeat*2) #flatten
         #t#time = timeit.default_timer()-tic
         #t#print('   candidates feats: {}'.format(time))
         #t#self.opt_cand.append(time)
@@ -2234,111 +2274,146 @@ class PairingGroupingGraph(BaseModel):
         return list(candidates)[:MAX_GRAPH_SIZE-numBoxes]
 
     def getTranscriptions(self,bbs,image):
-        #get corners from bb predictions
-        x = bbs[:,1]
-        y = bbs[:,2]
-        r = bbs[:,3]
-        h = bbs[:,4]
-        w = bbs[:,5]
-        cos_r = torch.cos(r)
-        sin_r = torch.sin(r)
-        tlX = -w*cos_r + -h*sin_r +x
-        tlY =  w*sin_r + -h*cos_r +y
-        trX =  w*cos_r + -h*sin_r +x
-        trY = -w*sin_r + -h*cos_r +y
-        brX =  w*cos_r + h*sin_r +x
-        brY = -w*sin_r + h*cos_r +y
-        blX = -w*cos_r + h*sin_r +x
-        blY =  w*sin_r + h*cos_r +y
+        if self.curvedBBs:
+            assert(image.size(0)==1) #single imag
+            self.text_rec.eval()
+            #build batch
+            max_w=0
+            for b in range(batch_size):
+                grid = bbs.getGrid()
+                max_w = max(max_x,grid.size(1))
+                girds.append(grids)
 
-        tlX = tlX.cpu()
-        tlY = tlY.cpu()
-        trX = trX.cpu()
-        trY = trY.cpu()
-        blX = blX.cpu()
-        blY = blY.cpu()
-        brX = brX.cpu()
-        brY = brY.cpu()
+            #batch the grids together padding to same length
+            to_pad = [g.size(1)-max_w for g in grids]
+            grids = [F.pad(g,(0,p,0,0)) for g,p in zip(grids,to_pad)]
 
-        x1 = torch.min(torch.min(tlX,trX),torch.min(brX,blX)).int()
-        x2 = torch.max(torch.max(tlX,trX),torch.max(brX,blX)).int()
-        y1 = torch.min(torch.min(tlY,trY),torch.min(brY,blY)).int()
-        y2 = torch.max(torch.max(tlY,trY),torch.max(brY,blY)).int()
+            output_strings=[]
+            num_batch = math.ceil(len(grids)/self.atr_batch_size)
+            for b in range(num_batch):
+                start=b*self.atr_batch_size
+                end=min((b+1)*self.atr_batch_size,len(grids))
+                b_grids = torch.stack(grids[start:end],dim=0).to(image.device)
+                batch_lines = F.grid_sample(image.expand(b_grids.size(0),-1,-1,-1),b_grids)
 
-        x1-=self.padATRx
-        x2+=self.padATRx
-        y1-=self.padATRy
-        y2+=self.padATRy
+                with torch.no_grad():
+                    resBatch = self.text_rec(batch_lines).cpu().detach().numpy().transpose(1,0,2)
+                batch_strings, decoded_raw_hw = decode_handwriting(resBatch, self.idx_to_char)
+                ##debug
+                out_im = batch_lines.cpu().numpy().transpose([0,2,3,1])
+                out_im = 256*(2-out_im)/2
+                for i in range(batch_lines.size(0)):
+                    cv2.imwrite('out2/line{}-{}.png'.format(i+index,batch_strings[i]),out_im[i])
+                    print('DEBUG saved hwr image: out2/line{}-{}.png'.format(i+start,batch_strings[i]))
+                ##
+                output_strings += batch_strings
 
-        x1 = torch.max(x1,torch.tensor(0).int())
-        x2 = torch.max(torch.min(x2,torch.tensor(image.size(3)-1).int()),torch.tensor(0).int())
-        y1 = torch.max(y1,torch.tensor(0).int())
-        y2 = torch.max(torch.min(y2,torch.tensor(image.size(2)-1).int()),torch.tensor(0).int())
+        else:
+            #get corners from bb predictions
+            x = bbs[:,1]
+            y = bbs[:,2]
+            r = bbs[:,3]
+            h = bbs[:,4]
+            w = bbs[:,5]
+            cos_r = torch.cos(r)
+            sin_r = torch.sin(r)
+            tlX = -w*cos_r + -h*sin_r +x
+            tlY =  w*sin_r + -h*cos_r +y
+            trX =  w*cos_r + -h*sin_r +x
+            trY = -w*sin_r + -h*cos_r +y
+            brX =  w*cos_r + h*sin_r +x
+            brY = -w*sin_r + h*cos_r +y
+            blX = -w*cos_r + h*sin_r +x
+            blY =  w*sin_r + h*cos_r +y
 
-        #h *=2
-        #w *=2
+            tlX = tlX.cpu()
+            tlY = tlY.cpu()
+            trX = trX.cpu()
+            trY = trY.cpu()
+            blX = blX.cpu()
+            blY = blY.cpu()
+            brX = brX.cpu()
+            brY = brY.cpu()
 
-        h = (y2-y1).float()
-        if self.pad_text_height:
-            h = torch.where(h<self.hw_input_height,torch.empty_like(h).fill_(self.hw_input_height),h)
-        scale = self.hw_input_height/h
-        all_scaled_w = (((x2-x1).float()+1)*scale).cpu()#.int()
-        scale=None
+            x1 = torch.min(torch.min(tlX,trX),torch.min(brX,blX)).int()
+            x2 = torch.max(torch.max(tlX,trX),torch.max(brX,blX)).int()
+            y1 = torch.min(torch.min(tlY,trY),torch.min(brY,blY)).int()
+            y2 = torch.max(torch.max(tlY,trY),torch.max(brY,blY)).int()
 
-        output_strings=[]
-        for index in range(0,bbs.size(0),self.atr_batch_size):
-            num = min(self.atr_batch_size,bbs.size(0)-index)
-            max_w = math.ceil(all_scaled_w[index:index+num].max().item())
+            x1-=self.padATRx
+            x2+=self.padATRx
+            y1-=self.padATRy
+            y2+=self.padATRy
 
-        
-            lines = torch.FloatTensor(num,image.size(1),self.hw_input_height,max_w).fill_(-1).to(image.device)
-            #imm = [None]*num
-            for i in range(index,index+num):
-                
-                if self.rotation:
-                    crop = rotate(image[0,:,y1[i]:y2[i]+1,x1[i]:x2[i]+1],r[i],(h[i],w[i]))
-                else:
-                    crop = image[...,y1[i]:y2[i]+1,x1[i]:x2[i]+1]
-                if self.pad_text_height and crop.size(2)<self.hw_input_height:
-                    diff = self.hw_input_height-crop.size(2)
-                    crop = F.pad(crop,(0,0,diff//2,diff//2+diff%2),"constant",-1)
-                elif crop.size(2)<h[i]:
-                    diff = int(h[i])-crop.size(2)
-                    if y1[i]==0:
-                        crop = F.pad(crop,(0,0,0,diff),"constant",-1)
-                    elif y2[i]==image.size(2)-1:
-                        crop = F.pad(crop,(0,0,diff,0),"constant",-1)
-                    else:
-                        assert(False and 'why is it short if not getting cropped by image boundary?')
-                scale = self.hw_input_height/crop.size(2)
-                scaled_w = math.ceil(crop.size(3)*scale)
-                lines[i-index,:,:,0:scaled_w] = F.interpolate(crop, size=(self.hw_input_height,scaled_w), mode='bilinear',align_corners=False)[0]#.to(crop.device)
-                #imm[i-index] = lines[i-index].cpu().numpy().transpose([1,2,0])
-                #imm[i-index] = 256*(2-imm[i-index])/2
+            x1 = torch.max(x1,torch.tensor(0).int())
+            x2 = torch.max(torch.min(x2,torch.tensor(image.size(3)-1).int()),torch.tensor(0).int())
+            y1 = torch.max(y1,torch.tensor(0).int())
+            y2 = torch.max(torch.min(y2,torch.tensor(image.size(2)-1).int()),torch.tensor(0).int())
 
+            #h *=2
+            #w *=2
 
+            h = (y2-y1).float()
+            if self.pad_text_height:
+                h = torch.where(h<self.hw_input_height,torch.empty_like(h).fill_(self.hw_input_height),h)
+            scale = self.hw_input_height/h
+            all_scaled_w = (((x2-x1).float()+1)*scale).cpu()#.int()
+            scale=None
 
-            if lines.size(1)==1 and self.hw_channels==3:
-                lines = lines.expand(-1,3,-1,-1)
+            output_strings=[]
+            for index in range(0,bbs.size(0),self.atr_batch_size):
+                num = min(self.atr_batch_size,bbs.size(0)-index)
+                max_w = math.ceil(all_scaled_w[index:index+num].max().item())
+
             
-            with torch.no_grad():
-                self.text_rec.eval()
-                resBatch = self.text_rec(lines).cpu().detach().numpy().transpose(1,0,2)
-            batch_strings, decoded_raw_hw = decode_handwriting(resBatch, self.idx_to_char)
-            ###debug
-            #for i in range(num):
-            #    cv2.imwrite('out2/line{}-{}.png'.format(i+index,batch_strings[i]),imm[i])
-            ###
-            output_strings += batch_strings
-            #res.append(resBatch)
-        #res = torch.cat(res,dim=1)
+                lines = torch.FloatTensor(num,image.size(1),self.hw_input_height,max_w).fill_(-1).to(image.device)
+                #imm = [None]*num
+                for i in range(index,index+num):
+                    
+                    if self.rotation:
+                        crop = rotate(image[0,:,y1[i]:y2[i]+1,x1[i]:x2[i]+1],r[i],(h[i],w[i]))
+                    else:
+                        crop = image[...,y1[i]:y2[i]+1,x1[i]:x2[i]+1]
+                    if self.pad_text_height and crop.size(2)<self.hw_input_height:
+                        diff = self.hw_input_height-crop.size(2)
+                        crop = F.pad(crop,(0,0,diff//2,diff//2+diff%2),"constant",-1)
+                    elif crop.size(2)<h[i]:
+                        diff = int(h[i])-crop.size(2)
+                        if y1[i]==0:
+                            crop = F.pad(crop,(0,0,0,diff),"constant",-1)
+                        elif y2[i]==image.size(2)-1:
+                            crop = F.pad(crop,(0,0,diff,0),"constant",-1)
+                        else:
+                            assert(False and 'why is it short if not getting cropped by image boundary?')
+                    scale = self.hw_input_height/crop.size(2)
+                    scaled_w = math.ceil(crop.size(3)*scale)
+                    lines[i-index,:,:,0:scaled_w] = F.interpolate(crop, size=(self.hw_input_height,scaled_w), mode='bilinear',align_corners=False)[0]#.to(crop.device)
+                    #imm[i-index] = lines[i-index].cpu().numpy().transpose([1,2,0])
+                    #imm[i-index] = 256*(2-imm[i-index])/2
 
-        ### Debug ###
-        #resN=res.data.cpu().numpy()
-        #output_strings, decoded_raw_hw = decode_handwriting(resN, self.idx_to_char)
-            #cv2.imshow('line',imm)
-            #cv2.waitKey()
-        ###
+
+
+                if lines.size(1)==1 and self.hw_channels==3:
+                    lines = lines.expand(-1,3,-1,-1)
+                
+                with torch.no_grad():
+                    self.text_rec.eval()
+                    resBatch = self.text_rec(lines).cpu().detach().numpy().transpose(1,0,2)
+                batch_strings, decoded_raw_hw = decode_handwriting(resBatch, self.idx_to_char)
+                ###debug
+                #for i in range(num):
+                #    cv2.imwrite('out2/line{}-{}.png'.format(i+index,batch_strings[i]),imm[i])
+                ###
+                output_strings += batch_strings
+                #res.append(resBatch)
+            #res = torch.cat(res,dim=1)
+
+            ### Debug ###
+            #resN=res.data.cpu().numpy()
+            #output_strings, decoded_raw_hw = decode_handwriting(resN, self.idx_to_char)
+                #cv2.imshow('line',imm)
+                #cv2.waitKey()
+            ###
 
         return output_strings
 
@@ -2355,3 +2430,10 @@ class PairingGroupingGraph(BaseModel):
         #def save_layerFC(module,input,output):
             #    self.debug_fc=output.cpu()
         #self.relFeaturizerConv[0].register_forward_hook(save_layerFC)
+
+    def xyrwhToCurved(self,bbs):
+        assert(bbs.size[0]==1)
+        return [xyrwh_TextLine(bb) for bb in bbs[0]]
+    def x1y1x2y2rToCurved(self,bbs):
+        assert(bbs.size[0]==1)
+        return [TextLine(bb) for bb in bbs[0]]
