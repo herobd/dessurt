@@ -631,7 +631,7 @@ class PairingGroupingGraph(BaseModel):
                 allEdgeOuts=[]
                 allGroups=[]
                 allEdgeIndexes=[]
-                graph,edgeIndexes,rel_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings)
+                graph,edgeIndexes,rel_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,image=image)
                 groups=[[i] for i in range(len(useBBs))]
                 bbTrans = transcriptions
                 #undirected
@@ -662,6 +662,8 @@ class PairingGroupingGraph(BaseModel):
                     useBBs,graph,groups,edgeIndexes,bbTrans=self.mergeAndGroup(
                             self.mergeThresh[gIter],self.keepEdgeThresh[gIter],self.groupThresh[gIter],
                             edgeIndexes,edgeOuts,groups,nodeFeats,edgeFeats,uniFeats,useBBs,bbTrans,image)
+                    if self.reintroduce_visual_features:
+                        graph = self.appendVisualFeatures(useBBs,graph,groups)
                     #print('graph 1-:   bbs:{}, nodes:{}, edges:{}'.format(useBBs.size(0),len(groups),len(edgeIndexes)))
                     if len(edgeIndexes)==0:
                         break #we have no graph, so we can just end here
@@ -699,7 +701,7 @@ class PairingGroupingGraph(BaseModel):
 
     #This rewrites the confidence and class predictions based on the (re)predictions from the graph network
     def updateBBs(self,bbs,groups,nodeOuts):
-        if self.curvedBBs:
+        if self.useCurvedBBs:
             nodeConfPred = torch.sigmoid(nodeOuts[:,-1,self.nodeIdxConf]).cpu().detach()
             startIndex = 5+self.nodeIdxClass
             endIndex = 5+self.nodeIdxClassEnd
@@ -1210,14 +1212,15 @@ class PairingGroupingGraph(BaseModel):
 
 
 
-    def createGraph(self,bbs,features,features2,imageHeight,imageWidth,text_emb=None,flip=None,debug_image=None):
+    def createGraph(self,bbs,features,features2,imageHeight,imageWidth,text_emb=None,flip=None,debug_image=None,image=None):
         #t#tic=timeit.default_timer()
         if self.relationshipProposal == 'line_of_sight':
             candidates = self.selectLineOfSightEdges(bbs,imageHeight,imageWidth)
             rel_prop_scores = None
         elif self.relationshipProposal == 'feature_nn':
-            candidates, rel_prop_scores = self.selectFeatureNNEdges(bbs,imageHeight,imageWidth,features.device)
-            bbs=bbs[:,1:] #discard confidence, we kept it so the proposer could see them
+            candidates, rel_prop_scores = self.selectFeatureNNEdges(bbs,imageHeight,imageWidth,image,features.device)
+            if not self.useCurvedBBs:
+                bbs=bbs[:,1:] #discard confidence, we kept it so the proposer could see them
         #t#print('   candidate: {}'.format(timeit.default_timer()-tic))
         if len(candidates)==0:
             if self.useMetaGraph:
@@ -1432,73 +1435,47 @@ class PairingGroupingGraph(BaseModel):
         if self.useShapeFeats:
             if self.useCurvedBBs:
 
-                shapeFeats[:,0] = torch.FloatTensor([bb.height() for bb in bbs_index1])/self.normalizeVert #height
-                shapeFeats[:,1] = torch.FloatTensor([bb.height() for bb in bbs_index2])/self.normalizeVert
-                shapeFeats[:,2] = torch.FloatTensor([bb.width() for bb in bbs_index1])/self.normalizeHorz #width
-                shapeFeats[:,3] = torch.FloatTensor([bb.width() for bb in bbs_index2])/self.normalizeHorz
-                shapeFeats[:,4] = torch.FloatTensor([bb.angle() for bb in bbs_index1])/math.pi
-                shapeFeats[:,5] = torch.FloatTensor([bb.angle() for bb in bbs_index2])/math.pi
-                leftX1 = torch.FloatTensor([bb.leftX() for bb in bbs_index1])
-                leftY1 = torch.FloatTensor([bb.leftY() for bb in bbs_index1])
-                leftX2 = torch.FloatTensor([bb.leftX() for bb in bbs_index2])
-                leftY2 = torch.FloatTensor([bb.leftY() for bb in bbs_index2])
-                rightX1 = torch.FloatTensor([bb.rightX() for bb in bbs_index1])
-                rightY1 = torch.FloatTensor([bb.rightY() for bb in bbs_index1])
-                rightX2 = torch.FloatTensor([bb.rightX() for bb in bbs_index2])
-                rightY2 = torch.FloatTensor([bb.rightY() for bb in bbs_index2])
+                #conf, x,y,r,h,w,tlx,tly,trx,try,brx,bry,blx,bly,r_left,r_rightA,classFeats = bb.getFeatureInfo()
+                allFeats1 = torch.FloatTensor([bb.getFeatureInfo() for bb in bbs_index1])
+                allFeats2 = torch.FloatTensor([bb.getFeatureInfo() for bb in bbs_index2])
+                shapeFeats[:,0] = allFeats1[:,4]/self.normalizeVert #height
+                shapeFeats[:,1] = allFeats2[:,4]/self.normalizeVert
+                shapeFeats[:,2] = allFeats1[:,5]/self.normalizeHorz #width
+                shapeFeats[:,3] = allFeats2[:,5]/self.normalizeHorz
+                shapeFeats[:,4] = allFeats1[:,3]/math.pi
+                shapeFeats[:,5] = allFeats2[:,3]/math.pi
+                leftX1 = (allFeats1[:,6]+allFeats1[:,12])/2
+                leftY1 = (allFeats1[:,7]+allFeats1[:,13])/2
+                leftX2 = (allFeats2[:,6]+allFeats2[:,12])/2
+                leftY2 = (allFeats2[:,7]+allFeats2[:,13])/2
+                rightX1 = (allFeats1[:,8]+allFeats1[:,10])/2
+                rightY1 = (allFeats1[:,9]+allFeats1[:,11])/2
+                rightX2 = (allFeats2[:,8]+allFeats2[:,10])/2
+                rightY2 = (allFeats2[:,9]+allFeats2[:,11])/2
                 shapeFeats[:,6] = torch.sqrt( (leftX1-leftX2)**2 + (leftY1-leftY2)**2 )/self.normalizeDist
                 shapeFeats[:,7] = torch.sqrt( (rightX1-rightX2)**2 + (rightY1-rightY2)**2 )/self.normalizeDist
                 shapeFeats[:,8] = torch.sqrt( (leftX1-rightX2)**2 + (leftY1-rightY2)**2 )/self.normalizeDist
                 shapeFeats[:,9] = torch.sqrt( (rightX1-leftX2)**2 + (rightY1-leftY2)**2 )/self.normalizeDist
-                centriodX1 = torch.FloatTensor([bb.centriodX() for bb in bbs_index1])
-                centriodY1 = torch.FloatTensor([bb.centriodY() for bb in bbs_index1])
-                centriodX2 = torch.FloatTensor([bb.centriodX() for bb in bbs_index2])
-                centriodY2 = torch.FloatTensor([bb.centriodY() for bb in bbs_index2])
+                centriodX1 = allFeats1[:,1]
+                centriodY1 = allFeats1[:,2]
+                centriodX2 = allFeats2[:,1]
+                centriodY2 = allFeats2[:,2]
                 shapeFeats[:,10] = torch.sqrt( (centriodX1-centriodX2)**2 + (centriodY1-centriodY2)**2 )/self.normalizeDist
                 shapeFeats[:,11] = torch.sqrt( (centriodX1-leftX2)**2 + (centriodY1-leftY2)**2 )/self.normalizeDist
                 shapeFeats[:,12] = torch.sqrt( (centriodX1-rightX2)**2 + (centriodY1-rightY2)**2 )/self.normalizeDist
                 shapeFeats[:,13] = torch.sqrt( (centriodX2-leftX1)**2 + (centriodY2-leftY1)**2 )/self.normalizeDist
                 shapeFeats[:,14] = torch.sqrt( (centriodX2-rightX1)**2 + (centriodY2-rightY1)**2 )/self.normalizeDist
-                shapeFeats[:,15] = torch.FloatTensor([bb.angleStd() for bb in bbs_index1])
-                shapeFeats[:,16] = torch.FloatTensor([bb.angleStd() for bb in bbs_index2])
+                shapeFeats[:,15] = (centriodX1-centriodX2)/self.normalizeDist
+                shapeFeats[:,16] = (centriodY1-centriodY2)/self.normalizeDist
+                shapeFeats[:,17] = allFeats1[:,16] #std angle
+                shapeFeats[:,18] = allFeats2[:,16]
 
-                shapeFeats[:,17] = torch.FloatTensor([bb1.getReadPos()-bb2.getReadPos() for bb1,bb2 in zip(bbs_index1,bbs_index2)])//self.normalizeDist #read pos
-
-                #TODO
-                #overlap feature?
-
-                #x y diff
-
-                #classes
-
-                #shapeFeats[:,2] = bbs1_feats[1]/self.normalizeHorz #width
-                #shapeFeats[:,3] = bbs2_feats[1]/self.normalizeHorz
-                #shapeFeats[:,4] = bbs1_feats[2]/math.pi #rot
-                #shapeFeats[:,5] = bbs2_feats[2]/math.pi #rot
-                #shapeFeats[:,5] = torch.sqrt( (bbs1_feats[3]-bbs2_feats[3]/)**2 + ()**2 )/self.normalizeDist
-
-                for i, index1,index2 in enumerate(candidates):
-
-                    shapeFeats[i,0] = bbs[index1].length()/self.normalizeHorz
-                    shapeFeats[i,1] = bbs[index2].length()/self.normalizeHorz
-                    shapeFeats[i,2] = bbs[index1].height()/self.normalizeVert
-                    shapeFeats[i,3] = bbs[index2].height()/self.normalizeVert
-                    shapeFeats[i,4] = bbs[index1].angle()/math.pi
-                    shapeFeats[i,5] = bbs[index2].angle()/math.pi
-
-                    lx1,ly1 = bbs[index1].leftPoint()
-                    lx2,ly2 = bbs[index2].leftPoint()
-                    rx1,ry1 = bbs[index1].rightPoint()
-                    rx2,ry2 = bbs[index2].rightPoint()
-                    shapeFeats[i,6] = math.sqrt( (lx1-rx2)**2 + (ly1-ry1)**2) 
-                    assert(False)
-                    #TODO, add more features!
-
-                    shapeFeats[i,xa:ya] = bbs[index1].cls
-                    shapeFeats[i,xb:yb] = bbs[index2].cls
+                shapeFeats[:,19] = torch.FloatTensor([bb1.getReadPosition()-bb2.getReadPosition() for bb1,bb2 in zip(bbs_index1,bbs_index2)])//self.normalizeDist #read pos
+                shapeFeats[:,20:20+num_class] = allFeats1[:,17:]
+                shapeFeats[:,20+num_class:20+2*num_class] = allFeats2[:,17:]
 
 
-                raise NotImplementedError('todo')
+
             else:
                 if type(self.pairer) is BinaryPairReal and type(self.pairer.shape_layers) is not nn.Sequential:
                     #The index specification is to allign with the format feat nets are trained with
@@ -1787,7 +1764,7 @@ class PairingGroupingGraph(BaseModel):
 
 
 
-    def selectFeatureNNEdges(self,bbs,imageHeight,imageWidth,device):
+    def selectFeatureNNEdges(self,bbs,imageHeight,imageWidth,image,device):
         if bbs.size(0)<2:
             return []
         
@@ -1820,13 +1797,63 @@ class PairingGroupingGraph(BaseModel):
             #25: conf2
             #26-n: classpred1
             #n+1-m: classpred2
-            line_of_sight = self.selectLineOfSightEdges(bbs,imageHeight,imageWidth,return_all=True)
+            line_counts = self.betweenPixels(bbs,image)
             numClassFeat = bbs[0].cls.size(0)
             
-            x,y,r,h,w,tl, tr, br, bl = torch.FloatTensor([bb.getFeatureInfo() for bb in bbs]).permute(1,0)
-            #TODO left off
+            #conf, x,y,r,h,w,tl, tr, br, bl = torch.FloatTensor([bb.getFeatureInfo() for bb in bbs]).permute(1,0)
+            #conf, x,y,r,h,w,tlx,tly,trx,try,brx,bry,blx,bly,r_left,r_rightA,classFeats = bb.getFeatureInfo()
 
-            features = torch.FloatTensor(len(bb),len(bbs), 26+numClassFeat*2)
+            allFeats = torch.FloatTensor([bb.getFeatureInfo() for bb in bbs])
+            num_bb = allFeats.size()
+            conf1 = allFeats[:,None,0].expand(-1,num_bb)
+            conf2 = allFeats[None,:,0].expand(num_bb,-1)
+            x1 = allFeats[:,None,1].expand(-1,num_bb)
+            x2 = allFeats[None,:,1].expand(num_bb,-1)
+            y1 = allFeats[:,None,2].expand(-1,num_bb)
+            y2 = allFeats[None,:,2].expand(num_bb,-1)
+            #r1 = allFeats[:,None,3].expand(-1,num_bb)
+            #r2 = allFeats[None,:,3].expand(num_bb,-1)
+            h1 = allFeats[:,None,4].expand(-1,num_bb)
+            h2 = allFeats[None,:,4].expand(num_bb,-1)
+            w1 = allFeats[:,None,5].expand(-1,num_bb)
+            w2 = allFeats[None,:,5].expand(num_bb,-1)
+            tlX1 = allFeats[:,None,6].expand(-1,num_bb)
+            tlX2 = allFeats[None,:,6].expand(num_bb,-1)
+            tlY1 = allFeats[:,None,7].expand(-1,num_bb)
+            tlY2 = allFeats[None,:,7].expand(num_bb,-1)
+            trX1 = allFeats[:,None,8].expand(-1,num_bb)
+            trX2 = allFeats[None,:,8].expand(num_bb,-1)
+            trY1 = allFeats[:,None,9].expand(-1,num_bb)
+            trY2 = allFeats[None,:,9].expand(num_bb,-1)
+            brX1 = allFeats[:,None,10].expand(-1,num_bb)
+            brX2 = allFeats[None,:,10].expand(num_bb,-1)
+            brY1 = allFeats[:,None,11].expand(-1,num_bb)
+            brY2 = allFeats[None,:,11].expand(num_bb,-1)
+            blX1 = allFeats[:,None,12].expand(-1,num_bb)
+            blX2 = allFeats[None,:,12].expand(num_bb,-1)
+            blY1 = allFeats[:,None,13].expand(-1,num_bb)
+            blY2 = allFeats[None,:,13].expand(num_bb,-1)
+            classFeat1 = allFeats[:,None,16:].expand(-1,num_bb)
+            classFeat2 = allFeats[None,:,16:].expand(num_bb,-1)
+            sin_r = torch.sin(allFeats[:,3])
+            cos_r = torch.cos(allFeats[:,3])
+            cos_r1 = cos_r[:,None].expand(-1,cos_r.size(0))
+            cos_r2 = cos_r[None,:].expand(cos_r.size(0),-1)
+            sin_r1 = sin_r[:,None].expand(-1,sin_r.size(0))
+            sin_r2 = sin_r[None,:].expand(sin_r.size(0),-1)
+            sin_r_left = torch.sin(allFeats[:,14])
+            cos_r_left = torch.cos(allFeats[:,14])
+            sin_r_right = torch.sin(allFeats[:,15])
+            cos_r_right = torch.cos(allFeats[:,15])
+            cos_r_left1 = cos_r_left[:,None].expand(-1,cos_r_left.size(0))
+            cos_r_left2 = cos_r_left[None,:].expand(cos_r_left.size(0),-1)
+            sin_r_left1 = sin_r_left[:,None].expand(-1,sin_r_left.size(0))
+            sin_r_left2 = sin_r_left[None,:].expand(sin_r_left.size(0),-1)
+            cos_r_right1 = cos_r_right[:,None].expand(-1,cos_r_right.size(0))
+            cos_r_right2 = cos_r_right[None,:].expand(cos_r_right.size(0),-1)
+            sin_r_right1 = sin_r_right[:,None].expand(-1,sin_r_right.size(0))
+            sin_r_right2 = sin_r_right[None,:].expand(sin_r_right.size(0),-1)
+
         else:
             #features: tlXDiff,trXDiff,brXDiff,blXDiff,tlYDiff,trYDiff,brYDiff,blYDiff, centerXDiff, centerYDiff, absX, absY, h1, w1, h2, w2, classpred1, classpred2, line of sight (binary)
 
@@ -1856,8 +1883,14 @@ class PairingGroupingGraph(BaseModel):
             #23: line of sight
             #24: conf1
             #25: conf2
-            #26-n: classpred1
-            #n+1-m: classpred2
+            #26: sin r 1
+            #27: sin r 2
+            #28: cos r 1
+            #29: cos r 2
+            #30-n: classpred1
+            #n-m: classpred2
+            #if curvedBB:
+            #m:m+8: left and right sin/cos
 
             conf = bbs[:,0]
             x = bbs[:,1]
@@ -1916,44 +1949,66 @@ class PairingGroupingGraph(BaseModel):
             blX2 = blX[None,:].expand(blX.size(0),-1)
             blY1 = blY[:,None].expand(-1,blY.size(0))
             blY2 = blY[None,:].expand(blY.size(0),-1)
-            features = torch.FloatTensor(bbs.size(0),bbs.size(0), 26+numClassFeat*2)
-            features[:,:,0] = tlX1-tlX2
-            features[:,:,1] = trX1-trX2
-            features[:,:,2] = brX1-brX2
-            features[:,:,3] = blX1-blX2
-            features[:,:,4] = x1-x2
-            features[:,:,5] = w1
-            features[:,:,6] = w2
-            features[:,:,7] = tlY1-tlY2
-            features[:,:,8] = trY1-trY2
-            features[:,:,9] = brY1-brY2
-            features[:,:,10] = blY1-blY2
-            features[:,:,11] = y1-y2
-            features[:,:,12] = h1
-            features[:,:,13] = h2
-            features[:,:,14] = torch.sqrt((tlY1-tlY2)**2 + (tlX1-tlX2)**2)
-            features[:,:,15] = torch.sqrt((trY1-trY2)**2 + (trX1-trX2)**2)
-            features[:,:,16] = torch.sqrt((brY1-brY2)**2 + (brX1-brX2)**2)
-            features[:,:,17] = torch.sqrt((blY1-blY2)**2 + (blX1-blX2)**2)
-            features[:,:,18] = torch.sqrt((y1-y2)**2 + (x1-x2)**2)
-            features[:,:,19] = x1/imageWidth
-            features[:,:,20] = y1/imageHeight
-            features[:,:,21] = x2/imageWidth
-            features[:,:,22] = y2/imageHeight
-            #features[:,:,23] = 1 if (index1,index2) in line_of_sight else 0
+
+        num_feats = 30+numClassFeat*2
+        if self.useCurvedBBs:
+            num_feats+=8
+        features = torch.FloatTensor(bbs.size(0),bbs.size(0), num_feats)
+        features[:,:,0] = tlX1-tlX2
+        features[:,:,1] = trX1-trX2
+        features[:,:,2] = brX1-brX2
+        features[:,:,3] = blX1-blX2
+        features[:,:,4] = x1-x2
+        features[:,:,5] = w1
+        features[:,:,6] = w2
+        features[:,:,7] = tlY1-tlY2
+        features[:,:,8] = trY1-trY2
+        features[:,:,9] = brY1-brY2
+        features[:,:,10] = blY1-blY2
+        features[:,:,11] = y1-y2
+        features[:,:,12] = h1
+        features[:,:,13] = h2
+        features[:,:,14] = torch.sqrt((tlY1-tlY2)**2 + (tlX1-tlX2)**2)
+        features[:,:,15] = torch.sqrt((trY1-trY2)**2 + (trX1-trX2)**2)
+        features[:,:,16] = torch.sqrt((brY1-brY2)**2 + (brX1-brX2)**2)
+        features[:,:,17] = torch.sqrt((blY1-blY2)**2 + (blX1-blX2)**2)
+        features[:,:,18] = torch.sqrt((y1-y2)**2 + (x1-x2)**2)
+        features[:,:,19] = x1/imageWidth
+        features[:,:,20] = y1/imageHeight
+        features[:,:,21] = x2/imageWidth
+        features[:,:,22] = y2/imageHeight
+        #features[:,:,23] = 1 if (index1,index2) in line_of_sight else 0
+        if self.useCurvedBBs:
+            features[:,:,23] = line_counts
+        else:
             features[:,:,23].zero_()
             for index1,index2 in line_of_sight:
                 features[index1,index2,23]=1
                 features[index2,index1,23]=1
-            features[:,:,24] = conf1
-            features[:,:,25] = conf2
-            features[:,:,26:26+numClassFeat] = classFeat1
-            features[:,:,26+numClassFeat:] = classFeat2
+        features[:,:,24] = conf1
+        features[:,:,25] = conf2
+        features[:,:,26] = sin_r1
+        features[:,:,27] = sin_r2
+        features[:,:,28] = cos_r1
+        features[:,:,29] = cos_r2
+        features[:,:,30:30+numClassFeat] = classFeat1
+        features[:,:,30+numClassFeat:] = classFeat2
+        if self.useCurvedBBs:
+            features[:,:,30+2*numClassFeat:] = sin_r_left1
+            features[:,:,31+2*numClassFeat:] = sin_r_left2
+            features[:,:,32+2*numClassFeat:] = cos_r_left1
+            features[:,:,33+2*numClassFeat:] = cos_r_left2
+            features[:,:,34+2*numClassFeat:] = sin_r_right1
+            features[:,:,35+2*numClassFeat:] = sin_r_right2
+            features[:,:,36+2*numClassFeat:] = cos_r_right1
+            features[:,:,37+2*numClassFeat:] = cos_r_right2
 
-            features[:,:,0:7]/=self.normalizeHorz
-            features[:,:,7:14]/=self.normalizeVert
-            features[:,:,14:19]/=(self.normalizeVert+self.normalizeHorz)/2
-            features = features.view(bbs.size(0)**2,26+numClassFeat*2) #flatten
+
+        #normalize distance features
+        features[:,:,0:7]/=self.normalizeHorz
+        features[:,:,7:14]/=self.normalizeVert
+        features[:,:,14:19]/=(self.normalizeVert+self.normalizeHorz)/2
+        features = features.view(bbs.size(0)**2,num_feats) #flatten
         #t#time = timeit.default_timer()-tic
         #t#print('   candidates feats: {}'.format(time))
         #t#self.opt_cand.append(time)
@@ -1981,6 +2036,18 @@ class PairingGroupingGraph(BaseModel):
         #t#print('   candidates net and thresh: {}'.format(timeit.default_timer()-tic))
         return keep_rels, (rel_pred, rels, implicit_threshold)
 
+
+    def betweenPixel(self,bbs,image):
+        values = torch.FloatTensor(len(bbs),len(bbs)).zeros_()
+        for i,bb1 in enumerate(bbs[:-1]):
+            for j,bb2 in zip(range(i+1,len(bbs)),bbs[i+1:]):
+                x1,y1 = bb1.getCenterPoint()
+                x2,y2 = bb2.getCenterPoint()
+                rr,cc = draw.line(y1,x1,y2,x2)
+                v = image[0,:,rr,cc].mean()
+                values[i,j] = v
+                values[j,i] = v
+        return values
 
 
     def selectLineOfSightEdges(self,bbs,imageHeight,imageWidth, return_all=False):
@@ -2274,7 +2341,7 @@ class PairingGroupingGraph(BaseModel):
         return list(candidates)[:MAX_GRAPH_SIZE-numBoxes]
 
     def getTranscriptions(self,bbs,image):
-        if self.curvedBBs:
+        if self.useCurvedBBs:
             assert(image.size(0)==1) #single imag
             self.text_rec.eval()
             #build batch
