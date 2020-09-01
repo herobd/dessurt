@@ -473,3 +473,6 @@ class TextLine:
         return torch.cat(chunks,dim=1)
 
 
+    def getFeatureInfo(self):
+        # 0    1 2 3 4 5  6   7   8   9   10  11  12  13  14     15      16    17
+        #conf, x,y,r,h,w,tlx,tly,trx,try,brx,bry,blx,bly,r_left,r_right,std_r,classFeats
