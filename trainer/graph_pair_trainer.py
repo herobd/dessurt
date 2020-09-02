@@ -10,6 +10,9 @@ from utils.group_pairing import getGTGroup, pure
 from datasets.testforms_graph_pair import display
 import random, os
 
+from model.oversegment_loss import build_oversegmented_targets_multiscale
+from model.overseg_box_detector import build_box_predictions
+
 
 class GraphPairTrainer(BaseTrainer):
     """
@@ -1277,9 +1280,41 @@ class GraphPairTrainer(BaseTrainer):
             gtTrans = None
         #t#tic=timeit.default_timer()
         if useGT and targetBoxes is not None:
+            if self.model.useCurvedBBs:
+                #build targets of GT to pass as detections
+                ph_boxes = [torch.zeros(1,1,1,1,1)]*3
+                ph_cls = [torch.zeros(1,1,1,1,1)]*3
+                ph_conf = [torch.zeros(1,1,1,1)]*3
+                scale = self.model.detector.scale
+                numAnchors = self.model.detector.numAnchors
+                numBBParams = self.model.detector.numBBParams
+                numBBParams = self.model.detector.numBBParams
+                numBBTypes = numClasses
+                grid_sizesH=[image.size(2)//s[0] for s in scale]
+                grid_sizesW=[image.size(3)//s[0] for s in scale]
+
+
+                nGT, masks, conf_masks, t_Ls, t_Ts, t_Rs, t_Bs, t_rs, tconf_scales, tcls_scales, pred_covered, gt_covered, recall, precision, pred_covered_noclass, gt_covered_noclass, recall_noclass, precision_noclass = build_oversegmented_targets_multiscale(ph_boxes, ph_conf, ph_cls, targetBoxes, [targetBoxes.size(1)], numClasses, grid_sizesH, grid_sizesW,scale=scale, assign_mode='split', close_anchor_rule='unmask')
+                t_Ls = [t.type(torch.FloatTensor) for t in t_Ls]
+                t_Ts = [t.type(torch.FloatTensor) for t in t_Ts]
+                t_Rs = [t.type(torch.FloatTensor) for t in t_Rs]
+                t_Bs = [t.type(torch.FloatTensor) for t in t_Bs]
+                t_rs = [t.type(torch.FloatTensor) for t in t_rs]
+                tconf_scales = [t.type(torch.FloatTensor) for t in tconf_scales]
+                tcls_scales = [t.type(torch.FloatTensor) for t in tcls_scales]
+
+                ys = []
+                for level in range(len(t_Ls)):
+                    level_y = torch.cat([ torch.stack([tconf_scales[level],t_Ls[level],t_Ts[level],t_Rs[level], t_Bs[level],t_rs[level]],dim=2), tcls_scales[level].permute(0,1,4,2,3)], dim=2)
+                    ys.append(level_y.view(level_y.size(0),level_y.size(1)*level_y.size(2),level_y.size(3),level_y.size(4)))
+                targetBoxes_changed = build_box_predictions(ys,scale,ys[0].device,numAnchors,numBBParams,numBBTypes)
+            else:
+                targetBoxes_changed=targetBoxes
+
+
             allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred, final = self.model(
                                     image,
-                                    targetBoxes,
+                                    targetBoxes_changed,
                                     target_num_neighbors,
                                     True,
                                     otherThresh=self.conf_thresh_init, 

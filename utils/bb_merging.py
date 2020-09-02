@@ -374,8 +374,24 @@ class TextLine:
         top_points=list(top_points)
         bot_points=list(bot_points)
         bot_points.reverse()
-        self.poly_points = top_points+bot_points
+        self.poly_points = np.array( top_points+bot_points )
 
+        self.center_point = self.poly_points.mean(axis=0)
+        self.conf = np.mean(self.all_conf)
+        self.cls = np.mean(self.all_cls)
+        self.std_r = np.std(self.all_angles)
+        self.r_left = math.atan2(top_points[0][1]-bot_points[0][1],bot_points[0][0]-top_points[0][0])
+        self.r_right = math.atan2(top_points[-1][1]-bot_points[-1][1],bot_points[-1][0]-top_points[-1][0])
+        
+        horz_sum=0
+        vert_sum=0
+        for i,(top,bot) in enumerate(self.point_pairs):
+            if i>=0:
+                horz_sum += math.sqrt((top[0]-top_points[i-1][0])**2 +(top[1]-top_points[i-1][1])**2)
+                horz_sum += math.sqrt((bot[0]-bot_points[i-1][0])**2 +(bot[1]-bot_points[i-1][1])**2)
+            vert_sum += math.sqrt((top[0]-bot[0])**2 + (top[0]- bot[0])**2)
+        self.height = vert_sum/len(self.point_pairs)
+        self.width = horz_sum/2
 
 
 
@@ -432,11 +448,13 @@ class TextLine:
     def polyYs(self):
         if self.poly_points is None:
             self.compute()
-        return [p[1] for p in self.poly_points]
+        #return [p[1] for p in self.poly_points]
+        return self.poly_points[:,1]
     def polyXs(self):
         if self.poly_points is None:
             self.compute()
-        return [p[0] for p in self.poly_points]
+        #return [p[0] for p in self.poly_points]
+        return self.poly_points[:,0]
     def polyPoints(self):
         if self.poly_points is None:
             self.compute()
@@ -472,7 +490,17 @@ class TextLine:
 
         return torch.cat(chunks,dim=1)
 
+    def boundingRect(self):
+        if self.poly_points is None:
+            self.compute()
+        minx,miny = self.poly_points.min(axis=0)
+        maxx,maxy = self.poly_points.max(axis=0)
+        return minx,miny,maxx,maxy
 
     def getFeatureInfo(self):
+        if self.poly_points is None:
+            self.compute()
         # 0    1 2 3 4 5  6   7   8   9   10  11  12  13  14     15      16    17
         #conf, x,y,r,h,w,tlx,tly,trx,try,brx,bry,blx,bly,r_left,r_right,std_r,classFeats
+
+        return (self.conf, self.center_point[0], self.center_point[1], self.median_angle, self.height, self.width, *self.point_pairs[0][0], *self.point_pairs[-1][0], *self.point_pairs[-1][1], *self.point_pairs[0][1], self.r_left, self.r_right, self.std_r, self.cls)
