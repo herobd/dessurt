@@ -521,7 +521,9 @@ class GraphPairTrainer(BaseTrainer):
             
             if targetBoxes is not None:
                 targetBoxes = targetBoxes.cpu()
-                if self.model.rotation:
+                if self.model.useCurvedBBs:
+                    targIndex, fullHit, overSegmented = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,?,numClasses,hard_thresh=False)
+                elif self.model.rotation:
                     assert(False and 'untested')
                     targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
                 else:
@@ -1305,7 +1307,7 @@ class GraphPairTrainer(BaseTrainer):
 
                 ys = []
                 for level in range(len(t_Ls)):
-                    level_y = torch.cat([ torch.stack([tconf_scales[level],t_Ls[level],t_Ts[level],t_Rs[level], t_Bs[level],t_rs[level]],dim=2), tcls_scales[level].permute(0,1,4,2,3)], dim=2)
+                    level_y = torch.cat([ torch.stack([2*tconf_scales[level]-1,t_Ls[level],t_Ts[level],t_Rs[level], t_Bs[level],t_rs[level]],dim=2), 2*tcls_scales[level].permute(0,1,4,2,3)-1], dim=2)
                     ys.append(level_y.view(level_y.size(0),level_y.size(1)*level_y.size(2),level_y.size(3),level_y.size(4)))
                 targetBoxes_changed = build_box_predictions(ys,scale,ys[0].device,numAnchors,numBBParams,numBBTypes)
             else:
@@ -1723,7 +1725,9 @@ class GraphPairTrainer(BaseTrainer):
         numClasses = len(self.data_loader.dataset.classMap)
         if targetBoxes is not None:
             targetBoxes = targetBoxes.cpu()
-            if self.model.rotation:
+            if self.model.useCurvedBBs:
+                targIndex, fullHit, overSegmented = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,?,numClasses,hard_thresh=False)
+            elif self.model.rotation:
                 targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
             else:
                 targIndex, fullHit, overSegmented = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,hard_thresh=False,fixed=self.fixedAlign)

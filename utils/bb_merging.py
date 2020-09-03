@@ -17,7 +17,8 @@ class TextLine:
     def __init__(self,pred_bb_info):
         pred_bb_info = pred_bb_info.cpu().detach()
         self.all_conf = [pred_bb_info[0]]
-        self.all_cls = [pred_bb_info[6:]]
+        self.all_cls = [pred_bb_info[6:].numpy()]
+        assert(self.all_cls[0].shape[0]==4)
 
         self.median_angle = None
         self.poly_points=None
@@ -73,7 +74,7 @@ class TextLine:
         toremove.reverse()
         for r in toremove:
             del primitive_rects_top[r]
-        top_points=[primitive_rects_top[0][0]]
+        top_points=[]#[primitive_rects_top[0][0]]
         last_point_top=primitive_rects_top[0][0]
         for rect in primitive_rects_top:
             if last_point_top[0]>rect[1][0]: #the prior rectangle extendes beyond this one
@@ -140,7 +141,7 @@ class TextLine:
         toremove.reverse()
         for r in toremove:
             del primitive_rects_bot[r]
-        bot_points=[primitive_rects_bot[0][3]]
+        bot_points=[]#[primitive_rects_bot[0][3]]
         last_point_bot=primitive_rects_bot[0][3]
         for rect in primitive_rects_bot:
             if last_point_bot[0]>rect[2][0]: #the prior rectangle extendes beyond this one
@@ -378,7 +379,7 @@ class TextLine:
 
         self.center_point = self.poly_points.mean(axis=0)
         self.conf = np.mean(self.all_conf)
-        self.cls = np.mean(self.all_cls)
+        self.cls = np.stack(self.all_cls,axis=0).mean(axis=0)
         self.std_r = np.std(self.all_angles)
         self.r_left = math.atan2(top_points[0][1]-bot_points[0][1],bot_points[0][0]-top_points[0][0])
         self.r_right = math.atan2(top_points[-1][1]-bot_points[-1][1],bot_points[-1][0]-top_points[-1][0])
@@ -400,8 +401,7 @@ class TextLine:
             self.compute()
         angle = self.median_angle
         slope = -math.tan(angle)
-        xc = self.centriodX()
-        yc = self.centriodY()
+        xc,yc = self.center_point
 
         if math.isinf(slope):
             if angle==math.pi/2:
@@ -503,4 +503,9 @@ class TextLine:
         # 0    1 2 3 4 5  6   7   8   9   10  11  12  13  14     15      16    17
         #conf, x,y,r,h,w,tlx,tly,trx,try,brx,bry,blx,bly,r_left,r_right,std_r,classFeats
 
-        return (self.conf, self.center_point[0], self.center_point[1], self.median_angle, self.height, self.width, *self.point_pairs[0][0], *self.point_pairs[-1][0], *self.point_pairs[-1][1], *self.point_pairs[0][1], self.r_left, self.r_right, self.std_r, self.cls)
+        return (self.conf, self.center_point[0], self.center_point[1], self.median_angle, self.height, self.width, *self.point_pairs[0][0], *self.point_pairs[-1][0], *self.point_pairs[-1][1], *self.point_pairs[0][1], self.r_left, self.r_right, self.std_r, *self.cls)
+
+    def getCenterPoint(self):
+        if self.poly_points is None:
+            self.compute()
+        return self.center_point
