@@ -697,6 +697,65 @@ def newGetTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,getLoc, 
         overSegmented,_ = overSegmented.max(dim=0)
         return targIndex, hits, overSegmented
 
+#This also returns which pred BBs are oversegmentations of targets (horizontall)
+def newGetTargIndexForPreds_textLine(target,pred,iou_thresh,numClasses,hard_thresh):
+    #TODO, just started
+    if pred is None: 
+        return None, None, None
+    targIndex = torch.LongTensor((len(pred)))
+    targIndex[:] = -1
+    #mAP=0.0
+    aps=[]
+    precisions=[]
+    recalls=[]
+
+    if len(target.size())<=1:
+        return None, None, None
+
+    #by class
+    #import pdb; pdb.set_trace()
+    #first get all IOUs, then process by class
+    allIOUs, allIO_clippedU = getLoc(target[:,0:],pred[:,1:]) #clippedUnion, target is clipped horizontally to match pred
+    #This isn't going to work of dist as 0 is perfect
+    maxIOUsForPred,_ = allIOUs.max(dim=0)
+    predsWithNoIntersection=maxIOUsForPred==0
+
+    hits = allIOUs>iou_thresh
+    overSeg_thresh = iou_thresh*1.05
+    overSegmented= (allIO_clippedU>overSeg_thresh) & ~hits
+    if hard_thresh:
+        allIOUs *= hits.float()
+
+
+    for cls in range(numClasses):
+        scores=[]
+        clsTargInd = target[:,cls+13]==1
+        notClsTargInd = target[:,cls+13]!=1
+        if len(pred.size())>1 and pred.size(0)>0:
+            #print(pred.size())
+            #clsPredInd = torch.argmax(pred[:,beforeCls+6:],dim=1)==cls
+            clsPredInd = torch.argmax(pred[:,-numClasses:],dim=1)==cls
+        else:
+            clsPredInd = torch.empty(0,dtype=torch.uint8)
+        if  clsPredInd.any():
+            if notClsTargInd.any():
+                notClsTargIndX = notClsTargInd[:,None].expand(allIOUs.size())
+                clsPredIndX = clsPredInd[None,:].expand(allIOUs.size())
+                allIOUs[notClsTargIndX*clsPredIndX]=0 #set IOU for instances that are from different class than predicted to 0 (different class so no intersection)
+                #allIOUs[notClsTargInd][:,clsPredInd]=0 this doesn't work for some reason
+            val,targIndexes = torch.max(allIOUs[:,clsPredInd],dim=0)
+            #targIndexes has the target indexes for the predictions of cls
+
+            #assign -1 index to places that don't really have a match
+            targIndexes[val==0] = -1
+            targIndex[clsPredInd] =  targIndexes
+
+    if hard_thresh:
+        return targIndex, predsWithNoIntersection
+    else:
+        hits,_ = hits.max(dim=0) #since we always take max pred
+        overSegmented,_ = overSegmented.max(dim=0)
+        return targIndex, hits, overSegmented
 
 def computeAP(scores):
     rank=[]
