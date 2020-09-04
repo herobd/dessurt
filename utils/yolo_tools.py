@@ -3,6 +3,8 @@ import torch
 import math
 import timeit
 import numpy as np
+from utils.forms_annotations import calcCornersTorch
+from shapely.geometry import Polygon
 
 def non_max_sup_overseg(pred_boxes,thresh_conf=0.5, thresh_inter=0.5, hard_limit=300):
     return non_max_sup_(pred_boxes,thresh_conf, thresh_inter, verticle_bias_intersection, hard_limit)
@@ -330,6 +332,119 @@ def allIOU_andClip(boxesT,boxesP, boxesPXYWH=[0,1,4,3]):
 
     iou = inter_area / (bP_area + bT_area - inter_area + 1e-16)
     io_clipped_u = inter_area / (bP_area + bT_clippedArea - inter_area + 1e-16)
+    return iou, io_clipped_u
+
+def allPolyIOU_andClip(rboxes,bbs):
+
+    #first we'll find encompassing boxes and compute IOU based on those (fast)
+    #for intersections, we'll compute the intersection using polygons (slow)
+    #rboxes = x,y,r,h,w
+    gt_tlX,gt_tlY,gt_trX,gt_trY,gt_brX,gt_brY,gt_blX,gt_blY = calcCornersTorch(rboxes[:,0],rboxes[:,1],rboxes[:,2],rboxes[:,3],rboxes[:,4])
+    gt_Xs = (gt_tlX,gt_tlX,gt_brX,gt_blX)
+    gt_Ys = (gt_tlY,gt_tlY,gt_brY,gt_blY)
+    gt_x1,_ = torch.stack(gt_Xs).min(dim=0)
+    gt_x2,_ = torch.stack(gt_Xs).max(dim=0)
+    gt_y1,_ = torch.stack(gt_Ys).min(dim=0)
+    gt_y2,_ = torch.stack(gt_Ys).max(dim=0)
+
+    pr_x1 = torch.FloatTensor([min(bb.polyXs()) for bb in bbs])
+    pr_x2 = torch.FloatTensor([max(bb.polyXs()) for bb in bbs])
+    pr_y1 = torch.FloatTensor([min(bb.polyYs()) for bb in bbs])
+    pr_y2 = torch.FloatTensor([max(bb.polyYs()) for bb in bbs])
+
+    pr_allRs = torch.FloatTensor([bb.medianAngle() for bb in bbs])
+
+    #expand to make two dimensional, allowing every instance of boxesP
+    #to be compared with every intsance of boxesT
+    gt_x1 = gt_x1[:,None].expand(rboxes.size(0), len(bbs))
+    gt_y1 = gt_y1[:,None].expand(rboxes.size(0), len(bbs))
+    gt_x2 = gt_x2[:,None].expand(rboxes.size(0), len(bbs))
+    gt_y2 = gt_y2[:,None].expand(rboxes.size(0), len(bbs))
+    pr_x1 = pr_x1[None,:].expand(rboxes.size(0), len(bbs))
+    pr_y1 = pr_y1[None,:].expand(rboxes.size(0), len(bbs))
+    pr_x2 = pr_x2[None,:].expand(rboxes.size(0), len(bbs))
+    pr_y2 = pr_y2[None,:].expand(rboxes.size(0), len(bbs))
+
+    inter_rect_x1 = torch.max(pr_x1, gt_x1)
+    inter_rect_x2 = torch.min(pr_x2, gt_x2)
+    inter_rect_y1 = torch.max(pr_y1, gt_y1)
+    inter_rect_y2 = torch.min(pr_y2, gt_y2)
+
+    inter_area = torch.clamp(inter_rect_x2 - inter_rect_x1 + 1, min=0) * torch.clamp(
+            inter_rect_y2 - inter_rect_y1 + 1, min=0 )
+
+    pr_area = (pr_x2 - pr_x1 + 1) * (pr_y2 - pr_y1 + 1)
+    gt_area = (gt_x2 - gt_x1 + 1) * (gt_y2 - gt_y1 + 1)
+    #clip target region by pred region
+    #gt_clippedArea = (torch.min(gt_x2,pr_x2) - torch.max(gt_x1,pr_x1) + 1) * (gt_y2 - gt_y1 + 1)
+    gt_clippedArea = (inter_rect_x2 - inter_rect_x1 + 1) * (gt_y2 - gt_y1 + 1)
+
+    iou = inter_area / (pr_area + gt_area - inter_area + 1e-16)
+
+    gt_r = rboxes[:,None,2].expand(rboxes.size(0), len(bbs))
+    pr_allRs = pr_allRs[None,:].expand(rboxes.size(0), len(bbs))
+    angle_compatible = torch.abs(gt_r-pr_allRs)
+    angle_compatible[angle_compatible>math.pi]-=math.pi
+    angle_compatible[angle_compatible>math.pi]-=math.pi
+    angle_compatible = angle_compatible.abs()<math.pi/3
+    iou *= angle_compatible
+
+    
+    gt_cls_ind = torch.argmax(rboxes[:,13:],dim=1)
+    pr_allClss = torch.FloatTensor([bb.getCls() for bb in bbs])
+    pr_cls_int = torch.argmax(pr_allClss,dim=1)
+    gt_cls_ind = gt_cls_ind[:,None].expand(rboxes.size(0), len(bbs))
+    pr_cls_int = pr_cls_int[None,:].expand(rboxes.size(0), len(bbs))
+    class_compatible = gt_cls_ind==pr_cls_int
+    iou *= class_compatible
+    #io_clipped_u = inter_area / (pr_area + gt_clippedArea - inter_area + 1e-16)
+    io_clipped_u = torch.zeros_like(iou)
+    
+    for i,j in torch.nonzero(iou):
+        gt_poly = Polygon([gt_tlX[i],gt_tlY[i],gt_trX[i],gt_trY[i],gt_brX[i],gt_brY[i],gt_blX[i],gt_blY[i]])
+        pr_poly = bbs[j].polyPoints()
+
+        inter = gt_poly.intersection(pr_poly)
+        iou[i,j] = inter.area/(gt_poly.area+pr_poly.area-inter.area)
+
+        #clip
+        topline = LineString([(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i])])
+        botline = LineString([(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i])])
+
+        #get intersection of gt top and bottom with predicted
+        top_inter = pr_poly.intersection(topline)
+        top_p1=top_p2=None
+        for i,line in enumerate(top_inter):
+            p1,p2=line.coords
+            if i==0:
+                top_p1=p1
+                top_p2=p2
+            else:
+                raise NotImplementedError('havent implemented double intersections')
+        bot_inter = pr_poly.intersection(topline)
+        bot_p1=top_p2=None
+        for i,line in enumerate(bot_inter):
+            p1,p2=line.coords
+            if i==0:
+                bot_p1=p1
+                bot_p2=p2
+            else:
+                raise NotImplementedError('havent implemented double intersections')
+        # find whether top or bottom points will be bigger
+        if top_p1 is None:
+            length = math.sqrt((bot_p1[0]-bot_p2[0])**2 + (bot_p1[1]-bot_p2[1])**2)
+        elif bot_p1 is None:
+            length = math.sqrt((top_p1[0]-top_p2[0])**2 + (top_p1[1]-top_p2[1])**2)
+        else:
+            d_top = math.sqrt((top_p1[0]-top_p2[0])**2 + (top_p1[1]-top_p2[1])**2)
+            d_bot = math.sqrt((bot_p1[0]-bot_p2[0])**2 + (bot_p1[1]-bot_p2[1])**2)
+            length = max(d_top,d_bot)
+        #compute the area of the clipped gt
+        clipped_gt_area = length*rboxes[i,3] #new width*height
+
+
+        iou_clipped_u[i,j] = inter.area/(clipped_gt_area+pr_poly.area-inter.area)
+
     return iou, io_clipped_u
 
 def allDist(boxes1,boxes2):
@@ -698,7 +813,7 @@ def newGetTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,getLoc, 
         return targIndex, hits, overSegmented
 
 #This also returns which pred BBs are oversegmentations of targets (horizontall)
-def newGetTargIndexForPreds_textLine(target,pred,iou_thresh,numClasses,hard_thresh):
+def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,hard_thresh):
     #TODO, just started
     if pred is None: 
         return None, None, None
@@ -714,8 +829,8 @@ def newGetTargIndexForPreds_textLine(target,pred,iou_thresh,numClasses,hard_thre
 
     #by class
     #import pdb; pdb.set_trace()
-    #first get all IOUs, then process by class
-    allIOUs, allIO_clippedU = getLoc(target[:,0:],pred[:,1:]) #clippedUnion, target is clipped horizontally to match pred
+    #first get all IOUs. These are already filtered with angle and class
+    allIOUs, allIO_clippedU = allPolyIOU_andClip(target,pred) #clippedUnion, target is clipped horizontally to match pred
     #This isn't going to work of dist as 0 is perfect
     maxIOUsForPred,_ = allIOUs.max(dim=0)
     predsWithNoIntersection=maxIOUsForPred==0
@@ -726,29 +841,9 @@ def newGetTargIndexForPreds_textLine(target,pred,iou_thresh,numClasses,hard_thre
     if hard_thresh:
         allIOUs *= hits.float()
 
+    val,targIndex = torch.max(allIOUs,dim=0)
+    targIndex[val==0]=-1 #These don't have a match
 
-    for cls in range(numClasses):
-        scores=[]
-        clsTargInd = target[:,cls+13]==1
-        notClsTargInd = target[:,cls+13]!=1
-        if len(pred.size())>1 and pred.size(0)>0:
-            #print(pred.size())
-            #clsPredInd = torch.argmax(pred[:,beforeCls+6:],dim=1)==cls
-            clsPredInd = torch.argmax(pred[:,-numClasses:],dim=1)==cls
-        else:
-            clsPredInd = torch.empty(0,dtype=torch.uint8)
-        if  clsPredInd.any():
-            if notClsTargInd.any():
-                notClsTargIndX = notClsTargInd[:,None].expand(allIOUs.size())
-                clsPredIndX = clsPredInd[None,:].expand(allIOUs.size())
-                allIOUs[notClsTargIndX*clsPredIndX]=0 #set IOU for instances that are from different class than predicted to 0 (different class so no intersection)
-                #allIOUs[notClsTargInd][:,clsPredInd]=0 this doesn't work for some reason
-            val,targIndexes = torch.max(allIOUs[:,clsPredInd],dim=0)
-            #targIndexes has the target indexes for the predictions of cls
-
-            #assign -1 index to places that don't really have a match
-            targIndexes[val==0] = -1
-            targIndex[clsPredInd] =  targIndexes
 
     if hard_thresh:
         return targIndex, predsWithNoIntersection

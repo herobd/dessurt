@@ -5,7 +5,7 @@ import timeit
 from utils import util
 from collections import defaultdict
 from evaluators.draw_graph import draw_graph
-from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist, getTargIndexForPreds_iou, newGetTargIndexForPreds_iou, getTargIndexForPreds_dist, computeAP
+from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist, getTargIndexForPreds_iou, newGetTargIndexForPreds_iou, getTargIndexForPreds_dist, newGetTargIndexForPreds_textLines, computeAP
 from utils.group_pairing import getGTGroup, pure
 from datasets.testforms_graph_pair import display
 import random, os
@@ -522,7 +522,7 @@ class GraphPairTrainer(BaseTrainer):
             if targetBoxes is not None:
                 targetBoxes = targetBoxes.cpu()
                 if self.model.useCurvedBBs:
-                    targIndex, fullHit, overSegmented = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,?,numClasses,hard_thresh=False)
+                    targIndex, fullHit, overSegmented = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,0.4,numClasses,hard_thresh=False)
                 elif self.model.rotation:
                     assert(False and 'untested')
                     targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
@@ -1726,7 +1726,7 @@ class GraphPairTrainer(BaseTrainer):
         if targetBoxes is not None:
             targetBoxes = targetBoxes.cpu()
             if self.model.useCurvedBBs:
-                targIndex, fullHit, overSegmented = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,?,numClasses,hard_thresh=False)
+                targIndex, fullHit, overSegmented = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,0.4,numClasses,hard_thresh=False)
             elif self.model.rotation:
                 targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
             else:

@@ -18,7 +18,7 @@ class TextLine:
         pred_bb_info = pred_bb_info.cpu().detach()
         self.all_conf = [pred_bb_info[0]]
         self.all_cls = [pred_bb_info[6:].numpy()]
-        assert(self.all_cls[0].shape[0]==4)
+        #assert(self.all_cls[0].shape[0]==4)
 
         self.median_angle = None
         self.poly_points=None
@@ -130,7 +130,7 @@ class TextLine:
                 #    #import pdb;pdb.set_trace()
                 #    top_points[-1]=[(top_points[-2][0]+rect[1][0])/2,(top_points[-2][1]+rect[1][1])/2]
                 #    assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
-            top_points.append(rect[1])
+                top_points.append(rect[1])
             assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
             last_point_top = top_points[-1]
 
@@ -191,7 +191,7 @@ class TextLine:
                 #    #it's straight across, we'll just average the two overlapped points to provide a good midpoint
                 #    bot_points[-1]=[(bot_points[-2][0]+rect[2][0])/2,(bot_points[-2][1]+rect[2][1])/2]
 
-            bot_points.append(rect[2])
+                bot_points.append(rect[2])
             last_point_bot = bot_points[-1]
             #print('\n')
             #print(bot_points)
@@ -239,8 +239,10 @@ class TextLine:
         step_size = np.linalg.norm(top_points_np.mean(axis=0)-bot_points_np.mean(axis=0))
         top_points_np= bot_points_np= None
 
-        step_size_top= (2*step_size/top_total_distance)/(1/top_total_distance + 1/bot_total_distance)
-        step_size_bot = (2*step_size/bot_total_distance)/(1/top_total_distance + 1/bot_total_distance)
+        #step_size_top= (2*step_size/top_total_distance)/(1/top_total_distance + 1/bot_total_distance)
+        #step_size_bot = (2*step_size/bot_total_distance)/(1/top_total_distance + 1/bot_total_distance)
+        step_size_top = 2*step_size/((bot_total_distance/top_total_distance)+1)
+        step_size_bot = 2*step_size/((top_total_distance/bot_total_distance)+1)
 
         assert(abs(step_size_bot+step_size_top-2*step_size)<0.001)
 
@@ -285,39 +287,54 @@ class TextLine:
         
         t_i=1
         b_i=1
+        accum_top_distance=0
+        accum_bot_distance=0
+        top_distance = 0
+        bot_distance = 0
         while t_i<len(top_points) or b_i<len(bot_points):
-            top_points_in_step=[top_points[t_i-1]]
-            bot_points_in_step=[bot_points[b_i-1]]
-            top_distance = 0
+            print('top {:.2f}/{:.2f}, bot {:.2f}/{:.2f}'.format(accum_top_distance,top_total_distance,accum_bot_distance,bot_total_distance))
+            if top_distance<step_size_top:
+                top_points_in_step=[top_points[t_i-1]]
+            if bot_distance<step_size_bot:
+                bot_points_in_step=[bot_points[b_i-1]]
+            added=0
             while (top_distance<step_size_top or t_i>=len(top_points)-2) and t_i<len(top_points):
                 last_top_distance=np.linalg.norm(top_points_in_step[-1]-top_points[t_i])
                 top_distance+=last_top_distance
                 top_points_in_step.append(top_points[t_i])
                 #print('t_i:{}, added {},\tdistance:{}'.format(t_i,top_points[t_i],top_distance))
                 t_i+=1
-            if top_distance-step_size>-(top_distance-last_top_distance-step_size) and t_i<len(top_points)-2:
+                added+=1
+            if added>2 and top_distance-step_size_top>-(top_distance-last_top_distance-step_size_top) and t_i<len(top_points)-2:
                 top_distance-=last_top_distance
                 t_i-=1
                 r=top_points_in_step.pop()
                 #print('t_i:{}, removed {},\tdistance:{}'.format(t_i,r,top_distance))
+            if added>0:
+                accum_top_distance+=top_distance
             top_distance = top_distance-step_size #reset the top_distance with the residual to keep the two sides in sync
 
-            bot_distance = 0
+            added=0
             while (bot_distance<step_size_bot or b_i>=len(bot_points)-2) and b_i<len(bot_points):
                 last_bot_distance=np.linalg.norm(bot_points_in_step[-1]-bot_points[b_i])
                 bot_distance+=last_bot_distance
                 bot_points_in_step.append(bot_points[b_i])
                 #print('b_i:{}, added {}, distance:{}'.format(b_i,bot_points[b_i],bot_distance))
                 b_i+=1
-            if bot_distance-step_size>-(bot_distance-last_bot_distance-step_size) and b_i<len(bot_points)-2:
+                added+=1
+            if added>2 and bot_distance-step_size_bot>-(bot_distance-last_bot_distance-step_size_bot) and b_i<len(bot_points)-2:
                 bot_distance-=last_bot_distance
                 b_i-=1
                 r=bot_points_in_step.pop()
                 #print('b_i:{}, removed {}, distance:{}'.format(b_i,r,bot_distance))
+            if added>0:
+                accum_bot_distance+=bot_distance
             bot_distance = bot_distance-step_size #reset the bot_distance with the residual to keep the two sides in sync
+            print('diff top: {}, bot:{}'.format(top_distance,bot_distance))
+            print('F top {:.2f}/{:.2f}, bot {:.2f}/{:.2f}'.format(accum_top_distance,top_total_distance,accum_bot_distance,bot_total_distance))
 
 
-            assert(len(top_points_in_step)>0 and len(bot_points_in_step)>0)
+            assert(len(top_points_in_step)>1 and len(bot_points_in_step)>1)
             #if len(top_points_in_step)>0:
             top_points_in_step = np.array(top_points_in_step)
             s_top,c_top = np.polyfit(top_points_in_step[:,0],top_points_in_step[:,1], 1)
@@ -509,3 +526,7 @@ class TextLine:
         if self.poly_points is None:
             self.compute()
         return self.center_point
+    def medianAngle(self):
+        if self.median_angle is None:
+            self.compute()
+        return self.median_angle

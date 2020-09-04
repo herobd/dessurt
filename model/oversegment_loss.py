@@ -1343,7 +1343,7 @@ def bbox_coverage_axis_rot(box_gt, pred_boxes):
     """
     Computes how much the gt is covered by predictions and how much of each prediction is covered by the gt
     """
-    gt_poly = Polygon(xyrhwToCorners(*box_gt[0:5]))
+    gt_poly =  Polygon(xyrhwToCorners(*box_gt[0:5]))
     pred_areas=[]
     agglom = None
     for i in range(pred_boxes.size(0)):

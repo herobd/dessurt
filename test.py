@@ -56,7 +56,7 @@ from utils.bb_merging import TextLine
 import torch, cv2
 import numpy as np
 import math,random
-
+from utils.forms_annotations import calcCorners
 def calcPoints(x,y,r,h,w):
     rx = x + math.cos(r)*w
     ry = y - math.sin(r)*w
@@ -69,16 +69,6 @@ def calcPoints(x,y,r,h,w):
     by = y + math.cos(r)*h
 
     return lx,ly,rx,ry,tx,ty,bx,by
-def calcCorners(x,y,r,h,w):
-    tlX = -w*math.cos(r) -h*math.sin(r) +x
-    tlY = -h*math.cos(r) +w*math.sin(r) +y
-    trX =  w*math.cos(r) -h*math.sin(r) +x
-    trY = -h*math.cos(r) -w*math.sin(r) +y
-    brX =  w*math.cos(r) +h*math.sin(r) +x
-    brY =  h*math.cos(r) -w*math.sin(r) +y
-    blX = -w*math.cos(r) +h*math.sin(r) +x
-    blY =  h*math.cos(r) +w*math.sin(r) +y
-    return [[tlX,tlY],[trX,trY],[brX,brY],[blX,blY]]
 
 def drawPoly(img,pts,color,thck=1):
     for i in range(-1,len(pts)-1):
@@ -205,8 +195,8 @@ for bb in gt_boxes[0]:
 
 first_textline=all_textlines[0]
 
-#for tl in all_textlines[1:]:
-#    first_textline.merge(tl)
+for tl in all_textlines[1:]:
+    first_textline.merge(tl)
 
 #cv2.polylines(img,np.array(first_textline.polyPoints(),np.int32).reshape((-1,1,2)),True,(255,0,0),1)
 drawPoly(img,first_textline.polyPoints(),(255,0,0),1)
