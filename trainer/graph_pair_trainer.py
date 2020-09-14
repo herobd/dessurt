@@ -91,6 +91,8 @@ class GraphPairTrainer(BaseTrainer):
 
         self.use_gt_trans = config['trainer']['use_gt_trans'] if 'use_gt_trans' in config['trainer'] else False
 
+        self.start_merge_iter = config['trainer']['start_merge_iter'] if 'start_merge_iter' in config['trainer'] else 100
+
         self.num_node_error_class = 0
         self.final_class_bad_alignment = False
         self.final_class_bad_alignment = False
@@ -1322,7 +1324,8 @@ class GraphPairTrainer(BaseTrainer):
                                     otherThresh=self.conf_thresh_init, 
                                     otherThreshIntur=threshIntur, 
                                     hard_detect_limit=self.train_hard_detect_limit,
-                                    gtTrans = gtTrans)
+                                    gtTrans = gtTrans,
+                                    dont_merge = self.iteration<self.start_merge_iter)
             #TODO
             #predPairingShouldBeTrue,predPairingShouldBeFalse, eRecall,ePrec,fullPrec,ap,proposedInfo = self.prealignedEdgePred(adj,relPred,relIndexes,rel_prop_pred)
             #if bbPred is not None:
@@ -1350,7 +1353,8 @@ class GraphPairTrainer(BaseTrainer):
                     otherThresh=self.conf_thresh_init, 
                     otherThreshIntur=threshIntur, 
                     hard_detect_limit=self.train_hard_detect_limit,
-                    gtTrans = gtTrans)
+                    gtTrans = gtTrans,
+                    dont_merge = self.iteration<self.start_merge_iter)
             #gtPairing,predPairing = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred)
         #t#print('time run model: {}'.format(timeit.default_timer()-tic))
         #t#tic=timeit.default_timer()

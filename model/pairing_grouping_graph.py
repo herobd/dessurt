@@ -513,7 +513,7 @@ class PairingGroupingGraph(BaseModel):
             print('Unfroze detector')
         
 
-    def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=300, debug=False,old_nn=False,gtTrans=None):
+    def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=300, debug=False,old_nn=False,gtTrans=None,dont_merge=False):
         tic=timeit.default_timer()
         bbPredictions, offsetPredictions, _,_,_,_ = self.detector(image)
         _=None
@@ -680,7 +680,7 @@ class PairingGroupingGraph(BaseModel):
                     #print('      graph num edges: {}'.format(graph[1].size()))
                     useBBs,graph,groups,edgeIndexes,bbTrans=self.mergeAndGroup(
                             self.mergeThresh[gIter],self.keepEdgeThresh[gIter],self.groupThresh[gIter],
-                            edgeIndexes,edgeOuts,groups,nodeFeats,edgeFeats,uniFeats,useBBs,bbTrans,image)
+                            edgeIndexes,edgeOuts,groups,nodeFeats,edgeFeats,uniFeats,useBBs,bbTrans,image,dont_merge)
                     if self.reintroduce_visual_features:
                         graph = self.appendVisualFeatures(useBBs,graph,groups)
                     #print('graph 1-:   bbs:{}, nodes:{}, edges:{}'.format(useBBs.size(0),len(groups),len(edgeIndexes)))
@@ -701,7 +701,7 @@ class PairingGroupingGraph(BaseModel):
                 #print('!D! F before edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(edgeFeats.size(),useBBs.size(),nodeFeats.size(),len(edgeIndexes)))
                 useBBs,graph,groups,edgeIndexes,bbTrans=self.mergeAndGroup(
                         self.mergeThresh[-1],self.keepEdgeThresh[-1],self.groupThresh[-1],
-                        edgeIndexes,edgeOuts.detach(),groups,nodeFeats.detach(),edgeFeats.detach(),uniFeats.detach() if uniFeats is not None else None,useBBs,bbTrans,image)
+                        edgeIndexes,edgeOuts.detach(),groups,nodeFeats.detach(),edgeFeats.detach(),uniFeats.detach() if uniFeats is not None else None,useBBs,bbTrans,image,dont_merge)
                 #print('!D! after  edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(graph[2].size(),useBBs.size(),graph[0].size(),len(edgeIndexes)))
                 final=(useBBs if self.useCurvedBBs else useBBs.cpu().detach(),groups,edgeIndexes,bbTrans)
 
@@ -727,8 +727,10 @@ class PairingGroupingGraph(BaseModel):
             nodeClassPred = torch.sigmoid(nodeOuts[:,-1,self.nodeIdxClass:self.nodeIdxClassEnd].detach()).cpu().detach()
             for i,group in enumerate(groups):
                 for bbId in group:
-                    bbs[bbId].conf= nodeConfPred[i]
-                    bbs[bbId].cls = nodeClassPred[i]
+                    bbs[bbId].conf= nodeConfPred[i].numpy()
+                    bbs[bbId].cls = nodeClassPred[i].numpy()
+                    bbs[bbId].all_conf=None
+                    bbs[bbId].all_cls=None
         else:
             if len(bbs)>1:
                 nodeConfPred = torch.sigmoid(nodeOuts[:,-1,self.nodeIdxConf:self.nodeIdxConf+1]).cpu()
@@ -816,7 +818,7 @@ class PairingGroupingGraph(BaseModel):
         #resBatch = self.text_rec(lines)
 
     #Use the graph network's predictions to merge oversegmented detections and group nodes into a single node
-    def mergeAndGroup(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePreds,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image):
+    def mergeAndGroup(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePreds,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,dont_merge=False):
         assert(not self.useCurvedBBs or len(oldBBs)==0 or type(oldBBs[0]) is TextLine)
         newBBs={}
         #newBBs_line={}
@@ -827,7 +829,7 @@ class PairingGroupingGraph(BaseModel):
         mergePreds = torch.sigmoid(edgePreds[:,-1,1]).cpu().detach()
         groupPreds = torch.sigmoid(edgePreds[:,-1,2]).cpu().detach()
         ##Prevent all nodes from merging during first iterations (bad init):
-        if not(mergePreds.mean()>mergeThresh*0.99 and edgePreds.size(0)>5):
+        if not dont_merge:
         
             #check for merges, where we will combine two BBs into one
             for i,(n0,n1) in enumerate(oldEdgeIndexes):

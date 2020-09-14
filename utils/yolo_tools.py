@@ -4,7 +4,7 @@ import math
 import timeit
 import numpy as np
 from utils.forms_annotations import calcCornersTorch
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, LineString
 
 def non_max_sup_overseg(pred_boxes,thresh_conf=0.5, thresh_inter=0.5, hard_limit=300):
     return non_max_sup_(pred_boxes,thresh_conf, thresh_inter, verticle_bias_intersection, hard_limit)
@@ -392,17 +392,20 @@ def allPolyIOU_andClip(rboxes,bbs):
     
     gt_cls_ind = torch.argmax(rboxes[:,13:],dim=1)
     pr_allClss = torch.FloatTensor([bb.getCls() for bb in bbs])
+    #pr_allClss = torch.stack([bb.getCls() for bb in bbs],dim=0)
     pr_cls_int = torch.argmax(pr_allClss,dim=1)
     gt_cls_ind = gt_cls_ind[:,None].expand(rboxes.size(0), len(bbs))
     pr_cls_int = pr_cls_int[None,:].expand(rboxes.size(0), len(bbs))
     class_compatible = gt_cls_ind==pr_cls_int
     iou *= class_compatible
     #io_clipped_u = inter_area / (pr_area + gt_clippedArea - inter_area + 1e-16)
+
+    #we also compute clipped IOU. Here we "clip" the GT to 
     io_clipped_u = torch.zeros_like(iou)
     
-    for i,j in torch.nonzero(iou):
-        gt_poly = Polygon([gt_tlX[i],gt_tlY[i],gt_trX[i],gt_trY[i],gt_brX[i],gt_brY[i],gt_blX[i],gt_blY[i]])
-        pr_poly = bbs[j].polyPoints()
+    for i,j in torch.nonzero(iou>0.001):
+        gt_poly = Polygon([[gt_tlX[i].item(),gt_tlY[i].item()],[gt_trX[i].item(),gt_trY[i].item()],[gt_brX[i].item(),gt_brY[i].item()],[gt_blX[i].item(),gt_blY[i].item()]])
+        pr_poly = Polygon(bbs[j].polyPoints())
 
         inter = gt_poly.intersection(pr_poly)
         iou[i,j] = inter.area/(gt_poly.area+pr_poly.area-inter.area)
@@ -412,26 +415,47 @@ def allPolyIOU_andClip(rboxes,bbs):
         botline = LineString([(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i])])
 
         #get intersection of gt top and bottom with predicted
+        #TODO left off. Issues when line and poly a perfectly aligned (returnns single point)
         top_inter = pr_poly.intersection(topline)
         top_p1=top_p2=None
-        for i,line in enumerate(top_inter):
-            p1,p2=line.coords
-            if i==0:
-                top_p1=p1
-                top_p2=p2
-            else:
-                raise NotImplementedError('havent implemented double intersections')
+        if type(top_inter) is LineString:
+            if len(top_inter.coords)>0:
+                top_p1,top_p2=top_inter.coords
+        else:
+            for i,line in enumerate(top_inter):
+                p1,p2=line.coords
+                if i==0:
+                    top_p1=p1
+                    top_p2=p2
+                else:
+                    l1 = math.sqrt((top_p1[0]-p2[0])**2 + (top_p1[1]-p2[1])**2)
+                    l2 = math.sqrt((top_p2[0]-p1[0])**2 + (top_p2[1]-p1[1])**2)
+                    if l1>l2:
+                        top_p2=p2
+                    else:
+                        top_p1=p1
         bot_inter = pr_poly.intersection(topline)
-        bot_p1=top_p2=None
-        for i,line in enumerate(bot_inter):
-            p1,p2=line.coords
-            if i==0:
-                bot_p1=p1
-                bot_p2=p2
-            else:
-                raise NotImplementedError('havent implemented double intersections')
+        bot_p1=boPolygon(t_p2=None
+        if type(bot_inter) is LineString:
+            if len(bot_inter.coords)>0:
+                bot_p1,bot_p2=bot_inter.coords
+        else:
+            for i,line in enumerate(bot_inter):
+                p1,p2=line.coords
+                if i==0:
+                    bot_p1=p1
+                    bot_p2=p2
+                else:
+                    l1 = math.sqrt((bot_p1[0]-p2[0])**2 + (bot_p1[1]-p2[1])**2)
+                    l2 = math.sqrt((bot_p2[0]-p1[0])**2 + (bot_p2[1]-p1[1])**2)
+                    if l1>l2:
+                        bot_p2=p2
+                    else:
+                        bot_p1=p1
         # find whether top or bottom points will be bigger
-        if top_p1 is None:
+        if top_p1 is None and bot_p1 is None:
+            assert('small pr (inside GT) not handeled')
+        elif top_p1 is None:
             length = math.sqrt((bot_p1[0]-bot_p2[0])**2 + (bot_p1[1]-bot_p2[1])**2)
         elif bot_p1 is None:
             length = math.sqrt((top_p1[0]-top_p2[0])**2 + (top_p1[1]-top_p2[1])**2)
@@ -443,7 +467,7 @@ def allPolyIOU_andClip(rboxes,bbs):
         clipped_gt_area = length*rboxes[i,3] #new width*height
 
 
-        iou_clipped_u[i,j] = inter.area/(clipped_gt_area+pr_poly.area-inter.area)
+        io_clipped_u[i,j] = inter.area/(clipped_gt_area+pr_poly.area-inter.area)
 
     return iou, io_clipped_u
 

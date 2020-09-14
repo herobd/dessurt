@@ -30,8 +30,10 @@ class TextLine:
     def merge(self,other):
         self.all_primitive_rects+=other.all_primitive_rects
         self.all_angles+=other.all_angles
-        self.all_conf+=other.all_conf
-        self.all_cls+=other.all_cls
+        if self.all_conf is not None:
+            self.all_conf+=other.all_conf
+        if self.all_cls is not None:
+            self.all_cls+=other.all_cls
         self.median_angle = None
         self.poly_points=None
         self.point_pairs=None
@@ -76,62 +78,101 @@ class TextLine:
             del primitive_rects_top[r]
         top_points=[]#[primitive_rects_top[0][0]]
         last_point_top=primitive_rects_top[0][0]
+        #At a high level, this extracts the top border of the polygon created by unioning all rects
         for rect in primitive_rects_top:
+            print('top_points: {}'.format(top_points))
             if last_point_top[0]>rect[1][0]: #the prior rectangle extendes beyond this one
-                if rect[0][1]<last_point_top[1]:
-                    top_points.append( [rect[0][0],last_point_top[1]] )
-                    top_points.append( rect[0] )
-                    top_points.append( rect[1] )
-                    top_points.append( [rect[1][0],last_point_top[1]] )
-                #otherwise it doesn't matter
+                #find the first point beyon rect (may not be last)
+                first_i=-2 #"first" and "second" are relative to traversing top_points in reverse
+                while top_points[first_i][0]>rect[1][0]:
+                    first_i-=1
+                first_i+=1 #move to beyond
+                #while first_i>-len(top_points): there is only one strech because we process boxes in order (only steps up, going backward)
+                if top_points[first_i][1]>rect[0][1]:
+                    second_i = first_i-1
+                    while top_points[second_i][1]>rect[0][1] and top_points[second_i][0]>rect[0][0]:
+                        second_i-=1
+                        print('second {}: {}'.format(second_i,top_points[second_i]))
+                    inter_first=[rect[1][0],top_points[first_i][1]]
+                    if top_points[second_i][1]<=rect[0][1]:
+                        inter_second=[top_points[second_i][0],rect[0][1]]
+                    else:
+                        inter_second=[rect[0][0],top_points[second_i][1]]
+                    second_i = len(top_points)+second_i
+                    top_points = top_points[:second_i+1]+[inter_second,rect[1],inter_first]+top_points[first_i:]
+                #if rect[0][1]<last_point_top[1]:
+                #    #we need to step back all toppoints until we reach where rect[0][0] is
+                #    #anyplace rect is above, we need to redo the points
+                #    ri=-1
+                #    #while top_points[ri][0]<rect[0]
+                #    #oldwrong
+                #    top_points.append( [rect[0][0],last_point_top[1]] )
+                #    top_points.append( rect[0] )
+                #    top_points.append( rect[1] )
+                #    top_points.append( [rect[1][0],last_point_top[1]] )
+                ##otherwise it doesn't matter
                 assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
             else:
-                if rect[0][0]>=last_point_top[0]: #this rectangle starts after the ast
+                if rect[0][0]>=last_point_top[0]: #this rectangle starts after the last
                     top_points.append(rect[0]) #just add it
                     assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
-                elif rect[0][1]<last_point_top[1]: #if the rect/line im adding is above
-                    if top_points[-2][0]>rect[0][0]: #if prior line was clipped, we need to work with the intersection point top_points[-2]
-                        if top_points[-3][1]>rect[0][1]:
-                            intersect_point = [rect[0][0],top_points[-2][1]]
-                            top_points[-3]=intersect_point
-                            top_points[-2]=rect[0]
-                            top_points.pop()
-                        else:
-                            intersect_point=[top_points[-3][0],rect[0][1]]
-                            top_points[-2]=intersect_point
-                            top_points.pop()
-                        assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
+                else:
+                    second_i = -1
+                    while top_points[second_i][1]>rect[0][1] and top_points[second_i][0]>rect[0][0]:
+                        second_i-=1
+                    if top_points[second_i][1]<=rect[0][1]:
+                        inter_second=[top_points[second_i][0],rect[0][1]]
                     else:
-                        intersect_point = [rect[0][0],last_point_top[1]]
-                        top_points[-1]=intersect_point
-                        top_points.append(rect[0])
-                        assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
-                elif rect[0][1]>last_point_top[1]: #if the rect/line im adding is below
-                    if top_points[-2][0]>rect[0][0]:
-                        if top_points[-3][1]>rect[0][1]:
-                            last_two_points = top_points[-2:]
-                            intersect_point_3 = [rect[0][0],top_points[-3][1]]
-                            top_points[-3]=intersect_point_3
-                            top_points[-2]=rect[0]
-                            intersect_point_2 = [top_points[-2][0],rect[0][1]]
-                            top_points[-1]=intersect_point_2
-                            top_points+=last_two_points
-                            assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
-                        intersection_point_1 = [top_points[-1][0],rect[1][1]]
-                        top_points.append(intersection_point_1)
-                        assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
+                        inter_second=[rect[0][0],top_points[second_i][1]]
+                    second_i = len(top_points)+second_i
+                    top_points = top_points[:second_i+1]+[inter_second]
+                #elif rect[0][1]<last_point_top[1]: #if the rect/line im adding is above
+                #    if top_points[-2][0]>rect[0][0]: #if prior line was clipped, we need to work with the intersection point top_points[-2]
+                #        if top_points[-3][1]>rect[0][1]:
+                #            intersect_point = [rect[0][0],top_points[-2][1]]
+                #            top_points[-3]=intersect_point
+                #            top_points[-2]=rect[0]
+                #            top_points.pop()
+                #            assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
+                #        else:
+                #            intersect_point=[top_points[-3][0],rect[0][1]]
+                #            top_points[-2]=intersect_point
+                #            top_points.pop()
+                #            assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
+                #    else:
+                #        intersect_point = [rect[0][0],last_point_top[1]]
+                #        top_points[-1]=intersect_point
+                #        top_points.append(rect[0])
+                #        assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
+                #elif rect[0][1]>last_point_top[1]: #if the rect/line im adding is below
+                #    if top_points[-2][0]>rect[0][0]:
+                #        if top_points[-3][1]>rect[0][1]:
+                #            last_two_points = top_points[-2:]
+                #            intersect_point_3 = [rect[0][0],top_points[-3][1]]
+                #            top_points[-3]=intersect_point_3
+                #            top_points[-2]=rect[0]
+                #            intersect_point_2 = [top_points[-2][0],rect[0][1]]
+                #            top_points[-1]=intersect_point_2
+                #            top_points+=last_two_points
+                #            assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
+                #        intersection_point_1 = [top_points[-1][0],rect[1][1]]
+                #        top_points.append(intersection_point_1)
+                #        assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
 
-                    else:
-                        intersect_point = [last_point_top[0],rect[0][1]]
-                        top_points.append(intersect_point)
-                        assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
+                #    else:
+                #        intersect_point = [last_point_top[0],rect[0][1]]
+                #        top_points.append(intersect_point)
+                #        assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
                 #else:
                 #    #it's straight across, we'll just average the two outside points to provide a good midpoint
                 #    #import pdb;pdb.set_trace()
                 #    top_points[-1]=[(top_points[-2][0]+rect[1][0])/2,(top_points[-2][1]+rect[1][1])/2]
                 #    assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
+                assert(rect[1][0]>=top_points[-1][0])
                 top_points.append(rect[1])
-            assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
+                assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
+                if math.sqrt((top_points[-1][0]-top_points[-2][0])**2 + (top_points[-1][1]-top_points[-2][1])**2)<0.0001:
+                    top_points.pop()
             last_point_top = top_points[-1]
 
         primitive_rects_bot = list(primitive_rects)
@@ -145,52 +186,75 @@ class TextLine:
         last_point_bot=primitive_rects_bot[0][3]
         for rect in primitive_rects_bot:
             if last_point_bot[0]>rect[2][0]: #the prior rectangle extendes beyond this one
-                if rect[3][1]<last_point_bot[1]:
-                    bot_points.append( [rect[3][0],last_point_bot[1]] )
-                    bot_points.append( rect[3] )
-                    bot_points.append( rect[2] )
-                    bot_points.append( [rect[2][0],last_point_bot[1]] )
-                #otherwise it doesn't matter
+                #find the first point beyon rect (may not be last)
+                first_i=-2 #"first" and "second" are relative to traversing bot_points in reverse
+                while bot_points[first_i][0]>rect[1][0]:
+                    first_i-=1
+                first_i+=1 #move to beyond
+                #while first_i>-len(bot_points): there is only one strech because we process boxes in order (only steps up, going backward)
+                if bot_points[first_i][1]<rect[0][1]:
+                    second_i = first_i-1
+                    while bot_points[second_i][1]>rect[0][1] and bot_points[second_i][0]>rect[0][0]:
+                        second_i-=1
+                        print('second {}: {}'.format(second_i,bot_points[second_i]))
+                    inter_first=[rect[1][0],bot_points[first_i][1]]
+                    if bot_points[second_i][1]>=rect[0][1]:
+                        inter_second=[bot_points[second_i][0],rect[0][1]]
+                    else:
+                        inter_second=[rect[0][0],bot_points[second_i][1]]
+                    second_i = len(bot_points)+second_i
+                    bot_points = bot_points[:second_i+1]+[inter_second,rect[1],inter_first]+bot_points[first_i:]
             else:
                 if rect[3][0]>=last_point_bot[0]:
                     bot_points.append(rect[3])
-                elif rect[3][1]>last_point_bot[1]:
-                    if bot_points[-2][0]>rect[3][0]: #if prior line was clipped, we need to work with the intersection point bot_points[-2]
-                        if bot_points[-3][1]<rect[3][1]:
-                            intersect_point = [rect[3][0],bot_points[-2][1]]
-                            bot_points[-3]=intersect_point
-                            bot_points[-2]=rect[3]
-                            bot_points.pop()
-                        else:
-                            intersect_point=[bot_points[-3][0],rect[3][1]]
-                            bot_points[-2]=intersect_point
-                            bot_points.pop()
+                else:
+                    second_i = -1
+                    while bot_points[second_i][1]<rect[0][1] and bot_points[second_i][0]>rect[0][0]:
+                        second_i-=1
+                    if bot_points[second_i][1]>=rect[0][1]:
+                        inter_second=[bot_points[second_i][0],rect[0][1]]
                     else:
-                        intersect_point = [rect[3][0],last_point_bot[1]]
-                        bot_points[-1]=intersect_point
-                        bot_points.append(rect[3])
-                elif rect[3][1]<last_point_bot[1]:
-                    if bot_points[-2][0]>rect[3][0]:
-                        if bot_points[-3][1]<rect[3][1]:
-                            last_two_points = bot_points[-2:]
-                            intersect_point_3 = [rect[3][0],bot_points[-3][1]]
-                            bot_points[-3]=intersect_point_3
+                        inter_second=[rect[0][0],bot_points[second_i][1]]
+                    second_i = len(bot_points)+second_i
+                    bot_points = bot_points[:second_i+1]+[inter_second]
+                #elif rect[3][1]>last_point_bot[1]:
+                #    if bot_points[-2][0]>rect[3][0]: #if prior line was clipped, we need to work with the intersection point bot_points[-2]
+                #        if bot_points[-3][1]<rect[3][1]:
+                #            intersect_point = [rect[3][0],bot_points[-2][1]]
+                #            bot_points[-3]=intersect_point
+                #            bot_points[-2]=rect[3]
+                #            bot_points.pop()
+                #        else:
+                #            intersect_point=[bot_points[-3][0],rect[3][1]]
+                #            bot_points[-2]=intersect_point
+                #            bot_points.pop()
+                #    else:
+                #        intersect_point = [rect[3][0],last_point_bot[1]]
+                #        bot_points[-1]=intersect_point
+                #        bot_points.append(rect[3])
+                #elif rect[3][1]<last_point_bot[1]:
+                #    if bot_points[-2][0]>rect[3][0]:
+                #        if bot_points[-3][1]<rect[3][1]:
+                #            last_two_points = bot_points[-2:]
+                #            intersect_point_3 = [rect[3][0],bot_points[-3][1]]
+                #            bot_points[-3]=intersect_point_3
 
-                            bot_points[-2]=rect[3]
+                #            bot_points[-2]=rect[3]
 
-                            intersect_point_2 = [bot_points[-2][0],rect[3][1]]
-                            bot_points[-1]=intersect_point_2
-                            bot_points+=last_two_points
-                        intersection_point_1 = [bot_points[-1][0],rect[2][1]]
-                        bot_points.append(intersection_point_1)
+                #            intersect_point_2 = [bot_points[-2][0],rect[3][1]]
+                #            bot_points[-1]=intersect_point_2
+                #            bot_points+=last_two_points
+                #        intersection_point_1 = [bot_points[-1][0],rect[2][1]]
+                #        bot_points.append(intersection_point_1)
 
-                    else:
-                        intersect_point = [last_point_bot[0],rect[3][1]]
-                        bot_points.append(intersect_point)
-                #else:
-                #    #it's straight across, we'll just average the two overlapped points to provide a good midpoint
-                #    bot_points[-1]=[(bot_points[-2][0]+rect[2][0])/2,(bot_points[-2][1]+rect[2][1])/2]
+                #    else:
+                #        intersect_point = [last_point_bot[0],rect[3][1]]
+                #        bot_points.append(intersect_point)
+                ##else:
+                ##    #it's straight across, we'll just average the two overlapped points to provide a good midpoint
+                ##    bot_points[-1]=[(bot_points[-2][0]+rect[2][0])/2,(bot_points[-2][1]+rect[2][1])/2]
 
+                assert(rect[2][0]>=bot_points[-1][0])
                 bot_points.append(rect[2])
             last_point_bot = bot_points[-1]
             #print('\n')
@@ -258,11 +322,14 @@ class TextLine:
                 for t in np.arange(1/lengths,0.999999999,1/lengths):
                     x = t*top_points[i+1][0] + (1-t)*top_points[i][0]
                     y = t*top_points[i+1][1] + (1-t)*top_points[i][1]
-                    toadd.append((i,[x,y]))
+                    toadd.append((i+1,[x,y]))
         toadd.reverse()
         #print('adding {} points to top'.format(len(toadd)))
+        print('top_points before: {}'.format(top_points))
         for i,p in toadd:
             top_points.insert(i,p)
+        print('top_points after: {}'.format(top_points))
+        assert(all([top_points[i][0]<=top_points[i+1][0]+0.000001 for i in range(len(top_points)-1)]))
 
         toadd=[]
         max_length = step_size_bot/2
@@ -274,11 +341,22 @@ class TextLine:
                 for t in np.arange(1/lengths,0.999999999,1/lengths):
                     x = t*bot_points[i+1][0] + (1-t)*bot_points[i][0]
                     y = t*bot_points[i+1][1] + (1-t)*bot_points[i][1]
-                    toadd.append((i,[x,y]))
+                    toadd.append((i+1,[x,y]))
         toadd.reverse()
         #print('adding {} points to bot'.format(len(toadd)))
+        print('bot_points before: {}'.format(bot_points))
         for i,p in toadd:
             bot_points.insert(i,p)
+        print('bot_points after: {}'.format(bot_points))
+
+        TEST_top_total_distance=0
+        for i in range(len(top_points)-1):
+            TEST_top_total_distance += math.sqrt((top_points[i][0]-top_points[i+1][0])**2 + (top_points[i][1]-top_points[i+1][1])**2)
+        TEST_bot_total_distance=0
+        for i in range(len(bot_points)-1):
+            TEST_bot_total_distance += math.sqrt((bot_points[i][0]-bot_points[i+1][0])**2 + (bot_points[i][1]-bot_points[i+1][1])**2)
+        assert(abs(top_total_distance-TEST_top_total_distance)<0.000001)
+        assert(abs(bot_total_distance-TEST_bot_total_distance)<0.000001)
 
         top_points=np.array(top_points)
         bot_points=np.array(bot_points)
@@ -293,6 +371,7 @@ class TextLine:
         bot_distance = 0
         while t_i<len(top_points) or b_i<len(bot_points):
             print('top {:.2f}/{:.2f}, bot {:.2f}/{:.2f}'.format(accum_top_distance,top_total_distance,accum_bot_distance,bot_total_distance))
+            print('\ttop {:.2f}/{:.2f}, bot {:.2f}/{:.2f}'.format(accum_top_distance/step_size_top,top_total_distance/step_size_top,accum_bot_distance/step_size_bot,bot_total_distance/step_size_bot))
             if top_distance<step_size_top:
                 top_points_in_step=[top_points[t_i-1]]
             if bot_distance<step_size_bot:
@@ -301,41 +380,50 @@ class TextLine:
             while (top_distance<step_size_top or t_i>=len(top_points)-2) and t_i<len(top_points):
                 last_top_distance=np.linalg.norm(top_points_in_step[-1]-top_points[t_i])
                 top_distance+=last_top_distance
+                accum_top_distance+=last_top_distance
                 top_points_in_step.append(top_points[t_i])
                 #print('t_i:{}, added {},\tdistance:{}'.format(t_i,top_points[t_i],top_distance))
                 t_i+=1
                 added+=1
             if added>2 and top_distance-step_size_top>-(top_distance-last_top_distance-step_size_top) and t_i<len(top_points)-2:
                 top_distance-=last_top_distance
+                accum_top_distance-=last_top_distance
                 t_i-=1
                 r=top_points_in_step.pop()
                 #print('t_i:{}, removed {},\tdistance:{}'.format(t_i,r,top_distance))
-            if added>0:
-                accum_top_distance+=top_distance
+            #if added>0:
+            #    accum_top_distance+=top_distance
             top_distance = top_distance-step_size #reset the top_distance with the residual to keep the two sides in sync
 
             added=0
             while (bot_distance<step_size_bot or b_i>=len(bot_points)-2) and b_i<len(bot_points):
                 last_bot_distance=np.linalg.norm(bot_points_in_step[-1]-bot_points[b_i])
                 bot_distance+=last_bot_distance
+                accum_bot_distance+=last_bot_distance
                 bot_points_in_step.append(bot_points[b_i])
                 #print('b_i:{}, added {}, distance:{}'.format(b_i,bot_points[b_i],bot_distance))
                 b_i+=1
                 added+=1
             if added>2 and bot_distance-step_size_bot>-(bot_distance-last_bot_distance-step_size_bot) and b_i<len(bot_points)-2:
                 bot_distance-=last_bot_distance
+                accum_bot_distance-=last_bot_distance
                 b_i-=1
                 r=bot_points_in_step.pop()
                 #print('b_i:{}, removed {}, distance:{}'.format(b_i,r,bot_distance))
-            if added>0:
-                accum_bot_distance+=bot_distance
+            #if added>0:
+            #    accum_bot_distance+=bot_distance
             bot_distance = bot_distance-step_size #reset the bot_distance with the residual to keep the two sides in sync
-            print('diff top: {}, bot:{}'.format(top_distance,bot_distance))
-            print('F top {:.2f}/{:.2f}, bot {:.2f}/{:.2f}'.format(accum_top_distance,top_total_distance,accum_bot_distance,bot_total_distance))
+            #print('diff top: {}, bot:{}'.format(top_distance,bot_distance))
+            #print('F top {:.2f}/{:.2f}, bot {:.2f}/{:.2f}'.format(accum_top_distance,top_total_distance,accum_bot_distance,bot_total_distance))
 
 
+            if len(top_points_in_step)==1:
+                assert(t_i==len(top_points))
+                top_points_in_step = [top_points[-2],top_points_in_step[0]]
+            if len(bot_points_in_step)==1:
+                assert(b_i==len(bot_points))
+                bot_points_in_step = [bot_points[-2],bot_points_in_step[0]]
             assert(len(top_points_in_step)>1 and len(bot_points_in_step)>1)
-            #if len(top_points_in_step)>0:
             top_points_in_step = np.array(top_points_in_step)
             s_top,c_top = np.polyfit(top_points_in_step[:,0],top_points_in_step[:,1], 1)
 
@@ -364,6 +452,7 @@ class TextLine:
                 mag_bot = (mean_first_point[0]+(mean_first_point[1]-bot_new_c)*s)/(1+s**2)
                 bot_first_point = [mag_bot,mag_bot*s+bot_new_c]
                 final_points.append([top_first_point,bot_first_point])
+            assert(top_point[0]!=bot_point[0] or top_point[1]!=bot_point[1])
             final_points.append([top_point,bot_point])
 
         #now we'll add the other end point
@@ -395,8 +484,11 @@ class TextLine:
         self.poly_points = np.array( top_points+bot_points )
 
         self.center_point = self.poly_points.mean(axis=0)
-        self.conf = np.mean(self.all_conf)
-        self.cls = np.stack(self.all_cls,axis=0).mean(axis=0)
+        if self.all_conf is not None:
+            self.conf = np.mean(self.all_conf)
+        if self.all_cls is not None:
+            self.cls = np.stack(self.all_cls,axis=0).mean(axis=0)
+        assert(type(self.cls) is np.ndarray)
         self.std_r = np.std(self.all_angles)
         self.r_left = math.atan2(top_points[0][1]-bot_points[0][1],bot_points[0][0]-top_points[0][0])
         self.r_right = math.atan2(top_points[-1][1]-bot_points[-1][1],bot_points[-1][0]-top_points[-1][0])
@@ -530,3 +622,8 @@ class TextLine:
         if self.median_angle is None:
             self.compute()
         return self.median_angle
+    def getCls(self):
+        if self.poly_points is None:
+            self.compute()
+        assert(type(self.cls) is np.ndarray)
+        return self.cls
