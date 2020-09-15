@@ -6,6 +6,9 @@ import numpy as np
 from utils.forms_annotations import calcCornersTorch
 from shapely.geometry import Polygon, LineString
 
+def distancePoints(a,b):
+    return math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2)
+
 def non_max_sup_overseg(pred_boxes,thresh_conf=0.5, thresh_inter=0.5, hard_limit=300):
     return non_max_sup_(pred_boxes,thresh_conf, thresh_inter, verticle_bias_intersection, hard_limit)
 def non_max_sup_iou(pred_boxes,thresh_conf=0.5, thresh_inter=0.5, hard_limit=300):
@@ -334,7 +337,7 @@ def allIOU_andClip(boxesT,boxesP, boxesPXYWH=[0,1,4,3]):
     io_clipped_u = inter_area / (bP_area + bT_clippedArea - inter_area + 1e-16)
     return iou, io_clipped_u
 
-def allPolyIOU_andClip(rboxes,bbs):
+def allPolyIOU_andClip(rboxes,bbs, ret_clip=True):
 
     #first we'll find encompassing boxes and compute IOU based on those (fast)
     #for intersections, we'll compute the intersection using polygons (slow)
@@ -377,7 +380,7 @@ def allPolyIOU_andClip(rboxes,bbs):
     gt_area = (gt_x2 - gt_x1 + 1) * (gt_y2 - gt_y1 + 1)
     #clip target region by pred region
     #gt_clippedArea = (torch.min(gt_x2,pr_x2) - torch.max(gt_x1,pr_x1) + 1) * (gt_y2 - gt_y1 + 1)
-    gt_clippedArea = (inter_rect_x2 - inter_rect_x1 + 1) * (gt_y2 - gt_y1 + 1)
+    #gt_clippedArea = (inter_rect_x2 - inter_rect_x1 + 1) * (gt_y2 - gt_y1 + 1)
 
     iou = inter_area / (pr_area + gt_area - inter_area + 1e-16)
 
@@ -401,75 +404,124 @@ def allPolyIOU_andClip(rboxes,bbs):
     #io_clipped_u = inter_area / (pr_area + gt_clippedArea - inter_area + 1e-16)
 
     #we also compute clipped IOU. Here we "clip" the GT to 
-    io_clipped_u = torch.zeros_like(iou)
-    
+    if ret_clip:
+        io_clipped_u = torch.zeros_like(iou)
+        
     for i,j in torch.nonzero(iou>0.001):
         gt_poly = Polygon([[gt_tlX[i].item(),gt_tlY[i].item()],[gt_trX[i].item(),gt_trY[i].item()],[gt_brX[i].item(),gt_brY[i].item()],[gt_blX[i].item(),gt_blY[i].item()]])
         pr_poly = Polygon(bbs[j].polyPoints())
 
         inter = gt_poly.intersection(pr_poly)
         iou[i,j] = inter.area/(gt_poly.area+pr_poly.area-inter.area)
+        
+        if ret_clip:
+            #clip
+            topline = LineString([(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i])])
+            botline = LineString([(gt_blX[i],gt_blY[i]),(gt_brX[i],gt_brY[i])])
 
-        #clip
-        topline = LineString([(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i])])
-        botline = LineString([(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i])])
-
-        #get intersection of gt top and bottom with predicted
-        #TODO left off. Issues when line and poly a perfectly aligned (returnns single point)
-        top_inter = pr_poly.intersection(topline)
-        top_p1=top_p2=None
-        if type(top_inter) is LineString:
-            if len(top_inter.coords)>0:
-                top_p1,top_p2=top_inter.coords
-        else:
-            for i,line in enumerate(top_inter):
-                p1,p2=line.coords
-                if i==0:
-                    top_p1=p1
-                    top_p2=p2
-                else:
-                    l1 = math.sqrt((top_p1[0]-p2[0])**2 + (top_p1[1]-p2[1])**2)
-                    l2 = math.sqrt((top_p2[0]-p1[0])**2 + (top_p2[1]-p1[1])**2)
-                    if l1>l2:
+            #get intersection of gt top and bottom with predicted
+            #TODO left off. Issues when line and poly a perfectly aligned (returnns single point)
+            top_inter = pr_poly.intersection(topline)
+            top_p1=top_p2=None
+            if type(top_inter) is LineString:
+                if len(top_inter.coords)>0:
+                    top_p1,top_p2=top_inter.coords
+            else:
+                for i,line in enumerate(top_inter):
+                    p1,p2=line.coords
+                    if i==0:
+                        top_p1=p1
                         top_p2=p2
                     else:
-                        top_p1=p1
-        bot_inter = pr_poly.intersection(topline)
-        bot_p1=boPolygon(t_p2=None
-        if type(bot_inter) is LineString:
-            if len(bot_inter.coords)>0:
-                bot_p1,bot_p2=bot_inter.coords
-        else:
-            for i,line in enumerate(bot_inter):
-                p1,p2=line.coords
-                if i==0:
-                    bot_p1=p1
-                    bot_p2=p2
-                else:
-                    l1 = math.sqrt((bot_p1[0]-p2[0])**2 + (bot_p1[1]-p2[1])**2)
-                    l2 = math.sqrt((bot_p2[0]-p1[0])**2 + (bot_p2[1]-p1[1])**2)
-                    if l1>l2:
+                        l1 = math.sqrt((top_p1[0]-p2[0])**2 + (top_p1[1]-p2[1])**2)
+                        l2 = math.sqrt((top_p2[0]-p1[0])**2 + (top_p2[1]-p1[1])**2)
+                        if l1>l2:
+                            top_p2=p2
+                        else:
+                            top_p1=p1
+            bot_inter = pr_poly.intersection(topline)
+            bot_p1=bot_p2=None
+            if type(bot_inter) is LineString:
+                if len(bot_inter.coords)>0:
+                    bot_p1,bot_p2=bot_inter.coords
+            else:
+                for i,line in enumerate(bot_inter):
+                    p1,p2=line.coords
+                    if i==0:
+                        bot_p1=p1
                         bot_p2=p2
                     else:
-                        bot_p1=p1
-        # find whether top or bottom points will be bigger
-        if top_p1 is None and bot_p1 is None:
-            assert('small pr (inside GT) not handeled')
-        elif top_p1 is None:
-            length = math.sqrt((bot_p1[0]-bot_p2[0])**2 + (bot_p1[1]-bot_p2[1])**2)
-        elif bot_p1 is None:
-            length = math.sqrt((top_p1[0]-top_p2[0])**2 + (top_p1[1]-top_p2[1])**2)
-        else:
-            d_top = math.sqrt((top_p1[0]-top_p2[0])**2 + (top_p1[1]-top_p2[1])**2)
-            d_bot = math.sqrt((bot_p1[0]-bot_p2[0])**2 + (bot_p1[1]-bot_p2[1])**2)
-            length = max(d_top,d_bot)
-        #compute the area of the clipped gt
-        clipped_gt_area = length*rboxes[i,3] #new width*height
+                        l1 = math.sqrt((bot_p1[0]-p2[0])**2 + (bot_p1[1]-p2[1])**2)
+                        l2 = math.sqrt((bot_p2[0]-p1[0])**2 + (bot_p2[1]-p1[1])**2)
+                        if l1>l2:
+                            bot_p2=p2
+                        else:
+                            bot_p1=p1
+            # find whether top or bottom points will be bigger
+            if top_p1 is None and bot_p1 is None:
+                #They didn't intersect, so we need a more general method
+                #We'll find points spanning the length of the intersection using distances
+                #iterate over points of intersection poly and find closest to topline and botline
+                #iterate from those points to the furthest from both (both iteratins same direction)
+                #distance between these last two poings is length.
+                min_dist_top=min_dist_bot=9999999
+                points = list(inter.exterior.coords)
+                for p_i,(x,y) in enumerate(points):
+                    #distance from top line to point x,y
+                    dist_top = abs((gt_tlY[i]-gt_trY[i])*x-(gt_tlX[i]-gt_trX[i])*y+gt_tlX[i]*gt_trY[i]-gt_tlY[i]*gt_trX[i])/math.sqrt((gt_tlY[i]-gt_trY[i])**2 + (gt_tlX[i]-gt_trX[i])**2)
+                    if dist_top<min_dist_top:
+                        min_dist_top=dist_top
+                        top_point_i = p_i
+                    dist_bot = abs((gt_blY[i]-gt_brY[i])*x-(gt_blX[i]-gt_brX[i])*y+gt_blX[i]*gt_brY[i]-gt_blY[i]*gt_brX[i])/math.sqrt((gt_blY[i]-gt_brY[i])**2 + (gt_blX[i]-gt_brX[i])**2)
+                    if dist_bot<min_dist_bot:
+                        min_dist_bot=dist_bot
+                        bot_point_i = p_i
+                min_dist_diff=9999999
+                p_j = (top_point_i+1)%(len(points)-1) #-1 as Polygon repeats closure vertex
+                if p_j == bot_point_i:
+                    side_point_A = ((points[top_point_i][0]+points[bot_point_i][0])/2,(points[top_point_i][1]+points[bot_point_i][1])/2)
+                else:
+                    while p_j!=bot_point_i:
+                        #dist_diff = abs(distancePoints(points[p_j],points[top_point_i])-distancePoints(points[p_j],points[bot_point_i]))
+                        #TODO left off 
+                        dist_diff = abs(distancePointLine(points[p_j],(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_gt
+                        if dist_diff < min_dist_diff:
+                            min_dist_diff = dist_diff
+                            side_point_A = points[p_j]
+                        p_j = (p_j+1)%(len(points)-1)
+                min_dist_diff=9999999
+                if p_j == top_point_i:
+                    side_point_B = ((points[top_point_i][0]+points[bot_point_i][0])/2,(points[top_point_i][1]+points[bot_point_i][1])/2)
+                else:
+                    while p_j!=top_point_i:
+                        dist_diff = abs(distancePoints(points[p_j],points[top_point_i])-distancePoints(points[p_j],points[bot_point_i]))
+                        if dist_diff < min_dist_diff:
+                            min_dist_diff = dist_diff
+                            side_point_B = points[p_j]
+                        p_j = (p_j+1)%(len(points)-1)
+                length = distancePoints(side_point_A,side_point_B)
+
+                print(points)
+                print('length: {}, top: {}, bot: {}, A: {}, B: {}'.format(length,top_point_i,bot_point_i,side_point_A,side_point_B))
+                import pdb;pdb.set_trace()
+            elif top_p1 is None:
+                length = math.sqrt((bot_p1[0]-bot_p2[0])**2 + (bot_p1[1]-bot_p2[1])**2)
+            elif bot_p1 is None:
+                length = math.sqrt((top_p1[0]-top_p2[0])**2 + (top_p1[1]-top_p2[1])**2)
+            else:
+                d_top = math.sqrt((top_p1[0]-top_p2[0])**2 + (top_p1[1]-top_p2[1])**2)
+                d_bot = math.sqrt((bot_p1[0]-bot_p2[0])**2 + (bot_p1[1]-bot_p2[1])**2)
+                length = max(d_top,d_bot)
+            #compute the area of the clipped gt
+            clipped_gt_area = length*rboxes[i,3] #new width*height
 
 
-        io_clipped_u[i,j] = inter.area/(clipped_gt_area+pr_poly.area-inter.area)
+            io_clipped_u[i,j] = inter.area/(clipped_gt_area+pr_poly.area-inter.area)
 
-    return iou, io_clipped_u
+    if ret_clip:
+        return iou, io_clipped_u
+    else:
+        return iou
 
 def allDist(boxes1,boxes2):
     b1_x = boxes1[:,0]
@@ -705,6 +757,175 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClas
     else:
         return computeAP(allScores), precisions, recalls
 
+def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeCls=0,getClassAP=False):
+    #mAP=0.0
+    #aps=[]
+    precisions=[]
+    recalls=[]
+
+    #how many classes are there?
+    if ignoreClasses:
+        numClasses=1
+    if len(target.size())>1:
+        #numClasses=target.size(1)-13
+        pass
+    elif pred is not None and len(pred)>0:
+        #if there are no targets, we shouldn't be pred anything
+        if ignoreClasses:
+            #aps.append(0)
+            ap=0.0
+            precisions.append(0.0)
+            recalls.append(1.0)
+        else:
+            #numClasses=pred.size(1)-6
+            ap=0
+            class_ap=[]
+            all_cls_pred = torch.stack([p.getCls() for p in pred],dim=0)
+            for cls in range(numClasses):
+                if (torch.argmax(all_cls_pred,dim=1)==cls).any():
+                    #aps.append(0) #but we did for this class :(
+                    ap+=0.0
+                    precisions.append(0.0)
+                    class_ap.append(0.0)
+                else:
+                    #aps.append(1) #we didn't for this class :)
+                    ap+=1.0
+                    precisions.append(1.0)
+                    class_ap.append(1.0)
+                recalls.append(1.0)
+        if getClassAP:
+            return ap/numClasses, precisions, recalls, class_ap
+        else:
+            return ap/numClasses, precisions, recalls
+    else:
+        if getClassAP:
+            return 1.0, [1.0]*numClasses, [1.0]*numClasses, [1.0]*numClasses #we didn't for all classes :)
+        else:
+            return 1.0, [1.0]*numClasses, [1.0]*numClasses
+
+    allScores=[]
+    classScores=[[] for i in range(numClasses)]
+    if pred is not None and len(pred)>0:
+        #This is an alternate metric that computes AP of all classes together
+        #Your only a hit if you have the same class
+        allIOUs = allPolyIOU_andClip(target,pred,ret_clip=False) 
+        allHits = allIOUs>iou_thresh
+        #evalute hits to see if they're valid (matching class)
+        targetClasses_index = torch.argmax(target[:,13:13+numClasses],dim=1)
+        predClasses = torch.stack([torch.from_numpy(p.getCls()) for p in pred],dim=0)
+        if predClasses.size(0)==0 or predClasses.size(1)==0:
+            print('ERROR, zero sized predClasses: {}. pred is {}'.format(predClasses.size(),pred.size()))
+        predClasses_index = torch.argmax(predClasses,dim=1)
+        targetClasses_index_ex = targetClasses_index[:,None].expand(targetClasses_index.size(0),predClasses_index.size(0))
+        predClasses_index_ex = predClasses_index[None,:].expand(targetClasses_index.size(0),predClasses_index.size(0))
+        matchingClasses = targetClasses_index_ex==predClasses_index_ex
+        validHits = allHits*matchingClasses
+
+        #add all the preds that didn't have a hit
+        hasHit,_ = validHits.max(dim=0) #which preds have hits
+        notHitScores = pred[~hasHit,0]
+        notHitClass = predClasses_index[~hasHit]
+        for i in range(notHitScores.shape[0]):
+            allScores.append( (notHitScores[i].item(), False) )
+            cls = notHitClass[i]
+            classScores[cls].append( (notHitScores[i].item(), False) )
+
+        # if something has multiple hits, it gets paired to the closest (with matching class)
+        allIOUs[~validHits] -= 9999999 #Force these to be smaller
+        maxValidHitIndexes = torch.argmax(allIOUs,dim=0)
+        for i in range(maxValidHitIndexes.size(0)):
+            if validHits[maxValidHitIndexes[i],i]:
+                allScores.append( (pred[i,0].item(),True) )
+                #but now we've consumed this pred, so we'll zero its hit
+                validHits[maxValidHitIndexes[i],i]=0
+                cls = predClasses_index[i]
+                classScores[cls].append( (pred[i,0].item(),True) )
+
+        #add nan scores for missed targets
+        gotHit,gotHitIndex = torch.max(validHits,dim=1)
+        for i in range((gotHit==0).sum()):
+            allScores.append( (float('nan'),True) )
+            cls = targetClasses_index[i]
+            classScores[cls].append( (float('nan'),True) )
+    else:
+        allScores.append( (float('nan'),True) )
+        classScores=[[(float('nan'),True)]]*numClasses
+
+
+    if ignoreClasses:
+        numClasses=1
+    #by class
+    #import pdb; pdb.set_trace()
+    for cls in range(numClasses):
+        clsTargInd = target[:,cls+13]==1
+        if pred is not None and len(pred)>0:
+            #print(pred.size())
+            clsPredInd = predClasses_index==cls
+        else:
+            clsPredInd = torch.empty(0,dtype=torch.bool)
+        if (ignoreClasses and pred.size(0)>0) or (clsTargInd.any() and clsPredInd.any()):
+            if ignoreClasses:
+                clsTarg=target
+                clsPredConf=torch.FloatTensor([p.get_conf() for p in pred])
+            else:
+                clsTarg = target[clsTargInd]
+                clsPredConf=torch.FloatTensor([pred[i].get_conf() for i in torch.nonzero(clsPredInd)])
+            #clsIOUs = getLoc(clsTarg[:,0:],clsPred[:,1:])
+            clsIOUs = allIOUs[clsTargInd,clsPredInd]
+            hits = clsIOUs>iou_thresh
+
+            clsIOUs *= hits.float()
+            ps = torch.argmax(clsIOUs,dim=1)
+            left_ps = torch.ones(clsPredConf.size(0),dtype=torch.bool)
+            left_ps[ps]=0
+            truePos=0
+            for t in range(clsTarg.size(0)):
+                p=ps[t]
+                if hits[t,p]:
+                    #scores.append( (clsPred[p,0],True) )
+                    #hits[t,p]=0
+                    truePos+=1
+                #else:
+                    #scores.append( (float('nan'),True) )
+            
+            left_conf = clsPredConf[left_ps]
+            #for i in range(left_conf.size(0)):
+                #scores.append( (left_conf[i],False) )
+            
+            #ap = computeAP(scores)
+            #if ap is not None:
+            #    aps.append(ap)
+
+            precisions.append( truePos/max(clsPredConf.size(0),truePos) )
+            if precisions[-1]>1:
+                import pdb;pdb.set_trace()
+            recalls.append( truePos/clsTarg.size(0) )
+        elif ignoreClasses:
+            #no pred
+            #aps.append(0)
+            precisions.append(0)
+            recalls.append(0)
+        elif clsPredInd.any() or clsTargInd.any():
+            #aps.append(0)
+            if clsPredInd.any():
+                recalls.append(1)
+                precisions.append(0)
+            else:
+                precisions.append(0)
+                recalls.append(0)
+        else:
+            #aps.append(1)
+            precisions.append(1)
+            recalls.append(1)
+    
+    if getClassAP:
+        classAPs=[computeAP(scores) for scores in classScores]
+        #for i in range(len(classAPs)):
+        #    if classAPs[i] is None:
+        #        classAPs[i]=1
+        return computeAP(allScores), precisions, recalls, classAPs
+    else:
+        return computeAP(allScores), precisions, recalls
 
 def getTargIndexForPreds_iou(target,pred,iou_thresh,numClasses,beforeCls=0,hard_thresh=True,fixed=True):
     return getTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,allIOU,hard_thresh,fixed)

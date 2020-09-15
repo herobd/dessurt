@@ -5,7 +5,7 @@ import timeit
 from utils import util
 from collections import defaultdict
 from evaluators.draw_graph import draw_graph
-from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist, getTargIndexForPreds_iou, newGetTargIndexForPreds_iou, getTargIndexForPreds_dist, newGetTargIndexForPreds_textLines, computeAP
+from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist, AP_textLines, getTargIndexForPreds_iou, newGetTargIndexForPreds_iou, getTargIndexForPreds_dist, newGetTargIndexForPreds_textLines, computeAP
 from utils.group_pairing import getGTGroup, pure
 from datasets.testforms_graph_pair import display
 import random, os
@@ -1219,7 +1219,9 @@ class GraphPairTrainer(BaseTrainer):
                 target_for_b = targetBoxes[0]
             else:
                 target_for_b = torch.empty(0)
-            if self.model.rotation:
+            if self.model.useCurvedBBs:
+                ap_5, prec_5, recall_5 =AP_textLines(target_for_b,outputBoxes,0.5,numClasses)
+            elif self.model.rotation:
                 ap_5, prec_5, recall_5 =AP_dist(target_for_b,outputBoxes,0.9,numClasses)
             else:
                 ap_5, prec_5, recall_5 =AP_iou(target_for_b,outputBoxes,0.5,numClasses)
@@ -1299,11 +1301,18 @@ class GraphPairTrainer(BaseTrainer):
 
 
                 nGT, masks, conf_masks, t_Ls, t_Ts, t_Rs, t_Bs, t_rs, tconf_scales, tcls_scales, pred_covered, gt_covered, recall, precision, pred_covered_noclass, gt_covered_noclass, recall_noclass, precision_noclass = build_oversegmented_targets_multiscale(ph_boxes, ph_conf, ph_cls, targetBoxes, [targetBoxes.size(1)], numClasses, grid_sizesH, grid_sizesW,scale=scale, assign_mode='split', close_anchor_rule='unmask')
-                t_Ls = [t.type(torch.FloatTensor) for t in t_Ls]
-                t_Ts = [t.type(torch.FloatTensor) for t in t_Ts]
-                t_Rs = [t.type(torch.FloatTensor) for t in t_Rs]
-                t_Bs = [t.type(torch.FloatTensor) for t in t_Bs]
-                t_rs = [t.type(torch.FloatTensor) for t in t_rs]
+                
+                for i in range(len(t_Ls)):
+                    assert((t_Ls[i]<=t_Rs[i]).all() and (t_Ts[i]<=t_Bs[i]).all())
+
+                #add some jitter
+                jitter_std=0.001
+                t_Ls = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Ls]
+                t_Ts = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Ts]
+                t_Rs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Rs]
+                t_Bs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Bs]
+                t_rs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_rs]
+
                 tconf_scales = [t.type(torch.FloatTensor) for t in tconf_scales]
                 tcls_scales = [t.type(torch.FloatTensor) for t in tcls_scales]
 
@@ -1635,7 +1644,9 @@ class GraphPairTrainer(BaseTrainer):
                         target_for_b = targetBoxes[0].cpu()
                     else:
                         target_for_b = torch.empty(0)
-                    if self.model.rotation:
+                    if self.model.useCurvedBBs:
+                        ap_5, prec_5, recall_5 =AP_textLines(target_for_b,outputBoxes,0.5,numClasses)
+                    elif self.model.rotation:
                         ap_5, prec_5, recall_5 =AP_dist(target_for_b,outputBoxes,0.9,numClasses, beforeCls=beforeCls)
                     else:
                         ap_5, prec_5, recall_5 =AP_iou(target_for_b,outputBoxes,0.5,numClasses, beforeCls=beforeCls)
@@ -1751,7 +1762,9 @@ class GraphPairTrainer(BaseTrainer):
             target_for_b = targetBoxes[0].cpu()
         else:
             target_for_b = torch.empty(0)
-        if self.model.rotation:
+        if self.model.useCurvedBBs:
+            ap_5, prec_5, recall_5 =AP_textLines(target_for_b,outputBoxes,0.5,numClasses)
+        elif self.model.rotation:
             ap_5, prec_5, recall_5 =AP_dist(target_for_b,outputBoxes,0.9,numClasses, beforeCls=beforeCls)
         else:
             ap_5, prec_5, recall_5 =AP_iou(target_for_b,outputBoxes,0.5,numClasses, beforeCls=beforeCls)

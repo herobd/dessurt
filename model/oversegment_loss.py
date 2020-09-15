@@ -313,7 +313,7 @@ def build_oversegmented_targets_multiscale(
 ):
     #t#tic=timeit.default_timer()
 
-    VISUAL_DEBUG=False
+    VISUAL_DEBUG=True
     HIT_THRESH=0.5
     VIZ_SIZE=24
     use_rotation_aligned_predictions=False
@@ -1108,7 +1108,7 @@ def build_oversegmented_targets_multiscale(
                         #assert(ti_y==ti_y and bi_y==bi_y and ri_x==ri_x and li_x ==li_x)
                         #assert(not (math.isinf(ti_y) or math.isinf(bi_y) or math.isinf(ri_x) or math.isinf(li_x)))
                         num_assigned +=1
-                        if True or isHorz:
+                        if isHorz:
                             T=ti_y-tile_y #negative if above tile center (just add predcition to center)
                             #T = max(min(T,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
                             assert(abs(T)<MAX_H_PRED)
@@ -1125,35 +1125,35 @@ def build_oversegmented_targets_multiscale(
                             R = max(min(R,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
                             targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_W_PRED)
                         else:
-                            T=ti_y-tile_y #negative if above tile center (just add predcition to center)
-                            #T = max(min(T,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
-                            assert(abs(T)<MAX_H_PRED)
-                            targ_T[b, assigned, cell_y, cell_x] = inv_tanh(T/MAX_H_PRED)
-                            B=bi_y-tile_y 
-                            #B = max(min(B,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
-                            assert(abs(B)<MAX_H_PRED)
-                            targ_B[b, assigned, cell_y, cell_x] = inv_tanh(B/MAX_H_PRED)
-                            L=ri_x-tile_x #negative if left of tile center (just add predcition to center)
-                            L = max(min(L,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
-                            #print('L:{} {}-{}={}'.format(L,ri_x,tile_x,ri_x-tile_x))
-                            targ_L[b, assigned, cell_y, cell_x] = inv_tanh(L/MAX_W_PRED)
-                            R=li_x-tile_x 
-                            R = max(min(R,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
-                            targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_W_PRED)
-                            #old
-                            #T=li_x-tile_x #negative if above tile center (just add predcition to center)
+                            #T=ti_y-tile_y #negative if above tile center (just add predcition to center)
+                            ##T = max(min(T,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
                             #assert(abs(T)<MAX_H_PRED)
                             #targ_T[b, assigned, cell_y, cell_x] = inv_tanh(T/MAX_H_PRED)
-                            #B=ri_x-tile_x
+                            #B=bi_y-tile_y 
+                            ##B = max(min(B,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
                             #assert(abs(B)<MAX_H_PRED)
                             #targ_B[b, assigned, cell_y, cell_x] = inv_tanh(B/MAX_H_PRED)
-                            #
-                            #L=ti_y-tile_y #negative if left of tile center (just add predcition to center)
+                            #L=ri_x-tile_x #negative if left of tile center (just add predcition to center)
                             #L = max(min(L,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
+                            ##print('L:{} {}-{}={}'.format(L,ri_x,tile_x,ri_x-tile_x))
                             #targ_L[b, assigned, cell_y, cell_x] = inv_tanh(L/MAX_W_PRED)
-                            #R=bi_y-tile_y 
+                            #R=li_x-tile_x 
                             #R = max(min(R,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
                             #targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_W_PRED)
+                            #old
+                            T=li_x-tile_x #negative if above tile center (just add predcition to center)
+                            T = max(min(T,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
+                            targ_T[b, assigned, cell_y, cell_x] = inv_tanh(T/MAX_W_PRED)
+                            B=ri_x-tile_x
+                            B = max(min(B,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
+                            targ_B[b, assigned, cell_y, cell_x] = inv_tanh(B/MAX_W_PRED)
+                            
+                            L=ti_y-tile_y #negative if left of tile center (just add predcition to center)
+                            assert(abs(L)<MAX_H_PRED)
+                            targ_L[b, assigned, cell_y, cell_x] = inv_tanh(L/MAX_H_PRED)
+                            R=bi_y-tile_y 
+                            assert(abs(R)<MAX_H_PRED)
+                            targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_H_PRED)
                         #t#times_assign.append(timeit.default_timer()-tic2)
 
 
@@ -1256,26 +1256,33 @@ def build_oversegmented_targets_multiscale(
                                 elif i==3:
                                     coff_x = VIZ_SIZE*0.25
                                     coff_y = 0
-                                T= torch.tanh(t_Ts[level][b,i,ty,tx])*MAX_H_PRED
-                                B= torch.tanh(t_Bs[level][b,i,ty,tx])*MAX_H_PRED
-                                L= torch.tanh(t_Ls[level][b,i,ty,tx])*MAX_W_PRED
-                                R= torch.tanh(t_Rs[level][b,i,ty,tx])*MAX_W_PRED
+                                if i==0 or i==1:
+                                    T= torch.tanh(t_Ts[level][b,i,ty,tx])*MAX_H_PRED
+                                    B= torch.tanh(t_Bs[level][b,i,ty,tx])*MAX_H_PRED
+                                    L= torch.tanh(t_Ls[level][b,i,ty,tx])*MAX_W_PRED
+                                    R= torch.tanh(t_Rs[level][b,i,ty,tx])*MAX_W_PRED
+                                else:
+                                    T= torch.tanh(t_Ts[level][b,i,ty,tx])*MAX_W_PRED
+                                    B= torch.tanh(t_Bs[level][b,i,ty,tx])*MAX_W_PRED
+                                    L= torch.tanh(t_Ls[level][b,i,ty,tx])*MAX_H_PRED
+                                    R= torch.tanh(t_Rs[level][b,i,ty,tx])*MAX_H_PRED
+
                                 #cv2.line(draw_level,(int(d_tile_x-1+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x-1+coff_x),int(d_tile_y+(T*VIZ_SIZE))),(bright,bright,0),1)
                                 #cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x+coff_x),int(d_tile_y+(B*VIZ_SIZE))),(bright,0,0),1)
                                 #cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y-1+coff_y)),(int(d_tile_x+(L*VIZ_SIZE)),int(d_tile_y-1+coff_y)),(bright,0,bright),1)
                                 #cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x+(R*VIZ_SIZE)),int(d_tile_y+coff_y)),(0,bright,bright),1)
                                 
                                 draw_level[int(d_tile_y+coff_y)-1:int(d_tile_y+coff_y)+2,int(d_tile_x+coff_x)-1:int(d_tile_x+coff_x)+2]=draw_colors[colorIndex]
-                                if i==0 or i==1:
-                                    drawT = int(d_tile_y+T*VIZ_SIZE)
-                                    drawB = int(d_tile_y+B*VIZ_SIZE)
-                                    drawL = int(d_tile_x+L*VIZ_SIZE)
-                                    drawR = int(d_tile_x+R*VIZ_SIZE)
-                                elif i==2 or i==3:
-                                    drawL = int(d_tile_x+T*VIZ_SIZE)
-                                    drawR = int(d_tile_x+B*VIZ_SIZE)
-                                    drawB = int(d_tile_y+L*VIZ_SIZE)
-                                    drawT = int(d_tile_y+R*VIZ_SIZE)
+                                #if i==0 or i==1:
+                                drawT = int(d_tile_y+T*VIZ_SIZE)
+                                drawB = int(d_tile_y+B*VIZ_SIZE)
+                                drawL = int(d_tile_x+L*VIZ_SIZE)
+                                drawR = int(d_tile_x+R*VIZ_SIZE)
+                                #elif i==2 or i==3:
+                                #    drawL = int(d_tile_x+T*VIZ_SIZE)
+                                #    drawR = int(d_tile_x+B*VIZ_SIZE)
+                                #    drawB = int(d_tile_y+L*VIZ_SIZE)
+                                #    drawT = int(d_tile_y+R*VIZ_SIZE)
                                 #assert(drawL>=-VIZ_SIZE and drawL<=draw_level.shape[1]+VIZ_SIZE)
                                 #assert(drawR>=-VIZ_SIZE and drawR<=draw_level.shape[1]+VIZ_SIZE)
                                 #assert(drawT>=-VIZ_SIZE and drawT<=draw_level.shape[0]+VIZ_SIZE)

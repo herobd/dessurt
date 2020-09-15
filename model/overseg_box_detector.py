@@ -227,10 +227,14 @@ def build_box_predictions(ys,scale,device,numAnchors,numBBParams,numBBTypes):
             elif i<4: #verticle text
                 stackedPred = [
                     torch.sigmoid(y[:,0+offset:1+offset,:,:]),                              #0. confidence
-                    torch.tanh(y[:,2+offset:3+offset,:,:])*scale[level][0]*MAX_H_PRED + priors_1, #1. x1
-                    torch.tanh(y[:,1+offset:2+offset,:,:])*scale[level][1]*MAX_W_PRED + priors_0, #2. y1
-                    torch.tanh(y[:,4+offset:5+offset,:,:])*scale[level][0]*MAX_H_PRED + priors_1, #3. x2
-                    torch.tanh(y[:,3+offset:4+offset,:,:])*scale[level][1]*MAX_W_PRED + priors_0, #4. y2
+                    #torch.tanh(y[:,2+offset:3+offset,:,:])*scale[level][0]*MAX_H_PRED + priors_1, #1. x1
+                    #torch.tanh(y[:,1+offset:2+offset,:,:])*scale[level][1]*MAX_W_PRED + priors_0, #2. y1
+                    #torch.tanh(y[:,4+offset:5+offset,:,:])*scale[level][0]*MAX_H_PRED + priors_1, #3. x2
+                    #torch.tanh(y[:,3+offset:4+offset,:,:])*scale[level][1]*MAX_W_PRED + priors_0, #4. y2
+                    torch.tanh(y[:,1+offset:2+offset,:,:])*scale[level][0]*MAX_H_PRED + priors_1, #1. x1
+                    torch.tanh(y[:,2+offset:3+offset,:,:])*scale[level][1]*MAX_W_PRED + priors_0, #2. y1
+                    torch.tanh(y[:,3+offset:4+offset,:,:])*scale[level][0]*MAX_H_PRED + priors_1, #3. x2
+                    torch.tanh(y[:,4+offset:5+offset,:,:])*scale[level][1]*MAX_W_PRED + priors_0, #4. y2
                     torch.sin(y[:,5+offset:6+offset,:,:]*np.pi)*np.pi,        #5. rotation (radians)
                 ]
             else:
@@ -251,5 +255,8 @@ def build_box_predictions(ys,scale,device,numAnchors,numBBParams,numBBTypes):
 
     bbPredictions = torch.cat(bbPredictions_scales,dim=1) #stack the scales
     bbPredictions_scales=None
+    #assert(torch.logical_or(torch.logical_and(bbPredictions[:,:,1]<=bbPredictions[:,:,3],bbPredictions[:,:,2]<=bbPredictions[:,:,4]),bbPredictions[:,:,0]<0.5).all())
+    
+    #assert(((bbPredictions[:,:,1]<=bbPredictions[:,:,3])*(bbPredictions[:,:,2]<=bbPredictions[:,:,4])+(bbPredictions[:,:,0]<0.5)).all())
     return bbPredictions
 
