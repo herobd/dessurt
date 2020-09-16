@@ -1628,7 +1628,7 @@ class GraphPairTrainer(BaseTrainer):
 
                 if self.save_images_every>0 and self.iteration%self.save_images_every==0:
                     path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b',graphIteration))#instance['name'],graphIteration))
-                    draw_graph(outputBoxes,self.model.used_threshConf,torch.sigmoid(nodePred).cpu().detach(),torch.sigmoid(edgePred).cpu().detach(),edgeIndexes,predGroups,image,edgePredTypes,targetBoxes,self.model,path)
+                    draw_graph(outputBoxes,self.model.used_threshConf,torch.sigmoid(nodePred).cpu().detach(),torch.sigmoid(edgePred).cpu().detach(),edgeIndexes,predGroups,image,edgePredTypes,targetBoxes,self.model,path,useTextLines=self.model.useCurvedBBs)
                     print('saved {}'.format(path))
 
                 if 'bb_stats' in get:
@@ -1667,6 +1667,10 @@ class GraphPairTrainer(BaseTrainer):
             finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = final
             draw_graph(finalOutputBoxes,self.model.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,image,None,targetBoxes,self.model,path,bbTrans=finalBBTrans)
         #    print('saved {}'.format(path))
+        ###
+        finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = final
+        print('DEBUG final num node:{}, num edges: {}'.format(len(finalOutputBoxes) if finalOutputBoxes is not None else 0,len(finalEdgeIndexes) if finalEdgeIndexes is not None else 0))
+        ###
         
         #log['rel_prec']= fullPrec
         #log['rel_recall']= eRecall

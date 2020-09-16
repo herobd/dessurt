@@ -8,6 +8,8 @@ from shapely.geometry import Polygon, LineString
 
 def distancePoints(a,b):
     return math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2)
+def distancePointLine(p,la,lb):
+    return abs((la[1]-lb[1])*p[0]-(la[0]-lb[0])*p[1]+la[0]*lb[1]-la[1]*lb[0])/math.sqrt((la[1]-lb[1])**2 + (la[0]-lb[0])**2)
 
 def non_max_sup_overseg(pred_boxes,thresh_conf=0.5, thresh_inter=0.5, hard_limit=300):
     return non_max_sup_(pred_boxes,thresh_conf, thresh_inter, verticle_bias_intersection, hard_limit)
@@ -414,7 +416,7 @@ def allPolyIOU_andClip(rboxes,bbs, ret_clip=True):
         inter = gt_poly.intersection(pr_poly)
         iou[i,j] = inter.area/(gt_poly.area+pr_poly.area-inter.area)
         
-        if ret_clip:
+        if ret_clip and iou[i,j]>0:
             #clip
             topline = LineString([(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i])])
             botline = LineString([(gt_blX[i],gt_blY[i]),(gt_brX[i],gt_brY[i])])
@@ -464,27 +466,34 @@ def allPolyIOU_andClip(rboxes,bbs, ret_clip=True):
                 #iterate over points of intersection poly and find closest to topline and botline
                 #iterate from those points to the furthest from both (both iteratins same direction)
                 #distance between these last two poings is length.
+                #TODO this doesn't work. I'll average with the longest distance between any two vertices, but at somepoint I should fix this to be proper
                 min_dist_top=min_dist_bot=9999999
                 points = list(inter.exterior.coords)
-                for p_i,(x,y) in enumerate(points):
+                max_dist = 0
+                for p_i,p in enumerate(points):
                     #distance from top line to point x,y
-                    dist_top = abs((gt_tlY[i]-gt_trY[i])*x-(gt_tlX[i]-gt_trX[i])*y+gt_tlX[i]*gt_trY[i]-gt_tlY[i]*gt_trX[i])/math.sqrt((gt_tlY[i]-gt_trY[i])**2 + (gt_tlX[i]-gt_trX[i])**2)
+                    dist_top = distancePointLine(p,(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i]))
+                    #dist_top = abs((gt_tlY[i]-gt_trY[i])*x-(gt_tlX[i]-gt_trX[i])*y+gt_tlX[i]*gt_trY[i]-gt_tlY[i]*gt_trX[i])/math.sqrt((gt_tlY[i]-gt_trY[i])**2 + (gt_tlX[i]-gt_trX[i])**2)
                     if dist_top<min_dist_top:
                         min_dist_top=dist_top
                         top_point_i = p_i
-                    dist_bot = abs((gt_blY[i]-gt_brY[i])*x-(gt_blX[i]-gt_brX[i])*y+gt_blX[i]*gt_brY[i]-gt_blY[i]*gt_brX[i])/math.sqrt((gt_blY[i]-gt_brY[i])**2 + (gt_blX[i]-gt_brX[i])**2)
+                    dist_bot = distancePointLine(p,(gt_blX[i],gt_blY[i]),(gt_brX[i],gt_brY[i]))
+                    #dist_bot = abs((gt_blY[i]-gt_brY[i])*x-(gt_blX[i]-gt_brX[i])*y+gt_blX[i]*gt_brY[i]-gt_blY[i]*gt_brX[i])/math.sqrt((gt_blY[i]-gt_brY[i])**2 + (gt_blX[i]-gt_brX[i])**2)
                     if dist_bot<min_dist_bot:
                         min_dist_bot=dist_bot
                         bot_point_i = p_i
+
+                    for p2 in points[p_i+1:]:
+                        dist = distancePoints(p,p2)
+                        max_dist = max(max_dist,dist)
                 min_dist_diff=9999999
                 p_j = (top_point_i+1)%(len(points)-1) #-1 as Polygon repeats closure vertex
                 if p_j == bot_point_i:
                     side_point_A = ((points[top_point_i][0]+points[bot_point_i][0])/2,(points[top_point_i][1]+points[bot_point_i][1])/2)
                 else:
                     while p_j!=bot_point_i:
-                        #dist_diff = abs(distancePoints(points[p_j],points[top_point_i])-distancePoints(points[p_j],points[bot_point_i]))
-                        #TODO left off 
-                        dist_diff = abs(distancePointLine(points[p_j],(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_gt
+                        dist_diff = abs(distancePointLine(points[p_j],(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i]))-distancePointLine(points[p_j],(gt_blX[i],gt_blY[i]),(gt_brX[i],gt_brY[i])))
+                        dist_diff += abs(distancePoints(points[p_j],points[top_point_i])-distancePoints(points[p_j],points[bot_point_i]))*0.1
                         if dist_diff < min_dist_diff:
                             min_dist_diff = dist_diff
                             side_point_A = points[p_j]
@@ -494,16 +503,18 @@ def allPolyIOU_andClip(rboxes,bbs, ret_clip=True):
                     side_point_B = ((points[top_point_i][0]+points[bot_point_i][0])/2,(points[top_point_i][1]+points[bot_point_i][1])/2)
                 else:
                     while p_j!=top_point_i:
-                        dist_diff = abs(distancePoints(points[p_j],points[top_point_i])-distancePoints(points[p_j],points[bot_point_i]))
+                        dist_diff = abs(distancePointLine(points[p_j],(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i]))-distancePointLine(points[p_j],(gt_blX[i],gt_blY[i]),(gt_brX[i],gt_brY[i])))
+                        dist_diff += abs(distancePoints(points[p_j],points[top_point_i])-distancePoints(points[p_j],points[bot_point_i]))*0.1
                         if dist_diff < min_dist_diff:
                             min_dist_diff = dist_diff
                             side_point_B = points[p_j]
                         p_j = (p_j+1)%(len(points)-1)
-                length = distancePoints(side_point_A,side_point_B)
+                length_i = distancePoints(side_point_A,side_point_B)
+                length = (length_i+max_dist)/2
 
-                print(points)
-                print('length: {}, top: {}, bot: {}, A: {}, B: {}'.format(length,top_point_i,bot_point_i,side_point_A,side_point_B))
-                import pdb;pdb.set_trace()
+                #print(points)
+                #print('length: {}, length_i:{}, max_dist:{}, top: {}, bot: {}, A: {}, B: {}'.format(length,length_i,max_dist,top_point_i,bot_point_i,side_point_A,side_point_B))
+                #import pdb;pdb.set_trace()
             elif top_p1 is None:
                 length = math.sqrt((bot_p1[0]-bot_p2[0])**2 + (bot_p1[1]-bot_p2[1])**2)
             elif bot_p1 is None:
@@ -823,7 +834,8 @@ def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeC
 
         #add all the preds that didn't have a hit
         hasHit,_ = validHits.max(dim=0) #which preds have hits
-        notHitScores = pred[~hasHit,0]
+        predConf=torch.FloatTensor([p.getConf().item() for p in pred])
+        notHitScores = predConf[~hasHit]
         notHitClass = predClasses_index[~hasHit]
         for i in range(notHitScores.shape[0]):
             allScores.append( (notHitScores[i].item(), False) )
@@ -835,11 +847,11 @@ def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeC
         maxValidHitIndexes = torch.argmax(allIOUs,dim=0)
         for i in range(maxValidHitIndexes.size(0)):
             if validHits[maxValidHitIndexes[i],i]:
-                allScores.append( (pred[i,0].item(),True) )
+                allScores.append( (predConf[i].item(),True) )
                 #but now we've consumed this pred, so we'll zero its hit
                 validHits[maxValidHitIndexes[i],i]=0
                 cls = predClasses_index[i]
-                classScores[cls].append( (pred[i,0].item(),True) )
+                classScores[cls].append( (predConf[i].item(),True) )
 
         #add nan scores for missed targets
         gotHit,gotHitIndex = torch.max(validHits,dim=1)
@@ -869,9 +881,9 @@ def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeC
                 clsPredConf=torch.FloatTensor([p.get_conf() for p in pred])
             else:
                 clsTarg = target[clsTargInd]
-                clsPredConf=torch.FloatTensor([pred[i].get_conf() for i in torch.nonzero(clsPredInd)])
+                clsPredConf=predConf[clsPredInd]#torch.FloatTensor([pred[i].get_conf() for i in torch.nonzero(clsPredInd)])
             #clsIOUs = getLoc(clsTarg[:,0:],clsPred[:,1:])
-            clsIOUs = allIOUs[clsTargInd,clsPredInd]
+            clsIOUs = allIOUs[clsTargInd][:,clsPredInd]
             hits = clsIOUs>iou_thresh
 
             clsIOUs *= hits.float()

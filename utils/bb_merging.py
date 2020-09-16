@@ -627,3 +627,7 @@ class TextLine:
             self.compute()
         assert(type(self.cls) is np.ndarray)
         return self.cls
+    def getConf(self):
+        if self.poly_points is None:
+            self.compute()
+        return self.conf
