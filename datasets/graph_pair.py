@@ -212,16 +212,22 @@ class GraphPairDataset(torch.utils.data.Dataset):
             numNeighbors=None
         #if table_points is not None:
         #    table_points = None if table_points.shape[1] == 0 else torch.from_numpy(table_points)
-        groups_adj = []
+        groups_adj = set()
         if groups is not None:
             for n0,n1 in pairs:
+                g0=-1
+                g1=-1
                 for i,ns in enumerate(groups):
                     if n0 in ns:
                         g0=i
+                        if g1!=-1:
+                            break
                     if n1 in ns:
                         g1=i
+                        if g0!=-1:
+                            break
                 if g0!=g1:
-                    groups_adj.append((min(g0,g1),max(g0,g1)))
+                    groups_adj.add((min(g0,g1),max(g0,g1)))
             for group in groups:
                 for i in group:
                     assert(i<bbs.shape[1])
