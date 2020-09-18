@@ -27,7 +27,7 @@ import json
 from collections import defaultdict
 
 import timeit
-import cv2
+import utils.img_f as img_f
 
 MAX_CANDIDATES=2000
 MAX_GRAPH_SIZE=4000
@@ -1488,12 +1488,12 @@ class PairingGroupingGraph(BaseModel):
                         crop[0,int(tlY[index1].item()-minY):int(brY[index1].item()-minY)+1,int(tlX[index1].item()-minX):int(brX[index1].item()-minX)+1]*=0.5
                         crop[1,int(tlY[index2].item()-minY):int(brY[index2].item()-minY)+1,int(tlX[index2].item()-minX):int(brX[index2].item()-minX)+1]*=0.5
                     crop = crop.numpy().transpose([1,2,0])
-                    #cv2.imshow('crop {}'.format(i),crop)
+                    #img_f.imshow('crop {}'.format(i),crop)
                     debug_images.append(crop)
                     #import pdb;pdb.set_trace()
             ###
         #if debug_image is not None:
-        #    cv2.waitKey()
+        #    img_f.waitKey()
 
         #build all-mask image, may want to move this up and use for relationship proposals
         if self.expandedRelContext is not None:
@@ -1604,7 +1604,7 @@ class PairingGroupingGraph(BaseModel):
                         if len(cropArea.shape)==0:
                             raise ValueError("RoI is bad: {}:{},{}:{} for size {}".format(round(b_rois[i,2].item()),round(b_rois[i,4].item())+1,round(b_rois[i,1].item()),round(b_rois[i,3].item())+1,allMasks.shape))
                         masks[i,2] = F.interpolate(cropArea[None,None,...], size=(pool2_h,pool2_w), mode='bilinear',align_corners=False)[0,0]
-                        #masks[i,2] = cv2.resize(cropArea,(stackedEdgeFeatWindows.size(2),stackedEdgeFeatWindows.size(3)))
+                        #masks[i,2] = img_f.resize(cropArea,(stackedEdgeFeatWindows.size(2),stackedEdgeFeatWindows.size(3)))
                         if debug_image is not None:
                             debug_masks.append(cropArea)
 
@@ -1701,10 +1701,10 @@ class PairingGroupingGraph(BaseModel):
             ###DEBUG
             if debug_image is not None:
                 for i in range(4):
-                    cv2.imshow('b{}-{} crop rel {}'.format(b_start,b_end,i),debug_images[i])
-                    cv2.imshow('b{}-{} masks rel {}'.format(b_start,b_end,i),masks[i].numpy().transpose([1,2,0]))
-                    cv2.imshow('b{}-{} mask all rel {}'.format(b_start,b_end,i),debug_masks[i].numpy())
-                cv2.waitKey()
+                    img_f.imshow('b{}-{} crop rel {}'.format(b_start,b_end,i),debug_images[i])
+                    img_f.imshow('b{}-{} masks rel {}'.format(b_start,b_end,i),masks[i].numpy().transpose([1,2,0]))
+                    img_f.imshow('b{}-{} mask all rel {}'.format(b_start,b_end,i),debug_masks[i].numpy())
+                img_f.waitKey()
                 debug_images=[]
 
 
@@ -1838,12 +1838,12 @@ class PairingGroupingGraph(BaseModel):
                             crop = crop.expand(3,crop.size(1),crop.size(2))
                         crop[0,int(tlY[i].item()-minY):int(brY[i].item()-minY)+1,int(tlX[i].item()-minX):int(brX[i].item()-minX)+1]*=0.5
                         crop = crop.numpy().transpose([1,2,0])
-                        cv2.imshow('crop bb {}'.format(i),crop)
-                        cv2.imshow('masks bb {}'.format(i),torch.cat((masks[i],torch.zeros(1,self.poolBB2_h,self.poolBB2_w)),dim=0).numpy().transpose([1,2,0]))
+                        img_f.imshow('crop bb {}'.format(i),crop)
+                        img_f.imshow('masks bb {}'.format(i),torch.cat((masks[i],torch.zeros(1,self.poolBB2_h,self.poolBB2_w)),dim=0).numpy().transpose([1,2,0]))
                         #debug_images.append(crop)
 
             if debug_image is not None:
-                cv2.waitKey()
+                img_f.waitKey()
             if self.useShapeFeats != "only":
                 #bb_features[i]= F.avg_pool2d(features[0,:,minY:maxY+1,minX:maxX+1], (1+maxY-minY,1+maxX-minX)).view(-1)
                 bb_features = self.roi_alignBB(features,rois.to(features.device))
@@ -2393,10 +2393,10 @@ class PairingGroupingGraph(BaseModel):
             numBoxes = bbs.size(0)
             for i in range(numBoxes):
                 
-                #cv2.line( boxesDrawn, (int(tlX[i]),int(tlY[i])),(int(trX[i]),int(trY[i])),i,1)
-                #cv2.line( boxesDrawn, (int(trX[i]),int(trY[i])),(int(brX[i]),int(brY[i])),i,1)
-                #cv2.line( boxesDrawn, (int(blX[i]),int(blY[i])),(int(brX[i]),int(brY[i])),i,1)
-                #cv2.line( boxesDrawn, (int(blX[i]),int(blY[i])),(int(tlX[i]),int(tlY[i])),i,1)
+                #img_f.line( boxesDrawn, (int(tlX[i]),int(tlY[i])),(int(trX[i]),int(trY[i])),i,1)
+                #img_f.line( boxesDrawn, (int(trX[i]),int(trY[i])),(int(brX[i]),int(brY[i])),i,1)
+                #img_f.line( boxesDrawn, (int(blX[i]),int(blY[i])),(int(brX[i]),int(brY[i])),i,1)
+                #img_f.line( boxesDrawn, (int(blX[i]),int(blY[i])),(int(tlX[i]),int(tlY[i])),i,1)
 
                 #These are to catch the wierd case of a (clipped) bb having 0 height or width
                 #we just add a bit, this shouldn't greatly effect the heuristic pairing
@@ -2495,18 +2495,18 @@ class PairingGroupingGraph(BaseModel):
                 drawn = np.zeros( (math.ceil(maxY-minY),math.ceil(maxX-minX),3))#torch.IntTensor( (maxY-minY,maxX-minX) ).zero_()
                 numBoxes = bbs.size(0)
                 for a,b in candidates:
-                    cv2.line( drawn, (int(x[a]),int(y[a])),(int(x[b]),int(y[b])),(random.random()*0.5,random.random()*0.5,random.random()*0.5),1)
+                    img_f.line( drawn, (int(x[a]),int(y[a])),(int(x[b]),int(y[b])),(random.random()*0.5,random.random()*0.5,random.random()*0.5),1)
                 for i in range(numBoxes):
                     
-                    #cv2.line( boxesDrawn, (int(tlX[i]),int(tlY[i])),(int(trX[i]),int(trY[i])),i,1)
-                    #cv2.line( boxesDrawn, (int(trX[i]),int(trY[i])),(int(brX[i]),int(brY[i])),i,1)
-                    #cv2.line( boxesDrawn, (int(blX[i]),int(blY[i])),(int(brX[i]),int(brY[i])),i,1)
-                    #cv2.line( boxesDrawn, (int(blX[i]),int(blY[i])),(int(tlX[i]),int(tlY[i])),i,1)
+                    #img_f.line( boxesDrawn, (int(tlX[i]),int(tlY[i])),(int(trX[i]),int(trY[i])),i,1)
+                    #img_f.line( boxesDrawn, (int(trX[i]),int(trY[i])),(int(brX[i]),int(brY[i])),i,1)
+                    #img_f.line( boxesDrawn, (int(blX[i]),int(blY[i])),(int(brX[i]),int(brY[i])),i,1)
+                    #img_f.line( boxesDrawn, (int(blX[i]),int(blY[i])),(int(tlX[i]),int(tlY[i])),i,1)
 
                     rr,cc = draw.polygon_perimeter([int(tlY[i]),int(trY[i]),int(brY[i]),int(blY[i])],[int(tlX[i]),int(trX[i]),int(brX[i]),int(blX[i])])
                     drawn[rr,cc]=(random.random()*0.8+.2,random.random()*0.8+.2,random.random()*0.8+.2)
-                cv2.imshow('res',drawn)
-                #cv2.waitKey()
+                img_f.imshow('res',drawn)
+                #img_f.waitKey()
 
                 rows,cols=boxesDrawn.shape
                 colorMap = [(0,0,0)]
@@ -2520,8 +2520,8 @@ class PairingGroupingGraph(BaseModel):
                         draw2[r,c] = colorMap[int(round(boxesDrawn[r,c]))]
                         #draw[r,c] = (255,255,255) if boxesDrawn[r,c]>0 else (0,0,0)
 
-                cv2.imshow('d',draw2)
-                cv2.waitKey()
+                img_f.imshow('d',draw2)
+                img_f.waitKey()
 
 
             candidates=set()
@@ -2608,7 +2608,7 @@ class PairingGroupingGraph(BaseModel):
                 out_im = batch_lines.cpu().numpy().transpose([0,2,3,1])
                 out_im = 256*(2-out_im)/2
                 for i in range(batch_lines.size(0)):
-                    cv2.imwrite('out2/line{}-{}.png'.format(i+index,batch_strings[i]),out_im[i])
+                    img_f.imwrite('out2/line{}-{}.png'.format(i+index,batch_strings[i]),out_im[i])
                     print('DEBUG saved hwr image: out2/line{}-{}.png'.format(i+start,batch_strings[i]))
                 ##
                 output_strings += batch_strings
@@ -2707,7 +2707,7 @@ class PairingGroupingGraph(BaseModel):
                 batch_strings, decoded_raw_hw = decode_handwriting(resBatch, self.idx_to_char)
                 ###debug
                 #for i in range(num):
-                #    cv2.imwrite('out2/line{}-{}.png'.format(i+index,batch_strings[i]),imm[i])
+                #    img_f.imwrite('out2/line{}-{}.png'.format(i+index,batch_strings[i]),imm[i])
                 ###
                 output_strings += batch_strings
                 #res.append(resBatch)
@@ -2716,8 +2716,8 @@ class PairingGroupingGraph(BaseModel):
             ### Debug ###
             #resN=res.data.cpu().numpy()
             #output_strings, decoded_raw_hw = decode_handwriting(resN, self.idx_to_char)
-                #cv2.imshow('line',imm)
-                #cv2.waitKey()
+                #img_f.imshow('line',imm)
+                #img_f.waitKey()
             ###
 
         return output_strings

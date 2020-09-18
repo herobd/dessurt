@@ -11,7 +11,7 @@ from utils.forms_annotations import fixAnnotations, convertBBs, getBBWithPoints,
 import timeit
 from .graph_pair import GraphPairDataset
 
-import cv2
+import utils.img_f as img_f
 
 SKIP=['174']#['193','194','197','200']
 ONE_DONE=[]
@@ -99,18 +99,18 @@ class FormsGraphPair(GraphPairDataset):
                         if self.cache_resized:
                             rescale = self.rescale_range[1]
                             if not os.path.exists(path):
-                                org_img = cv2.imread(org_path)
+                                org_img = img_f.imread(org_path)
                                 if org_img is None:
                                     print('WARNING, could not read {}'.format(org_img))
                                     continue
                                 #target_dim1 = self.rescale_range[1]
                                 #target_dim0 = int(org_img.shape[0]/float(org_img.shape[1]) * target_dim1)
-                                #resized = cv2.resize(org_img,(target_dim1, target_dim0), interpolation = cv2.INTER_CUBIC)
-                                resized = cv2.resize(org_img,(0,0),
+                                #resized = img_f.resize(org_img,(target_dim1, target_dim0))
+                                resized = img_f.resize(org_img,(0,0),
                                         fx=self.rescale_range[1], 
                                         fy=self.rescale_range[1], 
-                                        interpolation = cv2.INTER_CUBIC)
-                                cv2.imwrite(path,resized)
+                                        )
+                                img_f.imwrite(path,resized)
                                 #rescale = target_dim1/float(org_img.shape[1])
                         #elif self.cache_resized:
                             #print(jsonPath)

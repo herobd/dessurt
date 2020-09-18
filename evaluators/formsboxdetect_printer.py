@@ -2,7 +2,7 @@ from skimage import color, io
 import os
 import numpy as np
 import torch
-import cv2
+import utils.img_f as img_f
 from utils import util
 from model.alignment_loss import alignment_loss
 import math
@@ -29,10 +29,10 @@ def getCorners(xyrhw):
 def plotRect(img,color,xyrhw,lineW=1):
     tl,tr,br,bl = getCorners(xyrhw)
 
-    cv2.line(img,tl,tr,color,lineW)
-    cv2.line(img,tr,br,color,lineW)
-    cv2.line(img,br,bl,color,lineW)
-    cv2.line(img,bl,tl,color,lineW)
+    img_f.line(img,tl,tr,color,lineW)
+    img_f.line(img,tr,br,color,lineW)
+    img_f.line(img,br,bl,color,lineW)
+    img_f.line(img,bl,tl,color,lineW)
 
 def FormsBoxDetect_printer(config,instance, model, gpu, metrics, outDir=None, startIndex=None, lossFunc=None):
     def __eval_metrics(data,target):
@@ -323,7 +323,7 @@ def FormsBoxDetect_printer(config,instance, model, gpu, metrics, outDir=None, st
             #np.save(saveFile,rescaled_outputBBs_xyrs)
             image = (1-((1+np.transpose(data[b][:,:,:],(1,2,0)))/2.0)).copy()
             if image.shape[2]==1:
-                image = cv2.cvtColor(image,cv2.COLOR_GRAY2RGB)
+                image = img_f.cvtColor(image,cv2.COLOR_GRAY2RGB)
             #if name=='text_start_gt':
 
             if not pretty:
@@ -332,14 +332,14 @@ def FormsBoxDetect_printer(config,instance, model, gpu, metrics, outDir=None, st
                     if model.predNumNeighbors:
                         x=int(targetBBs[b,j,0])
                         y=int(targetBBs[b,j,1]+targetBBs[b,j,3])
-                        cv2.putText(image,'{:.2f}'.format(gtNumNeighbors[b,j]),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(0.6,0.3,0),2,cv2.LINE_AA)
+                        img_f.putText(image,'{:.2f}'.format(gtNumNeighbors[b,j]),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(0.6,0.3,0),2,cv2.LINE_AA)
                 #if alignmentBBs[b] is not None:
                 #    aj=alignmentBBs[b][j]
                 #    xc_gt = targetBBs[b,j,0]
                 #    yc_gt = targetBBs[b,j,1]
                 #    xc=outputBBs[b,aj,1]
                 #    yc=outputBBs[b,aj,2]
-                #    cv2.line(image,(xc,yc),(xc_gt,yc_gt),(0,1,0),1)
+                #    img_f.line(image,(xc,yc),(xc_gt,yc_gt),(0,1,0),1)
                 #    shade = 0.0+(outputBBs[b,aj,0]-threshConf)/(maxConf-threshConf)
                 #    shade = max(0,shade)
                 #    if outputBBs[b,aj,6] > outputBBs[b,aj,7]:
@@ -368,11 +368,11 @@ def FormsBoxDetect_printer(config,instance, model, gpu, metrics, outDir=None, st
                     shade = 0.0+(conf-threshConf)/(maxConf-threshConf)
                     #print(shade)
                     #if name=='text_start_gt' or name=='field_end_gt':
-                    #    cv2.bb(bbImage[:,:,1],p1,p2,shade,2)
+                    #    img_f.bb(bbImage[:,:,1],p1,p2,shade,2)
                     #if name=='text_end_gt':
-                    #    cv2.bb(bbImage[:,:,2],p1,p2,shade,2)
+                    #    img_f.bb(bbImage[:,:,2],p1,p2,shade,2)
                     #elif name=='field_end_gt' or name=='field_start_gt':
-                    #    cv2.bb(bbImage[:,:,0],p1,p2,shade,2)
+                    #    img_f.bb(bbImage[:,:,0],p1,p2,shade,2)
                     if predClass[j,0] > predClass[j,1]:
                         color=[0,0,shade] #text
                     else:
@@ -391,8 +391,8 @@ def FormsBoxDetect_printer(config,instance, model, gpu, metrics, outDir=None, st
                         x=int(bbs[j,1])
                         y=int(bbs[j,2]-bbs[j,4])
                         #color = int(min(abs(predNN[j]-target_num_neighbors[j]),2)*127)
-                        #cv2.putText(image,'{}/{}'.format(predNN[j],target_num_neighbors[j]),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 3,(color,0,0),2,cv2.LINE_AA)
-                        cv2.putText(image,'{:.2f}'.format(predNN[j]),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,color,2,cv2.LINE_AA)
+                        #img_f.putText(image,'{}/{}'.format(predNN[j],target_num_neighbors[j]),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 3,(color,0,0),2,cv2.LINE_AA)
+                        img_f.putText(image,'{:.2f}'.format(predNN[j]),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,color,2,cv2.LINE_AA)
 
 
             #for j in alignmentBBsTarg[name][b]:
@@ -402,7 +402,7 @@ def FormsBoxDetect_printer(config,instance, model, gpu, metrics, outDir=None, st
             #    rad = round(math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)/2.0)
             #    #print(mid)
             #    #print(rad)
-            #    cv2.circle(image,mid,rad,(1,0,1),1)
+            #    img_f.circle(image,mid,rad,(1,0,1),1)
 
             saveName = '{}_boxes_AP:{:.2f}'.format(imageName[b],aps_5all[b])
             #for j in range(metricsOut.shape[1]):
@@ -416,7 +416,7 @@ def FormsBoxDetect_printer(config,instance, model, gpu, metrics, outDir=None, st
                 #if name=='text_start_gt':
                 for j in range(targetPointsSizes[name][b]):
                     p1 = (targetPoints[name][b,j,0], targetPoints[name][b,j,1])
-                    cv2.circle(image,p1,2,(1,0.5,0),-1)
+                    img_f.circle(image,p1,2,(1,0.5,0),-1)
                 points=[]
                 maxConf = max(out[b,:,0].max(),1.0)
                 threshConf = maxConf*0.1
@@ -432,13 +432,13 @@ def FormsBoxDetect_printer(config,instance, model, gpu, metrics, outDir=None, st
                         color=(0,0,shade)
                     else:
                         color=(shade,0,0)
-                    cv2.circle(image,p1,2,color,-1)
+                    img_f.circle(image,p1,2,color,-1)
                     if alignmentPointsPred[name] is not None and j in alignmentPointsPred[name][b]:
                         mid = p1 #( int(round((p1[0]+p2[0])/2.0)), int(round((p1[1]+p2[1])/2.0)) )
                         rad = 4 #round(math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)/2.0)
                         #print(mid)
                         #print(rad)
-                        #cv2.circle(image,mid,rad,(0,1,1),1)
+                        #img_f.circle(image,mid,rad,(0,1,1),1)
                 #for j in alignmentBBsTarg[name][b]:
                 #    p1 = (targetBBs[name][b,j,0], targetBBs[name][b,j,1])
                 #    p2 = (targetBBs[name][b,j,0], targetBBs[name][b,j,1])
@@ -446,7 +446,7 @@ def FormsBoxDetect_printer(config,instance, model, gpu, metrics, outDir=None, st
                 #    rad = round(math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)/2.0)
                 #    #print(mid)
                 #    #print(rad)
-                #    cv2.circle(image,mid,rad,(1,0,1),1)
+                #    img_f.circle(image,mid,rad,(1,0,1),1)
 
                 saveName = '{:06}_{}'.format(startIndex+b,name)
                 #for j in range(metricsOut.shape[1]):

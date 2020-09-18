@@ -2,7 +2,7 @@ from skimage import color, io
 import os
 import numpy as np
 import torch
-import cv2
+import utils.img_f as img_f
 from utils import util
 from model.alignment_loss import alignment_loss
 import math
@@ -195,10 +195,10 @@ def FormsDetect_printer(config,instance, model, gpu, metrics, outDir=None, start
                     #rad = round(math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)/2.0)
                     #print(mid)
                     #print(rad)
-                    #cv2.circle(image,mid,rad,(1,0.5,0),1)
+                    #img_f.circle(image,mid,rad,(1,0.5,0),1)
                     #print(p1)
                     #print(p2)
-                    cv2.line(image,p1,p2,(1,0.5,0),1)
+                    img_f.line(image,p1,p2,(1,0.5,0),1)
             lines=[]
             #pred_points=[]
             maxConf = out[b,:,0].max()
@@ -237,16 +237,16 @@ def FormsDetect_printer(config,instance, model, gpu, metrics, outDir=None, start
                     #rad = round(math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)/2.0)
                     #print(mid)
                     #print(rad)
-                    #cv2.circle(image,mid,rad,(0,1,1),1)
+                    #img_f.circle(image,mid,rad,(0,1,1),1)
                 if outDir is not None:
                     shade = 0.0+conf/maxConf
                     #print(shade)
                     #if name=='text_start_gt' or name=='field_end_gt':
-                    #    cv2.line(lineImage[:,:,1],p1,p2,shade,2)
+                    #    img_f.line(lineImage[:,:,1],p1,p2,shade,2)
                     #if name=='text_end_gt':
-                    #    cv2.line(lineImage[:,:,2],p1,p2,shade,2)
+                    #    img_f.line(lineImage[:,:,2],p1,p2,shade,2)
                     #elif name=='field_end_gt' or name=='field_start_gt':
-                    #    cv2.line(lineImage[:,:,0],p1,p2,shade,2)
+                    #    img_f.line(lineImage[:,:,0],p1,p2,shade,2)
                     if name=='text_start_gt':
                         color=(0,shade,0)
                     elif name=='text_end_gt':
@@ -257,7 +257,7 @@ def FormsDetect_printer(config,instance, model, gpu, metrics, outDir=None, start
                         color=(shade,0,0)
                     else:
                         color=(shade,0,0)
-                    cv2.line(image,p1,p2,color,1)
+                    img_f.line(image,p1,p2,color,1)
 
             if outDir is not None:
                 #for j in alignmentLinesTarg[name][b]:
@@ -267,7 +267,7 @@ def FormsDetect_printer(config,instance, model, gpu, metrics, outDir=None, start
                 #    rad = round(math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)/2.0)
                 #    #print(mid)
                 #    #print(rad)
-                #    cv2.circle(image,mid,rad,(1,0,1),1)
+                #    img_f.circle(image,mid,rad,(1,0,1),1)
 
                 saveName = '{:06}_{}'.format(startIndex+b,name)
                 #for j in range(metricsOut.shape[1]):
@@ -281,7 +281,7 @@ def FormsDetect_printer(config,instance, model, gpu, metrics, outDir=None, start
                 #if name=='text_start_gt':
                 for j in range(targetPointsSizes[name][b]):
                     p1 = (targetPoints[name][b,j,0], targetPoints[name][b,j,1])
-                    cv2.circle(image,p1,2,(1,0.5,0),-1)
+                    img_f.circle(image,p1,2,(1,0.5,0),-1)
                 points=[]
                 maxConf = max(out[b,:,0].max(),1.0)
                 threshConf = maxConf*0.1
@@ -297,13 +297,13 @@ def FormsDetect_printer(config,instance, model, gpu, metrics, outDir=None, start
                         color=(0,0,shade)
                     else:
                         color=(shade,0,0)
-                    cv2.circle(image,p1,2,color,-1)
+                    img_f.circle(image,p1,2,color,-1)
                     if alignmentPointsPred[name] is not None and j in alignmentPointsPred[name][b]:
                         mid = p1 #( int(round((p1[0]+p2[0])/2.0)), int(round((p1[1]+p2[1])/2.0)) )
                         rad = 4 #round(math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)/2.0)
                         #print(mid)
                         #print(rad)
-                        #cv2.circle(image,mid,rad,(0,1,1),1)
+                        #img_f.circle(image,mid,rad,(0,1,1),1)
                 #for j in alignmentLinesTarg[name][b]:
                 #    p1 = (targetLines[name][b,j,0], targetLines[name][b,j,1])
                 #    p2 = (targetLines[name][b,j,0], targetLines[name][b,j,1])
@@ -311,7 +311,7 @@ def FormsDetect_printer(config,instance, model, gpu, metrics, outDir=None, start
                 #    rad = round(math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)/2.0)
                 #    #print(mid)
                 #    #print(rad)
-                #    cv2.circle(image,mid,rad,(1,0,1),1)
+                #    img_f.circle(image,mid,rad,(1,0,1),1)
 
                 saveName = '{:06}_{}'.format(startIndex+b,name)
                 #for j in range(metricsOut.shape[1]):

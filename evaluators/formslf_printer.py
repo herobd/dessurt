@@ -2,7 +2,7 @@ from skimage import color, io
 import os
 import numpy as np
 import torch
-import cv2
+import utils.img_f as img_f
 from utils import util
 from model.alignment_loss import alignment_loss
 import math
@@ -54,7 +54,7 @@ def FormsLF_printer(config,instance, model, gpu, metrics, outDir=None, startInde
             x = int(instance[5][b,j,1])
             y = int(instance[5][b,j,2])
 
-            cv2.circle(image,(x,y),2,(conf,conf,0),-1)
+            img_f.circle(image,(x,y),2,(conf,conf,0),-1)
 
         for pointPair in  instance[1]:
             pointPair=pointPair[b].numpy()
@@ -63,8 +63,8 @@ def FormsLF_printer(config,instance, model, gpu, metrics, outDir=None, startInde
             yU=int(pointPair[1,0])
             xL=int(pointPair[0,1])
             yL=int(pointPair[1,1])
-            cv2.circle(image,(xU,yU),2,(0.25,1,0),-1)
-            cv2.circle(image,(xL,yL),2,(0,1,0.25),-1)
+            img_f.circle(image,(xU,yU),2,(0.25,1,0),-1)
+            img_f.circle(image,(xL,yL),2,(0,1,0.25),-1)
             minX=min(minX,xU,xL)
             maxX=max(maxX,xU,xL)
             minY=min(minY,yU,yL)
@@ -78,8 +78,8 @@ def FormsLF_printer(config,instance, model, gpu, metrics, outDir=None, startInde
             yU=int(pointPair[1,0])
             xL=int(pointPair[0,1])
             yL=int(pointPair[1,1])
-            cv2.circle(image,(xU,yU),2,(1,0,0),-1)
-            cv2.circle(image,(xL,yL),2,(0,0,1),-1)
+            img_f.circle(image,(xU,yU),2,(1,0,0),-1)
+            img_f.circle(image,(xL,yL),2,(0,0,1),-1)
             minX=min(minX,xU,xL)
             maxX=max(maxX,xU,xL)
             minY=min(minY,yU,yL)
@@ -89,7 +89,7 @@ def FormsLF_printer(config,instance, model, gpu, metrics, outDir=None, startInde
                 endScore = output_end[j-1][b]
                 x=(xU+xL)//2
                 y=(yU+yL)//2
-                cv2.circle(image,(x,y),4,(endScore,0,endScore),-1)
+                img_f.circle(image,(x,y),4,(endScore,0,endScore),-1)
 
             j+=1
 

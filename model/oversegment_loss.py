@@ -11,7 +11,7 @@ from utils.util import plotRect, xyrhwToCorners, inv_tanh
 from shapely.geometry import Polygon
 import shapely
 import skimage.draw
-import cv2
+import utils.img_f as img_f
 
 UNMASK_CENT_DIST_THRESH=0.1
 END_BOUNDARY_THRESH=0.4
@@ -496,7 +496,7 @@ def build_oversegmented_targets_multiscale(
                     #Draw GT
 
                     #draw_gy,draw_gx = skimage.draw.polygon([(g_lxI
-                    #cv2.rectangle(draw[level],(gx,gy),(255,171,212),1
+                    #img_f.rectangle(draw[level],(gx,gy),(255,171,212),1
                     #print('{}'.format((gx,gy,gr,gh,gw)))
                     #plotRect(draw[level],(255,171,212),(gx,gy,gr,gh,gw))
                     #print('{} {} {} {}'.format(tl,tr,br,bl))
@@ -507,10 +507,10 @@ def build_oversegmented_targets_multiscale(
                     colorKey=(112, 58, 99)
                     color=(92, 38, 79)
                     lineWidth=2
-                    cv2.line(draw[level],tl,tr,color,lineWidth)
-                    cv2.line(draw[level],tr,br,color,lineWidth)
-                    cv2.line(draw[level],br,bl,color,lineWidth)
-                    cv2.line(draw[level],bl,tl,colorKey,lineWidth)
+                    img_f.line(draw[level],tl,tr,color,lineWidth)
+                    img_f.line(draw[level],tr,br,color,lineWidth)
+                    img_f.line(draw[level],br,bl,color,lineWidth)
+                    img_f.line(draw[level],bl,tl,colorKey,lineWidth)
 
 
                 gt_area = gw*gh
@@ -808,11 +808,11 @@ def build_oversegmented_targets_multiscale(
                                 #    bix = (bi_y-c_r)/s_r
                                 #    tix = (ti_y-c_r)/s_r
                                 #    print((bi_y,bix),(ti_y,tix))
-                                #    cv2.line(draw[level],(int(VIZ_SIZE*bi_y),int(VIZ_SIZE*bix)),(int(VIZ_SIZE*ti_y),int(VIZ_SIZE*tix)),(255,255,255))
+                                #    img_f.line(draw[level],(int(VIZ_SIZE*bi_y),int(VIZ_SIZE*bix)),(int(VIZ_SIZE*ti_y),int(VIZ_SIZE*tix)),(255,255,255))
                                 #    bix = (bi_y-c_b)/s_b
                                 #    tix = (ti_y-c_b)/s_b
                                 #    print((bi_y,bix),(ti_y,tix))
-                                #    cv2.line(draw[level],(int(VIZ_SIZE*bi_y),int(VIZ_SIZE*bix)),(int(VIZ_SIZE*ti_y),int(VIZ_SIZE*tix)),(255,255,255))
+                                #    img_f.line(draw[level],(int(VIZ_SIZE*bi_y),int(VIZ_SIZE*bix)),(int(VIZ_SIZE*ti_y),int(VIZ_SIZE*tix)),(255,255,255))
                                 ###
                                 b_to_th_inter_x = (ti_y-c_b)/s_b #intersection of gt bb bot line to horizontal line at ti_y 
                                 b_to_r_inter_x = (c_r-c_b)/(s_b-s_r) #intersection of gt bb bot and right lines (corner)
@@ -1267,10 +1267,10 @@ def build_oversegmented_targets_multiscale(
                                     L= torch.tanh(t_Ls[level][b,i,ty,tx])*MAX_H_PRED
                                     R= torch.tanh(t_Rs[level][b,i,ty,tx])*MAX_H_PRED
 
-                                #cv2.line(draw_level,(int(d_tile_x-1+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x-1+coff_x),int(d_tile_y+(T*VIZ_SIZE))),(bright,bright,0),1)
-                                #cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x+coff_x),int(d_tile_y+(B*VIZ_SIZE))),(bright,0,0),1)
-                                #cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y-1+coff_y)),(int(d_tile_x+(L*VIZ_SIZE)),int(d_tile_y-1+coff_y)),(bright,0,bright),1)
-                                #cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x+(R*VIZ_SIZE)),int(d_tile_y+coff_y)),(0,bright,bright),1)
+                                #img_f.line(draw_level,(int(d_tile_x-1+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x-1+coff_x),int(d_tile_y+(T*VIZ_SIZE))),(bright,bright,0),1)
+                                #img_f.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x+coff_x),int(d_tile_y+(B*VIZ_SIZE))),(bright,0,0),1)
+                                #img_f.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y-1+coff_y)),(int(d_tile_x+(L*VIZ_SIZE)),int(d_tile_y-1+coff_y)),(bright,0,bright),1)
+                                #img_f.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x+(R*VIZ_SIZE)),int(d_tile_y+coff_y)),(0,bright,bright),1)
                                 
                                 draw_level[int(d_tile_y+coff_y)-1:int(d_tile_y+coff_y)+2,int(d_tile_x+coff_x)-1:int(d_tile_x+coff_x)+2]=draw_colors[colorIndex]
                                 #if i==0 or i==1:
@@ -1287,10 +1287,10 @@ def build_oversegmented_targets_multiscale(
                                 #assert(drawR>=-VIZ_SIZE and drawR<=draw_level.shape[1]+VIZ_SIZE)
                                 #assert(drawT>=-VIZ_SIZE and drawT<=draw_level.shape[0]+VIZ_SIZE)
                                 #assert(drawB>=-VIZ_SIZE and drawB<=draw_level.shape[0]+VIZ_SIZE)
-                                cv2.line(draw_level,(drawL,drawT),(drawR,drawT),draw_colors[colorIndex])
-                                cv2.line(draw_level,(drawR,drawT),(drawR,drawB),draw_colors[colorIndex])
-                                cv2.line(draw_level,(drawR,drawB),(drawL,drawB),draw_colors[colorIndex])
-                                cv2.line(draw_level,(drawL,drawB),(drawL,drawT),draw_colors[colorIndex])
+                                img_f.line(draw_level,(drawL,drawT),(drawR,drawT),draw_colors[colorIndex])
+                                img_f.line(draw_level,(drawR,drawT),(drawR,drawB),draw_colors[colorIndex])
+                                img_f.line(draw_level,(drawR,drawB),(drawL,drawB),draw_colors[colorIndex])
+                                img_f.line(draw_level,(drawL,drawB),(drawL,drawT),draw_colors[colorIndex])
                                 colorIndex = (colorIndex+1)%len(draw_colors)
                                 
 
