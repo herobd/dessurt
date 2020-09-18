@@ -195,7 +195,7 @@ class PairingGroupingGraph(BaseModel):
 
         if self.useShapeFeats:
            if self.useCurvedBBs:
-               self.numShapeFeats=20+2*self.numBBTypes
+               self.numShapeFeats=26+2*self.numBBTypes
            else:
                self.numShapeFeats=8+2*self.numBBTypes #we'll append some extra feats
            self.numShapeFeatsBB=3+self.numBBTypes
@@ -704,20 +704,24 @@ class PairingGroupingGraph(BaseModel):
                     #We don't build a full graph, just propose edges and extract the edge features
                     graph,edgeIndexes,merge_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,image=image,merge_only=True)
                     #_,edgeIndexes, edgeFeatures,_ = graph
-                    edgeOuts = self.mergepred(graph[2]) #classifier on edge features
-                    edgeOuts = edgeOuts[:,None,:]
+                    if graph is not None:
+                        edgeOuts = self.mergepred(graph[2]) #classifier on edge features
+                        edgeOuts = edgeOuts[:,None,:]
+                    else:
+                        edgeOuts = None
 
                     allOutputBoxes=[useBBs]
                     allNodeOuts=[None]
                     allEdgeOuts=[edgeOuts]
                     allGroups=[groups]
                     allEdgeIndexes=[edgeIndexes]
-
-                    #perform predicted merges
-                    useBBs,bbTrans=self.mergeAndGroup(
-                            self.mergeThresh[0],None,None,
-                            edgeIndexes,edgeOuts,groups,None,None,None,useBBs,bbTrans,image,dont_merge=False,merge_only=True)
-                    groups=[[i] for i in range(len(useBBs))]
+                    
+                    if edgeIndexes is not None:
+                        #perform predicted merges
+                        useBBs,bbTrans=self.mergeAndGroup(
+                                self.mergeThresh[0],None,None,
+                                edgeIndexes,edgeOuts,groups,None,None,None,useBBs,bbTrans,image,dont_merge=False,merge_only=True)
+                        groups=[[i] for i in range(len(useBBs))]
                     if dont_merge:
                         return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, None, merge_prop_scores, None
 
@@ -1731,11 +1735,12 @@ class PairingGroupingGraph(BaseModel):
                     b_relFeats = shapeFeats.to(features.device)
                 else:
                     b_relFeats = torch.cat((b_relFeats,shapeFeats.to(features.device)),dim=1)
-        if self.useShapeFeats!='only':
-            relFeats = torch.cat(relFeats,dim=0)
-            stackedEdgeFeatWindows=None
-            stackedEdgeFeatWindows2=None
-            b_relFeats=None
+        relFeats = torch.cat(relFeats,dim=0)
+        stackedEdgeFeatWindows=None
+        stackedEdgeFeatWindows2=None
+        b_relFeats=None
+        assert(relFeats.size(1)==250 or merge_only)
+
         if self.blankRelFeats:
             relFeats = relFeats.zero_()
         if self.relFeaturizerFC is not None:
