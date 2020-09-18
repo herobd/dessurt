@@ -7,7 +7,7 @@ from skimage import draw
 #import skimage.transform as sktransform
 import os
 import math
-import cv2
+import utils.img_f as img_f
 from utils import augmentation
 from utils.crop_transform import CropBoxTransform
 from datasets.forms_box_pair import fixAnnotations, getDistMask
@@ -118,15 +118,15 @@ class FormsPair(torch.utils.data.Dataset):
                         if self.cache_resized:
                             rescale = self.rescale_range[1]
                             if not os.path.exists(path):
-                                org_img = cv2.imread(org_path)
+                                org_img = img_f.imread(org_path)
                                 if org_img is None:
                                     print('WARNING, could not read {}'.format(org_img))
                                     continue
-                                resized = cv2.resize(org_img,(0,0),
+                                resized = img_f.resize(org_img,(0,0),
                                         fx=self.rescale_range[1],
                                         fy=self.rescale_range[1],
-                                        interpolation = cv2.INTER_CUBIC)
-                                cv2.imwrite(path,resized)
+                                        )
+                                img_f.imwrite(path,resized)
                         if annotations is None:
                             with open(os.path.join(jsonPath)) as f:
                                 annotations = json.loads(f.read())
@@ -202,17 +202,17 @@ class FormsPair(torch.utils.data.Dataset):
         #print(index)
         #print(self.imagePath)
         #print(self.ids[index])
-        image = cv2.imread(imagePath, 1 if self.color else 0)
+        image = img_f.imread(imagePath, 1 if self.color else 0)
         
         if self.bbCrop:
             #resize
             rescaled=self.instances[index]['rescaled']
             scale = np.random.uniform(self.rescale_range[0], self.rescale_range[1])
             partial_rescale = scale/rescaled
-            image = cv2.resize(image,(0,0),
+            image = img_f.resize(image,(0,0),
                     fx=partial_rescale,
                     fy=partial_rescale,
-                    interpolation = cv2.INTER_CUBIC)
+                    )
             if not self.color:
                 image=image[:,:,None]
             response_bbs = self.getBBGT(responsePolyList,scale)
@@ -241,9 +241,9 @@ class FormsPair(torch.utils.data.Dataset):
                 rr, cc = draw.polygon(response_bbs[i,[1,3,5,7]], response_bbs[i,[0,2,4,6]], responseMask.shape)
                 responseMask[rr,cc]=1
             if self.halfResponse:
-                responseMask = cv2.resize(  responseMask,
+                responseMask = img_f.resize(  responseMask,
                                             (responseMask.shape[1]//2,responseMask.shape[0]//2),
-                                            interpolation = cv2.INTER_CUBIC)
+                                            )
             return (imageWithQuery, imageName,responseMask)
         else:
             image = 1-image/128.0
@@ -490,8 +490,8 @@ class FormsPair(torch.utils.data.Dataset):
 
             #retImage = sktransform.resize(imagePatch.transpose((1, 2, 0)),(patchSize,patchSize)).transpose((2, 0, 1))
             #retLabel = sktransform.resize(labelPatch, (patchSize,patchSize))
-            retImage = cv2.resize(imagePatch.transpose((1, 2, 0)),(patchSize,patchSize)).transpose((2, 0, 1))
-            retLabel = cv2.resize(labelPatch, (patchSize,patchSize))
+            retImage = img_f.resize(imagePatch.transpose((1, 2, 0)),(patchSize,patchSize)).transpose((2, 0, 1))
+            retLabel = img_f.resize(labelPatch, (patchSize,patchSize))
             retImage = torch.from_numpy(retImage.astype(np.float32))
             retLabel = torch.from_numpy(retLabel.astype(np.float32))
             return (retImage, retLabel)

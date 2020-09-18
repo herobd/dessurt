@@ -1,6 +1,6 @@
 import numpy as np
 import math, os, random
-import cv2
+import utils.img_f as img_f
 from skimage import color, io
 
 def getCorners(xyrhw):
@@ -20,10 +20,10 @@ def getCorners(xyrhw):
 def plotRect(img,color,xyrhw,lineWidth=1):
     tr,tl,br,bl=getCorners(xyrhw)
 
-    cv2.line(img,tl,tr,color,lineWidth)
-    cv2.line(img,tr,br,color,lineWidth)
-    cv2.line(img,br,bl,color,lineWidth)
-    cv2.line(img,bl,tl,color,lineWidth)
+    img_f.line(img,tl,tr,color,lineWidth)
+    img_f.line(img,tr,br,color,lineWidth)
+    img_f.line(img,br,bl,color,lineWidth)
+    img_f.line(img,bl,tl,color,lineWidth)
 
 def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,image,predTypes,targetBoxes,model,path,verbosity=2,bbTrans=None,useTextLines=False):
     #for graphIteration,(outputBoxes,nodePred,edgePred,edgeIndexes,predGroups) in zip(allOutputBoxes,allNodePred,allEdgePred,allEdgeIndexes,allPredGroups):
@@ -36,7 +36,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
         b=0
         image = (1-((1+np.transpose(data[b][:,:,:],(1,2,0)))/2.0)).copy()
         if image.shape[2]==1:
-            image = cv2.cvtColor(image,cv2.COLOR_GRAY2RGB)
+            image = img_f.cvtColor(image,cv2.COLOR_GRAY2RGB)
         #if name=='text_start_gt':
 
         if verbosity>1 and targetBoxes is not None:
@@ -58,11 +58,11 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                 shade = (conf-bb_thresh)/(1-bb_thresh)
                 #print(shade)
                 #if name=='text_start_gt' or name=='field_end_gt':
-                #    cv2.bb(bbImage[:,:,1],p1,p2,shade,2)
+                #    img_f.bb(bbImage[:,:,1],p1,p2,shade,2)
                 #if name=='text_end_gt':
-                #    cv2.bb(bbImage[:,:,2],p1,p2,shade,2)
+                #    img_f.bb(bbImage[:,:,2],p1,p2,shade,2)
                 #elif name=='field_end_gt' or name=='field_start_gt':
-                #    cv2.bb(bbImage[:,:,0],p1,p2,shade,2)
+                #    img_f.bb(bbImage[:,:,0],p1,p2,shade,2)
                 if maxIndex==0:
                     color=(0,0,shade) #header
                 elif maxIndex==1:
@@ -78,7 +78,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                 if useTextLines:
                     pts = bbs[j].polyPoints()
                     pts = pts.reshape((-1,1,2))
-                    cv2.polylines(image,pts.astype(np.int),True,color,lineWidth)
+                    img_f.polylines(image,pts.astype(np.int),True,color,lineWidth)
                     x,y = bbs[j].getCenterPoint()
                 else:
                     plotRect(image,color,bbs[j,1:6],lineWidth)
@@ -93,9 +93,9 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                         gtNN = 0
                     pred_nn = predNN[j].item()
                     color = min(abs(pred_nn-gtNN),1)#*0.5
-                    cv2.putText(image,'{:.2}/{}'.format(pred_nn,gtNN),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(color,0,0),2,cv2.LINE_AA)
+                    img_f.putText(image,'{:.2}/{}'.format(pred_nn,gtNN),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(color,0,0),2,cv2.LINE_AA)
                 if bbTrans is not None:
-                    cv2.putText(image,'{}'.format(j),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,color,2,cv2.LINE_AA)
+                    img_f.putText(image,'{}'.format(j),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,color,2,cv2.LINE_AA)
                     transOut.write('{}: {}\n'.format(j,bbTrans[j]))
         if bbTrans is not None:
             transOut.close()
@@ -138,10 +138,10 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                 lineWidth=2
                 color=(0.5,0,1)
                 if len(group)>1:
-                    cv2.line(image,(minX,minY),(maxX,minY),color,lineWidth)
-                    cv2.line(image,(maxX,minY),(maxX,maxY),color,lineWidth)
-                    cv2.line(image,(maxX,maxY),(minX,maxY),color,lineWidth)
-                    cv2.line(image,(minX,maxY),(minX,minY),color,lineWidth)
+                    img_f.line(image,(minX,minY),(maxX,minY),color,lineWidth)
+                    img_f.line(image,(maxX,minY),(maxX,maxY),color,lineWidth)
+                    img_f.line(image,(maxX,maxY),(minX,maxY),color,lineWidth)
+                    img_f.line(image,(minX,maxY),(minX,minY),color,lineWidth)
                     image[minY:minY+3,minX:minX+3]=idColor
                 image[maxY:maxY+1,minX:minX+1]=idColor
                 image[maxY:maxY+1,maxX:maxX+1]=idColor
@@ -166,7 +166,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                      (predTypes[1][i]=='TN' or predTypes[1][i]=='UN') and
                      (predTypes[2][i]=='TN' or predTypes[2][i]=='UN') ):
                     lineColor = (0,0,edgePred[i,-1,0].item()) #BLUE
-                    cv2.line(image,(x1,y1),(x2,y2),lineColor,1)
+                    img_f.line(image,(x1,y1),(x2,y2),lineColor,1)
                 else:
                     edgesToDraw.append((i,x1,y1,x2,y2))
 
@@ -188,7 +188,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                         else: #We don;t know the GT
                             color = (pred[i].item(),pred[i].item(),pred[i].item())
                         boxColors.append(color)
-                    cv2.line(image,(x1,y1),(x2,y2),lineColor,2)
+                    img_f.line(image,(x1,y1),(x2,y2),lineColor,2)
                     cX = (x1+x2)//2
                     cY = (y1+y2)//2
                     #print('{} {},  {} {},  > {} {}'.format(x1,y1,x2,y2,cX,cY))
@@ -201,7 +201,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
         else:
             lineColor = (0,0.8,0)
             for i,x1,y1,x2,y2 in edgesToDraw:
-                cv2.line(image,(x1,y1),(x2,y2),lineColor,2)
+                img_f.line(image,(x1,y1),(x2,y2),lineColor,2)
 
 
         #Draw alginment between gt and pred bbs
@@ -220,11 +220,11 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
 
                     x2 = round(targetBoxes[0,targI,0].item())
                     y2 = round(targetBoxes[0,targI,1].item())
-                    cv2.line(image,(x1,y1),(x2,y2),(1,0,1),1)
+                    img_f.line(image,(x1,y1),(x2,y2),(1,0,1),1)
                 else:
                     #draw 'x', indicating not match
-                    cv2.line(image,(x1-5,y1-5),(x1+5,y1+5),(.1,0,.1),1)
-                    cv2.line(image,(x1+5,y1-5),(x1-5,y1+5),(.1,0,.1),1)
+                    img_f.line(image,(x1-5,y1-5),(x1+5,y1+5),(.1,0,.1),1)
+                    img_f.line(image,(x1+5,y1-5),(x1-5,y1+5),(.1,0,.1),1)
         #Draw GT pairings
         #TODO
         #if not pretty:
@@ -240,7 +240,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
         #        y1 = round(targetBoxes[0,i,1].item())
         #        x2 = round(targetBoxes[0,j,0].item())
         #        y2 = round(targetBoxes[0,j,1].item())
-        #        cv2.line(image,(x1,y1),(x2,y2),gtcolor,wth)
+        #        img_f.line(image,(x1,y1),(x2,y2),gtcolor,wth)
 
     
 

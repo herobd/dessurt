@@ -13,7 +13,7 @@ from .box_detect import BoxDetectDataset, collate
 from utils.forms_annotations import fixAnnotations, convertBBs, getBBWithPoints, getStartEndGT, getResponseBBIdList_
 import timeit
 
-import cv2
+import utils.img_f as img_f
 
 SKIP=['174']#['193','194','197','200']
 ONE_DONE=[]
@@ -167,18 +167,18 @@ class FormsBoxDetect(BoxDetectDataset):
                         if self.cache_resized:
                             rescale = self.rescale_range[1]
                             if not os.path.exists(path):
-                                org_img = cv2.imread(org_path)
+                                org_img = img_f.imread(org_path)
                                 if org_img is None:
                                     print('WARNING, could not read {}'.format(org_img))
                                     continue
                                 #target_dim1 = self.rescale_range[1]
                                 #target_dim0 = int(org_img.shape[0]/float(org_img.shape[1]) * target_dim1)
-                                #resized = cv2.resize(org_img,(target_dim1, target_dim0), interpolation = cv2.INTER_CUBIC)
-                                resized = cv2.resize(org_img,(0,0),
+                                #resized = img_f.resize(org_img,(target_dim1, target_dim0))
+                                resized = img_f.resize(org_img,(0,0),
                                         fx=self.rescale_range[1], 
                                         fy=self.rescale_range[1], 
-                                        interpolation = cv2.INTER_CUBIC)
-                                cv2.imwrite(path,resized)
+                                        )
+                                img_f.imwrite(path,resized)
                                 #rescale = target_dim1/float(org_img.shape[1])
                         #elif self.cache_resized:
                             #print(jsonPath)
@@ -509,7 +509,7 @@ class FormsBoxDetect(BoxDetectDataset):
                     toApp=[]
                     for id in ids:
                         toApp.append(table[id]['poly_points'])
-                        cv2.fillConvexPoly(pixelMap[:,:,0],(table[id]['poly_points']*s).astype(int),1)
+                        img_f.fillConvexPoly(pixelMap[:,:,0],(table[id]['poly_points']*s).astype(int),1)
                         del table[id]
 
                     if typ=='fieldRow':
@@ -527,7 +527,7 @@ class FormsBoxDetect(BoxDetectDataset):
                 else:
                     cols.append([bb['poly_points']])
                 #print(npBB*s)
-                cv2.fillConvexPoly(pixelMap[:,:,0],(bb['poly_points']*s).astype(int),1)
+                img_f.fillConvexPoly(pixelMap[:,:,0],(bb['poly_points']*s).astype(int),1)
 
             rows.sort(key=lambda a: a[0][0,1])#sort vertically by top-left point
             cols.sort(key=lambda a: a[0][0,0])#sort horizontally by top-left point
@@ -887,10 +887,10 @@ class FormsBoxDetect(BoxDetectDataset):
                 br = ( int(math.cos(rot)*w-math.sin(rot)*-h)+dW//2,  int(math.sin(rot)*w+math.cos(rot)*-h)+dH//2 )
                 bl = ( int(math.cos(rot)*-w-math.sin(rot)*-h)+dW//2, int(math.sin(rot)*-w+math.cos(rot)*-h)+dH//2 )
                 
-                cv2.line(draw,tl,tr,color)
-                cv2.line(draw,tr,br,color)
-                cv2.line(draw,br,bl,color)
-                cv2.line(draw,bl,tl,color,2)
+                img_f.line(draw,tl,tr,color)
+                img_f.line(draw,tr,br,color)
+                img_f.line(draw,br,bl,color)
+                img_f.line(draw,bl,tl,color,2)
             else:
                 final_k-=1
         
@@ -898,8 +898,8 @@ class FormsBoxDetect(BoxDetectDataset):
         with open(outPath.format(final_k),'w') as out:
             out.write(json.dumps(toWrite))
             print('saved '+outPath.format(final_k))
-        cv2.imshow('clusters',draw)
-        cv2.waitKey()
+        img_f.imshow('clusters',draw)
+        img_f.waitKey()
 
 
 def getWidthFromBB(bb):

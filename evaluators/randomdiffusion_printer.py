@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import torch
-import cv2
+import utils.img_f as img_f
 import math
 from model.loss import *
 from datasets.test_random_diffusion import display
