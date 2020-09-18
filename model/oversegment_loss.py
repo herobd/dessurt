@@ -313,7 +313,7 @@ def build_oversegmented_targets_multiscale(
 ):
     #t#tic=timeit.default_timer()
 
-    VISUAL_DEBUG=True
+    VISUAL_DEBUG=False
     HIT_THRESH=0.5
     VIZ_SIZE=24
     use_rotation_aligned_predictions=False
