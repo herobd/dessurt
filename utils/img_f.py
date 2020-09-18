@@ -2,9 +2,29 @@ import skimage
 
 #These are all based on the OpenCV functions, to make the conversion to scikit image easier (also should make future changes easier as well)
 
-def line(img,p1,p2,color):
+def line(img,p1,p2,color,thickness=1):
     rr,cc = skimage.draw.line(p1[1],p1[0],p2[1],p2[0])
     img[rr,cc]=color
+    if thicnkness>1:
+        rr,cc = skimage.draw.line(p1[1]+1,p1[0]+1,p2[1]+1,p2[0]+1)
+        img[rr,cc]=color
+        rr,cc = skimage.draw.line(p1[1],p1[0]+1,p2[1],p2[0]+1)
+        img[rr,cc]=color
+        rr,cc = skimage.draw.line(p1[1]+1,p1[0],p2[1]+1,p2[0])
+        img[rr,cc]=color
+    if thickness>2:
+        rr,cc = skimage.draw.line(p1[1]-1,p1[0]-1,p2[1]-1,p2[0]-1)
+        img[rr,cc]=color
+        rr,cc = skimage.draw.line(p1[1],p1[0]-1,p2[1],p2[0]-1)
+        img[rr,cc]=color
+        rr,cc = skimage.draw.line(p1[1]-1,p1[0],p2[1]-1,p2[0])
+        img[rr,cc]=color
+        rr,cc = skimage.draw.line(p1[1]+1,p1[0]-1,p2[1]+1,p2[0]-1)
+        img[rr,cc]=color
+        rr,cc = skimage.draw.line(p1[1]-1,p1[0]+1,p2[1]-1,p2[0]+1)
+        img[rr,cc]=color
+        assert(thickness<4)
+
 
 def imread(path,color=True):
     return skimage.io.imread(path,not color)
@@ -38,3 +58,5 @@ def hsv2rgb(img):
     return skimage.color.hsv2rgb(img)
 def rgb2gray(img):
     return skimage.color.rgb2gray(img)
+def gray2rgb(img):
+    return skimage.color.gray2rgb(img)

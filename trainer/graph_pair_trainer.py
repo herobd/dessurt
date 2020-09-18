@@ -1298,7 +1298,20 @@ class GraphPairTrainer(BaseTrainer):
             else:
                 targetBoxes_changed=targetBoxes
 
-            with profiler.profile(profile_memory=True, record_shapes=True) as prof:
+            if self.iteration>=self.start_merge_iter:
+                with profiler.profile(profile_memory=True, record_shapes=True) as prof:
+                    allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred,merge_prop_scores, final = self.model(
+                                        image,
+                                        targetBoxes_changed,
+                                        target_num_neighbors,
+                                        True,
+                                        otherThresh=self.conf_thresh_init, 
+                                        otherThreshIntur=threshIntur, 
+                                        hard_detect_limit=self.train_hard_detect_limit,
+                                        gtTrans = gtTrans,
+                                        dont_merge = self.iteration<self.start_merge_iter)
+                    print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
+            else:
                 allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred,merge_prop_scores, final = self.model(
                                     image,
                                     targetBoxes_changed,
@@ -1309,7 +1322,6 @@ class GraphPairTrainer(BaseTrainer):
                                     hard_detect_limit=self.train_hard_detect_limit,
                                     gtTrans = gtTrans,
                                     dont_merge = self.iteration<self.start_merge_iter)
-                print(prof.key_averages().table(sort_by="cpu_memory_usage", row_limit=10))
             #TODO
             #predPairingShouldBeTrue,predPairingShouldBeFalse, eRecall,ePrec,fullPrec,ap,proposedInfo = self.prealignedEdgePred(adj,relPred,relIndexes,rel_prop_pred)
             #if bbPred is not None:

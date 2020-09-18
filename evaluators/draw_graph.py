@@ -36,7 +36,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
         b=0
         image = (1-((1+np.transpose(data[b][:,:,:],(1,2,0)))/2.0)).copy()
         if image.shape[2]==1:
-            image = img_f.cvtColor(image,cv2.COLOR_GRAY2RGB)
+            image = img_f.gray2rgb(image)
         #if name=='text_start_gt':
 
         if verbosity>1 and targetBoxes is not None:
