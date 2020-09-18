@@ -13,6 +13,8 @@ import random, os
 from model.oversegment_loss import build_oversegmented_targets_multiscale
 from model.overseg_box_detector import build_box_predictions
 
+import torch.autograd.profiler as profiler
+
 
 class GraphPairTrainer(BaseTrainer):
     """
@@ -839,7 +841,7 @@ class GraphPairTrainer(BaseTrainer):
                     t1 = targIndex[n1].item()
                     #ts0=predGroupsT[n0]
                     #ts1=predGroupsT[n1]
-                    assert(len(predGroupsT[n0])==1 and len(predGroupsT[n1])==1)
+                    assert(len(predGroupsT[n0])<=1 and len(predGroupsT[n1])<=1)
                     gtGroup0 = getGTGroup([t0],gtGroups)
                     gtGroup1 = getGTGroup([t1],gtGroups)
                     isEdge=False
@@ -874,8 +876,8 @@ class GraphPairTrainer(BaseTrainer):
                 propPredsNeg = None
 
         
-            propRecall=truePropPred/(truePropPred+falseNegProp)
-            propPrec=truePropPred/(truePropPred+falsePropPred)
+            propRecall=truePropPred/(truePropPred+falseNegProp) if truePropPred+falseNegProp>0 else 1
+            propPrec=truePropPred/(truePropPred+falsePropPred) if truePropPred+falsePropPred>0 else 1
             log['edgePropRecall']=propRecall
             log['edgePropPrec']=propPrec
 
@@ -1296,8 +1298,8 @@ class GraphPairTrainer(BaseTrainer):
             else:
                 targetBoxes_changed=targetBoxes
 
-
-            allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred,merge_prop_scores, final = self.model(
+            with profiler.profile(profile_memory=True, record_shapes=True) as prof:
+                allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred,merge_prop_scores, final = self.model(
                                     image,
                                     targetBoxes_changed,
                                     target_num_neighbors,
@@ -1307,6 +1309,7 @@ class GraphPairTrainer(BaseTrainer):
                                     hard_detect_limit=self.train_hard_detect_limit,
                                     gtTrans = gtTrans,
                                     dont_merge = self.iteration<self.start_merge_iter)
+                print(prof.key_averages().table(sort_by="cpu_memory_usage", row_limit=10))
             #TODO
             #predPairingShouldBeTrue,predPairingShouldBeFalse, eRecall,ePrec,fullPrec,ap,proposedInfo = self.prealignedEdgePred(adj,relPred,relIndexes,rel_prop_pred)
             #if bbPred is not None:
@@ -1575,7 +1578,20 @@ class GraphPairTrainer(BaseTrainer):
 
                 if self.save_images_every>0 and self.iteration%self.save_images_every==0:
                     path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b',graphIteration))#instance['name'],graphIteration))
-                    draw_graph(outputBoxes,self.model.used_threshConf,torch.sigmoid(nodePred).cpu().detach(),torch.sigmoid(edgePred).cpu().detach(),edgeIndexes,predGroups,image,edgePredTypes,targetBoxes,self.model,path,useTextLines=self.model.useCurvedBBs)
+                    
+                    draw_graph(
+                            outputBoxes,
+                            self.model.used_threshConf,
+                            torch.sigmoid(nodePred).cpu().detach() if nodePred is not None else None,
+                            torch.sigmoid(edgePred).cpu().detach(),
+                            edgeIndexes,
+                            predGroups,
+                            image,
+                            edgePredTypes,
+                            targetBoxes,
+                            self.model,
+                            path,
+                            useTextLines=self.model.useCurvedBBs)
                     print('saved {}'.format(path))
 
                 if 'bb_stats' in get:
@@ -1609,13 +1625,13 @@ class GraphPairTrainer(BaseTrainer):
         #t#print('time run all_losses: {}'.format(timeit.default_timer()-tic))
         #t#tic=timeit.default_timer()
         #print final state of graph
-        if self.save_images_every>0 and self.iteration%self.save_images_every==0:
-            path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b','final'))#instance['name'],graphIteration))
-            finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = final
-            draw_graph(finalOutputBoxes,self.model.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,image,None,targetBoxes,self.model,path,bbTrans=finalBBTrans)
-        #    print('saved {}'.format(path))
         ###
         if final is not None:
+            if self.save_images_every>0 and self.iteration%self.save_images_every==0:
+                path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b','final'))#instance['name'],graphIteration))
+                finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = final
+                draw_graph(finalOutputBoxes,self.model.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,image,None,targetBoxes,self.model,path,bbTrans=finalBBTrans)
+                #print('saved {}'.format(path))
             finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = final
             print('DEBUG final num node:{}, num edges: {}'.format(len(finalOutputBoxes) if finalOutputBoxes is not None else 0,len(finalEdgeIndexes) if finalEdgeIndexes is not None else 0))
         ###

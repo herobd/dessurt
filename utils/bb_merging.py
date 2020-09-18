@@ -14,18 +14,29 @@ def xyrwh_TextLine(bb):
     return TextLine(torch.FloatTensor([bb[0],x1,y1,x2,y2,r,*bb[6:]]))
 
 class TextLine:
-    def __init__(self,pred_bb_info):
-        pred_bb_info = pred_bb_info.cpu().detach()
-        self.all_conf = [pred_bb_info[0]]
-        self.all_cls = [pred_bb_info[6:].numpy()]
-        #assert(self.all_cls[0].shape[0]==4)
+    #two constructors. One takes vector, other two TextLines and merges them
+    def __init__(self,pred_bb_info,other=None):
+        if other is None:
 
-        self.median_angle = None
-        self.poly_points=None
-        self.point_pairs=None
+            pred_bb_info = pred_bb_info.cpu().detach()
+            self.all_conf = [pred_bb_info[0].item()]
+            self.all_cls = [pred_bb_info[6:].numpy()]
+            #assert(self.all_cls[0].shape[0]==4)
 
-        self.all_primitive_rects = [ np.array([[pred_bb_info[1].item(),pred_bb_info[2].item()],[pred_bb_info[3].item(),pred_bb_info[2].item()],[pred_bb_info[3].item(),pred_bb_info[4].item()],[pred_bb_info[1].item(),pred_bb_info[4].item()]]) ] #tl, tr, bt, bl
-        self.all_angles = [pred_bb_info[5]]
+            self.median_angle = None
+            self.poly_points=None
+            self.point_pairs=None
+
+            self.all_primitive_rects = [ np.array([[pred_bb_info[1].item(),pred_bb_info[2].item()],[pred_bb_info[3].item(),pred_bb_info[2].item()],[pred_bb_info[3].item(),pred_bb_info[4].item()],[pred_bb_info[1].item(),pred_bb_info[4].item()]]) ] #tl, tr, bt, bl
+            self.all_angles = [pred_bb_info[5].item()]
+        else:
+            self.all_conf =  pred_bb_info.all_conf+other.all_conf
+            self.all_cls =  pred_bb_info.all_cls+other.all_cls
+            self.all_primitive_rects =  pred_bb_info.all_primitive_rects+other.all_primitive_rects
+            self.all_angles =  pred_bb_info.all_angles+other.all_angles
+            self.median_angle = None
+            self.poly_points=None
+            self.point_pairs=None
 
     def merge(self,other):
         self.all_primitive_rects+=other.all_primitive_rects
@@ -80,7 +91,7 @@ class TextLine:
         last_point_top=primitive_rects_top[0][0]
         #At a high level, this extracts the top border of the polygon created by unioning all rects
         for rect in primitive_rects_top:
-            print('top_points: {}'.format(top_points))
+            #print('top_points: {}'.format(top_points))
             if last_point_top[0]>rect[1][0]: #the prior rectangle extendes beyond this one
                 #find the first point beyon rect (may not be last)
                 first_i=-2 #"first" and "second" are relative to traversing top_points in reverse
@@ -92,7 +103,7 @@ class TextLine:
                     second_i = first_i-1
                     while top_points[second_i][1]>rect[0][1] and top_points[second_i][0]>rect[0][0]:
                         second_i-=1
-                        print('second {}: {}'.format(second_i,top_points[second_i]))
+                        #print('second {}: {}'.format(second_i,top_points[second_i]))
                     inter_first=[rect[1][0],top_points[first_i][1]]
                     if top_points[second_i][1]<=rect[0][1]:
                         inter_second=[top_points[second_i][0],rect[0][1]]
@@ -196,7 +207,7 @@ class TextLine:
                     second_i = first_i-1
                     while bot_points[second_i][1]>rect[0][1] and bot_points[second_i][0]>rect[0][0]:
                         second_i-=1
-                        print('second {}: {}'.format(second_i,bot_points[second_i]))
+                        #print('second {}: {}'.format(second_i,bot_points[second_i]))
                     inter_first=[rect[1][0],bot_points[first_i][1]]
                     if bot_points[second_i][1]>=rect[0][1]:
                         inter_second=[bot_points[second_i][0],rect[0][1]]
@@ -325,10 +336,10 @@ class TextLine:
                     toadd.append((i+1,[x,y]))
         toadd.reverse()
         #print('adding {} points to top'.format(len(toadd)))
-        print('top_points before: {}'.format(top_points))
+        #print('top_points before: {}'.format(top_points))
         for i,p in toadd:
             top_points.insert(i,p)
-        print('top_points after: {}'.format(top_points))
+        #print('top_points after: {}'.format(top_points))
         assert(all([top_points[i][0]<=top_points[i+1][0]+0.000001 for i in range(len(top_points)-1)]))
 
         toadd=[]
@@ -344,10 +355,10 @@ class TextLine:
                     toadd.append((i+1,[x,y]))
         toadd.reverse()
         #print('adding {} points to bot'.format(len(toadd)))
-        print('bot_points before: {}'.format(bot_points))
+        #print('bot_points before: {}'.format(bot_points))
         for i,p in toadd:
             bot_points.insert(i,p)
-        print('bot_points after: {}'.format(bot_points))
+        #print('bot_points after: {}'.format(bot_points))
 
         TEST_top_total_distance=0
         for i in range(len(top_points)-1):
@@ -370,8 +381,8 @@ class TextLine:
         top_distance = 0
         bot_distance = 0
         while t_i<len(top_points) or b_i<len(bot_points):
-            print('top {:.2f}/{:.2f}, bot {:.2f}/{:.2f}'.format(accum_top_distance,top_total_distance,accum_bot_distance,bot_total_distance))
-            print('\ttop {:.2f}/{:.2f}, bot {:.2f}/{:.2f}'.format(accum_top_distance/step_size_top,top_total_distance/step_size_top,accum_bot_distance/step_size_bot,bot_total_distance/step_size_bot))
+            #print('top {:.2f}/{:.2f}, bot {:.2f}/{:.2f}'.format(accum_top_distance,top_total_distance,accum_bot_distance,bot_total_distance))
+            #print('\ttop {:.2f}/{:.2f}, bot {:.2f}/{:.2f}'.format(accum_top_distance/step_size_top,top_total_distance/step_size_top,accum_bot_distance/step_size_bot,bot_total_distance/step_size_bot))
             if top_distance<step_size_top:
                 top_points_in_step=[top_points[t_i-1]]
             if bot_distance<step_size_bot:
@@ -453,6 +464,15 @@ class TextLine:
                 bot_first_point = [mag_bot,mag_bot*s+bot_new_c]
                 final_points.append([top_first_point,bot_first_point])
             assert(top_point[0]!=bot_point[0] or top_point[1]!=bot_point[1])
+            #assert(top_point[1]<bot_point[1])
+            #Hack, because weird stuff is getting merged at the begining of training.
+            if top_point[1]>bot_point[1]:
+                tmp = bot_point
+                bot_point=top_point
+                top_point=tmp
+            elif top_point[1]==bot_point[1]:
+                top_point[1]-=1
+                bot_point[1]+=1
             final_points.append([top_point,bot_point])
 
         #now we'll add the other end point

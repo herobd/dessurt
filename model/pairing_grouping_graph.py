@@ -441,6 +441,7 @@ class PairingGroupingGraph(BaseModel):
             
             if 'group_node_method' not in config or config['group_node_method']=='mean':
                 self.groupNodeFunc = lambda l: torch.stack(l,dim=0).mean(dim=0)
+                #TODO should this be where the visual features are recomputed?, No node and edge recomputation can share... mask maps, I guess that could just be passed in
             else:
                 raise NotImplementedError('Error, unknown node group method: {}'.format(config['group_node_method']))
             if 'group_edge_method' not in config or config['group_edge_method']=='mean':
@@ -942,22 +943,25 @@ class PairingGroupingGraph(BaseModel):
                             else:
                                 newId1 = None
                                 bb1ToMerge = oldBBs[bbId1]
+                                #oldBBs[bbId1]=None
 
-                            #newBB= self.mergeBB(bb0,bb1,image)
-                            bb0ToMerge.merge(bb1ToMerge)
 
                             if newId0 is None and newId1 is None:
+                                bbMerged = TextLine(bb0ToMerge,bb1ToMerge)
                                 oldToNewBBIndexes[bbId0]=newBBIdCounter
                                 oldToNewBBIndexes[bbId1]=newBBIdCounter
-                                newBBs[newBBIdCounter]=bb0ToMerge
+                                newBBs[newBBIdCounter]=bbMerged
                                 newBBIdCounter+=1
                             elif newId0 is None:
+                                bb1ToMerge.merge(bb0ToMerge)
                                 oldToNewBBIndexes[bbId0]=newId1
-                                newBBs[newId1]=bb0ToMerge
+                                #newBBs[newId1]=bbMerged would be reassignemnt
                             elif newId1 is None:
+                                bb0ToMerge.merge(bb1ToMerge)
                                 oldToNewBBIndexes[bbId1]=newId0
-                                newBBs[newId0]=bb0ToMerge
+                                #newBBs[newId0]=bbMerged
                             elif newId0!=newId1:
+                                bb0ToMerge.merge(bb1ToMerge)
                                 #merge two merged bbs
                                 oldToNewBBIndexes = {k:(v if v!=newId1 else newId0) for k,v in oldToNewBBIndexes.items()}
                                 #oldToNewBBIndexes[bbId1]=newId0
