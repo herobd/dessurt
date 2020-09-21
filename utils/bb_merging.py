@@ -21,6 +21,8 @@ class TextLine:
             pred_bb_info = pred_bb_info.cpu().detach()
             self.all_conf = [pred_bb_info[0].item()]
             self.all_cls = [pred_bb_info[6:].numpy()]
+            self.cls=None
+            self.conf=None
             #assert(self.all_cls[0].shape[0]==4)
 
             self.median_angle = None
@@ -30,24 +32,38 @@ class TextLine:
             self.all_primitive_rects = [ np.array([[pred_bb_info[1].item(),pred_bb_info[2].item()],[pred_bb_info[3].item(),pred_bb_info[2].item()],[pred_bb_info[3].item(),pred_bb_info[4].item()],[pred_bb_info[1].item(),pred_bb_info[4].item()]]) ] #tl, tr, bt, bl
             self.all_angles = [pred_bb_info[5].item()]
         else:
-            self.all_conf =  pred_bb_info.all_conf+other.all_conf
-            self.all_cls =  pred_bb_info.all_cls+other.all_cls
+            if pred_bb_info.all_conf is not None and other.all_conf is not None:
+                self.all_conf =  pred_bb_info.all_conf+other.all_conf
+            else:
+                self.all_conf = [pred_bb_info.getConf(),other.getConf()]
+            if pred_bb_info.all_cls is not None and other.all_cls is not None:
+                self.all_cls =  pred_bb_info.all_cls+other.all_cls
+            else:
+                self.all_cls = [pred_bb_info.getCls(),other.getCls()]
             self.all_primitive_rects =  pred_bb_info.all_primitive_rects+other.all_primitive_rects
             self.all_angles =  pred_bb_info.all_angles+other.all_angles
             self.median_angle = None
             self.poly_points=None
             self.point_pairs=None
+            self.cls=None
+            self.conf=None
 
     def merge(self,other):
         self.all_primitive_rects+=other.all_primitive_rects
         self.all_angles+=other.all_angles
-        if self.all_conf is not None:
+        if self.all_conf is not None and other.all_conf is not None:
             self.all_conf+=other.all_conf
-        if self.all_cls is not None:
+        else:
+            self.all_conf = [self.getConf(),other.getConf()]
+        if self.all_cls is not None and other.all_cls is not None:
             self.all_cls+=other.all_cls
+        else:
+            self.all_cls = [self.getCls(),other.getCls()]
         self.median_angle = None
         self.poly_points=None
         self.point_pairs=None
+        self.cls=None
+        self.conf=None
 
     def compute(self):
         self.median_angle = np.median(self.all_angles)
@@ -504,11 +520,7 @@ class TextLine:
         self.poly_points = np.array( top_points+bot_points )
 
         self.center_point = self.poly_points.mean(axis=0)
-        if self.all_conf is not None:
-            self.conf = np.mean(self.all_conf)
-        if self.all_cls is not None:
-            self.cls = np.stack(self.all_cls,axis=0).mean(axis=0)
-        assert(type(self.cls) is np.ndarray)
+            #assert(type(self.cls) is np.ndarray)
         self.std_r = np.std(self.all_angles)
         self.r_left = math.atan2(top_points[0][1]-bot_points[0][1],bot_points[0][0]-top_points[0][0])
         self.r_right = math.atan2(top_points[-1][1]-bot_points[-1][1],bot_points[-1][0]-top_points[-1][0])
@@ -632,7 +644,7 @@ class TextLine:
         # 0    1 2 3 4 5  6   7   8   9   10  11  12  13  14     15      16    17
         #conf, x,y,r,h,w,tlx,tly,trx,try,brx,bry,blx,bly,r_left,r_right,std_r,classFeats
 
-        return (self.conf, self.center_point[0], self.center_point[1], self.median_angle, self.height, self.width, *self.point_pairs[0][0], *self.point_pairs[-1][0], *self.point_pairs[-1][1], *self.point_pairs[0][1], self.r_left, self.r_right, self.std_r, *self.cls)
+        return (self.getConf(), self.center_point[0], self.center_point[1], self.median_angle, self.height, self.width, *self.point_pairs[0][0], *self.point_pairs[-1][0], *self.point_pairs[-1][1], *self.point_pairs[0][1], self.r_left, self.r_right, self.std_r, *self.getCls())
 
     def getCenterPoint(self):
         if self.poly_points is None:
@@ -643,11 +655,13 @@ class TextLine:
             self.compute()
         return self.median_angle
     def getCls(self):
-        if self.poly_points is None:
-            self.compute()
-        assert(type(self.cls) is np.ndarray)
+        if self.cls is None:
+            if self.all_cls is not None:
+                self.cls = np.stack(self.all_cls,axis=0).mean(axis=0)
+        #assert(type(self.cls) is np.ndarray)
         return self.cls
     def getConf(self):
-        if self.poly_points is None:
-            self.compute()
+        if self.conf is None:
+            if self.all_conf is not None:
+                self.conf = np.mean(self.all_conf)
         return self.conf

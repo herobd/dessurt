@@ -6,9 +6,12 @@ def tensmeyer_brightness(img, foreground=0, background=0):
         gray = img_f.rgb2gray(img)
     else:
         gray = img
-    ret,th = img_f.otsuThreshold(gray)
+    try:
+        ret,th = img_f.otsuThreshold(gray)
+    except ValueError:
+        th=img/2
 
-    th = (th.astype(np.float32) / 255)[...,None]
+    th = (th.astype(np.float32) / 255)#[...,None]
 
     img = img.astype(np.float32)
     img = img + (1.0 - th) * foreground
