@@ -5,6 +5,7 @@ import timeit
 import numpy as np
 from utils.forms_annotations import calcCornersTorch
 from shapely.geometry import Polygon, LineString
+import shapely
 
 def distancePoints(a,b):
     return math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2)
@@ -416,125 +417,128 @@ def allPolyIO_clipU(rboxes,bbs):
     #we compute clipped IOU. Here we "clip" the GT area horizontally (w.r.t. GT orientation) to match it's overlap with the prediction. Thus the IOU is not penalized for not coverving all the GT
     io_clipped_u = torch.zeros_like(iou)
         
-    for i,j in torch.nonzero(iou>0.001):
+    for i,j in torch.nonzero(iou>0.001,as_tuple=False):
         gt_poly = Polygon([[gt_tlX[i].item(),gt_tlY[i].item()],[gt_trX[i].item(),gt_trY[i].item()],[gt_brX[i].item(),gt_brY[i].item()],[gt_blX[i].item(),gt_blY[i].item()]])
         pr_poly = Polygon(bbs[j].polyPoints())
-
-        inter = gt_poly.intersection(pr_poly)
-        #iou[i,j] = inter.area/(gt_poly.area+pr_poly.area-inter.area)
         
-        if inter.area>0:
-            #clip
-            topline = LineString([(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i])])
-            botline = LineString([(gt_blX[i],gt_blY[i]),(gt_brX[i],gt_brY[i])])
+        try:
+            inter = gt_poly.intersection(pr_poly)
+            #iou[i,j] = inter.area/(gt_poly.area+pr_poly.area-inter.area)
+            
+            if inter.area>0:
+                #clip
+                topline = LineString([(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i])])
+                botline = LineString([(gt_blX[i],gt_blY[i]),(gt_brX[i],gt_brY[i])])
 
-            #get intersection of gt top and bottom with predicted
-            #TODO left off. Issues when line and poly a perfectly aligned (returnns single point)
-            top_inter = inter.intersection(topline)
-            top_p1=top_p2=None
-            if type(top_inter) is LineString:
-                if len(top_inter.coords)>0:
-                    top_p1,top_p2=top_inter.coords
-            else:
-                for i,line in enumerate(top_inter):
-                    p1,p2=line.coords
-                    if i==0:
-                        top_p1=p1
-                        top_p2=p2
-                    else:
-                        l1 = math.sqrt((top_p1[0]-p2[0])**2 + (top_p1[1]-p2[1])**2)
-                        l2 = math.sqrt((top_p2[0]-p1[0])**2 + (top_p2[1]-p1[1])**2)
-                        if l1>l2:
+                #get intersection of gt top and bottom with predicted
+                #TODO left off. Issues when line and poly a perfectly aligned (returnns single point)
+                top_inter = inter.intersection(topline)
+                top_p1=top_p2=None
+                if type(top_inter) is LineString:
+                    if len(top_inter.coords)>0:
+                        top_p1,top_p2=top_inter.coords
+                else:
+                    for i,line in enumerate(top_inter):
+                        p1,p2=line.coords
+                        if i==0:
+                            top_p1=p1
                             top_p2=p2
                         else:
-                            top_p1=p1
-            bot_inter = inter.intersection(topline)
-            bot_p1=bot_p2=None
-            if type(bot_inter) is LineString:
-                if len(bot_inter.coords)>0:
-                    bot_p1,bot_p2=bot_inter.coords
-            else:
-                for i,line in enumerate(bot_inter):
-                    p1,p2=line.coords
-                    if i==0:
-                        bot_p1=p1
-                        bot_p2=p2
-                    else:
-                        l1 = math.sqrt((bot_p1[0]-p2[0])**2 + (bot_p1[1]-p2[1])**2)
-                        l2 = math.sqrt((bot_p2[0]-p1[0])**2 + (bot_p2[1]-p1[1])**2)
-                        if l1>l2:
+                            l1 = math.sqrt((top_p1[0]-p2[0])**2 + (top_p1[1]-p2[1])**2)
+                            l2 = math.sqrt((top_p2[0]-p1[0])**2 + (top_p2[1]-p1[1])**2)
+                            if l1>l2:
+                                top_p2=p2
+                            else:
+                                top_p1=p1
+                bot_inter = inter.intersection(topline)
+                bot_p1=bot_p2=None
+                if type(bot_inter) is LineString:
+                    if len(bot_inter.coords)>0:
+                        bot_p1,bot_p2=bot_inter.coords
+                else:
+                    for i,line in enumerate(bot_inter):
+                        p1,p2=line.coords
+                        if i==0:
+                            bot_p1=p1
                             bot_p2=p2
                         else:
-                            bot_p1=p1
-            # find whether top or bottom points will be bigger
-            if top_p1 is None and bot_p1 is None:
-                #They didn't intersect, so we need a more general method
-                #We'll find points spanning the length of the intersection using distances
-                #iterate over points of intersection poly and find closest to topline and botline
-                #iterate from those points to the furthest from both (both iteratins same direction)
-                #distance between these last two poings is length.
-                #TODO this doesn't work. I'll average with the longest distance between any two vertices, but at somepoint I should fix this to be proper
-                min_dist_top=min_dist_bot=9999999
-                points = list(inter.exterior.coords)
-                max_dist = 0
-                for p_i,p in enumerate(points):
-                    #distance from top line to point x,y
-                    dist_top = distancePointLine(p,(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i]))
-                    #dist_top = abs((gt_tlY[i]-gt_trY[i])*x-(gt_tlX[i]-gt_trX[i])*y+gt_tlX[i]*gt_trY[i]-gt_tlY[i]*gt_trX[i])/math.sqrt((gt_tlY[i]-gt_trY[i])**2 + (gt_tlX[i]-gt_trX[i])**2)
-                    if dist_top<min_dist_top:
-                        min_dist_top=dist_top
-                        top_point_i = p_i
-                    dist_bot = distancePointLine(p,(gt_blX[i],gt_blY[i]),(gt_brX[i],gt_brY[i]))
-                    #dist_bot = abs((gt_blY[i]-gt_brY[i])*x-(gt_blX[i]-gt_brX[i])*y+gt_blX[i]*gt_brY[i]-gt_blY[i]*gt_brX[i])/math.sqrt((gt_blY[i]-gt_brY[i])**2 + (gt_blX[i]-gt_brX[i])**2)
-                    if dist_bot<min_dist_bot:
-                        min_dist_bot=dist_bot
-                        bot_point_i = p_i
+                            l1 = math.sqrt((bot_p1[0]-p2[0])**2 + (bot_p1[1]-p2[1])**2)
+                            l2 = math.sqrt((bot_p2[0]-p1[0])**2 + (bot_p2[1]-p1[1])**2)
+                            if l1>l2:
+                                bot_p2=p2
+                            else:
+                                bot_p1=p1
+                # find whether top or bottom points will be bigger
+                if top_p1 is None and bot_p1 is None:
+                    #They didn't intersect, so we need a more general method
+                    #We'll find points spanning the length of the intersection using distances
+                    #iterate over points of intersection poly and find closest to topline and botline
+                    #iterate from those points to the furthest from both (both iteratins same direction)
+                    #distance between these last two poings is length.
+                    #TODO this doesn't work. I'll average with the longest distance between any two vertices, but at somepoint I should fix this to be proper
+                    min_dist_top=min_dist_bot=9999999
+                    points = list(inter.exterior.coords)
+                    max_dist = 0
+                    for p_i,p in enumerate(points):
+                        #distance from top line to point x,y
+                        dist_top = distancePointLine(p,(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i]))
+                        #dist_top = abs((gt_tlY[i]-gt_trY[i])*x-(gt_tlX[i]-gt_trX[i])*y+gt_tlX[i]*gt_trY[i]-gt_tlY[i]*gt_trX[i])/math.sqrt((gt_tlY[i]-gt_trY[i])**2 + (gt_tlX[i]-gt_trX[i])**2)
+                        if dist_top<min_dist_top:
+                            min_dist_top=dist_top
+                            top_point_i = p_i
+                        dist_bot = distancePointLine(p,(gt_blX[i],gt_blY[i]),(gt_brX[i],gt_brY[i]))
+                        #dist_bot = abs((gt_blY[i]-gt_brY[i])*x-(gt_blX[i]-gt_brX[i])*y+gt_blX[i]*gt_brY[i]-gt_blY[i]*gt_brX[i])/math.sqrt((gt_blY[i]-gt_brY[i])**2 + (gt_blX[i]-gt_brX[i])**2)
+                        if dist_bot<min_dist_bot:
+                            min_dist_bot=dist_bot
+                            bot_point_i = p_i
 
-                    for p2 in points[p_i+1:]:
-                        dist = distancePoints(p,p2)
-                        max_dist = max(max_dist,dist)
-                min_dist_diff=9999999
-                p_j = (top_point_i+1)%(len(points)-1) #-1 as Polygon repeats closure vertex
-                if p_j == bot_point_i:
-                    side_point_A = ((points[top_point_i][0]+points[bot_point_i][0])/2,(points[top_point_i][1]+points[bot_point_i][1])/2)
+                        for p2 in points[p_i+1:]:
+                            dist = distancePoints(p,p2)
+                            max_dist = max(max_dist,dist)
+                    min_dist_diff=9999999
+                    p_j = (top_point_i+1)%(len(points)-1) #-1 as Polygon repeats closure vertex
+                    if p_j == bot_point_i:
+                        side_point_A = ((points[top_point_i][0]+points[bot_point_i][0])/2,(points[top_point_i][1]+points[bot_point_i][1])/2)
+                    else:
+                        while p_j!=bot_point_i:
+                            dist_diff = abs(distancePointLine(points[p_j],(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i]))-distancePointLine(points[p_j],(gt_blX[i],gt_blY[i]),(gt_brX[i],gt_brY[i])))
+                            dist_diff += abs(distancePoints(points[p_j],points[top_point_i])-distancePoints(points[p_j],points[bot_point_i]))*0.1
+                            if dist_diff < min_dist_diff:
+                                min_dist_diff = dist_diff
+                                side_point_A = points[p_j]
+                            p_j = (p_j+1)%(len(points)-1)
+                    min_dist_diff=9999999
+                    if p_j == top_point_i:
+                        side_point_B = ((points[top_point_i][0]+points[bot_point_i][0])/2,(points[top_point_i][1]+points[bot_point_i][1])/2)
+                    else:
+                        while p_j!=top_point_i:
+                            dist_diff = abs(distancePointLine(points[p_j],(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i]))-distancePointLine(points[p_j],(gt_blX[i],gt_blY[i]),(gt_brX[i],gt_brY[i])))
+                            dist_diff += abs(distancePoints(points[p_j],points[top_point_i])-distancePoints(points[p_j],points[bot_point_i]))*0.1
+                            if dist_diff < min_dist_diff:
+                                min_dist_diff = dist_diff
+                                side_point_B = points[p_j]
+                            p_j = (p_j+1)%(len(points)-1)
+                    length_i = distancePoints(side_point_A,side_point_B)
+                    length = (length_i+max_dist)/2
+
+                    #print(points)
+                    #print('length: {}, length_i:{}, max_dist:{}, top: {}, bot: {}, A: {}, B: {}'.format(length,length_i,max_dist,top_point_i,bot_point_i,side_point_A,side_point_B))
+                    #import pdb;pdb.set_trace()
+                elif top_p1 is None:
+                    length = math.sqrt((bot_p1[0]-bot_p2[0])**2 + (bot_p1[1]-bot_p2[1])**2)
+                elif bot_p1 is None:
+                    length = math.sqrt((top_p1[0]-top_p2[0])**2 + (top_p1[1]-top_p2[1])**2)
                 else:
-                    while p_j!=bot_point_i:
-                        dist_diff = abs(distancePointLine(points[p_j],(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i]))-distancePointLine(points[p_j],(gt_blX[i],gt_blY[i]),(gt_brX[i],gt_brY[i])))
-                        dist_diff += abs(distancePoints(points[p_j],points[top_point_i])-distancePoints(points[p_j],points[bot_point_i]))*0.1
-                        if dist_diff < min_dist_diff:
-                            min_dist_diff = dist_diff
-                            side_point_A = points[p_j]
-                        p_j = (p_j+1)%(len(points)-1)
-                min_dist_diff=9999999
-                if p_j == top_point_i:
-                    side_point_B = ((points[top_point_i][0]+points[bot_point_i][0])/2,(points[top_point_i][1]+points[bot_point_i][1])/2)
-                else:
-                    while p_j!=top_point_i:
-                        dist_diff = abs(distancePointLine(points[p_j],(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i]))-distancePointLine(points[p_j],(gt_blX[i],gt_blY[i]),(gt_brX[i],gt_brY[i])))
-                        dist_diff += abs(distancePoints(points[p_j],points[top_point_i])-distancePoints(points[p_j],points[bot_point_i]))*0.1
-                        if dist_diff < min_dist_diff:
-                            min_dist_diff = dist_diff
-                            side_point_B = points[p_j]
-                        p_j = (p_j+1)%(len(points)-1)
-                length_i = distancePoints(side_point_A,side_point_B)
-                length = (length_i+max_dist)/2
-
-                #print(points)
-                #print('length: {}, length_i:{}, max_dist:{}, top: {}, bot: {}, A: {}, B: {}'.format(length,length_i,max_dist,top_point_i,bot_point_i,side_point_A,side_point_B))
-                #import pdb;pdb.set_trace()
-            elif top_p1 is None:
-                length = math.sqrt((bot_p1[0]-bot_p2[0])**2 + (bot_p1[1]-bot_p2[1])**2)
-            elif bot_p1 is None:
-                length = math.sqrt((top_p1[0]-top_p2[0])**2 + (top_p1[1]-top_p2[1])**2)
-            else:
-                d_top = math.sqrt((top_p1[0]-top_p2[0])**2 + (top_p1[1]-top_p2[1])**2)
-                d_bot = math.sqrt((bot_p1[0]-bot_p2[0])**2 + (bot_p1[1]-bot_p2[1])**2)
-                length = max(d_top,d_bot)
-            #compute the area of the clipped gt
-            clipped_gt_area = length*rboxes[i,3] #new width*height
+                    d_top = math.sqrt((top_p1[0]-top_p2[0])**2 + (top_p1[1]-top_p2[1])**2)
+                    d_bot = math.sqrt((bot_p1[0]-bot_p2[0])**2 + (bot_p1[1]-bot_p2[1])**2)
+                    length = max(d_top,d_bot)
+                #compute the area of the clipped gt
+                clipped_gt_area = length*rboxes[i,3] #new width*height
 
 
-            io_clipped_u[i,j] = inter.area/(clipped_gt_area+pr_poly.area-inter.area)
+                io_clipped_u[i,j] = inter.area/(clipped_gt_area+pr_poly.area-inter.area)
+        except shapely.errors.TopologicalError:
+            io_clipped_u[i,j]=0
     return io_clipped_u
     #if ret_clip:
     #    return iou, io_clipped_u
@@ -898,22 +902,16 @@ def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeC
     if pred is not None and len(pred)>0:
         #This is an alternate metric that computes AP of all classes together
         #Your only a hit if you have the same class
-        allIOUs = allPolyIOU_andClip(target,pred,ret_clip=False) 
-        allHits = allIOUs>iou_thresh
+        allIOUs = classPolyIOU(target,pred) 
+        validHits = allHits = allIOUs>iou_thresh
         #evalute hits to see if they're valid (matching class)
-        targetClasses_index = torch.argmax(target[:,13:13+numClasses],dim=1)
-        predClasses = torch.stack([torch.from_numpy(p.getCls()) for p in pred],dim=0)
-        if predClasses.size(0)==0 or predClasses.size(1)==0:
-            print('ERROR, zero sized predClasses: {}. pred is {}'.format(predClasses.size(),pred.size()))
-        predClasses_index = torch.argmax(predClasses,dim=1)
-        targetClasses_index_ex = targetClasses_index[:,None].expand(targetClasses_index.size(0),predClasses_index.size(0))
-        predClasses_index_ex = predClasses_index[None,:].expand(targetClasses_index.size(0),predClasses_index.size(0))
-        matchingClasses = targetClasses_index_ex==predClasses_index_ex
-        validHits = allHits*matchingClasses
 
         #add all the preds that didn't have a hit
         hasHit,_ = validHits.max(dim=0) #which preds have hits
         predConf=torch.FloatTensor([p.getConf().item() for p in pred])
+        predClasses_index = torch.argmax(predClasses,dim=1)
+        #targetClasses_index_ex = targetClasses_index[:,None].expand(targetClasses_index.size(0),predClasses_index.size(0))
+        #predClasses_index_ex = predClasses_index[None,:].expand(targetClasses_index.size(0),predClasses_index.size(0))
         notHitScores = predConf[~hasHit]
         notHitClass = predClasses_index[~hasHit]
         for i in range(notHitScores.shape[0]):

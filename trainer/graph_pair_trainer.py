@@ -547,6 +547,7 @@ class GraphPairTrainer(BaseTrainer):
             #Create gt vector to match edgePred.values()
             num_internal_iters = edgePred.size(-2)
             predsEdge = edgePred[...,0] 
+            assert(not torch.isnan(predsEdge).any())
             predsGTEdge = []
             predsGTNoEdge = []
             truePosEdge=falsePosEdge=trueNegEdge=falseNegEdge=0
@@ -618,10 +619,10 @@ class GraphPairTrainer(BaseTrainer):
                 else:
                     wasRel=False
                     wasOverSeg=False
-                    wasMerge=False
+                    wasGroup=False
                     #wasError=True hmm, should this be an error? Not means error has a fairly strict definition of meaning a group in the relationship is impure
 
-                if (not merge_only and (wasRel or wasMerge)) or wasOverSeg:
+                if (not merge_only and (wasRel or wasGroup)) or wasOverSeg:
                     shouldBeEdge[(n0,n1)]=True
                     predsGTEdge.append(predsEdge[i])
                     if torch.sigmoid(predsEdge[i])>thresh_edge:
@@ -658,7 +659,7 @@ class GraphPairTrainer(BaseTrainer):
                                 trueNegRel+=1
                                 saveRelPred[i]='TN'
                     else:
-                        if torch.sigmoid(predsRel[i])>self.thresh_rel:
+                        if torch.sigmoid(predsRel[i])>thresh_rel:
                             saveRelPred[i]='UP'
                         else:
                             saveRelPred[i]='UN'
@@ -1298,30 +1299,30 @@ class GraphPairTrainer(BaseTrainer):
             else:
                 targetBoxes_changed=targetBoxes
 
-            if self.iteration>=self.start_merge_iter:
-                with profiler.profile(profile_memory=True, record_shapes=True) as prof:
-                    allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred,merge_prop_scores, final = self.model(
-                                        image,
-                                        targetBoxes_changed,
-                                        target_num_neighbors,
-                                        True,
-                                        otherThresh=self.conf_thresh_init, 
-                                        otherThreshIntur=threshIntur, 
-                                        hard_detect_limit=self.train_hard_detect_limit,
-                                        gtTrans = gtTrans,
-                                        dont_merge = self.iteration<self.start_merge_iter)
-                    print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
-            else:
-                allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred,merge_prop_scores, final = self.model(
-                                    image,
-                                    targetBoxes_changed,
-                                    target_num_neighbors,
-                                    True,
-                                    otherThresh=self.conf_thresh_init, 
-                                    otherThreshIntur=threshIntur, 
-                                    hard_detect_limit=self.train_hard_detect_limit,
-                                    gtTrans = gtTrans,
-                                    dont_merge = self.iteration<self.start_merge_iter)
+            #if self.iteration>=self.start_merge_iter:
+            #    with profiler.profile(profile_memory=True, record_shapes=True) as prof:
+            #        allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred,merge_prop_scores, final = self.model(
+            #                            image,
+            #                            targetBoxes_changed,
+            #                            target_num_neighbors,
+            #                            True,
+            #                            otherThresh=self.conf_thresh_init, 
+            #                            otherThreshIntur=threshIntur, 
+            #                            hard_detect_limit=self.train_hard_detect_limit,
+            #                            gtTrans = gtTrans,
+            #                            dont_merge = self.iteration<self.start_merge_iter)
+            #        print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
+            #else:
+            allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred,merge_prop_scores, final = self.model(
+                                image,
+                                targetBoxes_changed,
+                                target_num_neighbors,
+                                True,
+                                otherThresh=self.conf_thresh_init, 
+                                otherThreshIntur=threshIntur, 
+                                hard_detect_limit=self.train_hard_detect_limit,
+                                gtTrans = gtTrans,
+                                dont_merge = self.iteration<self.start_merge_iter)
             #TODO
             #predPairingShouldBeTrue,predPairingShouldBeFalse, eRecall,ePrec,fullPrec,ap,proposedInfo = self.prealignedEdgePred(adj,relPred,relIndexes,rel_prop_pred)
             #if bbPred is not None:

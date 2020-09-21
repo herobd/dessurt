@@ -3,26 +3,35 @@ import skimage
 #These are all based on the OpenCV functions, to make the conversion to scikit image easier (also should make future changes easier as well)
 
 def line(img,p1,p2,color,thickness=1):
-    rr,cc = skimage.draw.line(p1[1],p1[0],p2[1],p2[0])
+    y1 = max(0,min(img.shape[0]-1,p1[1]))
+    y2 = max(0,min(img.shape[0]-1,p2[1]))
+    x1 = max(0,min(img.shape[1]-1,p1[0]))
+    x2 = max(0,min(img.shape[1]-1,p2[0]))
+    rr,cc = skimage.draw.line(y1,x1,y2,x2)
     img[rr,cc]=color
-    if thicnkness>1:
-        rr,cc = skimage.draw.line(p1[1]+1,p1[0]+1,p2[1]+1,p2[0]+1)
-        img[rr,cc]=color
-        rr,cc = skimage.draw.line(p1[1],p1[0]+1,p2[1],p2[0]+1)
-        img[rr,cc]=color
-        rr,cc = skimage.draw.line(p1[1]+1,p1[0],p2[1]+1,p2[0])
-        img[rr,cc]=color
+    if thickness>1:
+        if x1<img.shape[1]-2 and y1<img.shape[0]-2 and x2<img.shape[1]-2 and y2<img.shape[0]-2:
+            rr,cc = skimage.draw.line(y1+1,x1+1,y2+1,x2+1)
+            img[rr,cc]=color
+        if x1<img.shape[1]-2 and x2<img.shape[1]-2:
+            rr,cc = skimage.draw.line(y1,x1+1,y2,x2+1)
+            img[rr,cc]=color
+        if y1<img.shape[0]-2 and y2<img.shape[0]-2:
+            rr,cc = skimage.draw.line(y1+1,x1,y2+1,x2)
+            img[rr,cc]=color
     if thickness>2:
-        rr,cc = skimage.draw.line(p1[1]-1,p1[0]-1,p2[1]-1,p2[0]-1)
+        rr,cc = skimage.draw.line(y1-1,x1-1,y2-1,x2-1)
         img[rr,cc]=color
-        rr,cc = skimage.draw.line(p1[1],p1[0]-1,p2[1],p2[0]-1)
+        rr,cc = skimage.draw.line(y1,x1-1,y2,x2-1)
         img[rr,cc]=color
-        rr,cc = skimage.draw.line(p1[1]-1,p1[0],p2[1]-1,p2[0])
+        rr,cc = skimage.draw.line(y1-1,x1,y2-1,x2)
         img[rr,cc]=color
-        rr,cc = skimage.draw.line(p1[1]+1,p1[0]-1,p2[1]+1,p2[0]-1)
-        img[rr,cc]=color
-        rr,cc = skimage.draw.line(p1[1]-1,p1[0]+1,p2[1]-1,p2[0]+1)
-        img[rr,cc]=color
+        if y1<img.shape[0]-2 and y2<img.shape[0]-2:
+            rr,cc = skimage.draw.line(y1+1,x1-1,y2+1,x2-1)
+            img[rr,cc]=color
+        if x1<img.shape[1]-2 and x2<img.shape[1]-2:
+            rr,cc = skimage.draw.line(y1-1,x1+1,y2-1,x2+1)
+            img[rr,cc]=color
         assert(thickness<4)
 
 
@@ -49,8 +58,10 @@ def resize(img,dim,fx=None,fy=None): #remove ",interpolation = cv2.INTER_CUBIC"
         return skimage.transform.resize(img,dim,3,multichannel=hasColor,anti_aliasing=downsize)
 
 def otsuThreshold(img):
+    #if len(img.shape)==3 and img.shape[2]==1:
+    #    img=img[:,:,0]
     t = skimage.filters.threshold_otsu(img)
-    return (img>t)*255,t
+    return  t,(img>t)*255
 
 def rgb2hsv(img):
     return skimage.color.rgb2hsv(img)
@@ -59,4 +70,16 @@ def hsv2rgb(img):
 def rgb2gray(img):
     return skimage.color.rgb2gray(img)
 def gray2rgb(img):
+    if len(img.shape) == 3:
+        img=img[:,:,0]
     return skimage.color.gray2rgb(img)
+
+def polylines(img,points,isClosed,color,thickness=1):
+    if len(points.shape)==3:
+        assert(points.shape[1]==1)
+        points=points[:,0]
+    if isClosed:
+        rr,cc = skimage.draw.polygon(points[:,1],points[:,0],shape=img.shape)
+    else:
+        rr,cc = skimage.draw.polygon_perimeter(points[:,1],points[:,0],shape=img.shape)
+    img[rr,cc]=color
