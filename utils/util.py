@@ -163,6 +163,8 @@ def plotRect(img,color,xyrhw,lineWidth=1):
     img_f.line(img,tr,br,color,lineWidth)
     img_f.line(img,br,bl,color,lineWidth)
     img_f.line(img,bl,tl,color,lineWidth)
+def pointDistance(p1,p2):
+    return math.sqrt( (p1[0]-p2[0])**2 + (p1[1]-p2[1])**2 )
 
 def inv_tanh(y):
     if y<=-1: #implicit gradient clipping done here

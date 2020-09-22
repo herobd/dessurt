@@ -30,7 +30,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
         if bbTrans is not None:
             transPath = path[:-3]+'txt'
             transOut = open(transPath,'w')
-        if not useTextLines and outputBoxes is not None:
+        if not useTextLines and outputBoxes is not None and not useTextLines:
             outputBoxes = outputBoxes.data.numpy()
         data = image.cpu().numpy()
         b=0
