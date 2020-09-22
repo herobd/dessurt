@@ -479,7 +479,7 @@ class TextLine:
                 mag_bot = (mean_first_point[0]+(mean_first_point[1]-bot_new_c)*s)/(1+s**2)
                 bot_first_point = [mag_bot,mag_bot*s+bot_new_c]
                 final_points.append([top_first_point,bot_first_point])
-            assert(top_point[0]!=bot_point[0] or top_point[1]!=bot_point[1])
+            #assert(top_point[0]!=bot_point[0] or top_point[1]!=bot_point[1])
             #assert(top_point[1]<bot_point[1])
             #Hack, because weird stuff is getting merged at the begining of training.
             if top_point[1]>bot_point[1]:
@@ -646,6 +646,14 @@ class TextLine:
 
         return (self.getConf(), self.center_point[0], self.center_point[1], self.median_angle, self.height, self.width, *self.point_pairs[0][0], *self.point_pairs[-1][0], *self.point_pairs[-1][1], *self.point_pairs[0][1], self.r_left, self.r_right, self.std_r, *self.getCls())
 
+    def getHeight(self):
+        if self.poly_points is None:
+            self.compute()
+        return self.height
+    def getWidth(self):
+        if self.poly_points is None:
+            self.compute()
+        return self.width
     def getCenterPoint(self):
         if self.poly_points is None:
             self.compute()

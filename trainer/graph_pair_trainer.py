@@ -96,6 +96,7 @@ class GraphPairTrainer(BaseTrainer):
         self.use_gt_trans = config['trainer']['use_gt_trans'] if 'use_gt_trans' in config['trainer'] else False
 
         self.start_merge_iter = config['trainer']['start_merge_iter'] if 'start_merge_iter' in config['trainer'] else 100
+        self.init_merge_rule = config['trainer']['init_merge_rule'] if 'init_merge_rule' in config['trainer'] else None
 
         self.num_node_error_class = 0
         self.final_class_bad_alignment = False
@@ -249,12 +250,20 @@ class GraphPairTrainer(BaseTrainer):
 
     def _minor_log(self, log):
         ls=''
-        for key,val in log.items():
+        for i,(key,val) in enumerate(log.items()):
             ls += key
             if type(val) is float or type(val) is np.float64:
-                ls +=': {:.3f},\t'.format(val)
+
+                this_data=': {:.3f},'.format(val)
             else:
-                ls +=': {},\t'.format(val)
+                this_data=': {},'.format(val)
+            ls+=this_data
+            this_len=len(this_data)
+            if i%2==0 and this_len>0:
+                #ls+='\t\t'
+                ls+=' '*(20-this_len)
+            else:
+                ls+='\n      '
         self.logger.info('Train '+ls)
     
     #New
@@ -603,7 +612,24 @@ class GraphPairTrainer(BaseTrainer):
                         
                     if purity_0>0.8 and purity_1>0.8:
                         if len(predGroups[n0])==1 and len(predGroups[n1])==1 and ts0[0]==ts1[0]:
-                            wasOverSeg=True
+                            if not merge_only or self.init_merge_rule is None:
+                                wasOverSeg=True
+                            elif self.init_merge_rule=='adjacent':
+                                tx0,ty0,bx0,by0 = outputBoxes[n0].boundingRect()
+                                tx1,ty1,bx1,by1 = outputBoxes[n1].boundingRect()
+                                #roughly see if the two polygons are overlapping
+                                if (min(bx0,bx1)-max(tx0,tx1))>0 and (min(by0,by1)-max(ty0,ty1))>0:
+                                    wasOverSeg=True
+                                else:
+                                    #define adjacency as having the end points being close
+                                    point_pairs_0 = outputBoxes[n0].pairPoints()
+                                    point_pairs_1 = outputBoxes[n1].pairPoints()
+                                    dist = min(util.pointDistance(point_pairs_0[0][0],point_pairs_1[-1][0]),util.pointDistance(point_pairs_0[-1][0],point_pairs_1[0][0]),util.pointDistance(point_pairs_0[0][1],point_pairs_1[-1][1]),util.pointDistance(point_pairs_0[-1][1],point_pairs_1[0][1]))
+                                    mean_h = (outputBoxes[n0].getHeight()+outputBoxes[n1].getHeight())/2
+                                    if dist<mean_h:
+                                        wasOverSeg=True
+                            else:
+                                raise NotImplementedError('Unknown merge rule: {}'.format(self.merge_rule))
                             wasError=False
                         else:
                             wasOverSeg=False
@@ -792,9 +818,9 @@ class GraphPairTrainer(BaseTrainer):
 
             if merge_only:
                 log = {
-                    'recallEdge' : recallEdge, 
-                    'precEdge' : precEdge, 
-                    'FmEdge' : 2*(precEdge*recallEdge)/(recallEdge+precEdge) if recallEdge+precEdge>0 else 0
+                    'recallMergeFirst' : recallEdge, 
+                    'precMergeFirst' : precEdge, 
+                    'FmMergeFirst' : 2*(precEdge*recallEdge)/(recallEdge+precEdge) if recallEdge+precEdge>0 else 0
                     }
                 predTypes=None
             else:
@@ -1361,6 +1387,7 @@ class GraphPairTrainer(BaseTrainer):
         #for graphIteration in range(len(allEdgePred)):
         allEdgePredTypes=[]
         proposedInfo=None
+        mergeProposedInfo=None
         if allEdgePred is not None:
             for graphIteration,(outputBoxes,edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allOutputBoxes,allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
 
@@ -1383,7 +1410,9 @@ class GraphPairTrainer(BaseTrainer):
                         )
                 #t#print('time run g{} newAlignEdgePred: {}'.format(graphIteration,timeit.default_timer()-tic2))
                 allEdgePredTypes.append(edgePredTypes)
-                if graphIteration==0 or (graphIteration==1 and self.model.merge_first):
+                if graphIteration==0 and self.model.merge_first:
+                    mergeProposedInfo=proposedInfoI
+                elif (graphIteration==0 and not self.model.merge_first) or (graphIteration==1 and self.model.merge_first):
                     proposedInfo=proposedInfoI
 
                 assert(not self.model.predNN)
@@ -1502,8 +1531,8 @@ class GraphPairTrainer(BaseTrainer):
                     #relLoss *= self.lossWeights['rel']
                     losses['relLoss']+=relLoss
 
-                if proposedInfo is not None:
-                    propPredPairingShouldBeTrue,propPredPairingShouldBeFalse= proposedInfo[0:2]
+                if proposedInfoI is not None:
+                    propPredPairingShouldBeTrue,propPredPairingShouldBeFalse= proposedInfoI[0:2]
                     propRelLoss = None
                     #seperating the loss into true and false portions is not only convienint, it balances the loss between true/false examples
                     if propPredPairingShouldBeTrue is not None and propPredPairingShouldBeTrue.size(0)>0:
@@ -1643,7 +1672,7 @@ class GraphPairTrainer(BaseTrainer):
             if self.save_images_every>0 and self.iteration%self.save_images_every==0:
                 path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b','final'))#instance['name'],graphIteration))
                 finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = final
-                draw_graph(finalOutputBoxes,self.model.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,image,None,targetBoxes,self.model,path,bbTrans=finalBBTrans)
+                draw_graph(finalOutputBoxes,self.model.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,image,None,targetBoxes,self.model,path,bbTrans=finalBBTrans,useTextLines=self.model.useCurvedBBs)
                 #print('saved {}'.format(path))
             finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = final
             print('DEBUG final num node:{}, num edges: {}'.format(len(finalOutputBoxes) if finalOutputBoxes is not None else 0,len(finalEdgeIndexes) if finalEdgeIndexes is not None else 0))
@@ -1671,6 +1700,10 @@ class GraphPairTrainer(BaseTrainer):
             propRecall,propPrec = proposedInfo[2:4]
             log['prop_rel_recall'] = propRecall
             log['prop_rel_prec'] = propPrec
+        if mergeProposedInfo is not None:
+            propRecall,propPrec = mergeProposedInfo[2:4]
+            log['prop_merge_recall'] = propRecall
+            log['prop_merge_prec'] = propPrec
         #if final_prop_rel_recall is not None:
         #    log['final_prop_rel_recall']=final_prop_rel_recall
         #if final_prop_rel_prec is not None:
@@ -1731,7 +1764,7 @@ class GraphPairTrainer(BaseTrainer):
                 raise NotImplementedError('newGetTargIndexForPreds_ should be modified to reflect the behavoir or newGetTargIndexForPreds_textLines')
                 targIndex, fullHit, overSegmented = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,hard_thresh=False,fixed=self.fixedAlign)
         elif outputBoxes is not None:
-            targIndex=torch.LongTensor(outputBoxes.size(0)).fill_(-1)
+            targIndex=torch.LongTensor(len(outputBoxes)).fill_(-1)
 
         if self.model.detector.predNumNeighbors:
             beforeCls=1
@@ -1806,7 +1839,7 @@ class GraphPairTrainer(BaseTrainer):
         log['final_groupCompleteness']=np.mean(groupCompleteness)
         log['final_groupPurity']=np.mean([v for k,v in groupPurity.items()])
 
-        gtRelHit=[False]*len(gt_groups_adj)
+        gtRelHit=set()
         relPrec=0
         if predPairs is None:
             predPairs=[]
@@ -1814,18 +1847,16 @@ class GraphPairTrainer(BaseTrainer):
             gtG0=predToGTGroup[n0]
             gtG1=predToGTGroup[n1]
             if gtG0>=0 and gtG1>=0:
-                try:
-                    index=gt_groups_adj.index((min(gtG0,gtG1),max(gtG0,gtG1)))
+                pair_id = (min(gtG0,gtG1),max(gtG0,gtG1))
+                if pair_id in gt_groups_adj:
                     relPrec+=1
-                    gtRelHit[index]=True
-                except ValueError:
-                    pass
+                    gtRelHit.add((min(gtG0,gtG1),max(gtG0,gtG1)))
         if len(predPairs)>0:
             relPrec /= len(predPairs)
         else:
             relPrec = 1
         if len(gt_groups_adj)>0:
-            relRecall = sum(gtRelHit)/len(gt_groups_adj)
+            relRecall = len(gtRelHit)/len(gt_groups_adj)
         else:
             relRecall = 1
 
