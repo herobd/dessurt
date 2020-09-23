@@ -29,7 +29,13 @@ class TextLine:
             self.poly_points=None
             self.point_pairs=None
 
+            if pred_bb_info[2]>pred_bb_info[4]: #I think this only occured after changing things on a trained model...
+                tmp = pred_bb_info[2]
+                pred_bb_info[2]=pred_bb_info[4]
+                pred_bb_info[4]=tmp
+
             self.all_primitive_rects = [ np.array([[pred_bb_info[1].item(),pred_bb_info[2].item()],[pred_bb_info[3].item(),pred_bb_info[2].item()],[pred_bb_info[3].item(),pred_bb_info[4].item()],[pred_bb_info[1].item(),pred_bb_info[4].item()]]) ] #tl, tr, bt, bl
+            
             self.all_angles = [pred_bb_info[5].item()]
         else:
             if pred_bb_info.all_conf is not None and other.all_conf is not None:
@@ -66,6 +72,7 @@ class TextLine:
         self.conf=None
 
     def compute(self):
+
         self.median_angle = np.median(self.all_angles)
 
         if self.median_angle>=-math.pi/4 and self.median_angle<=math.pi/4:
@@ -328,6 +335,12 @@ class TextLine:
         top_points_np=np.array(top_points)
         bot_points_np=np.array(bot_points)
         step_size = np.linalg.norm(top_points_np.mean(axis=0)-bot_points_np.mean(axis=0))
+        if step_size==0: #Detection error with flat box
+            for p in top_points:
+                p[1]-=2
+            for p in bot_points:
+                p[1]+=2
+            step_size=4
         top_points_np= bot_points_np= None
 
         #step_size_top= (2*step_size/top_total_distance)/(1/top_total_distance + 1/bot_total_distance)
@@ -481,14 +494,6 @@ class TextLine:
                 final_points.append([top_first_point,bot_first_point])
             #assert(top_point[0]!=bot_point[0] or top_point[1]!=bot_point[1])
             #assert(top_point[1]<bot_point[1])
-            #Hack, because weird stuff is getting merged at the begining of training.
-            if top_point[1]>bot_point[1]:
-                tmp = bot_point
-                bot_point=top_point
-                top_point=tmp
-            elif top_point[1]==bot_point[1]:
-                top_point[1]-=1
-                bot_point[1]+=1
             final_points.append([top_point,bot_point])
 
         #now we'll add the other end point
@@ -498,6 +503,18 @@ class TextLine:
         mag_bot = (mean_end_point[0]+(mean_end_point[1]-bot_new_c)*s)/(1+s**2)
         bot_end_point = [mag_bot,mag_bot*s+bot_new_c]
         final_points.append([top_end_point,bot_end_point])
+
+        #Hack, because weird stuff is getting merged at the begining of training.
+        for i in range(len(final_points)-1):
+            #check if the lines cross at all
+            if (
+                    doIntersect(final_points[i][0],final_points[i+1][0],final_points[i][1],final_points[i+1][1]) or 
+                    (i>0 and doIntersect(final_points[i-1][0],final_points[i][0],final_points[i][1],final_points[i+1][1])) or 
+                    (i>0 and doIntersect(final_points[i][0],final_points[i+1][0],final_points[i-1][1],final_points[i][1]))
+                    ):
+                tmp=final_points[i+1][0]
+                final_points[i+1][0]=final_points[i+1][1]
+                final_points[i+1][1]=tmp
 
         #print('final pair points: {}'.format(final_points))
         if horz:
@@ -673,3 +690,76 @@ class TextLine:
             if self.all_conf is not None:
                 self.conf = np.mean(self.all_conf)
         return self.conf
+
+
+
+
+### from https://www.geeksforgeeks.org/check-if-two-given-line-segments-intersect/
+
+# Given three colinear points p, q, r, the function checks if  
+# point q lies on line segment 'pr'  
+def onSegment(p, q, r): 
+    if ( (q[0] <= max(p[0], r[0])) and (q[0] >= min(p[0], r[0])) and 
+           (q[1] <= max(p[1], r[1])) and (q[1] >= min(p[1], r[1]))): 
+        return True
+    return False
+  
+def orientation(p, q, r): 
+    # to find the orientation of an ordered triplet (p,q,r) 
+    # function returns the following values: 
+    # 0 : Colinear points 
+    # 1 : Clockwise points 
+    # 2 : Counterclockwise 
+      
+    # See https://www.geeksforgeeks.org/orientation-3-ordered-points/amp/  
+    # for details of below formula.  
+      
+    val = (float(q[1] - p[1]) * (r[0] - q[0])) - (float(q[0] - p[0]) * (r[1] - q[1])) 
+    if (val > 0): 
+          
+        # Clockwise orientation 
+        return 1
+    elif (val < 0): 
+          
+        # Counterclockwise orientation 
+        return 2
+    else: 
+          
+        # Colinear orientation 
+        return 0
+  
+# The main function that returns true if  
+# the line segment 'p1q1' and 'p2q2' intersect. 
+def doIntersect(p1,q1,p2,q2): 
+      
+    # Find the 4 orientations required for  
+    # the general and special cases 
+    o1 = orientation(p1, q1, p2) 
+    o2 = orientation(p1, q1, q2) 
+    o3 = orientation(p2, q2, p1) 
+    o4 = orientation(p2, q2, q1) 
+  
+    # General case 
+    if ((o1 != o2) and (o3 != o4)): 
+        return True
+  
+    # Special Cases 
+  
+    # p1 , q1 and p2 are colinear and p2 lies on segment p1q1 
+    if ((o1 == 0) and onSegment(p1, p2, q1)): 
+        return True
+  
+    # p1 , q1 and q2 are colinear and q2 lies on segment p1q1 
+    if ((o2 == 0) and onSegment(p1, q2, q1)): 
+        return True
+  
+    # p2 , q2 and p1 are colinear and p1 lies on segment p2q2 
+    if ((o3 == 0) and onSegment(p2, p1, q2)): 
+        return True
+  
+    # p2 , q2 and q1 are colinear and q1 lies on segment p2q2 
+    if ((o4 == 0) and onSegment(p2, q1, q2)): 
+        return True
+  
+    # If none of the cases 
+    return False

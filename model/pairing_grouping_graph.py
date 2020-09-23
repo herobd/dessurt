@@ -623,7 +623,7 @@ class PairingGroupingGraph(BaseModel):
         #Otherwise we have to to alignment first
         if not useGTBBs:
             if bbPredictions.size(0)==0:
-                return [bbPredictions], offsetPredictions, None, None, None, None, None, (None,None,None,None)
+                return [bbPredictions], offsetPredictions, None, None, None, None, None, None, (None,None,None,None)
             if self.include_bb_conf or self.useCurvedBBs: 
                 useBBs = bbPredictions
             else:
