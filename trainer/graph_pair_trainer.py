@@ -1164,7 +1164,7 @@ class GraphPairTrainer(BaseTrainer):
                 boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
                 losses['boxLoss'] = boxLoss
             else:
-                oversegLoss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered, recall_noclass, precision_noclass, gt_covered_noclass, pred_covered_noclass = self.loss['overseg'](outputOffsets,targetBoxes,[targSize],calc_stats=calc_stats)
+                oversegLoss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered, recall_noclass, precision_noclass, gt_covered_noclass, pred_covered_noclass = self.loss['overseg'](outputOffsets,targetBoxes,[targSize],calc_stats='bb_stats' in get)
                 losses['oversegLoss'] = oversegLoss
             #boxLoss *= self.lossWeights['box']
             #if relLoss is not None:
@@ -1568,11 +1568,17 @@ class GraphPairTrainer(BaseTrainer):
                         logIter['bb_class_loss'] = class_loss
                         logIter['bb_nn_loss'] = nn_loss
                     else:
-                        oversegLoss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered, recall_noclass, precision_noclass, gt_covered_noclass, pred_covered_noclass = self.loss['overseg'](outputOffsets,targetBoxes,[targSize],calc_stats=calc_stats)
+                        oversegLoss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered, recall_noclass, precision_noclass, gt_covered_noclass, pred_covered_noclass = self.loss['overseg'](outputOffsets,targetBoxes,[targSize],calc_stats='bb_stats' in get)
                         losses['oversegLoss'] = oversegLoss
                         logIter['bb_position_loss'] = position_loss
                         logIter['bb_conf_loss'] = conf_loss
                         logIter['bb_class_loss'] = class_loss
+                        if 'bb_stats' in get:
+                            logIter['bb_recall_noclass']=recall_noclass
+                            logIter['bb_precision_noclass']=precision_noclass
+                            logIter['bb_gt_covered_noclass']=gt_covered_noclass
+                            logIter['bb_pred_covered_noclass']=pred_covered_noclass
+
 
                     #t#print('time run box_loss: {}'.format(timeit.default_timer()-tic2))
 

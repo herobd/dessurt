@@ -277,7 +277,8 @@ class MultiScaleOversegmentLoss (nn.Module):
                     (loss_L.item()+loss_T.item()+loss_R.item()+loss_B.item())/4,
                     loss_conf.item(),
                     loss_cls.item(),
-                    loss_r.item()
+                    loss_r.item(),
+                    None,None,None,None,None,None,None,None
                     )
         else:
             #t#print('time FULL: '+str(timeit.default_timer()-ticAll))
@@ -303,7 +304,8 @@ class MultiScaleOversegmentLoss (nn.Module):
                     0,
                     loss_conf.item(),
                     0,
-                    0
+                    0,
+                    None,None,None,None,None,None,None,None
                     )
 
 #This isn't totally anchor free, the model predicts horizontal and verticle text seperately.
@@ -1326,6 +1328,8 @@ def build_oversegmented_targets_multiscale(
         #t#print('  times_overlaps: {}   std: {}, count{}'.format(np.mean(times_overlaps),np.std(times_overlaps),len(times_overlaps)))
 
     #assert(False and 'TODO verify this works! Have you crafted corner cases?')
+    for Ls,Rs,Ts,Bs in zip(t_Ls,t_Rs,t_Ts,t_Bs):
+        assert((Ls<=Rs).all() and (Ts<=Bs).all())
     return (nGT, 
             masks,
             conf_masks, 

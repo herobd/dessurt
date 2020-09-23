@@ -421,76 +421,23 @@ def allPolyIO_clipU(rboxes,bbs):
         gt_poly = Polygon([[gt_tlX[i].item(),gt_tlY[i].item()],[gt_trX[i].item(),gt_trY[i].item()],[gt_brX[i].item(),gt_brY[i].item()],[gt_blX[i].item(),gt_blY[i].item()]])
         pr_poly = Polygon(bbs[j].polyPoints())
         
-        try:
+        #try:
+        if pr_poly.is_valid:
             inter = gt_poly.intersection(pr_poly)
             #iou[i,j] = inter.area/(gt_poly.area+pr_poly.area-inter.area)
             
             if inter.area>0:
-                ##clip
-                #topline = LineString([(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i])])
-                #botline = LineString([(gt_blX[i],gt_blY[i]),(gt_brX[i],gt_brY[i])])
-
-                ##get intersection of gt top and bottom with predicted
-                ##TODO left off. Issues when line and poly a perfectly aligned (returnns single point)
-                #top_inter = inter.intersection(topline)
-                #top_p1=top_p2=None
-                #if type(top_inter) is LineString:
-                #    if len(top_inter.coords)>0:
-                #        top_p1,top_p2=top_inter.coords
-                #else:
-                #    for i,line in enumerate(top_inter):
-                #        p1,p2=line.coords
-                #        if i==0:
-                #            top_p1=p1
-                #            top_p2=p2
-                #        else:
-                #            l1 = math.sqrt((top_p1[0]-p2[0])**2 + (top_p1[1]-p2[1])**2)
-                #            l2 = math.sqrt((top_p2[0]-p1[0])**2 + (top_p2[1]-p1[1])**2)
-                #            if l1>l2:
-                #                top_p2=p2
-                #            else:
-                #                top_p1=p1
-                #bot_inter = inter.intersection(topline)
-                #bot_p1=bot_p2=None
-                #if type(bot_inter) is LineString:
-                #    if len(bot_inter.coords)>0:
-                #        bot_p1,bot_p2=bot_inter.coords
-                #else:
-                #    for i,line in enumerate(bot_inter):
-                #        p1,p2=line.coords
-                #        if i==0:
-                #            bot_p1=p1
-                #            bot_p2=p2
-                #        else:
-                #            l1 = math.sqrt((bot_p1[0]-p2[0])**2 + (bot_p1[1]-p2[1])**2)
-                #            l2 = math.sqrt((bot_p2[0]-p1[0])**2 + (bot_p2[1]-p1[1])**2)
-                #            if l1>l2:
-                #                bot_p2=p2
-                #            else:
-                #                bot_p1=p1
-                ## find whether top or bottom points will be bigger
-                #if top_p1 is None and bot_p1 is None:
-                #    #They didn't intersect, so we need a more general method
-                #    length = getWidthWRT(inter,topline)
-                #elif top_p1 is None:
-                #    length = math.sqrt((bot_p1[0]-bot_p2[0])**2 + (bot_p1[1]-bot_p2[1])**2)
-                #elif bot_p1 is None:
-                #    length = math.sqrt((top_p1[0]-top_p2[0])**2 + (top_p1[1]-top_p2[1])**2)
-                #else:
-                #    d_top = math.sqrt((top_p1[0]-top_p2[0])**2 + (top_p1[1]-top_p2[1])**2)
-                #    d_bot = math.sqrt((bot_p1[0]-bot_p2[0])**2 + (bot_p1[1]-bot_p2[1])**2)
-                #    length = max(d_top,d_bot)
-
                 length = getWidthWRT(inter,[(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i])])
-
 
                 #compute the area of the clipped gt
                 clipped_gt_area = length*rboxes[i,3] #new width*height
 
 
                 io_clipped_u[i,j] = inter.area/(clipped_gt_area+pr_poly.area-inter.area)
-        except shapely.errors.TopologicalError:
-            io_clipped_u[i,j]=0
+        #except shapely.errors.TopologicalError:
+        #    print(bbs[j].pairPoints())
+        #    import pdb;pdb.set_trace()
+        #    io_clipped_u[i,j]=0
     return io_clipped_u
     #if ret_clip:
     #    return iou, io_clipped_u
@@ -643,11 +590,13 @@ def classPolyIOU(rboxes,bbs):
         gt_poly = Polygon([[gt_tlX[i].item(),gt_tlY[i].item()],[gt_trX[i].item(),gt_trY[i].item()],[gt_brX[i].item(),gt_brY[i].item()],[gt_blX[i].item(),gt_blY[i].item()]])
         pr_poly = Polygon(bbs[j].polyPoints())
         
-        try:
+        #try:
+        if pr_poly.is_valid:
             inter = gt_poly.intersection(pr_poly)
             iou[i,j] = inter.area/(gt_poly.area+pr_poly.area-inter.area)
-        except shapely.errors.TopologicalError:
+        else:
             iou[i,j]=0
+        #except shapely.errors.TopologicalError:
     return iou
 
 def allDist(boxes1,boxes2):
