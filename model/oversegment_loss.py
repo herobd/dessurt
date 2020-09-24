@@ -11,7 +11,7 @@ from utils.util import plotRect, xyrhwToCorners, inv_tanh
 from shapely.geometry import Polygon
 import shapely
 import skimage.draw
-import cv2
+import utils.img_f as img_f
 
 UNMASK_CENT_DIST_THRESH=0.1
 END_BOUNDARY_THRESH=0.4
@@ -242,6 +242,12 @@ class MultiScaleOversegmentLoss (nn.Module):
 
             loss = loss_L + loss_T + loss_R + loss_B + loss_r + loss_conf + loss_cls
 
+            if False and build_gt_detections:
+                ys = []
+                for level in range(len(t_Ls)):
+                    ys.append(torch.cat([torch.ones_like(t_Ls[level]),t_Ls[level],t_Ts[level],t_Rs[level], t_Bs[level],t_rs[level]],dim=1))
+                gt_boxes = build_box_predictions(ys,self.scale,img.device,self.numAnchors,self.numBBParams,self.numBBTypes)
+
             #t#time = timeit.default_timer()-ticAll
             #t#print('time FULL: '+str(time))
             #t#self.OPT_FULL.append(time)
@@ -271,7 +277,8 @@ class MultiScaleOversegmentLoss (nn.Module):
                     (loss_L.item()+loss_T.item()+loss_R.item()+loss_B.item())/4,
                     loss_conf.item(),
                     loss_cls.item(),
-                    loss_r.item()
+                    loss_r.item(),
+                    None,None,None,None,None,None,None,None
                     )
         else:
             #t#print('time FULL: '+str(timeit.default_timer()-ticAll))
@@ -297,7 +304,8 @@ class MultiScaleOversegmentLoss (nn.Module):
                     0,
                     loss_conf.item(),
                     0,
-                    0
+                    0,
+                    None,None,None,None,None,None,None,None
                     )
 
 #This isn't totally anchor free, the model predicts horizontal and verticle text seperately.
@@ -490,7 +498,7 @@ def build_oversegmented_targets_multiscale(
                     #Draw GT
 
                     #draw_gy,draw_gx = skimage.draw.polygon([(g_lxI
-                    #cv2.rectangle(draw[level],(gx,gy),(255,171,212),1
+                    #img_f.rectangle(draw[level],(gx,gy),(255,171,212),1
                     #print('{}'.format((gx,gy,gr,gh,gw)))
                     #plotRect(draw[level],(255,171,212),(gx,gy,gr,gh,gw))
                     #print('{} {} {} {}'.format(tl,tr,br,bl))
@@ -501,10 +509,10 @@ def build_oversegmented_targets_multiscale(
                     colorKey=(112, 58, 99)
                     color=(92, 38, 79)
                     lineWidth=2
-                    cv2.line(draw[level],tl,tr,color,lineWidth)
-                    cv2.line(draw[level],tr,br,color,lineWidth)
-                    cv2.line(draw[level],br,bl,color,lineWidth)
-                    cv2.line(draw[level],bl,tl,colorKey,lineWidth)
+                    img_f.line(draw[level],tl,tr,color,lineWidth)
+                    img_f.line(draw[level],tr,br,color,lineWidth)
+                    img_f.line(draw[level],br,bl,color,lineWidth)
+                    img_f.line(draw[level],bl,tl,colorKey,lineWidth)
 
 
                 gt_area = gw*gh
@@ -802,11 +810,11 @@ def build_oversegmented_targets_multiscale(
                                 #    bix = (bi_y-c_r)/s_r
                                 #    tix = (ti_y-c_r)/s_r
                                 #    print((bi_y,bix),(ti_y,tix))
-                                #    cv2.line(draw[level],(int(VIZ_SIZE*bi_y),int(VIZ_SIZE*bix)),(int(VIZ_SIZE*ti_y),int(VIZ_SIZE*tix)),(255,255,255))
+                                #    img_f.line(draw[level],(int(VIZ_SIZE*bi_y),int(VIZ_SIZE*bix)),(int(VIZ_SIZE*ti_y),int(VIZ_SIZE*tix)),(255,255,255))
                                 #    bix = (bi_y-c_b)/s_b
                                 #    tix = (ti_y-c_b)/s_b
                                 #    print((bi_y,bix),(ti_y,tix))
-                                #    cv2.line(draw[level],(int(VIZ_SIZE*bi_y),int(VIZ_SIZE*bix)),(int(VIZ_SIZE*ti_y),int(VIZ_SIZE*tix)),(255,255,255))
+                                #    img_f.line(draw[level],(int(VIZ_SIZE*bi_y),int(VIZ_SIZE*bix)),(int(VIZ_SIZE*ti_y),int(VIZ_SIZE*tix)),(255,255,255))
                                 ###
                                 b_to_th_inter_x = (ti_y-c_b)/s_b #intersection of gt bb bot line to horizontal line at ti_y 
                                 b_to_r_inter_x = (c_r-c_b)/(s_b-s_r) #intersection of gt bb bot and right lines (corner)
@@ -1118,36 +1126,40 @@ def build_oversegmented_targets_multiscale(
                             R=ri_x-tile_x 
                             R = max(min(R,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
                             targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_W_PRED)
+
+                            assert(R>=L and T<=B)
                         else:
-                            T=ti_y-tile_y #negative if above tile center (just add predcition to center)
-                            #T = max(min(T,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
-                            assert(abs(T)<MAX_H_PRED)
-                            targ_T[b, assigned, cell_y, cell_x] = inv_tanh(T/MAX_H_PRED)
-                            B=bi_y-tile_y 
-                            #B = max(min(B,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
-                            assert(abs(B)<MAX_H_PRED)
-                            targ_B[b, assigned, cell_y, cell_x] = inv_tanh(B/MAX_H_PRED)
-                            L=ri_x-tile_x #negative if left of tile center (just add predcition to center)
-                            L = max(min(L,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
-                            #print('L:{} {}-{}={}'.format(L,ri_x,tile_x,ri_x-tile_x))
-                            targ_L[b, assigned, cell_y, cell_x] = inv_tanh(L/MAX_W_PRED)
-                            R=li_x-tile_x 
-                            R = max(min(R,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
-                            targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_W_PRED)
-                            #old
-                            #T=li_x-tile_x #negative if above tile center (just add predcition to center)
+                            #T=ti_y-tile_y #negative if above tile center (just add predcition to center)
+                            ##T = max(min(T,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
                             #assert(abs(T)<MAX_H_PRED)
                             #targ_T[b, assigned, cell_y, cell_x] = inv_tanh(T/MAX_H_PRED)
-                            #B=ri_x-tile_x
+                            #B=bi_y-tile_y 
+                            ##B = max(min(B,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
                             #assert(abs(B)<MAX_H_PRED)
                             #targ_B[b, assigned, cell_y, cell_x] = inv_tanh(B/MAX_H_PRED)
-                            #
-                            #L=ti_y-tile_y #negative if left of tile center (just add predcition to center)
+                            #L=ri_x-tile_x #negative if left of tile center (just add predcition to center)
                             #L = max(min(L,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
+                            ##print('L:{} {}-{}={}'.format(L,ri_x,tile_x,ri_x-tile_x))
                             #targ_L[b, assigned, cell_y, cell_x] = inv_tanh(L/MAX_W_PRED)
-                            #R=bi_y-tile_y 
+                            #R=li_x-tile_x 
                             #R = max(min(R,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
                             #targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_W_PRED)
+                            #old
+                            T=li_x-tile_x #negative if above tile center (just add predcition to center)
+                            T = max(min(T,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
+                            targ_T[b, assigned, cell_y, cell_x] = inv_tanh(T/MAX_W_PRED)
+                            B=ri_x-tile_x
+                            B = max(min(B,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
+                            targ_B[b, assigned, cell_y, cell_x] = inv_tanh(B/MAX_W_PRED)
+                            
+                            L=ti_y-tile_y #negative if left of tile center (just add predcition to center)
+                            assert(abs(L)<MAX_H_PRED)
+                            targ_L[b, assigned, cell_y, cell_x] = inv_tanh(L/MAX_H_PRED)
+                            R=bi_y-tile_y 
+                            assert(abs(R)<MAX_H_PRED)
+                            targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_H_PRED)
+
+                            assert(R>=L and T<=B)
                         #t#times_assign.append(timeit.default_timer()-tic2)
 
 
@@ -1252,34 +1264,41 @@ def build_oversegmented_targets_multiscale(
                                 elif i==3:
                                     coff_x = VIZ_SIZE*0.25
                                     coff_y = 0
-                                T= torch.tanh(t_Ts[level][b,i,ty,tx])*MAX_H_PRED
-                                B= torch.tanh(t_Bs[level][b,i,ty,tx])*MAX_H_PRED
-                                L= torch.tanh(t_Ls[level][b,i,ty,tx])*MAX_W_PRED
-                                R= torch.tanh(t_Rs[level][b,i,ty,tx])*MAX_W_PRED
-                                #cv2.line(draw_level,(int(d_tile_x-1+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x-1+coff_x),int(d_tile_y+(T*VIZ_SIZE))),(bright,bright,0),1)
-                                #cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x+coff_x),int(d_tile_y+(B*VIZ_SIZE))),(bright,0,0),1)
-                                #cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y-1+coff_y)),(int(d_tile_x+(L*VIZ_SIZE)),int(d_tile_y-1+coff_y)),(bright,0,bright),1)
-                                #cv2.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x+(R*VIZ_SIZE)),int(d_tile_y+coff_y)),(0,bright,bright),1)
+                                if i==0 or i==1:
+                                    T= torch.tanh(t_Ts[level][b,i,ty,tx])*MAX_H_PRED
+                                    B= torch.tanh(t_Bs[level][b,i,ty,tx])*MAX_H_PRED
+                                    L= torch.tanh(t_Ls[level][b,i,ty,tx])*MAX_W_PRED
+                                    R= torch.tanh(t_Rs[level][b,i,ty,tx])*MAX_W_PRED
+                                else:
+                                    T= torch.tanh(t_Ts[level][b,i,ty,tx])*MAX_W_PRED
+                                    B= torch.tanh(t_Bs[level][b,i,ty,tx])*MAX_W_PRED
+                                    L= torch.tanh(t_Ls[level][b,i,ty,tx])*MAX_H_PRED
+                                    R= torch.tanh(t_Rs[level][b,i,ty,tx])*MAX_H_PRED
+
+                                #img_f.line(draw_level,(int(d_tile_x-1+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x-1+coff_x),int(d_tile_y+(T*VIZ_SIZE))),(bright,bright,0),1)
+                                #img_f.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x+coff_x),int(d_tile_y+(B*VIZ_SIZE))),(bright,0,0),1)
+                                #img_f.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y-1+coff_y)),(int(d_tile_x+(L*VIZ_SIZE)),int(d_tile_y-1+coff_y)),(bright,0,bright),1)
+                                #img_f.line(draw_level,(int(d_tile_x+coff_x),int(d_tile_y+coff_y)),(int(d_tile_x+(R*VIZ_SIZE)),int(d_tile_y+coff_y)),(0,bright,bright),1)
                                 
                                 draw_level[int(d_tile_y+coff_y)-1:int(d_tile_y+coff_y)+2,int(d_tile_x+coff_x)-1:int(d_tile_x+coff_x)+2]=draw_colors[colorIndex]
-                                if i==0 or i==1:
-                                    drawT = int(d_tile_y+T*VIZ_SIZE)
-                                    drawB = int(d_tile_y+B*VIZ_SIZE)
-                                    drawL = int(d_tile_x+L*VIZ_SIZE)
-                                    drawR = int(d_tile_x+R*VIZ_SIZE)
-                                elif i==2 or i==3:
-                                    drawL = int(d_tile_x+T*VIZ_SIZE)
-                                    drawR = int(d_tile_x+B*VIZ_SIZE)
-                                    drawB = int(d_tile_y+L*VIZ_SIZE)
-                                    drawT = int(d_tile_y+R*VIZ_SIZE)
+                                #if i==0 or i==1:
+                                drawT = int(d_tile_y+T*VIZ_SIZE)
+                                drawB = int(d_tile_y+B*VIZ_SIZE)
+                                drawL = int(d_tile_x+L*VIZ_SIZE)
+                                drawR = int(d_tile_x+R*VIZ_SIZE)
+                                #elif i==2 or i==3:
+                                #    drawL = int(d_tile_x+T*VIZ_SIZE)
+                                #    drawR = int(d_tile_x+B*VIZ_SIZE)
+                                #    drawB = int(d_tile_y+L*VIZ_SIZE)
+                                #    drawT = int(d_tile_y+R*VIZ_SIZE)
                                 #assert(drawL>=-VIZ_SIZE and drawL<=draw_level.shape[1]+VIZ_SIZE)
                                 #assert(drawR>=-VIZ_SIZE and drawR<=draw_level.shape[1]+VIZ_SIZE)
                                 #assert(drawT>=-VIZ_SIZE and drawT<=draw_level.shape[0]+VIZ_SIZE)
                                 #assert(drawB>=-VIZ_SIZE and drawB<=draw_level.shape[0]+VIZ_SIZE)
-                                cv2.line(draw_level,(drawL,drawT),(drawR,drawT),draw_colors[colorIndex])
-                                cv2.line(draw_level,(drawR,drawT),(drawR,drawB),draw_colors[colorIndex])
-                                cv2.line(draw_level,(drawR,drawB),(drawL,drawB),draw_colors[colorIndex])
-                                cv2.line(draw_level,(drawL,drawB),(drawL,drawT),draw_colors[colorIndex])
+                                img_f.line(draw_level,(drawL,drawT),(drawR,drawT),draw_colors[colorIndex])
+                                img_f.line(draw_level,(drawR,drawT),(drawR,drawB),draw_colors[colorIndex])
+                                img_f.line(draw_level,(drawR,drawB),(drawL,drawB),draw_colors[colorIndex])
+                                img_f.line(draw_level,(drawL,drawB),(drawL,drawT),draw_colors[colorIndex])
                                 colorIndex = (colorIndex+1)%len(draw_colors)
                                 
 
@@ -1315,6 +1334,8 @@ def build_oversegmented_targets_multiscale(
         #t#print('  times_overlaps: {}   std: {}, count{}'.format(np.mean(times_overlaps),np.std(times_overlaps),len(times_overlaps)))
 
     #assert(False and 'TODO verify this works! Have you crafted corner cases?')
+    for Ls,Rs,Ts,Bs in zip(t_Ls,t_Rs,t_Ts,t_Bs):
+        assert((Ls<=Rs).all() and (Ts<=Bs).all())
     return (nGT, 
             masks,
             conf_masks, 
@@ -1339,7 +1360,7 @@ def bbox_coverage_axis_rot(box_gt, pred_boxes):
     """
     Computes how much the gt is covered by predictions and how much of each prediction is covered by the gt
     """
-    gt_poly = Polygon(xyrhwToCorners(*box_gt[0:5]))
+    gt_poly =  Polygon(xyrhwToCorners(*box_gt[0:5]))
     pred_areas=[]
     agglom = None
     for i in range(pred_boxes.size(0)):

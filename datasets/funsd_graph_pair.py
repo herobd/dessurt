@@ -11,7 +11,7 @@ from utils.funsd_annotations import createLines
 import timeit
 from .graph_pair import GraphPairDataset
 
-import cv2
+import utils.img_f as img_f
 
 SKIP=['174']#['193','194','197','200']
 ONE_DONE=[]
@@ -78,15 +78,15 @@ class FUNSDGraphPair(GraphPairDataset):
                     if self.cache_resized:
                         rescale = self.rescale_range[1]
                         if not os.path.exists(path):
-                            org_img = cv2.imread(org_path)
+                            org_img = img_f.imread(org_path)
                             if org_img is None:
                                 print('WARNING, could not read {}'.format(org_img))
                                 continue
-                            resized = cv2.resize(org_img,(0,0),
+                            resized = img_f.resize(org_img,(0,0),
                                     fx=self.rescale_range[1], 
                                     fy=self.rescale_range[1], 
-                                    interpolation = cv2.INTER_CUBIC)
-                            cv2.imwrite(path,resized)
+                                    )
+                            img_f.imwrite(path,resized)
                     self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')]})
         self.only_types=None
         self.errors=[]

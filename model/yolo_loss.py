@@ -7,7 +7,7 @@ import math
 from utils.yolo_tools import allIOU, allDist
 from utils.util import inv_tanh
 from matplotlib import pyplot as plt
-import cv2
+import utils.img_f as img_f
 class YoloLoss (nn.Module):
     def __init__(self, num_classes, rotation, scale, anchors, ignore_thresh=0.5,use_special_loss=False,bad_conf_weight=1.25, multiclass=False):
         super(YoloLoss, self).__init__()

@@ -12,7 +12,7 @@ from collections import defaultdict, OrderedDict
 from utils.forms_annotations import fixAnnotations, convertBBs, getBBWithPoints, getStartEndGT
 import timeit
 
-import cv2
+import utils.img_f as img_f
 
 
 def collate(batch):
@@ -238,7 +238,7 @@ class BoxDetectDataset(torch.utils.data.Dataset):
 
 
         ##tic=timeit.default_timer()
-        np_img = cv2.imread(imagePath, 1 if self.color else 0)#/255.0
+        np_img = img_f.imread(imagePath, 1 if self.color else 0)#/255.0
         if np_img is None or np_img.shape[0]==0:
             print("ERROR, could not open "+imagePath)
             return self.__getitem__((index+1)%self.__len__())
@@ -267,13 +267,13 @@ class BoxDetectDataset(torch.utils.data.Dataset):
         
         
         ##tic=timeit.default_timer()
-        #np_img = cv2.resize(np_img,(target_dim1, target_dim0), interpolation = cv2.INTER_CUBIC)
+        #np_img = img_f.resize(np_img,(target_dim1, target_dim0))
         if np_img is not None:
             #print('! dataset not none...')
-            np_img = cv2.resize(np_img,(0,0),
+            np_img = img_f.resize(np_img,(0,0),
                     fx=partial_rescale,
                     fy=partial_rescale,
-                    interpolation = cv2.INTER_CUBIC)
+                    )
         #print('! dataset resize')
         if not self.color:
             np_img=np_img[...,None] #add 'color' channel
@@ -665,10 +665,10 @@ class BoxDetectDataset(torch.utils.data.Dataset):
                 br = ( int(math.cos(rot)*w-math.sin(rot)*-h)+dW//2,  int(math.sin(rot)*w+math.cos(rot)*-h)+dH//2 )
                 bl = ( int(math.cos(rot)*-w-math.sin(rot)*-h)+dW//2, int(math.sin(rot)*-w+math.cos(rot)*-h)+dH//2 )
                 
-                cv2.line(draw,tl,tr,color)
-                cv2.line(draw,tr,br,color)
-                cv2.line(draw,br,bl,color)
-                cv2.line(draw,bl,tl,color,2)
+                img_f.line(draw,tl,tr,color)
+                img_f.line(draw,tr,br,color)
+                img_f.line(draw,br,bl,color)
+                img_f.line(draw,bl,tl,color,2)
             else:
                 final_k-=1
         
@@ -676,7 +676,7 @@ class BoxDetectDataset(torch.utils.data.Dataset):
         with open(outPath.format(final_k),'w') as out:
             out.write(json.dumps(toWrite))
             print('saved '+outPath.format(final_k))
-        cv2.imshow('clusters',draw)
-        cv2.waitKey()
+        img_f.imshow('clusters',draw)
+        img_f.waitKey()
 
 
