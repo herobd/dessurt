@@ -1,5 +1,5 @@
 import numpy as np
-import cv2
+import utils.img_f as img_f
 import timeit
 import warnings
 import random, math
@@ -7,13 +7,13 @@ import random, math
 def perform_crop(img, gt, crop):
     #csX,csY = crop['crop_size']
     cropped_gt_img = img[crop['dim0'][0]:crop['dim0'][1], crop['dim1'][0]:crop['dim1'][1]]
-    scaled_gt_img = cropped_gt_img #cv2.resize(cropped_gt_img, (csY, csX), interpolation = cv2.INTER_CUBIC)
+    scaled_gt_img = cropped_gt_img #img_f.resize(cropped_gt_img, (csY, csX))
     if len(scaled_gt_img.shape)==2:
         scaled_gt_img = scaled_gt_img[...,None]
     scaled_gt = None
     if gt is not None:
         cropped_gt = gt[crop['dim0'][0]:crop['dim0'][1], crop['dim1'][0]:crop['dim1'][1]]
-        scaled_gt = cropped_gt #cv2.resize(cropped_gt, (cs, cs), interpolation = cv2.INTER_CUBIC)
+        scaled_gt = cropped_gt #img_f.resize(cropped_gt, (cs, cs))
         if len(scaled_gt.shape)==2:
             scaled_gt = scaled_gt[...,None]
     return scaled_gt_img, scaled_gt
@@ -408,7 +408,7 @@ class CropBoxTransform(object):
                 amount = math.pi*amount/180
             else:
                 amount = 0
-            #M = cv2.getRotationMatrix2D((org_img.shape[1]/2,org_img.shape[0]/2),amount,1)
+            #M = img_f.getRotationMatrix2D((org_img.shape[1]/2,org_img.shape[0]/2),amount,1)
             rot = np.array([  [math.cos(amount), -math.sin(amount), 0],
                             [math.sin(amount), math.cos(amount), 0],
                             [0,0,1] ])
@@ -433,13 +433,13 @@ class CropBoxTransform(object):
                                     [0,0,1] ])
                 M = flipV.dot(M)
             M = uncenter.dot(M)
-            M=M[:2]
+            M=M[:2] #opencv didn't want 3x3
             #rotate image
-            org_img = cv2.warpAffine(org_img,M,(org_img.shape[1],org_img.shape[0]))
+            org_img = img_f.warpAffine(org_img,M,(org_img.shape[1],org_img.shape[0]))
             if len(org_img.shape)==2:
                 org_img = org_img[:,:,None]
             if pixel_gt is not None:
-                pixel_gt = cv2.warpAffine(pixel_gt,M,(pixel_gt.shape[1],pixel_gt.shape[0]))
+                pixel_gt = img_f.warpAffine(pixel_gt,M,(pixel_gt.shape[1],pixel_gt.shape[0]))
                 if len(pixel_gt.shape)==2:
                     pixel_gt = pixel_gt[:,:,None]
             #rotate points

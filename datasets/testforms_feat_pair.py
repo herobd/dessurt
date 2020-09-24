@@ -25,14 +25,14 @@ def plotRect(img,color,xyrhw):
         br = ( int(w*math.cos(rot)+h*math.sin(rot) + xc),  int(-w*math.sin(rot)+h*math.cos(rot) + yc) )
         bl = ( int(-w*math.cos(rot)+h*math.sin(rot) + xc), int(w*math.sin(rot)+h*math.cos(rot) + yc) )
 
-        #cv2.line(img,tl,tr,color,1)
-        #cv2.line(img,tr,br,color,1)
-        #cv2.line(img,br,bl,color,1)
-        #cv2.line(img,bl,tl,color,1)
-        cv2.line(img,tl,tr,(255,0,0),1)
-        cv2.line(img,tr,br,(255,255,0),1)
-        cv2.line(img,br,bl,(0,255,255),1)
-        #cv2.line(img,bl,tl,(255,0,255),1)
+        #img_f.line(img,tl,tr,color,1)
+        #img_f.line(img,tr,br,color,1)
+        #img_f.line(img,br,bl,color,1)
+        #img_f.line(img,bl,tl,color,1)
+        img_f.line(img,tl,tr,(255,0,0),1)
+        img_f.line(img,tr,br,(255,255,0),1)
+        img_f.line(img,br,bl,(0,255,255),1)
+        #img_f.line(img,bl,tl,(255,0,255),1)
 
 #def display(instance):
 #    imagePath = instance['imgPath']
@@ -50,7 +50,7 @@ def display(data):
     if False:
         #print (data['img'].size())
         #img = (data['img'][0].permute(1,2,0)+1)/2.0
-        img =  cv2.imread(data['imgPath'])
+        img =  img_f.imread(data['imgPath'])
         #print(img.shape)
         #print(data['pixel_gt']['table_pixels'].shape)
         print(data['imgName'])
