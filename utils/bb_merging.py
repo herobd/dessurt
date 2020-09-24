@@ -33,6 +33,12 @@ class TextLine:
                 tmp = pred_bb_info[2]
                 pred_bb_info[2]=pred_bb_info[4]
                 pred_bb_info[4]=tmp
+            elif pred_bb_info[2]==pred_bb_info[4]: #detector sometimes predicts flat BBs
+                pred_bb_info[2]-=1
+                pred_bb_info[4]+=1
+            if pred_bb_info[1]==pred_bb_info[3]:
+                pred_bb_info[1]-=1
+                pred_bb_info[3]+=1
 
             self.all_primitive_rects = [ np.array([[pred_bb_info[1].item(),pred_bb_info[2].item()],[pred_bb_info[3].item(),pred_bb_info[2].item()],[pred_bb_info[3].item(),pred_bb_info[4].item()],[pred_bb_info[1].item(),pred_bb_info[4].item()]]) ] #tl, tr, bt, bl
             
@@ -335,12 +341,12 @@ class TextLine:
         top_points_np=np.array(top_points)
         bot_points_np=np.array(bot_points)
         step_size = np.linalg.norm(top_points_np.mean(axis=0)-bot_points_np.mean(axis=0))
-        if step_size==0: #Detection error with flat box
-            for p in top_points:
-                p[1]-=2
-            for p in bot_points:
-                p[1]+=2
-            step_size=4
+        #if step_size==0: #Detection error with flat box
+        #    for p in top_points:
+        #        p[1]-=2
+        #    for p in bot_points:
+        #        p[1]+=2
+        #    step_size=4
         top_points_np= bot_points_np= None
 
         #step_size_top= (2*step_size/top_total_distance)/(1/top_total_distance + 1/bot_total_distance)
