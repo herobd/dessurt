@@ -74,9 +74,11 @@ class ResBlock(nn.Module):
         if downsample and downsample!='unlearned':
             self.id_transform = nn.AvgPool2d(2)
             conv1_stride=2
+            padding=0
         else:
             self.id_transform = lambda x: x
             conv1_stride=1
+            padding=dilation
 
         layers=[]
         if not skipFirstReLU:
@@ -89,7 +91,10 @@ class ResBlock(nn.Module):
             elif 'group' in norm:
                 layers.append(nn.GroupNorm(getGroupSize(out_ch),out_ch))
             layers.append(nn.ReLU(inplace=True)) 
-        conv1=nn.Conv2d(out_ch, out_ch, kernel_size=3, padding=dilation, dilation=dilation, stride=conv_stride)
+        if downsample and downsample!='unlearned':
+            #we have to do an uneven padding so that the output will be the same as 2x2 avg pool
+            layers.append(nn.ZeroPad2d((0,1,0,1)))
+        conv1=nn.Conv2d(out_ch, out_ch, kernel_size=3, padding=padding, dilation=dilation, stride=conv1_stride)
         if 'weight' in norm and not skipFirstReLU: #or just use this normalization?
             layers.append(weight_norm(conv1))
         else:
@@ -176,7 +181,7 @@ class GeneralRes(nn.Module):
 
 
 
-def convReLU(in_ch,out_ch,norm,dilation=1,kernel=3,dropout=None,depthwise=False,coordconv=None,bias=True):
+def convReLU(in_ch,out_ch,norm,dilation=1,kernel=3,dropout=None,depthwise=False,coordconv=None,bias=True,stride=1,relu=True):
     if type(dilation) is int:
         dilation=(dilation,dilation)
     if type(kernel) is int:
@@ -186,7 +191,7 @@ def convReLU(in_ch,out_ch,norm,dilation=1,kernel=3,dropout=None,depthwise=False,
     if coordconv is not None:
         conv2d = CoordConv(in_ch,out_ch, kernel_size=kernel, padding=padding,dilation=dilation,groups=groups,features=coordconv)
     else:
-        conv2d = nn.Conv2d(in_ch,out_ch, kernel_size=kernel, padding=padding,dilation=dilation,groups=groups,bias=bias)
+        conv2d = nn.Conv2d(in_ch,out_ch, kernel_size=kernel, padding=padding,dilation=dilation,groups=groups,bias=bias, stride=stride)
     #if i == len(cfg)-1:
     #    layers += [conv2d]
     #    break
@@ -207,7 +212,8 @@ def convReLU(in_ch,out_ch,norm,dilation=1,kernel=3,dropout=None,depthwise=False,
             layers.append(nn.Dropout(p=0.1,inplace=True))
         elif type(dropout)==float:
             layers.append(nn.Dropout2d(p=dropout,inplace=True))
-    layers += [nn.ReLU(inplace=True)]
+    if relu:
+        layers += [nn.ReLU(inplace=True)]
     return layers
 
 def fcReLU(in_ch,out_ch,norm,dropout=None,relu=True):
@@ -313,11 +319,16 @@ def make_layers(cfg, dilation=1, norm=None, dropout=None):
             layers += convReLU(in_channels[-1],outCh,norm,kernel=kernel_size,dropout=dropout)
             layerCodes.append(v)
             in_channels.append(outCh)
-        elif type(v)==str and v[0] == '$': #conv later with custom kernel size without bias, for startingResnet
+        elif type(v)==str and v[0] == '$': #conv later for starting ResNet. No bias and stride of 2
+            if v[-1]=='r':
+                relu=True
+                v=v[:-1]
+            else:
+                relu=False
             div = v.find('-')
             kernel_size=int(v[1:div])
             outCh=int(v[div+1:])
-            layers += convReLU(in_channels[-1],outCh,norm,kernel=kernel_size,dropout=dropout,bias=False)
+            layers += convReLU(in_channels[-1],outCh,norm,kernel=kernel_size,dropout=dropout,stride=2,bias=False,relu=True)
             layerCodes.append(v)
             in_channels.append(outCh)
         elif type(v)==str and v[:2] == 'cc': #CoordConv 'ccTYPE-k#,d#,hd-CHS'

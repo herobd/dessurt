@@ -316,7 +316,7 @@ class BoxDetectTrainer(BaseTrainer):
                 log['gt_covered_noclass']=gt_covered_noclass
                 log['pred_covered_noclass']=pred_covered_noclass
             else:
-                this_loss, position_loss, conf_loss, class_loss, rot_loss = self.loss['overseg'](outputOffsets,targetBoxes,targetBoxes_sizes)
+                this_loss, position_loss, conf_loss, class_loss, rot_loss, _,_,_,_,_,_,_,_ = self.loss['overseg'](outputOffsets,targetBoxes,targetBoxes_sizes)
             losses['oversegLoss']=this_loss#.item()
             log['position_loss']=position_loss
             log['conf_loss']=conf_loss
