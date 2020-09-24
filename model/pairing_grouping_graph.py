@@ -2123,7 +2123,6 @@ class PairingGroupingGraph(BaseModel):
             cos_r_right2 = cos_r_right[None,:].expand(cos_r_right.size(0),-1)
             sin_r_right1 = sin_r_right[:,None].expand(-1,sin_r_right.size(0))
             sin_r_right2 = sin_r_right[None,:].expand(sin_r_right.size(0),-1)
->>>>>>> 7be3ea7ff206845956536cc501a8560dd0ce6732
 
         else:
             #features: tlXDiff,trXDiff,brXDiff,blXDiff,tlYDiff,trYDiff,brYDiff,blYDiff, centerXDiff, centerYDiff, absX, absY, h1, w1, h2, w2, classpred1, classpred2, line of sight (binary)
