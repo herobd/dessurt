@@ -33,12 +33,14 @@ class TextLine:
                 tmp = pred_bb_info[2]
                 pred_bb_info[2]=pred_bb_info[4]
                 pred_bb_info[4]=tmp
-            elif abs(pred_bb_info[2]-pred_bb_info[4])<0.001: #detector sometimes predicts flat BBs
+            print('check flat (vert): {}'.format(abs(pred_bb_info[2]-pred_bb_info[4])<0.001))
+            if abs(pred_bb_info[2]-pred_bb_info[4])<0.001: #detector sometimes predicts flat BBs
                 pred_bb_info[2]-=1
                 pred_bb_info[4]+=1
             if abs(pred_bb_info[1]-pred_bb_info[3])<0.001:
                 pred_bb_info[1]-=1
                 pred_bb_info[3]+=1
+            print('check flat 2 (vert): {}'.format(abs(pred_bb_info[2]-pred_bb_info[4])<0.001))
 
             self.all_primitive_rects = [ np.array([[pred_bb_info[1].item(),pred_bb_info[2].item()],[pred_bb_info[3].item(),pred_bb_info[2].item()],[pred_bb_info[3].item(),pred_bb_info[4].item()],[pred_bb_info[1].item(),pred_bb_info[4].item()]]) ] #tl, tr, bt, bl
 
