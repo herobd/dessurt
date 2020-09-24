@@ -51,9 +51,12 @@
 #plt.plot(x,y,'.')
 #plt.show()
 from model.oversegment_loss import build_oversegmented_targets_multiscale
-import torch
+from model.overseg_box_detector import build_box_predictions
+from utils.bb_merging import TextLine
+import torch, cv2
+import numpy as np
 import math,random
-
+from utils.forms_annotations import calcCorners
 def calcPoints(x,y,r,h,w):
     rx = x + math.cos(r)*w
     ry = y - math.sin(r)*w
@@ -67,9 +70,16 @@ def calcPoints(x,y,r,h,w):
 
     return lx,ly,rx,ry,tx,ty,bx,by
 
-num_classes=1
-H=1500
-W=1500
+def drawPoly(img,pts,color,thck=1):
+    for i in range(-1,len(pts)-1):
+        cv2.line(img,(int(pts[i][0]),int(pts[i][1])),(int(pts[i+1][0]),int(pts[i+1][1])),color,thck)
+
+num_classes=2
+numBBTypes=2
+numAnchors=4
+numBBParams=6
+H=300
+W=700
 #scale = [ (16,16), (32,32), (64,64) ]
 scale = [ (32,32), (64,64) ]
 grid_sizesH=[H//s[0] for s in scale]
@@ -80,23 +90,33 @@ pred_conf = [torch.zeros(1,1,1,1)]*3
 
 targs=[]
 #varying sizes
-yb=100
-t=0
-for h in range(8,64,4):
-    w = h*2
-    h = (h%40) +8
-    r = 0#-math.pi*(7/10)
-    y = yb
-    for x in range(100,1300,300):
-        lx,ly,rx,ry,tx,ty,bx,by = calcPoints(x,y,r,h,w)
-        targs.append([x,y,r,h,w,lx,ly,rx,ry,tx,ty,bx,by])
-        t+=1
-        y+=1
-        r += math.pi/10
-        if r>math.pi:
-            r-=math.pi*2
-        #r = (random.random()*math.pi/2)-math.pi/4
-    yb+=1.1*(h+w)
+#yb=100
+#t=0
+#for h in range(40,41,4):
+#    w = h*3
+#    r = math.pi/10#-math.pi*(7/10)
+#    y = yb
+#    for x in range(150,300,300):
+#        lx,ly,rx,ry,tx,ty,bx,by = calcPoints(x,y,r,h,w)
+#        targs.append([x,y,r,h,w,lx,ly,rx,ry,tx,ty,bx,by])
+#        t+=1
+#        y+=1
+#        r += math.pi/10
+#        if r>math.pi:
+#            r-=math.pi*2
+#        #r = (random.random()*math.pi/2)-math.pi/4
+#    yb+=1.1*(h+w)
+
+boxes = [
+        [150,110,-math.pi*7/10,40,120],
+        [299,105,math.pi/20,40,40],
+        [345,80,-math.pi/40,40,80],
+        [140,100,0,40,120]
+        ]
+t=len(boxes)
+for x,y,r,h,w in boxes:
+    lx,ly,rx,ry,tx,ty,bx,by = calcPoints(x,y,r,h,w)
+    targs.append([x,y,r,h,w,lx,ly,rx,ry,tx,ty,bx,by])
 
 #Totally random
 #t=50
@@ -129,4 +149,64 @@ target= torch.FloatTensor(1,t,13+1)
 for t,targ in enumerate(targs):
     target[0,t,:13]=torch.FloatTensor(targ)
 
-build_oversegmented_targets_multiscale(pred_boxes, pred_conf, pred_cls, target, target_sizes, num_classes, grid_sizesH, grid_sizesW,scale=scale, assign_mode='split', close_anchor_rule='unmask')
+nGT, masks, conf_masks, t_Ls, t_Ts, t_Rs, t_Bs, t_rs, tconf_scales, tcls_scales, pred_covered, gt_covered, recall, precision, pred_covered_noclass, gt_covered_noclass, recall_noclass, precision_noclass = build_oversegmented_targets_multiscale(pred_boxes, pred_conf, pred_cls, target, target_sizes, num_classes, grid_sizesH, grid_sizesW,scale=scale, assign_mode='split', close_anchor_rule='unmask')
+
+
+# Handle target variables
+t_Ls = [t.type(torch.FloatTensor) for t in t_Ls]
+t_Ts = [t.type(torch.FloatTensor) for t in t_Ts]
+t_Rs = [t.type(torch.FloatTensor) for t in t_Rs]
+t_Bs = [t.type(torch.FloatTensor) for t in t_Bs]
+t_rs = [t.type(torch.FloatTensor) for t in t_rs]
+tconf_scales = [t.type(torch.FloatTensor) for t in tconf_scales]
+tcls_scales = [t.type(torch.FloatTensor) for t in tcls_scales]
+
+ys = []
+for level in range(len(t_Ls)):
+    level_y = torch.cat([ torch.stack([tconf_scales[level],t_Ls[level],t_Ts[level],t_Rs[level], t_Bs[level],t_rs[level]],dim=2), tcls_scales[level].permute(0,1,4,2,3)], dim=2)
+    ys.append(level_y.view(level_y.size(0),level_y.size(1)*level_y.size(2),level_y.size(3),level_y.size(4)))
+
+    display_y = level_y[0].permute(2,3,0,1).contiguous().view(-1,level_y.size(2))
+
+    #print('level_y: {}'.format(display_y[display_y[:,0]>0.5]))
+gt_boxes = build_box_predictions(ys,scale,ys[0].device,numAnchors,numBBParams,numBBTypes)
+assert((gt_boxes[0,gt_boxes[0,:,0]>0.5,2] < gt_boxes[0,gt_boxes[0,:,0]>0.5,4]).all())
+#print('gt: {}'.format(gt_boxes[0,gt_boxes[0,:,0]>0.5]))
+
+img = np.zeros([H,W,3])
+for t in targs:
+    corners = calcCorners(*t[0:5])
+    #cv2.polylines(img,np.array([[t[5],t[10]],[t[7],t[10]],[t[7],t[12]],[t[5],t[12]]],np.int32).reshape((-1,1,2)),True,(0,255,0),3)
+    #drawPoly(img,[[t[5],t[10]],[t[7],t[10]],[t[7],t[12]],[t[5],t[12]]],(0,255,0),3)
+    #print([[t[5],t[10]],[t[7],t[10]],[t[7],t[12]],[t[5],t[12]]])
+    drawPoly(img,corners,(0,255,0),3)
+
+
+all_textlines=[]
+for bb in gt_boxes[0]:
+    if bb[0]>0.5:
+        #all_textlines.append(TextLine(torch.FloatTensor([1,t[5],t[10],t[7],t[12],0,0,1])))
+        #cv2.rectangle(img,(t[5],t[10]),(t[7],t[12]),(0,0,255),1)
+        all_textlines.append(TextLine(torch.FloatTensor(bb)))
+        #cv2.rectangle(img,bb[1:3].numpy(),bb[3:5].numpy(),(0,0,255))
+        #cv2.line(img,(round(bb[1].item()),round(bb[2].item())),(round(bb[3].item()),round(bb[4].item())),(0,0,255))
+        cv2.rectangle(img,(round(bb[1].item()),round(bb[2].item())),(round(bb[3].item()),round(bb[4].item())),(0,0,255),2)
+        print(bb)
+
+first_textline=all_textlines[0]
+
+for tl in all_textlines[1:]:
+    first_textline.merge(tl)
+
+#cv2.polylines(img,np.array(first_textline.polyPoints(),np.int32).reshape((-1,1,2)),True,(255,0,0),1)
+drawPoly(img,first_textline.polyPoints(),(255,0,0),1)
+#for p in first_textline.polyPoints():
+#    img[int(p[1]),int(p[0]),1]=255
+for t,b in first_textline.pairPoints():
+    color = [100+random.randint(0,154),100+random.randint(0,154),100+random.randint(0,154)]
+    img[int(t[1]-1):int(t[1]+1),int(t[0]-1):int(t[0]+1),:]=color
+    img[int(b[1]-1):int(b[1]+1),int(b[0]-1):int(b[0]+1),:]=color
+print('final poly: {}'.format(first_textline.polyPoints()))
+
+cv2.imshow('x',img)
+cv2.waitKey()

@@ -3,7 +3,7 @@ import os
 import numpy as np
 import torch
 import torch.nn.functional as F
-import cv2
+import utils.img_f as img_f
 from utils import util
 from model.alignment_loss import alignment_loss
 import math
@@ -32,10 +32,10 @@ def FormsFeaturePair_printer(config,instance, model, gpu, metrics, outDir=None, 
         br = ( int(w*math.cos(rot)+h*math.sin(rot) + xc),  int(-w*math.sin(rot)+h*math.cos(rot) + yc) )
         bl = ( int(-w*math.cos(rot)+h*math.sin(rot) + xc), int(w*math.sin(rot)+h*math.cos(rot) + yc) )
 
-        cv2.line(img,tl,tr,color,1)
-        cv2.line(img,tr,br,color,1)
-        cv2.line(img,br,bl,color,1)
-        cv2.line(img,bl,tl,color,1)
+        img_f.line(img,tl,tr,color,1)
+        img_f.line(img,tr,br,color,1)
+        img_f.line(img,br,bl,color,1)
+        img_f.line(img,bl,tl,color,1)
     def __eval_metrics(data,target):
         acc_metrics = np.zeros((output.shape[0],len(metrics)))
         for ind in range(output.shape[0]):
@@ -247,7 +247,7 @@ def FormsFeaturePair_printer(config,instance, model, gpu, metrics, outDir=None, 
 
         #ossThis, position_loss, conf_loss, class_loss, recall, precision = yolo_loss(outputOffsets,targetBBsT,targetBBsSizes)
         if outDir is not None:
-            image = cv2.imread(imagePath,1)
+            image = img_f.imread(imagePath,1)
             #image[40:50,40:50,0]=255
             #image[50:60,50:60,1]=255
             assert(image.shape[2]==3)
@@ -273,7 +273,7 @@ def FormsFeaturePair_printer(config,instance, model, gpu, metrics, outDir=None, 
                 #plotRect(image,(1,0,0),(x,y,r,h,w))
 
                 if label[b].item()> 0:
-                   cv2.line(image,(int(x),int(y)),(int(x2),int(y2)),(0,255,0),1)
+                   img_f.line(image,(int(x),int(y)),(int(x2),int(y2)),(0,255,0),1)
 
 
         totalPreds=0
@@ -295,7 +295,7 @@ def FormsFeaturePair_printer(config,instance, model, gpu, metrics, outDir=None, 
                     truePs+=1
                 if outDir is not None:
                     color = int(255*(pred[b].item()-THRESH)/(1-THRESH))
-                    cv2.line(image,(x,y+3),(x2,y2-3),(color,0,0),1)
+                    img_f.line(image,(x,y+3),(x2,y2-3),(color,0,0),1)
             if label[b].item()>0:
                 scores.append( (pred[b],True) )
                 totalGTs+=1
@@ -304,11 +304,11 @@ def FormsFeaturePair_printer(config,instance, model, gpu, metrics, outDir=None, 
             if predNN is not None and outDir is not None:
                 color = int(min(abs(predNN[id1]-gtNumNeighbors[b,0]),2)*127)
                 if id1 not in wroteIds:
-                    cv2.putText(image,'{:.2f}/{}'.format(predNN[id1],gtNumNeighbors[b,0]),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(color,0,0),2,cv2.LINE_AA)
+                    img_f.putText(image,'{:.2f}/{}'.format(predNN[id1],gtNumNeighbors[b,0]),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(color,0,0),2,cv2.LINE_AA)
                     wroteIds.add(id1)
                 color = int(min(abs(predNN[id2]-gtNumNeighbors[b,1]),2)*127)
                 if id2 not in wroteIds:
-                    cv2.putText(image,'{:.2f}/{}'.format(predNN[id2],gtNumNeighbors[b,1]),(x2,y2), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(color,0,0),2,cv2.LINE_AA)
+                    img_f.putText(image,'{:.2f}/{}'.format(predNN[id2],gtNumNeighbors[b,1]),(x2,y2), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(color,0,0),2,cv2.LINE_AA)
                     wroteIds.add(id2)
        
         totalGTs+=missedRels
@@ -331,9 +331,9 @@ def FormsFeaturePair_printer(config,instance, model, gpu, metrics, outDir=None, 
             else:
                 wap=ap
             saveName = '{}_AP:{:.2f}_r:{:.2f}_p:{:.2f}_.png'.format(imageName,wap,recall,prec)
-            cv2.imwrite(os.path.join(outDir,saveName),image)
-            #cv2.imshow('dfsdf',image)
-            #cv2.waitKey()
+            img_f.imwrite(os.path.join(outDir,saveName),image)
+            #img_f.imshow('dfsdf',image)
+            #img_f.waitKey()
         
         if 'optimize' in config and config['optimize']:
             returnDict['recall-{}'.format(penalty)]=recall

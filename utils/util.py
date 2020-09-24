@@ -1,5 +1,5 @@
 import os, math
-import cv2
+import utils.img_f as img_f
 import struct
 import torch
 from . import string_utils
@@ -159,10 +159,12 @@ def plotRect(img,color,xyrhw,lineWidth=1):
     br = (int(br[0]),int(br[1]))
     bl = (int(bl[0]),int(bl[1]))
 
-    cv2.line(img,tl,tr,color,lineWidth)
-    cv2.line(img,tr,br,color,lineWidth)
-    cv2.line(img,br,bl,color,lineWidth)
-    cv2.line(img,bl,tl,color,lineWidth)
+    img_f.line(img,tl,tr,color,lineWidth)
+    img_f.line(img,tr,br,color,lineWidth)
+    img_f.line(img,br,bl,color,lineWidth)
+    img_f.line(img,bl,tl,color,lineWidth)
+def pointDistance(p1,p2):
+    return math.sqrt( (p1[0]-p2[0])**2 + (p1[1]-p2[1])**2 )
 
 def inv_tanh(y):
     if y<=-1: #implicit gradient clipping done here

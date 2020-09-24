@@ -3,6 +3,14 @@ import torch
 import math
 import timeit
 import numpy as np
+from utils.forms_annotations import calcCornersTorch
+from shapely.geometry import Polygon, LineString
+import shapely
+
+def distancePoints(a,b):
+    return math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2)
+def distancePointLine(p,la,lb):
+    return abs((la[1]-lb[1])*p[0]-(la[0]-lb[0])*p[1]+la[0]*lb[1]-la[1]*lb[0])/math.sqrt((la[1]-lb[1])**2 + (la[0]-lb[0])**2)
 
 def non_max_sup_overseg(pred_boxes,thresh_conf=0.5, thresh_inter=0.5, hard_limit=300):
     return non_max_sup_(pred_boxes,thresh_conf, thresh_inter, verticle_bias_intersection, hard_limit)
@@ -330,7 +338,266 @@ def allIOU_andClip(boxesT,boxesP, boxesPXYWH=[0,1,4,3]):
 
     iou = inter_area / (bP_area + bT_area - inter_area + 1e-16)
     io_clipped_u = inter_area / (bP_area + bT_clippedArea - inter_area + 1e-16)
+
+    #gt_r = rboxes[:,None,2].expand(rboxes.size(0), len(bbs))
+    #pr_allRs = pr_allRs[None,:].expand(rboxes.size(0), len(bbs))
+    #angle_compatible = torch.abs(gt_r-pr_allRs)
+    #angle_compatible[angle_compatible>math.pi]-=math.pi
+    #angle_compatible[angle_compatible>math.pi]-=math.pi
+    #angle_compatible = angle_compatible.abs()<math.pi/3
+    #iou *= angle_compatible
+
+    #
+    #gt_cls_ind = torch.argmax(rboxes[:,13:],dim=1)
+    #pr_allClss = torch.FloatTensor([bb.getCls() for bb in bbs])
+    ##pr_allClss = torch.stack([bb.getCls() for bb in bbs],dim=0)
+    #pr_cls_int = torch.argmax(pr_allClss,dim=1)
+    #gt_cls_ind = gt_cls_ind[:,None].expand(rboxes.size(0), len(bbs))
+    #pr_cls_int = pr_cls_int[None,:].expand(rboxes.size(0), len(bbs))
+    #class_compatible = gt_cls_ind==pr_cls_int
+    #iou *= class_compatible
     return iou, io_clipped_u
+
+
+def allPolyIO_clipU(rboxes,bbs):
+
+    #first we'll find encompassing boxes and compute IOU based on those (fast)
+    #for intersections, we'll compute the intersection using polygons (slow)
+    #rboxes = x,y,r,h,w
+    gt_tlX,gt_tlY,gt_trX,gt_trY,gt_brX,gt_brY,gt_blX,gt_blY = calcCornersTorch(rboxes[:,0],rboxes[:,1],rboxes[:,2],rboxes[:,3],rboxes[:,4])
+    gt_Xs = (gt_tlX,gt_tlX,gt_brX,gt_blX)
+    gt_Ys = (gt_tlY,gt_tlY,gt_brY,gt_blY)
+    gt_x1,_ = torch.stack(gt_Xs).min(dim=0)
+    gt_x2,_ = torch.stack(gt_Xs).max(dim=0)
+    gt_y1,_ = torch.stack(gt_Ys).min(dim=0)
+    gt_y2,_ = torch.stack(gt_Ys).max(dim=0)
+
+    pr_x1 = torch.FloatTensor([min(bb.polyXs()) for bb in bbs])
+    pr_x2 = torch.FloatTensor([max(bb.polyXs()) for bb in bbs])
+    pr_y1 = torch.FloatTensor([min(bb.polyYs()) for bb in bbs])
+    pr_y2 = torch.FloatTensor([max(bb.polyYs()) for bb in bbs])
+
+    pr_allRs = torch.FloatTensor([bb.medianAngle() for bb in bbs])
+
+    #expand to make two dimensional, allowing every instance of boxesP
+    #to be compared with every intsance of boxesT
+    gt_x1 = gt_x1[:,None].expand(rboxes.size(0), len(bbs))
+    gt_y1 = gt_y1[:,None].expand(rboxes.size(0), len(bbs))
+    gt_x2 = gt_x2[:,None].expand(rboxes.size(0), len(bbs))
+    gt_y2 = gt_y2[:,None].expand(rboxes.size(0), len(bbs))
+    pr_x1 = pr_x1[None,:].expand(rboxes.size(0), len(bbs))
+    pr_y1 = pr_y1[None,:].expand(rboxes.size(0), len(bbs))
+    pr_x2 = pr_x2[None,:].expand(rboxes.size(0), len(bbs))
+    pr_y2 = pr_y2[None,:].expand(rboxes.size(0), len(bbs))
+
+    inter_rect_x1 = torch.max(pr_x1, gt_x1)
+    inter_rect_x2 = torch.min(pr_x2, gt_x2)
+    inter_rect_y1 = torch.max(pr_y1, gt_y1)
+    inter_rect_y2 = torch.min(pr_y2, gt_y2)
+
+    inter_area = torch.clamp(inter_rect_x2 - inter_rect_x1 + 1, min=0) * torch.clamp(
+            inter_rect_y2 - inter_rect_y1 + 1, min=0 )
+
+    pr_area = (pr_x2 - pr_x1 + 1) * (pr_y2 - pr_y1 + 1)
+    gt_area = (gt_x2 - gt_x1 + 1) * (gt_y2 - gt_y1 + 1)
+
+    iou = inter_area / (pr_area + gt_area - inter_area + 1e-16)
+
+    #we'll only match bbs with roughly the right orientation
+    #we allow upsidedown orientation matches
+    gt_r = rboxes[:,None,2].expand(rboxes.size(0), len(bbs))
+    pr_allRs = pr_allRs[None,:].expand(rboxes.size(0), len(bbs))
+    angle_compatible = torch.abs(gt_r-pr_allRs)
+    angle_compatible[angle_compatible>math.pi]-=math.pi
+    angle_compatible[angle_compatible>math.pi]-=math.pi
+    angle_compatible = angle_compatible.abs()<math.pi/3
+    iou *= angle_compatible
+
+
+    #we compute clipped IOU. Here we "clip" the GT area horizontally (w.r.t. GT orientation) to match it's overlap with the prediction. Thus the IOU is not penalized for not coverving all the GT
+    io_clipped_u = torch.zeros_like(iou)
+        
+    for i,j in torch.nonzero(iou>0.001,as_tuple=False):
+        gt_poly = Polygon([[gt_tlX[i].item(),gt_tlY[i].item()],[gt_trX[i].item(),gt_trY[i].item()],[gt_brX[i].item(),gt_brY[i].item()],[gt_blX[i].item(),gt_blY[i].item()]])
+        pr_poly = Polygon(bbs[j].polyPoints())
+        
+        #try:
+        if pr_poly.is_valid:
+            inter = gt_poly.intersection(pr_poly)
+            #iou[i,j] = inter.area/(gt_poly.area+pr_poly.area-inter.area)
+            
+            if inter.area>0:
+                length = getWidthWRT(inter,[(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i])])
+
+                #compute the area of the clipped gt
+                clipped_gt_area = length*rboxes[i,3] #new width*height
+
+
+                io_clipped_u[i,j] = inter.area/(clipped_gt_area+pr_poly.area-inter.area)
+        #except shapely.errors.TopologicalError:
+        #    print(bbs[j].pairPoints())
+        #    import pdb;pdb.set_trace()
+        #    io_clipped_u[i,j]=0
+    return io_clipped_u
+    #if ret_clip:
+    #    return iou, io_clipped_u
+    #else:
+    #    return iou
+
+#this finds the width of the polygon(s) w.r.t. to the given line (defines horizontal)
+#Clips the width according to the line to give proper overlap region for intersection-over-clipped-union
+def getWidthWRT(inter,line):
+    line = np.array(line)
+    p0=line[0]
+    v=(line[1]-p0)[None,:]
+    if type(inter) is shapely.geometry.multipolygon.MultiPolygon:
+        points=[]
+        for poly in inter:
+            points += list(poly.exterior.coords)
+        points = np.array(points)
+    else:
+        points = np.array(inter.exterior.coords)
+    #print('points: {}'.format(points))
+    points -= p0
+    projs=np.matmul(np.matmul(v.transpose(),v)/np.matmul(v,v.transpose()),points.transpose())
+    ds=(projs**2).sum(axis=0)**0.5
+    vd=np.matmul(v,v.transpose())**0.5
+    #print('line: {}'.format(line))
+    #print('length: {}'.format(min(ds.max(),vd)-max(ds.min(),0)))
+    #import pdb;pdb.set_trace()
+    return min(ds.max(),vd)-max(ds.min(),0)
+
+def getWidth(inter):
+    #We'll find points spanning the length of the intersection using distances
+    #iterate over points of intersection poly and find closest to topline and botline
+    #iterate from those points to the furthest from both (both iteratins same direction)
+    #distance between these last two poings is length.
+    #TODO this doesn't work. I'll average with the longest distance between any two vertices, but at somepoint I should fix this to be proper
+    min_dist_top=min_dist_bot=9999999
+    points = list(inter.exterior.coords)
+    max_dist = 0
+    for p_i,p in enumerate(points):
+        #distance from top line to point x,y
+        dist_top = distancePointLine(p,(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i]))
+        #dist_top = abs((gt_tlY[i]-gt_trY[i])*x-(gt_tlX[i]-gt_trX[i])*y+gt_tlX[i]*gt_trY[i]-gt_tlY[i]*gt_trX[i])/math.sqrt((gt_tlY[i]-gt_trY[i])**2 + (gt_tlX[i]-gt_trX[i])**2)
+        if dist_top<min_dist_top:
+            min_dist_top=dist_top
+            top_point_i = p_i
+        dist_bot = distancePointLine(p,(gt_blX[i],gt_blY[i]),(gt_brX[i],gt_brY[i]))
+        #dist_bot = abs((gt_blY[i]-gt_brY[i])*x-(gt_blX[i]-gt_brX[i])*y+gt_blX[i]*gt_brY[i]-gt_blY[i]*gt_brX[i])/math.sqrt((gt_blY[i]-gt_brY[i])**2 + (gt_blX[i]-gt_brX[i])**2)
+        if dist_bot<min_dist_bot:
+            min_dist_bot=dist_bot
+            bot_point_i = p_i
+
+        for p2 in points[p_i+1:]:
+            dist = distancePoints(p,p2)
+            max_dist = max(max_dist,dist)
+    min_dist_diff=9999999
+    p_j = (top_point_i+1)%(len(points)-1) #-1 as Polygon repeats closure vertex
+    if p_j == bot_point_i:
+        side_point_A = ((points[top_point_i][0]+points[bot_point_i][0])/2,(points[top_point_i][1]+points[bot_point_i][1])/2)
+    else:
+        while p_j!=bot_point_i:
+            dist_diff = abs(distancePointLine(points[p_j],(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i]))-distancePointLine(points[p_j],(gt_blX[i],gt_blY[i]),(gt_brX[i],gt_brY[i])))
+            dist_diff += abs(distancePoints(points[p_j],points[top_point_i])-distancePoints(points[p_j],points[bot_point_i]))*0.1
+            if dist_diff < min_dist_diff:
+                min_dist_diff = dist_diff
+                side_point_A = points[p_j]
+            p_j = (p_j+1)%(len(points)-1)
+    min_dist_diff=9999999
+    if p_j == top_point_i:
+        side_point_B = ((points[top_point_i][0]+points[bot_point_i][0])/2,(points[top_point_i][1]+points[bot_point_i][1])/2)
+    else:
+        while p_j!=top_point_i:
+            dist_diff = abs(distancePointLine(points[p_j],(gt_tlX[i],gt_tlY[i]),(gt_trX[i],gt_trY[i]))-distancePointLine(points[p_j],(gt_blX[i],gt_blY[i]),(gt_brX[i],gt_brY[i])))
+            dist_diff += abs(distancePoints(points[p_j],points[top_point_i])-distancePoints(points[p_j],points[bot_point_i]))*0.1
+            if dist_diff < min_dist_diff:
+                min_dist_diff = dist_diff
+                side_point_B = points[p_j]
+            p_j = (p_j+1)%(len(points)-1)
+    length_i = distancePoints(side_point_A,side_point_B)
+    length = (length_i+max_dist)/2
+
+    #print(points)
+    #print('length: {}, length_i:{}, max_dist:{}, top: {}, bot: {}, A: {}, B: {}'.format(length,length_i,max_dist,top_point_i,bot_point_i,side_point_A,side_point_B))
+    #import pdb;pdb.set_trace()
+
+def classPolyIOU(rboxes,bbs):
+
+    #first we'll find encompassing boxes and compute IOU based on those (fast)
+    #for intersections, we'll compute the intersection using polygons (slow)
+    #rboxes = x,y,r,h,w
+    gt_tlX,gt_tlY,gt_trX,gt_trY,gt_brX,gt_brY,gt_blX,gt_blY = calcCornersTorch(rboxes[:,0],rboxes[:,1],rboxes[:,2],rboxes[:,3],rboxes[:,4])
+    gt_Xs = (gt_tlX,gt_tlX,gt_brX,gt_blX)
+    gt_Ys = (gt_tlY,gt_tlY,gt_brY,gt_blY)
+    gt_x1,_ = torch.stack(gt_Xs).min(dim=0)
+    gt_x2,_ = torch.stack(gt_Xs).max(dim=0)
+    gt_y1,_ = torch.stack(gt_Ys).min(dim=0)
+    gt_y2,_ = torch.stack(gt_Ys).max(dim=0)
+
+    pr_x1 = torch.FloatTensor([min(bb.polyXs()) for bb in bbs])
+    pr_x2 = torch.FloatTensor([max(bb.polyXs()) for bb in bbs])
+    pr_y1 = torch.FloatTensor([min(bb.polyYs()) for bb in bbs])
+    pr_y2 = torch.FloatTensor([max(bb.polyYs()) for bb in bbs])
+
+    pr_allRs = torch.FloatTensor([bb.medianAngle() for bb in bbs])
+
+    #expand to make two dimensional, allowing every instance of boxesP
+    #to be compared with every intsance of boxesT
+    gt_x1 = gt_x1[:,None].expand(rboxes.size(0), len(bbs))
+    gt_y1 = gt_y1[:,None].expand(rboxes.size(0), len(bbs))
+    gt_x2 = gt_x2[:,None].expand(rboxes.size(0), len(bbs))
+    gt_y2 = gt_y2[:,None].expand(rboxes.size(0), len(bbs))
+    pr_x1 = pr_x1[None,:].expand(rboxes.size(0), len(bbs))
+    pr_y1 = pr_y1[None,:].expand(rboxes.size(0), len(bbs))
+    pr_x2 = pr_x2[None,:].expand(rboxes.size(0), len(bbs))
+    pr_y2 = pr_y2[None,:].expand(rboxes.size(0), len(bbs))
+
+    inter_rect_x1 = torch.max(pr_x1, gt_x1)
+    inter_rect_x2 = torch.min(pr_x2, gt_x2)
+    inter_rect_y1 = torch.max(pr_y1, gt_y1)
+    inter_rect_y2 = torch.min(pr_y2, gt_y2)
+
+    inter_area = torch.clamp(inter_rect_x2 - inter_rect_x1 + 1, min=0) * torch.clamp(
+            inter_rect_y2 - inter_rect_y1 + 1, min=0 )
+
+    pr_area = (pr_x2 - pr_x1 + 1) * (pr_y2 - pr_y1 + 1)
+    gt_area = (gt_x2 - gt_x1 + 1) * (gt_y2 - gt_y1 + 1)
+
+    iou = inter_area / (pr_area + gt_area - inter_area + 1e-16)
+
+    #we'll only match bbs with roughly the right orientation
+    #we allow upsidedown orientation matches
+    gt_r = rboxes[:,None,2].expand(rboxes.size(0), len(bbs))
+    pr_allRs = pr_allRs[None,:].expand(rboxes.size(0), len(bbs))
+    angle_compatible = torch.abs(gt_r-pr_allRs)
+    angle_compatible[angle_compatible>math.pi]-=math.pi
+    angle_compatible[angle_compatible>math.pi]-=math.pi
+    angle_compatible = angle_compatible.abs()<math.pi/3
+    iou *= angle_compatible
+
+    
+    gt_cls_ind = torch.argmax(rboxes[:,13:],dim=1)
+    pr_allClss = torch.FloatTensor([bb.getCls() for bb in bbs])
+    #pr_allClss = torch.stack([bb.getCls() for bb in bbs],dim=0)
+    pr_cls_int = torch.argmax(pr_allClss,dim=1)
+    gt_cls_ind = gt_cls_ind[:,None].expand(rboxes.size(0), len(bbs))
+    pr_cls_int = pr_cls_int[None,:].expand(rboxes.size(0), len(bbs))
+    class_compatible = gt_cls_ind==pr_cls_int
+    iou *= class_compatible
+
+    for i,j in torch.nonzero(iou>0.001):
+        gt_poly = Polygon([[gt_tlX[i].item(),gt_tlY[i].item()],[gt_trX[i].item(),gt_trY[i].item()],[gt_brX[i].item(),gt_brY[i].item()],[gt_blX[i].item(),gt_blY[i].item()]])
+        pr_poly = Polygon(bbs[j].polyPoints())
+        
+        #try:
+        if pr_poly.is_valid:
+            inter = gt_poly.intersection(pr_poly)
+            iou[i,j] = inter.area/(gt_poly.area+pr_poly.area-inter.area)
+        else:
+            iou[i,j]=0
+        #except shapely.errors.TopologicalError:
+    return iou
 
 def allDist(boxes1,boxes2):
     b1_x = boxes1[:,0]
@@ -566,6 +833,172 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClas
     else:
         return computeAP(allScores), precisions, recalls
 
+def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeCls=0,getClassAP=False):
+    #mAP=0.0
+    #aps=[]
+    precisions=[]
+    recalls=[]
+
+    #how many classes are there?
+    if ignoreClasses:
+        numClasses=1
+    if len(target.size())>1:
+        #numClasses=target.size(1)-13
+        pass
+    elif pred is not None and len(pred)>0:
+        #if there are no targets, we shouldn't be pred anything
+        if ignoreClasses:
+            #aps.append(0)
+            ap=0.0
+            precisions.append(0.0)
+            recalls.append(1.0)
+        else:
+            #numClasses=pred.size(1)-6
+            ap=0
+            class_ap=[]
+            all_cls_pred = torch.FloatTensor([p.getCls() for p in pred])
+            for cls in range(numClasses):
+                if (torch.argmax(all_cls_pred,dim=1)==cls).any():
+                    #aps.append(0) #but we did for this class :(
+                    ap+=0.0
+                    precisions.append(0.0)
+                    class_ap.append(0.0)
+                else:
+                    #aps.append(1) #we didn't for this class :)
+                    ap+=1.0
+                    precisions.append(1.0)
+                    class_ap.append(1.0)
+                recalls.append(1.0)
+        if getClassAP:
+            return ap/numClasses, precisions, recalls, class_ap
+        else:
+            return ap/numClasses, precisions, recalls
+    else:
+        if getClassAP:
+            return 1.0, [1.0]*numClasses, [1.0]*numClasses, [1.0]*numClasses #we didn't for all classes :)
+        else:
+            return 1.0, [1.0]*numClasses, [1.0]*numClasses
+
+    allScores=[]
+    classScores=[[] for i in range(numClasses)]
+    targetClasses_index = torch.argmax(target[:,13:13+numClasses],dim=1)
+    if pred is not None and len(pred)>0:
+        #This is an alternate metric that computes AP of all classes together
+        #Your only a hit if you have the same class
+        allIOUs = classPolyIOU(target,pred) 
+        validHits = allHits = allIOUs>iou_thresh
+        #evalute hits to see if they're valid (matching class)
+
+        #add all the preds that didn't have a hit
+        hasHit,_ = validHits.max(dim=0) #which preds have hits
+        predConf=torch.FloatTensor([p.getConf().item() for p in pred])
+        predClasses=torch.FloatTensor([p.getCls() for p in pred])
+        predClasses_index = torch.argmax(predClasses,dim=1)
+        #targetClasses_index_ex = targetClasses_index[:,None].expand(targetClasses_index.size(0),predClasses_index.size(0))
+        #predClasses_index_ex = predClasses_index[None,:].expand(targetClasses_index.size(0),predClasses_index.size(0))
+        notHitScores = predConf[~hasHit]
+        notHitClass = predClasses_index[~hasHit]
+        for i in range(notHitScores.shape[0]):
+            allScores.append( (notHitScores[i].item(), False) )
+            cls = notHitClass[i]
+            classScores[cls].append( (notHitScores[i].item(), False) )
+
+        # if something has multiple hits, it gets paired to the closest (with matching class)
+        allIOUs[~validHits] -= 9999999 #Force these to be smaller
+        maxValidHitIndexes = torch.argmax(allIOUs,dim=0)
+        for i in range(maxValidHitIndexes.size(0)):
+            if validHits[maxValidHitIndexes[i],i]:
+                allScores.append( (predConf[i].item(),True) )
+                #but now we've consumed this pred, so we'll zero its hit
+                validHits[maxValidHitIndexes[i],i]=0
+                cls = predClasses_index[i]
+                classScores[cls].append( (predConf[i].item(),True) )
+
+        #add nan scores for missed targets
+        gotHit,gotHitIndex = torch.max(validHits,dim=1)
+        for i in range((gotHit==0).sum()):
+            allScores.append( (float('nan'),True) )
+            cls = targetClasses_index[i]
+            classScores[cls].append( (float('nan'),True) )
+    else:
+        allScores.append( (float('nan'),True) )
+        classScores=[[(float('nan'),True)]]*numClasses
+
+
+    if ignoreClasses:
+        numClasses=1
+    #by class
+    #import pdb; pdb.set_trace()
+    for cls in range(numClasses):
+        clsTargInd = target[:,cls+13]==1
+        if pred is not None and len(pred)>0:
+            #print(pred.size())
+            clsPredInd = predClasses_index==cls
+        else:
+            clsPredInd = torch.empty(0,dtype=torch.bool)
+        if (ignoreClasses and pred.size(0)>0) or (clsTargInd.any() and clsPredInd.any()):
+            if ignoreClasses:
+                clsTarg=target
+                clsPredConf=torch.FloatTensor([p.get_conf() for p in pred])
+            else:
+                clsTarg = target[clsTargInd]
+                clsPredConf=predConf[clsPredInd]#torch.FloatTensor([pred[i].get_conf() for i in torch.nonzero(clsPredInd)])
+            #clsIOUs = getLoc(clsTarg[:,0:],clsPred[:,1:])
+            clsIOUs = allIOUs[clsTargInd][:,clsPredInd]
+            hits = clsIOUs>iou_thresh
+
+            clsIOUs *= hits.float()
+            ps = torch.argmax(clsIOUs,dim=1)
+            left_ps = torch.ones(clsPredConf.size(0),dtype=torch.bool)
+            left_ps[ps]=0
+            truePos=0
+            for t in range(clsTarg.size(0)):
+                p=ps[t]
+                if hits[t,p]:
+                    #scores.append( (clsPred[p,0],True) )
+                    #hits[t,p]=0
+                    truePos+=1
+                #else:
+                    #scores.append( (float('nan'),True) )
+            
+            left_conf = clsPredConf[left_ps]
+            #for i in range(left_conf.size(0)):
+                #scores.append( (left_conf[i],False) )
+            
+            #ap = computeAP(scores)
+            #if ap is not None:
+            #    aps.append(ap)
+
+            precisions.append( truePos/max(clsPredConf.size(0),truePos) )
+            if precisions[-1]>1:
+                import pdb;pdb.set_trace()
+            recalls.append( truePos/clsTarg.size(0) )
+        elif ignoreClasses:
+            #no pred
+            #aps.append(0)
+            precisions.append(0)
+            recalls.append(0)
+        elif clsPredInd.any() or clsTargInd.any():
+            #aps.append(0)
+            if clsPredInd.any():
+                recalls.append(1)
+                precisions.append(0)
+            else:
+                precisions.append(0)
+                recalls.append(0)
+        else:
+            #aps.append(1)
+            precisions.append(1)
+            recalls.append(1)
+    
+    if getClassAP:
+        classAPs=[computeAP(scores) for scores in classScores]
+        #for i in range(len(classAPs)):
+        #    if classAPs[i] is None:
+        #        classAPs[i]=1
+        return computeAP(allScores), precisions, recalls, classAPs
+    else:
+        return computeAP(allScores), precisions, recalls
 
 def getTargIndexForPreds_iou(target,pred,iou_thresh,numClasses,beforeCls=0,hard_thresh=True,fixed=True):
     return getTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,allIOU,hard_thresh,fixed)
@@ -697,6 +1130,36 @@ def newGetTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,getLoc, 
         overSegmented,_ = overSegmented.max(dim=0)
         return targIndex, hits, overSegmented
 
+#This also returns which pred BBs are oversegmentations of targets (horizontall)
+def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_targs):
+    if pred is None: 
+        return None
+
+    if len(target.size())<=1:
+        return None
+
+    #first get all IOUs. These are already filtered with angle and class
+    #allIOUs, allIO_clippedU = allPolyIOU_andClip(target,pred,class_sensitive=not train_targs) #clippedUnion, target is clipped horizontally to match pred. This filters for class matching
+
+    if train_targs:
+        allIOUs = allPolyIO_clipU(target,pred)
+    else:
+        allIOUs = classPolyIOU(target,pred)
+
+    hits = allIOUs>iou_thresh
+    #overSeg_thresh = iou_thresh*1.05
+    #overSegmented= (allIO_clippedU>overSeg_thresh)
+    allIOUs *= hits.float()
+    #allIO_clippedU *= overSegmented
+
+    #if train_targs:
+    #    val,targIndex = torch.max(allIO_clippedU,dim=0)
+    #else:
+    val,targIndex = torch.max(allIOUs,dim=0)
+    targIndex[val==0]=-1 #These don't have a match
+
+
+    return targIndex
 
 def computeAP(scores):
     rank=[]

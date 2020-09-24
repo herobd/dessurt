@@ -2,7 +2,7 @@ from skimage import color, io
 import os
 import numpy as np
 import torch
-import cv2
+import utils.img_f as img_f
 from utils import util
 from model.alignment_loss import alignment_loss
 import math
@@ -25,10 +25,10 @@ def FormsBoxPair_printer(config,instance, model, gpu, metrics, outDir=None, star
         br = ( int(w*math.cos(rot)+h*math.sin(rot) + xc),  int(-w*math.sin(rot)+h*math.cos(rot) + yc) )
         bl = ( int(-w*math.cos(rot)+h*math.sin(rot) + xc), int(w*math.sin(rot)+h*math.cos(rot) + yc) )
 
-        cv2.line(img,tl,tr,color,1)
-        cv2.line(img,tr,br,color,1)
-        cv2.line(img,br,bl,color,1)
-        cv2.line(img,bl,tl,color,1)
+        img_f.line(img,tl,tr,color,1)
+        img_f.line(img,tr,br,color,1)
+        img_f.line(img,br,bl,color,1)
+        img_f.line(img,bl,tl,color,1)
     def __eval_metrics(data,target):
         acc_metrics = np.zeros((output.shape[0],len(metrics)))
         for ind in range(output.shape[0]):
@@ -218,7 +218,7 @@ def FormsBoxPair_printer(config,instance, model, gpu, metrics, outDir=None, star
             #np.save(saveFile,rescaled_outputBBs_xyrs)
             imageB = (1-((1+np.transpose(image[b][:,:,:],(1,2,0)))/2.0)).copy()
             if imageB.shape[2]==1:
-                imageB = cv2.cvtColor(imageB,cv2.COLOR_GRAY2RGB)
+                imageB = img_f.cvtColor(imageB,cv2.COLOR_GRAY2RGB)
             imageB[:,:,1] *= 1-queryMask[b,0]
             if queryMask.shape[1]>1:
                 imageB[:,:,2] *= (1+queryMask[b,1])/2
@@ -232,7 +232,7 @@ def FormsBoxPair_printer(config,instance, model, gpu, metrics, outDir=None, star
                 #    yc_gt = targetBBs[b,j,1]
                 #    xc=outputBBs[b,aj,1]
                 #    yc=outputBBs[b,aj,2]
-                #    cv2.line(imageB,(xc,yc),(xc_gt,yc_gt),(0,1,0),1)
+                #    img_f.line(imageB,(xc,yc),(xc_gt,yc_gt),(0,1,0),1)
                 #    shade = 0.0+(outputBBs[b,aj,0]-threshConf)/(maxConf-threshConf)
                 #    shade = max(0,shade)
                 #    if outputBBs[b,aj,6] > outputBBs[b,aj,7]:
@@ -262,11 +262,11 @@ def FormsBoxPair_printer(config,instance, model, gpu, metrics, outDir=None, star
                     shade = 0.0+(conf-threshConf)/(maxConf-threshConf)
                     #print(shade)
                     #if name=='text_start_gt' or name=='field_end_gt':
-                    #    cv2.bb(bbImage[:,:,1],p1,p2,shade,2)
+                    #    img_f.bb(bbImage[:,:,1],p1,p2,shade,2)
                     #if name=='text_end_gt':
-                    #    cv2.bb(bbImage[:,:,2],p1,p2,shade,2)
+                    #    img_f.bb(bbImage[:,:,2],p1,p2,shade,2)
                     #elif name=='field_end_gt' or name=='field_start_gt':
-                    #    cv2.bb(bbImage[:,:,0],p1,p2,shade,2)
+                    #    img_f.bb(bbImage[:,:,0],p1,p2,shade,2)
                     if j==bestBBIdx[b]:
                         if bbs[j,6] > bbs[j,7]:
                             color=(0,shade,shade) #textF
@@ -293,7 +293,7 @@ def FormsBoxPair_printer(config,instance, model, gpu, metrics, outDir=None, star
             #    rad = round(math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)/2.0)
             #    #print(mid)
             #    #print(rad)
-            #    cv2.circle(imageB,mid,rad,(1,0,1),1)
+            #    img_f.circle(imageB,mid,rad,(1,0,1),1)
 
             saveName = '{:04}_n:{}_pairing_AP:{:.2f}_prec:{:.2f}_recall:{:.2f}_bestCnf:{:.3f}_2ndCnf:{:.3f}_thresh:{:.3f}'.format(startIndex+b,imageName[b],aps_5[b][0],precs_5[b][0],recalls_5[b][0],bestConf[b],secondConf[b],threshConf)
             #for j in range(metricsOut.shape[1]):
