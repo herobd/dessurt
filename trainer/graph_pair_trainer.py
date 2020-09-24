@@ -174,7 +174,7 @@ class GraphPairTrainer(BaseTrainer):
         #self.model.eval()
         #print("WARNING EVAL")
 
-        #t#tic=timeit.default_timer()
+        tic=timeit.default_timer()#t#
         batch_idx = (iteration-1) % len(self.data_loader)
         try:
             thisInstance = self.data_loader_iter.next()
@@ -184,9 +184,9 @@ class GraphPairTrainer(BaseTrainer):
         if not self.model.detector.predNumNeighbors:
             thisInstance['num_neighbors']=None
         ##toc=timeit.default_timer()
-        #t#print('time train data: {}'.format(timeit.default_timer()-tic))
+        print('time train data: {}'.format(timeit.default_timer()-tic))#t#
         
-        #t#tic=timeit.default_timer()
+        tic=timeit.default_timer()#t#
 
         self.optimizer.zero_grad()
 
@@ -195,7 +195,7 @@ class GraphPairTrainer(BaseTrainer):
         #loss = self.loss(output, target)
         index=0
         losses={}
-        ###t#tic=timeit.default_timer()
+        ##tic=timeit.default_timer()#t#
 
         #if self.iteration % self.save_step == 0:
         #    targetPoints={}
@@ -212,8 +212,8 @@ class GraphPairTrainer(BaseTrainer):
             losses, run_log, out = self.newRun(thisInstance,useGT,threshIntur)
         else:
             losses, run_log, out = self.run(thisInstance,useGT,threshIntur)
-        #t#print('time train run: {}'.format(timeit.default_timer()-tic))
-        #t#tic=timeit.default_timer()
+        print('time train run: {}'.format(timeit.default_timer()-tic))#t#
+        tic=timeit.default_timer()#t#
         loss=0
         for name in losses.keys():
             losses[name] *= self.lossWeights[name[:-4]]
@@ -224,7 +224,7 @@ class GraphPairTrainer(BaseTrainer):
 
         torch.nn.utils.clip_grad_value_(self.model.parameters(),1)
         self.optimizer.step()
-        #t#print('time train backprop: {}'.format(timeit.default_timer()-tic))
+        print('time train backprop: {}'.format(timeit.default_timer()-tic))#t#
         meangrad=0
         count=0
         for m in self.model.parameters():
@@ -1285,7 +1285,7 @@ class GraphPairTrainer(BaseTrainer):
                 gtTrans=None
         else:
             gtTrans = None
-        #t#tic=timeit.default_timer()
+        tic=timeit.default_timer()#t#
         if useGT and targetBoxes is not None:
             if self.model.useCurvedBBs:
                 #build targets of GT to pass as detections
@@ -1379,8 +1379,8 @@ class GraphPairTrainer(BaseTrainer):
                     gtTrans = gtTrans,
                     dont_merge = self.iteration<self.start_merge_iter)
             #gtPairing,predPairing = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred)
-        #t#print('time run model: {}'.format(timeit.default_timer()-tic))
-        #t#tic=timeit.default_timer()
+        print('time run model: {}'.format(timeit.default_timer()-tic))#t#
+        tic=timeit.default_timer()#t#
         ### TODO code prealigned
         losses=defaultdict(lambda:0)
         log={}
@@ -1391,7 +1391,7 @@ class GraphPairTrainer(BaseTrainer):
         if allEdgePred is not None:
             for graphIteration,(outputBoxes,edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allOutputBoxes,allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
 
-                #t#tic2=timeit.default_timer()
+                tic2=timeit.default_timer()#t#
                 predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, proposedInfoI, logIter, edgePredTypes = self.simplerAlignEdgePred(
                         targetBoxes,
                         gtGroups,
@@ -1408,7 +1408,7 @@ class GraphPairTrainer(BaseTrainer):
                         self.thresh_error[graphIteration],
                         merge_only= graphIteration==0 and self.model.merge_first
                         )
-                #t#print('time run g{} newAlignEdgePred: {}'.format(graphIteration,timeit.default_timer()-tic2))
+                print('time run g{} newAlignEdgePred: {}'.format(graphIteration,timeit.default_timer()-tic2))#t#
                 allEdgePredTypes.append(edgePredTypes)
                 if graphIteration==0 and self.model.merge_first:
                     mergeProposedInfo=proposedInfoI
@@ -1580,7 +1580,7 @@ class GraphPairTrainer(BaseTrainer):
                             logIter['bb_pred_covered_noclass']=pred_covered_noclass
 
 
-                    #t#print('time run box_loss: {}'.format(timeit.default_timer()-tic2))
+                    print('time run box_loss: {}'.format(timeit.default_timer()-tic2))#t#
 
                     #boxLoss *= self.lossWeights['box']
                     #if relLoss is not None:
@@ -1670,8 +1670,8 @@ class GraphPairTrainer(BaseTrainer):
                     Fm[np.isnan(Fm)]=0
                     log['bb_Fm_avg_{}'.format(graphIteration)]=Fm.mean()
 
-        #t#print('time run all_losses: {}'.format(timeit.default_timer()-tic))
-        #t#tic=timeit.default_timer()
+        print('time run all_losses: {}'.format(timeit.default_timer()-tic))#t#
+        tic=timeit.default_timer()#t#
         #print final state of graph
         ###
         if final is not None:

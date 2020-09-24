@@ -33,7 +33,7 @@ class TextLine:
                 tmp = pred_bb_info[2]
                 pred_bb_info[2]=pred_bb_info[4]
                 pred_bb_info[4]=tmp
-            elif abs(pred_bb_info[2]-pred_bb_info[4])<0.001: #detector sometimes predicts flat BBs
+            if abs(pred_bb_info[2]-pred_bb_info[4])<0.001: #detector sometimes predicts flat BBs
                 pred_bb_info[2]-=1
                 pred_bb_info[4]+=1
             if abs(pred_bb_info[1]-pred_bb_info[3])<0.001:
