@@ -416,7 +416,7 @@ class CropBoxTransform(object):
                                     [0,0,1] ])
                 M = flipV.dot(M)
             M = uncenter.dot(M)
-            M=M[:2]
+            M=M[:2] #opencv didn't want 3x3
             #rotate image
             org_img = img_f.warpAffine(org_img,M,(org_img.shape[1],org_img.shape[0]))
             if len(org_img.shape)==2:
