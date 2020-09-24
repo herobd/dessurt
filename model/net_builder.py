@@ -56,7 +56,7 @@ class ncReLU(nn.Module):
 #ResNet block based on:
  #No projection in the residual network https://link.springer.com/content/pdf/10.1007%2Fs10586-017-1389-z.pdf
 class ResBlock(nn.Module):
-    def __init__(self,in_ch,out_ch,dilation=1,norm='',downsample=False, dropout=None, secondKernel=3):
+    def __init__(self,in_ch,out_ch,dilation=1,norm='batch',downsample=False, dropout=True, secondKernel=3):
         super(ResBlock, self).__init__()
         layers=[]
         skipFirstReLU=False
@@ -64,12 +64,19 @@ class ResBlock(nn.Module):
             assert(out_ch==2*in_ch)
             layers.append(ncReLU())
             skipFirstReLU=True
-        if downsample:
+        if downsample=='unlearned':
             layers.append(nn.AvgPool2d(2)) #could be learned, but this allows a better identity?
         if len(layers)>0:
             self.transform = nn.Sequential(*layers)
         else:
             self.transform = lambda x: x
+
+        if downsample and downsample!='unlearned':
+            self.id_transform = nn.AvgPool2d(2)
+            conv1_stride=2
+        else:
+            self.id_transform = lambda x: x
+            conv1_stride=1
 
         layers=[]
         if not skipFirstReLU:
@@ -77,12 +84,12 @@ class ResBlock(nn.Module):
             #there should be a way to normalize (mask after normalization?)
             if 'batch' in norm:
                 layers.append(nn.BatchNorm2d(out_ch))
-            if 'instance' in norm:
+            elif 'instance' in norm:
                 layers.append(nn.InstanceNorm2d(out_ch))
-            if 'group' in norm:
+            elif 'group' in norm:
                 layers.append(nn.GroupNorm(getGroupSize(out_ch),out_ch))
             layers.append(nn.ReLU(inplace=True)) 
-        conv1=nn.Conv2d(out_ch, out_ch, kernel_size=3, padding=dilation, dilation=dilation)
+        conv1=nn.Conv2d(out_ch, out_ch, kernel_size=3, padding=dilation, dilation=dilation, stride=conv_stride)
         if 'weight' in norm and not skipFirstReLU: #or just use this normalization?
             layers.append(weight_norm(conv1))
         else:
@@ -91,15 +98,12 @@ class ResBlock(nn.Module):
 
         if 'batch' in norm:
             layers.append(nn.BatchNorm2d(out_ch))
-        if 'instance' in norm:
+        elif 'instance' in norm:
             layers.append(nn.InstanceNorm2d(out_ch))
-        if 'group' in norm:
+        elif 'group' in norm:
             layers.append(nn.GroupNorm(getGroupSize(out_ch),out_ch))
-        if dropout is not None:
-            if dropout==True or dropout=='2d':
-                layers.append(nn.Dropout2d(p=0.1,inplace=True))
-            elif dropout=='normal':
-                layers.append(nn.Dropout2d(p=0.1,inplace=True))
+        if dropout:
+            layers.append(nn.Dropout2d(p=0.1,inplace=True))
         layers.append(nn.ReLU(inplace=True)) 
         assert(secondKernel%2 == 1)
         conv2=nn.Conv2d(out_ch, out_ch, kernel_size=secondKernel, padding=(secondKernel-1)//2)
@@ -112,7 +116,7 @@ class ResBlock(nn.Module):
 
     def forward(self,x):
         x=self.transform(x)
-        return x+self.side(x)
+        return self.id_transform(x)+self.side(x)
 
 class GeneralRes(nn.Module):
     def __init__(self,ms,in_ch,out_ch,norm,dropout):
@@ -172,7 +176,7 @@ class GeneralRes(nn.Module):
 
 
 
-def convReLU(in_ch,out_ch,norm,dilation=1,kernel=3,dropout=None,depthwise=False,coordconv=None):
+def convReLU(in_ch,out_ch,norm,dilation=1,kernel=3,dropout=None,depthwise=False,coordconv=None,bias=True):
     if type(dilation) is int:
         dilation=(dilation,dilation)
     if type(kernel) is int:
@@ -182,7 +186,7 @@ def convReLU(in_ch,out_ch,norm,dilation=1,kernel=3,dropout=None,depthwise=False,
     if coordconv is not None:
         conv2d = CoordConv(in_ch,out_ch, kernel_size=kernel, padding=padding,dilation=dilation,groups=groups,features=coordconv)
     else:
-        conv2d = nn.Conv2d(in_ch,out_ch, kernel_size=kernel, padding=padding,dilation=dilation,groups=groups)
+        conv2d = nn.Conv2d(in_ch,out_ch, kernel_size=kernel, padding=padding,dilation=dilation,groups=groups,bias=bias)
     #if i == len(cfg)-1:
     #    layers += [conv2d]
     #    break
@@ -307,6 +311,13 @@ def make_layers(cfg, dilation=1, norm=None, dropout=None):
             kernel_size=int(v[1:div])
             outCh=int(v[div+1:])
             layers += convReLU(in_channels[-1],outCh,norm,kernel=kernel_size,dropout=dropout)
+            layerCodes.append(v)
+            in_channels.append(outCh)
+        elif type(v)==str and v[0] == '$': #conv later with custom kernel size without bias, for startingResnet
+            div = v.find('-')
+            kernel_size=int(v[1:div])
+            outCh=int(v[div+1:])
+            layers += convReLU(in_channels[-1],outCh,norm,kernel=kernel_size,dropout=dropout,bias=False)
             layerCodes.append(v)
             in_channels.append(outCh)
         elif type(v)==str and v[:2] == 'cc': #CoordConv 'ccTYPE-k#,d#,hd-CHS'
