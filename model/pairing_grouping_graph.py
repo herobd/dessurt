@@ -78,6 +78,7 @@ def correctTrans(pred,predBB,gt,gtBB):
 class PairingGroupingGraph(BaseModel):
     def __init__(self, config):
         super(PairingGroupingGraph, self).__init__(config)
+        self.useCurvedBBs=False
 
         if 'detector_checkpoint' in config:
             if os.path.exists(config['detector_checkpoint']):
@@ -696,7 +697,7 @@ class PairingGroupingGraph(BaseModel):
 
     #This rewrites the confidence and class predictions based on the (re)predictions from the graph network
     def updateBBs(self,bbs,groups,nodeOuts):
-        if self.curvedBBs:
+        if self.useCurvedBBs:
             nodeConfPred = torch.sigmoid(nodeOuts[:,-1,self.nodeIdxConf]).cpu().detach()
             startIndex = 5+self.nodeIdxClass
             endIndex = 5+self.nodeIdxClassEnd
@@ -1745,7 +1746,7 @@ class PairingGroupingGraph(BaseModel):
 
     def selectFeatureNNEdges(self,bbs,imageHeight,imageWidth,device):
         if bbs.size(0)<2:
-            return []
+            return [], ([],[],0)
 
         #features: tlXDiff,trXDiff,brXDiff,blXDiff,tlYDiff,trYDiff,brYDiff,blYDiff, centerXDiff, centerYDiff, absX, absY, h1, w1, h2, w2, classpred1, classpred2, line of sight (binary)
 
