@@ -80,6 +80,7 @@ def correctTrans(pred,predBB,gt,gtBB):
 class PairingGroupingGraph(BaseModel):
     def __init__(self, config):
         super(PairingGroupingGraph, self).__init__(config)
+        self.useCurvedBBs=False
 
         if 'detector_checkpoint' in config:
             if os.path.exists(config['detector_checkpoint']):

@@ -1,4 +1,5 @@
 import skimage
+import numpy as np
 
 #These are all based on the OpenCV functions, to make the conversion to scikit image easier (also should make future changes easier as well)
 
@@ -83,3 +84,11 @@ def polylines(img,points,isClosed,color,thickness=1):
     else:
         rr,cc = skimage.draw.polygon_perimeter(points[:,1],points[:,0],shape=img.shape)
     img[rr,cc]=color
+
+def warpAffine(img,M,shape=None):
+    if shape is None:
+        shape=img.shape
+    if M.shape[0]==2: #OpenCV takes 2x3 instead of 3x3
+        M = np.concatenate((M,np.array([[0.0,0.0,1.0]])),axis=0)
+    T = skimage.transform.AffineTransform(M)
+    return skimage.transform.warp(img,T,output_shape=shape)
