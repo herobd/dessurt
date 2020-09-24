@@ -1126,6 +1126,8 @@ def build_oversegmented_targets_multiscale(
                             R=ri_x-tile_x 
                             R = max(min(R,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
                             targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_W_PRED)
+
+                            assert(R>=L and T<=B)
                         else:
                             #T=ti_y-tile_y #negative if above tile center (just add predcition to center)
                             ##T = max(min(T,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
@@ -1156,6 +1158,8 @@ def build_oversegmented_targets_multiscale(
                             R=bi_y-tile_y 
                             assert(abs(R)<MAX_H_PRED)
                             targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_H_PRED)
+
+                            assert(R>=L and T<=B)
                         #t#times_assign.append(timeit.default_timer()-tic2)
 
 

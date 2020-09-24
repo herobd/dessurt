@@ -68,7 +68,7 @@ class OverSegBoxDetector(nn.Module): #BaseModel
         scaleY=1
         for layers_cfg_set in layers_cfg:
             for a in layers_cfg_set:
-                if a=='M' or (type(a) is str and a[0]=='D'):
+                if a=='M' or (type(a) is str and (a[0]=='D' or a[0]=='$')):
                     scaleX*=2
                     scaleY*=2
                 elif type(a) is str and a[0]=='U':
