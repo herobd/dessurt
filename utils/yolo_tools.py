@@ -455,6 +455,14 @@ def getWidthWRT(inter,line):
         for poly in inter:
             points += list(poly.exterior.coords)
         points = np.array(points)
+    elif type(inter) is shapely.geometry.collection.GeometryCollection:
+        points=[]
+        for shape in inter:
+            if type(shape) is shapely.geometry.linestring.LineString:
+                points += list(shape.coords)
+            else:
+                points += list(shape.exterior.coords)
+        points = np.array(points)
     else:
         points = np.array(inter.exterior.coords)
     #print('points: {}'.format(points))
