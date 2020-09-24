@@ -13,7 +13,7 @@ from .box_detect import BoxDetectDataset, collate
 from utils.funsd_annotations import createLines
 import timeit
 
-import cv2
+import utils.img_f as img_f
 
 SKIP=['174']#['193','194','197','200']
 ONE_DONE=[]
@@ -138,15 +138,15 @@ class FUNSDBoxDetect(BoxDetectDataset):
                     if self.cache_resized:
                         rescale = self.rescale_range[1]
                         if not os.path.exists(path):
-                            org_img = cv2.imread(org_path)
+                            org_img = img_f.imread(org_path)
                             if org_img is None:
                                 print('WARNING, could not read {}'.format(org_img))
                                 continue
-                            resized = cv2.resize(org_img,(0,0),
+                            resized = img_f.resize(org_img,(0,0),
                                     fx=self.rescale_range[1], 
                                     fy=self.rescale_range[1], 
-                                    interpolation = cv2.INTER_CUBIC)
-                            cv2.imwrite(path,resized)
+                                    )
+                            img_f.imwrite(path,resized)
                     self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')]})
         self.only_types=None
         self.errors=[]
@@ -441,10 +441,10 @@ class FUNSDBoxDetect(BoxDetectDataset):
                 br = ( int(math.cos(rot)*w-math.sin(rot)*-h)+dW//2,  int(math.sin(rot)*w+math.cos(rot)*-h)+dH//2 )
                 bl = ( int(math.cos(rot)*-w-math.sin(rot)*-h)+dW//2, int(math.sin(rot)*-w+math.cos(rot)*-h)+dH//2 )
                 
-                cv2.line(draw,tl,tr,color)
-                cv2.line(draw,tr,br,color)
-                cv2.line(draw,br,bl,color)
-                cv2.line(draw,bl,tl,color,2)
+                img_f.line(draw,tl,tr,color)
+                img_f.line(draw,tr,br,color)
+                img_f.line(draw,br,bl,color)
+                img_f.line(draw,bl,tl,color,2)
             else:
                 final_k-=1
         
@@ -452,9 +452,9 @@ class FUNSDBoxDetect(BoxDetectDataset):
         with open(outPath.format(final_k),'w') as out:
             out.write(json.dumps(toWrite))
             print('saved '+outPath.format(final_k))
-        #cv2.imshow('clusters',draw)
-        #cv2.waitKey()
-        cv2.imwrite('clusters.png',draw*255)
+        #img_f.imshow('clusters',draw)
+        #img_f.waitKey()
+        img_f.imwrite('clusters.png',draw*255)
 
 
 def getWidthFromBB(bb):

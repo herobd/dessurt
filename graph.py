@@ -28,7 +28,8 @@ def graph(log,plot=True,prefix=None):
         if ndata.dtype is not np.dtype(object):
             maxV = ndata.max(axis=0)
             minV = ndata.min(axis=0)
-            print('{} max: {}, min {}'.format(metric,maxV,minV))
+            meanV = ndata.mean(axis=0)
+            print('{} max: {}, min: {}, mean: {}'.format(metric,maxV,minV,meanV))
         else:
             skip.append(metric)
 

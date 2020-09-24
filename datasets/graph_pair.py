@@ -12,7 +12,7 @@ from collections import defaultdict, OrderedDict
 from utils.forms_annotations import fixAnnotations, convertBBs, getBBWithPoints, getStartEndGT
 import timeit
 
-import cv2
+import utils.img_f as img_f
 
 
 def collate(batch):
@@ -73,7 +73,7 @@ class GraphPairDataset(torch.utils.data.Dataset):
             annotations = json.loads(annFile.read())
 
         ##tic=timeit.default_timer()
-        np_img = cv2.imread(imagePath, 1 if self.color else 0)#/255.0
+        np_img = img_f.imread(imagePath, 1 if self.color else 0)#/255.0
         if np_img is None or np_img.shape[0]==0:
             print("ERROR, could not open "+imagePath)
             return self.__getitem__((index+1)%self.__len__())
@@ -100,11 +100,11 @@ class GraphPairDataset(torch.utils.data.Dataset):
         
         
         ##tic=timeit.default_timer()
-        #np_img = cv2.resize(np_img,(target_dim1, target_dim0), interpolation = cv2.INTER_CUBIC)
-        np_img = cv2.resize(np_img,(0,0),
+        #np_img = img_f.resize(np_img,(target_dim1, target_dim0))
+        np_img = img_f.resize(np_img,(0,0),
                 fx=partial_rescale,
                 fy=partial_rescale,
-                interpolation = cv2.INTER_CUBIC)
+                )
         if not self.color:
             np_img=np_img[...,None] #add 'color' channel
         ##print('resize: {}  [{}, {}]'.format(timeit.default_timer()-tic,np_img.shape[0],np_img.shape[1]))
@@ -212,16 +212,22 @@ class GraphPairDataset(torch.utils.data.Dataset):
             numNeighbors=None
         #if table_points is not None:
         #    table_points = None if table_points.shape[1] == 0 else torch.from_numpy(table_points)
-        groups_adj = []
+        groups_adj = set()
         if groups is not None:
             for n0,n1 in pairs:
+                g0=-1
+                g1=-1
                 for i,ns in enumerate(groups):
                     if n0 in ns:
                         g0=i
+                        if g1!=-1:
+                            break
                     if n1 in ns:
                         g1=i
+                        if g0!=-1:
+                            break
                 if g0!=g1:
-                    groups_adj.append((min(g0,g1),max(g0,g1)))
+                    groups_adj.add((min(g0,g1),max(g0,g1)))
             for group in groups:
                 for i in group:
                     assert(i<bbs.shape[1])

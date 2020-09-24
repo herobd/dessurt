@@ -97,15 +97,15 @@ class AI2DGraphPair(GraphPairDataset):
                     if self.cache_resized:
                         rescale = self.rescale_range[1]
                         if not os.path.exists(path):
-                            org_img = cv2.imread(org_path)
+                            org_img = img_f.imread(org_path)
                             if org_img is None:
                                 print('WARNING, could not read {}'.format(org_img))
                                 continue
-                            resized = cv2.resize(org_img,(0,0),
+                            resized = img_f.resize(org_img,(0,0),
                                     fx=self.rescale_range[1],
                                     fy=self.rescale_range[1],
-                                    interpolation = cv2.INTER_CUBIC)
-                            cv2.imwrite(path,resized)
+                                    )
+                            img_f.imwrite(path,resized)
                     self.images.append({'id':image, 'imagePath':imagePath, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':image[:image.rfind('.')]})
 
 

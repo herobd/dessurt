@@ -12,6 +12,7 @@ from data_loader import getDataLoader
 from trainer import *
 from logger import Logger
 import requests, socket
+import warnings
 
 def update_status(name,message,supercomputer):
     if supercomputer:
@@ -29,6 +30,8 @@ def update_status(name,message,supercomputer):
     pass
 
 logging.basicConfig(level=logging.INFO, format='')
+logging.getLogger('shapely.geos').setLevel(logging.ERROR)
+
 def set_procname(newname):
         from ctypes import cdll, byref, create_string_buffer
         newname=os.fsencode(newname)
@@ -101,6 +104,8 @@ if __name__ == '__main__':
     #                    help='Use combine train and valid sets.')
 
     args = parser.parse_args()
+
+    warnings.filterwarnings("once")
 
     config = None
     if args.config is not None:
