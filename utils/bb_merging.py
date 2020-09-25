@@ -33,14 +33,16 @@ class TextLine:
                 tmp = pred_bb_info[2]
                 pred_bb_info[2]=pred_bb_info[4]
                 pred_bb_info[4]=tmp
-            print('check flat (vert): {}'.format(abs(pred_bb_info[2]-pred_bb_info[4])<0.001))
+            if pred_bb_info[1]>pred_bb_info[3]: #I think this only occured after changing things on a trained model...
+                tmp = pred_bb_info[1]
+                pred_bb_info[1]=pred_bb_info[3]
+                pred_bb_info[3]=tmp
             if abs(pred_bb_info[2]-pred_bb_info[4])<0.001: #detector sometimes predicts flat BBs
                 pred_bb_info[2]-=1
                 pred_bb_info[4]+=1
             if abs(pred_bb_info[1]-pred_bb_info[3])<0.001:
                 pred_bb_info[1]-=1
                 pred_bb_info[3]+=1
-            print('check flat 2 (vert): {}'.format(abs(pred_bb_info[2]-pred_bb_info[4])<0.001))
 
             self.all_primitive_rects = [ np.array([[pred_bb_info[1].item(),pred_bb_info[2].item()],[pred_bb_info[3].item(),pred_bb_info[2].item()],[pred_bb_info[3].item(),pred_bb_info[4].item()],[pred_bb_info[1].item(),pred_bb_info[4].item()]]) ] #tl, tr, bt, bl
 
@@ -671,7 +673,7 @@ class TextLine:
         # 0    1 2 3 4 5  6   7   8   9   10  11  12  13  14     15      16    17
         #conf, x,y,r,h,w,tlx,tly,trx,try,brx,bry,blx,bly,r_left,r_right,std_r,classFeats
 
-        return (self.getConf(), self.center_point[0], self.center_point[1], self.median_angle, self.height, self.width, *self.point_pairs[0][0], *self.point_pairs[-1][0], *self.point_pairs[-1][1], *self.point_pairs[0][1], self.r_left, self.r_right, self.std_r, *self.getCls())
+        return (self.getConf(), self.center_point[0], self.center_point[1], self.median_angle, self.height, self.width, *self.point_pairs[0][0], *self.point_pairs[-1][0], *self.point_pairs[-1][1], *self.point_pairs[0][1], self.r_left, self.r_right, self.std_r, self.getReadPosition(), *self.getCls())
 
     def getHeight(self):
         if self.poly_points is None:
