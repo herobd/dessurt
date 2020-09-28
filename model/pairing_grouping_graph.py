@@ -839,13 +839,28 @@ class PairingGroupingGraph(BaseModel):
 
             return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final
         else:
-            return [bbPredictions], offsetPredictions, None, None, None, None, None, (useBBs.cpu().detach(),None,None,transcriptions)
+            return [bbPredictions], offsetPredictions, None, None, None, None, None, (useBBs if self.useCurvedBBs else useBBs.cpu().detach(),None,None,transcriptions)
 
 
     #This ROIAligns features and creates mask images for each edge and node, and runs the embedding convnet and [appends?] these features to the graph... This is only neccesary if a node has been updated...
     #perhaps we need a saved visual feature. If the node/edge is updated, it is recomputed. It is appended  to the graphs current features at each call of a GCN
     #TODO
-    def appendVisualFeatures(self,useBBs,graph,groups,same_node_map,prev_node_visual_feats,prev_edge_visual_feats,prev_edge_indexes):
+    def appendVisualFeatures(self,
+            useBBs,
+            graph,
+            groups,
+            features,
+            features2,
+            text_emb,
+            imageHeight,
+            imageWidth,
+            same_node_map,
+            prev_node_visual_feats,
+            prev_edge_visual_feats,
+            prev_edge_indexes,
+            merge_only=False,
+            debug_image=None):
+
         node_features, edge_indexes, edge_features, universal_features = graph
         #same_node_map, maps the old node id (index) to the new one
 
@@ -856,10 +871,14 @@ class PairingGroupingGraph(BaseModel):
             node_visual_feats[new_id] = prev_node_visual_feats[old_id]
 
         for new_id in [i for i,has in enumerate(has_feats) if not has]:
-            dfgerhya
+            
+        need_new_ids,need_groups,need_text_emb = zip(* [(i,g,t) for i,(has,g,t) in enumerate(zip(has_feats,groups,text_emb)) if not has])
+        node_visual_feats[need_new_ids] = self.computeNodeVisualFeatures(features,features2,imageHeight,imageWidth,useBBs,need_groups,need_text_emb,merge_only,debug_image)
 
         new_to_old_ids = {v:k for k,v in same_node_map.items()}
         edge_visual_feats = torch.FloatTensor(edge_features.size(0),self.prev_edge_visual_feats.size(1))
+        need_edge_ids=[]
+        need_edge_node_ids=[]
         for ei,(n0,n1) in enumerate(edge_indexes):
             if n0 in new_to_old_ids and n0 in new_to_old_ids:
                 old_id0 = new_to_old_ids[n0]
@@ -868,7 +887,9 @@ class PairingGroupingGraph(BaseModel):
                 assert(old_ei>=0)
                 edge_visual_features[ei]=prev_edge_visual_feats[old_ei]
             else:
-                dfgdfkg
+                need_edge_ids.append(ei)
+                need_edge_node_ids.append((n0,n1))
+        edge_visual_features[need_edge_ids] = self.computeEdgeVisualFeatures(features,features2,imageHeight,imageWidth,bbs,groups,need_edge_node_ids,allMasks,flip,merge_only,debug_image)
 
         new_graph = (torch.cat((node_features,node_visual_feats),dim=1),edge_indexes,torch.cat((edge_features,edge_visual_feats),dim=1),universal_features)
         return new_graph, node_visual_feats, edge_visual_features
