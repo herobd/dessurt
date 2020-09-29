@@ -185,8 +185,7 @@ class PairingGroupingGraph(BaseModel):
         self.merge_pool_h = self.merge_pool2_h = config['merge_featurizer_start_h']
         self.merge_pool_w = self.merge_pool2_w = config['merge_featurizer_start_w']
 
-        self.reintroduce_visual_features = False
-        print('WARNING: not reintroduce_visual_features, which needs implemented')
+        self.reintroduce_visual_features = config['reintroduce_visual_features']
 
 
         if 'use_rel_shape_feats' in config:
@@ -473,7 +472,7 @@ class PairingGroupingGraph(BaseModel):
         else:
             self.pairer = eval(config['graph_config']['arch'])(config['graph_config'])
             self.useMetaGraph = type(self.pairer) is MetaGraphNet
-        self.fixBiDirection= config['fix_bi_dir'] if 'fix_bi_dir' in config else False
+        self.fixBiDirection= config['fix_bi_dir'] #should be True unless this is a really old model
         if 'max_graph_size' in config:
             MAX_GRAPH_SIZE = config['max_graph_size']
 
@@ -768,6 +767,7 @@ class PairingGroupingGraph(BaseModel):
 
                 #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
                 graph,edgeIndexes,rel_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,image=image)
+
                 #print('createGraph')
                 #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
 
@@ -775,6 +775,9 @@ class PairingGroupingGraph(BaseModel):
                 #edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
                 if graph is None:
                     return [bbPredictions], offsetPredictions, None, None, None, None, rel_prop_scores, merge_prop_scores, (useBBs if self.useCurvedBBs else useBBs.cpu().detach(),None,None,transcriptions)
+
+                last_node_visual_feats = graph[0]
+                last_edge_visual_feats = graph[2]
 
                 #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
                 nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = self.graphnets[0](graph)
@@ -799,11 +802,36 @@ class PairingGroupingGraph(BaseModel):
 
                     print('!D! {} before edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(gIter,edgeFeats.size(),len(useBBs),nodeFeats.size(),len(edgeIndexes)))
                     #print('      graph num edges: {}'.format(graph[1].size()))
-                    useBBs,graph,groups,edgeIndexes,bbTrans=self.mergeAndGroup(
-                            self.mergeThresh[gIter],self.keepEdgeThresh[gIter],self.groupThresh[gIter],
-                            edgeIndexes,edgeOuts,groups,nodeFeats,edgeFeats,uniFeats,useBBs,bbTrans,image,dont_merge)
+                    useBBs,graph,groups,edgeIndexes,bbTrans,same_node_map=self.mergeAndGroup(
+                            self.mergeThresh[gIter],
+                            self.keepEdgeThresh[gIter],
+                            self.groupThresh[gIter],
+                            edgeIndexes,
+                            edgeOuts,
+                            groups,
+                            nodeFeats,
+                            edgeFeats,
+                            uniFeats,
+                            useBBs,
+                            bbTrans,
+                            image,
+                            dont_merge)
+
                     if self.reintroduce_visual_features:
-                        graph,last_node_visual_feats,last_edge_visual_feats = self.appendVisualFeatures(useBBs,graph,groups)
+                        graph,last_node_visual_feats,last_edge_visual_feats = self.appendVisualFeatures(
+                                useBBs,
+                                graph,
+                                groups,
+                                saved_features,
+                                saved_features2,
+                                embeddings,
+                                image.size(-2),
+                                image.size(-1),
+                                same_node_map,
+                                last_node_visual_feats,
+                                last_edge_visual_feats,
+                                allEdgeIndexes[-1],
+                                debug_image=None)
                     #print('graph 1-:   bbs:{}, nodes:{}, edges:{}'.format(useBBs.size(0),len(groups),len(edgeIndexes)))
                     if len(edgeIndexes)==0:
                         break #we have no graph, so we can just end here
@@ -844,7 +872,6 @@ class PairingGroupingGraph(BaseModel):
 
     #This ROIAligns features and creates mask images for each edge and node, and runs the embedding convnet and [appends?] these features to the graph... This is only neccesary if a node has been updated...
     #perhaps we need a saved visual feature. If the node/edge is updated, it is recomputed. It is appended  to the graphs current features at each call of a GCN
-    #TODO
     def appendVisualFeatures(self,
             useBBs,
             graph,
@@ -870,10 +897,10 @@ class PairingGroupingGraph(BaseModel):
             has_feat[new_id]=True
             node_visual_feats[new_id] = prev_node_visual_feats[old_id]
 
-        for new_id in [i for i,has in enumerate(has_feats) if not has]:
             
         need_new_ids,need_groups,need_text_emb = zip(* [(i,g,t) for i,(has,g,t) in enumerate(zip(has_feats,groups,text_emb)) if not has])
-        node_visual_feats[need_new_ids] = self.computeNodeVisualFeatures(features,features2,imageHeight,imageWidth,useBBs,need_groups,need_text_emb,merge_only,debug_image)
+        if len(need_new_ids)>0:
+            node_visual_feats[need_new_ids] = self.computeNodeVisualFeatures(features,features2,imageHeight,imageWidth,useBBs,need_groups,need_text_emb,merge_only,debug_image)
 
         new_to_old_ids = {v:k for k,v in same_node_map.items()}
         edge_visual_feats = torch.FloatTensor(edge_features.size(0),self.prev_edge_visual_feats.size(1))
@@ -889,7 +916,8 @@ class PairingGroupingGraph(BaseModel):
             else:
                 need_edge_ids.append(ei)
                 need_edge_node_ids.append((n0,n1))
-        edge_visual_features[need_edge_ids] = self.computeEdgeVisualFeatures(features,features2,imageHeight,imageWidth,bbs,groups,need_edge_node_ids,allMasks,flip,merge_only,debug_image)
+        if len(need_edge_ids)>0:
+            edge_visual_features[need_edge_ids] = self.computeEdgeVisualFeatures(features,features2,imageHeight,imageWidth,bbs,groups,need_edge_node_ids,allMasks,flip,merge_only,debug_image)
 
         new_graph = (torch.cat((node_features,node_visual_feats),dim=1),edge_indexes,torch.cat((edge_features,edge_visual_feats),dim=1),universal_features)
         return new_graph, node_visual_feats, edge_visual_features
@@ -996,6 +1024,7 @@ class PairingGroupingGraph(BaseModel):
     #Use the graph network's predictions to merge oversegmented detections and group nodes into a single node
     def mergeAndGroup(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,dont_merge=False,merge_only=False):
         assert(not self.useCurvedBBs or len(oldBBs)==0 or type(oldBBs[0]) is TextLine)
+        changedNodeIds=set()
         newBBs={}
         #newBBs_line={}
         newBBIdCounter=0
@@ -1016,7 +1045,9 @@ class PairingGroupingGraph(BaseModel):
                 #mergePred = edgePreds[i,-1,1]
                 
                 if mergePreds[i]>mergeThresh: #TODO condition this on whether it is correct. and GT?:
-                    if len(oldGroups[n0])==1 and len(oldGroups[n1])==1: #can only merge ungrouped nodes
+                    if len(oldGroups[n0])==1 and len(oldGroups[n1])==1: #can only merge ungrouped nodes. This assumption is used later in the code WXS
+                        #changedNodeIds.add(n0)
+                        #changedNodeIds.add(n1)
                         if self.useCurvedBBs:
                             bbId0 = oldGroups[n0][0]
                             bbId1 = oldGroups[n1][0]
@@ -1141,12 +1172,12 @@ class PairingGroupingGraph(BaseModel):
             #rewrite groups with merged instances
             assignedGroup={} #this will allow us to remove merged instances
             oldGroupToNew={}
-            workGroups = {i:v for i,v in enumerate(oldGroups)}
+            workGroups =  {}#{i:v for i,v in enumerate(oldGroups)}
             for id,bbIds in enumerate(oldGroups):
                 newGroup = [oldBBIdToNew[oldId] for oldId in bbIds]
-                if len(newGroup)==1 and newGroup[0] in assignedGroup:
+                if len(newGroup)==1 and newGroup[0] in assignedGroup: #WXS
                     oldGroupToNew[id]=assignedGroup[newGroup[0]]
-                    del workGroups[id]
+                    #del workGroups[id]
                 else:
                     workGroups[id] = newGroup
                     #alreadyInGroup.update(newGroup)
@@ -1174,6 +1205,7 @@ class PairingGroupingGraph(BaseModel):
                     #    newNodeFeat = self.groupNodeFunc(newNodeFeat,oldNodeFeats[oldNode])
                     newNodeFeat = self.groupNodeFunc( [oldNodeFeats[on] for on in oldNodes] )
                     newNodeFeats.append(newNodeFeat)
+                    changedNodeIds.update(oldNodes)
                 else:
                     newNodeFeats.append(oldNodeFeats[id])
             oldNodeFeats = torch.stack(newNodeFeats,dim=0)
@@ -1239,10 +1271,13 @@ class PairingGroupingGraph(BaseModel):
                 groupEdges.append((score, g0, g1))
                 break
 
+            changedNodeIds.add(g0)
+            changedNodeIds.add(g1)
+
             workingGroups[g0] += workingGroups[g1]
             del workingGroups[g1]
 
-
+            #Now combine the edges which the two nodes share (edges going to the same node)
             newGroupEdges=[]
             newEdgeFeats=[]
             mEdges=defaultdict(list)
@@ -1294,16 +1329,19 @@ class PairingGroupingGraph(BaseModel):
             yIndex=2
         else:
             yIndex=1
+        oldToNewNodeIds={}
         for oldG,bbIds in workingGroups.items():
             oldToIdx[oldG]=len(newGroups)
             newGroups.append(bbIds)
             newNodeFeats.append( self.groupNodeFunc(newNodeFeatsD[oldG]) )
+            if oldG not in changedNodeIds:
+                oldToNewNodeIds[oldG]=len(newGroups)-1
             if self.text_rec is not None:
                 newTrans = ''
-                #Something to get read-order correct, assuming groups only vertical, so sorting by y-position
                 if self.useCurvedBBs:
                     groupTrans = [(bbs[bbId].getReadPosition(),bbTrans[bbId]) for bbId in bbIds]
                 else:
+                    #Something to get read-order correct, assuming groups only vertical, so sorting by y-position
                     groupTrans = [(bbs[bbId,yIndex].item(),bbTrans[bbId]) for bbId in bbIds]
                 groupTrans.sort(key=lambda a:a[0])
                 newNodeTrans.append(' '.join([t[1] for t in groupTrans]))
@@ -1409,7 +1447,7 @@ class PairingGroupingGraph(BaseModel):
 
         newGraph = (newNodeFeats, newEdgeIndexes, newEdgeFeats, oldUniversalFeats)
 
-        return bbs, newGraph, newGroups, edges, bbTrans
+        return bbs, newGraph, newGroups, edges, bbTrans,  oldToNewNodeIds
 
 
                 
