@@ -484,15 +484,21 @@ class PairingGroupingGraph(BaseModel):
             self.include_bb_conf=True
             #num_classes = config['num_class']
             num_bb_feat = self.numBBTypes + (1 if self.detector.predNumNeighbors else 0) #config['graph_config']['bb_out']
+            prop_feats = 30+2*num_bb_feat
+            if self.useCurvedBBs:
+                prop_feats += 8
+                if self.shape_feats_normal:
+                    prop_feats += 1
             self.rel_prop_nn = nn.Sequential(
-                                nn.Linear(30+2*num_bb_feat+(8 if self.useCurvedBBs else 0),64),
+                                nn.Linear(prop_feats,64),
                                 nn.Dropout(0.25),
                                 nn.ReLU(True),
                                 nn.Linear(64,1)
                                 )
             if self.merge_first:
+                
                 self.merge_prop_nn = nn.Sequential(
-                                    nn.Linear(30+2*num_bb_feat+(8 if self.useCurvedBBs else 0),64),
+                                    nn.Linear(prop_feats,64),
                                     nn.Dropout(0.25),
                                     nn.ReLU(True),
                                     nn.Linear(64,1)
@@ -919,7 +925,9 @@ class PairingGroupingGraph(BaseModel):
         if len(need_edge_ids)>0:
             edge_visual_features[need_edge_ids] = self.computeEdgeVisualFeatures(features,features2,imageHeight,imageWidth,bbs,groups,need_edge_node_ids,allMasks,flip,merge_only,debug_image)
 
-        new_graph = (torch.cat((node_features,node_visual_feats),dim=1),edge_indexes,torch.cat((edge_features,edge_visual_feats),dim=1),universal_features)
+        #for now, we'll just sum the features.
+        #new_graph = (torch.cat((node_features,node_visual_feats),dim=1),edge_indexes,torch.cat((edge_features,edge_visual_feats),dim=1),universal_features)
+        new_graph = (node_features+node_visual_feats,edge_indexes,edge_features+edge_visual_feats,universal_features)
         return new_graph, node_visual_feats, edge_visual_features
 
     #This rewrites the confidence and class predictions based on the (re)predictions from the graph network

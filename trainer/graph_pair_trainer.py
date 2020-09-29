@@ -534,6 +534,8 @@ class GraphPairTrainer(BaseTrainer):
             #decide which predicted boxes belong to which target boxes
             #should this be the same as AP_?
             numClasses = 2
+
+            tic=timeit.default_timer()#t#
             
             if targetBoxes is not None:
                 targetBoxes = targetBoxes.cpu()
@@ -548,10 +550,14 @@ class GraphPairTrainer(BaseTrainer):
                 else:
                     raise NotImplementedError('newGetTargIndexForPreds_ should be changed to reflect the behavoir or newGetTargIndexForPreds_textLines')
                     targIndex, fullHit, overSegmented = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,hard_thresh=False,fixed=self.fixedAlign)
+                targIndex = targIndex.numpy()
             else:
-                targIndex=torch.LongTensor(len(outputBoxes)).fill_(-1)
+                #targIndex=torch.LongTensor(len(outputBoxes)).fill_(-1)
+                targIndex = [-1]*len(outputBoxes)
+            
+            print('\tsimplerAlign newGetTargIndexForPreds: {}'.format(timeit.default_timer()-tic))#t#
 
-
+            tic=timeit.default_timer()#t#
 
             #Create gt vector to match edgePred.values()
             num_internal_iters = edgePred.size(-2)
@@ -587,7 +593,7 @@ class GraphPairTrainer(BaseTrainer):
             predGroupsT={}
             predGroupsTNear={}
             for node in range(len(predGroups)):
-                predGroupsT[node] = [targIndex[bb].item() for bb in predGroups[node] if targIndex[bb].item()>=0]
+                predGroupsT[node] = [targIndex[bb] for bb in predGroups[node] if targIndex[bb]>=0]
             shouldBeEdge={}
             for i,(n0,n1) in enumerate(edgePredIndexes):
                 wasRel=None
@@ -854,28 +860,34 @@ class GraphPairTrainer(BaseTrainer):
                     }
                 predTypes = [saveRelPred,saveOverSegPred,saveGroupPred,saveErrorPred]
 
+            print('\tsimplerAlign everything else: {}'.format(timeit.default_timer()-tic))#t#
+
+
         if rel_prop_pred is not None:
 
             relPropScores,relPropIds, threshPropRel = rel_prop_pred
+
+            print('\tcount rel prop: {}'.format(len(relPropIds)))
+            tic=timeit.default_timer()#t#
             truePropPred=falsePropPred=falseNegProp=0
             propPredsPos=[]
             propPredsNeg=[]
             for i,(n0,n1) in enumerate(relPropIds):
-                if (n0,n1) in shouldBeEdge:
+                if not merge_only and (n0,n1) in shouldBeEdge: #unsure if this really saves time
                     isEdge = shouldBeEdge[(n0,n1)]
                 else:
-                    t0 = targIndex[n0].item()
-                    t1 = targIndex[n1].item()
+                    t0 = targIndex[n0]
+                    t1 = targIndex[n1]
                     #ts0=predGroupsT[n0]
                     #ts1=predGroupsT[n1]
-                    assert(len(predGroupsT[n0])<=1 and len(predGroupsT[n1])<=1)
-                    gtGroup0 = getGTGroup([t0],gtGroups)
-                    gtGroup1 = getGTGroup([t1],gtGroups)
+                    #assert(len(predGroupsT[n0])<=1 and len(predGroupsT[n1])<=1) removing for efficiency
                     isEdge=False
                     if t0>=0 and t1>=0:
                         if t0==t1:
                             isEdge=True
                         elif not merge_only:
+                            gtGroup0 = getGTGroup([t0],gtGroups)
+                            gtGroup1 = getGTGroup([t1],gtGroups)
                             
                             if gtGroup0==gtGroup1:
                                 isEdge=True
@@ -892,6 +904,18 @@ class GraphPairTrainer(BaseTrainer):
                     propPredsNeg.append(relPropScores[i])
                     if relPropScores[i]>threshPropRel:
                         falsePropPred+=1
+            time = timeit.default_timer()-tic
+            print('\tsimplerAlign proposal: {}, per edge: {}'.format(time,time/len(relPropIds)))#t# 
+            #per: 5.0e-5
+
+            #tic=timeit.default_timer()#t#
+            #truePropPred_n=falsePropPred_n=falseNegProp_n=0
+            #propPredsPos_n=[]
+            #propPredsNeg_n=[]
+            #edges = [(targIndex[n0].item(),targIndex[n1].item()) for n0,n1 in relPropIds]
+            #edges = [(t0,t1) for t0,t1 in edges if t0>=0 and t1>=0]
+
+
         
             if len(propPredsPos)>0:
                 propPredsPos = torch.stack(propPredsPos).to(relPropScores.device)
@@ -909,6 +933,7 @@ class GraphPairTrainer(BaseTrainer):
             log['edgePropPrec']=propPrec
 
             proposedInfo = (propPredsPos,propPredsNeg, propRecall, propPrec)
+            #self.timing{
         else:
             proposedInfo = None
 
