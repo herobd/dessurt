@@ -227,7 +227,7 @@ class BaseTrainer:
             if (    self.iteration%self.log_step==0 or 
                     self.iteration%self.val_step==0 or 
                     self.iteration % self.save_step == 0 or 
-                    (self.save_step_minor is not None and self.iteration % self.save_step_minor)
+                    (self.save_step_minor is not None and self.iteration % self.save_step_minor==0)
                 ):
                 log = {'iteration': self.iteration}
 
