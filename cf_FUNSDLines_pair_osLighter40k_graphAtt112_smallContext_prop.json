@@ -135,8 +135,13 @@
         "featurizer_bb_start_h": 10,
         "featurizer_bb_start_w": 10,
         "bb_featurizer_conv": ["sep64","M","sep128","sep128",250],
+        "!!!":"!!!",
+        "shape_feats_normal": false,
+        "!!!":"!!!",
+
 
         "fix_bi_dir": true,
+        "reintroduce_visual_features": true,
         "graph_config": [
         {
             "arch": "MetaGraphNet",
