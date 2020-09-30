@@ -613,7 +613,7 @@ class TextLine:
 
 
             t = b/(sign_y*math.sqrt(1/(1+slope**2))-slope*sign_x*math.sqrt(1/(1+(1/slope**2))))
-            return t
+            return t.item()
         
     def polyYs(self):
         if self.poly_points is None:
@@ -701,7 +701,7 @@ class TextLine:
         if self.conf is None:
             if self.all_conf is not None:
                 self.conf = np.mean(self.all_conf)
-        return self.conf
+        return self.conf.item()
 
 
 

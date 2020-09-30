@@ -899,7 +899,7 @@ def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeC
 
         #add all the preds that didn't have a hit
         hasHit,_ = validHits.max(dim=0) #which preds have hits
-        predConf=torch.FloatTensor([p.getConf().item() for p in pred])
+        predConf=torch.FloatTensor([p.getConf() for p in pred])
         predClasses=torch.FloatTensor([p.getCls() for p in pred])
         predClasses_index = torch.argmax(predClasses,dim=1)
         #targetClasses_index_ex = targetClasses_index[:,None].expand(targetClasses_index.size(0),predClasses_index.size(0))
