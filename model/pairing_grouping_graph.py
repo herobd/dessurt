@@ -891,7 +891,7 @@ class PairingGroupingGraph(BaseModel):
     #This ROIAligns features and creates mask images for each edge and node, and runs the embedding convnet and [appends?] these features to the graph... This is only neccesary if a node has been updated...
     #perhaps we need a saved visual feature. If the node/edge is updated, it is recomputed. It is appended  to the graphs current features at each call of a GCN
     def appendVisualFeatures(self,
-            useBBs,
+            bbs,
             graph,
             groups,
             edge_indexes,
@@ -905,7 +905,8 @@ class PairingGroupingGraph(BaseModel):
             prev_edge_visual_feats,
             prev_edge_indexes,
             merge_only=False,
-            debug_image=None):
+            debug_image=None,
+            flip=None):
 
         node_features, _edge_indexes, edge_features, universal_features = graph
         #same_node_map, maps the old node id (index) to the new one
@@ -925,16 +926,15 @@ class PairingGroupingGraph(BaseModel):
             if len(need_new_ids)>0:
                 need_new_ids=list(need_new_ids)
                 need_new_ids=list(need_new_ids)
-                allMasks=self.makeAllMasks(image_height,image_width,useBBs)
-                node_visual_feats[need_new_ids] = self.computeNodeVisualFeatures(features,features2,image_height,image_width,useBBs,need_groups,need_text_emb,allMasks,merge_only,debug_image)
+                allMasks=self.makeAllMasks(image_height,image_width,bbs)
+                node_visual_feats[need_new_ids] = self.computeNodeVisualFeatures(features,features2,image_height,image_width,bbs,need_groups,need_text_emb,allMasks,merge_only,debug_image)
 
         new_to_old_ids = {v:k for k,v in same_node_map.items()}
         edge_visual_feats = torch.FloatTensor(len(edge_indexes),prev_edge_visual_feats.size(1)).to(edge_features.device)
         need_edge_ids=[]
         need_edge_node_ids=[]
-        allMasks=None
         for ei,(n0,n1) in enumerate(edge_indexes):
-            if n0 in new_to_old_ids and n0 in new_to_old_ids:
+            if n0 in new_to_old_ids and n1 in new_to_old_ids:
                 old_id0 = new_to_old_ids[n0]
                 old_id1 = new_to_old_ids[n1]
                 try:
@@ -950,7 +950,7 @@ class PairingGroupingGraph(BaseModel):
                 need_edge_ids.append(ei)
                 need_edge_node_ids.append((n0,n1))
         if len(need_edge_ids)>0:
-            edge_visual_features[need_edge_ids] = self.computeEdgeVisualFeatures(features,features2,image_height,image_width,bbs,groups,need_edge_node_ids,allMasks,flip,merge_only,debug_image)
+            edge_visual_feats[need_edge_ids] = self.computeEdgeVisualFeatures(features,features2,image_height,image_width,bbs,groups,need_edge_node_ids,allMasks,flip,merge_only,debug_image)
 
         #for now, we'll just sum the features.
         #new_graph = (torch.cat((node_features,node_visual_feats),dim=1),edge_indexes,torch.cat((edge_features,edge_visual_feats),dim=1),universal_features)
@@ -1063,10 +1063,12 @@ class PairingGroupingGraph(BaseModel):
         #resBatch = self.text_rec(lines)
 
     #Use the graph network's predictions to merge oversegmented detections and group nodes into a single node
-    def mergeAndGroup(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,dont_merge=False,merge_only=False):
-        assert(not self.useCurvedBBs or len(oldBBs)==0 or type(oldBBs[0]) is TextLine)
+    def mergeAndGroupCurved(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,oldBBTrans,image,dont_merge=False,merge_only=False):
+        assert(len(oldBBs)==0 or type(oldBBs[0]) is TextLine)
         changedNodeIds=set()
-        newBBs={}
+        bbs={i:v for i,v in enumerate(oldBBs)}
+        bbTrans={i:v for enumerate(oldBBTrans)}
+        oldToNewBBIndexes={i:i for i in range(len(oldBBs))}
         #newBBs_line={}
         newBBIdCounter=0
         #toMergeBBs={}
@@ -1080,7 +1082,7 @@ class PairingGroupingGraph(BaseModel):
             mergePreds = torch.sigmoid(edgePredictions[:,-1,0]).cpu().detach()
         ##Prevent all nodes from merging during first iterations (bad init):
         if not dont_merge:
-        
+            mergedTo=set()
             #check for merges, where we will combine two BBs into one
             for i,(n0,n1) in enumerate(oldEdgeIndexes):
                 #mergePred = edgePreds[i,-1,1]
@@ -1089,124 +1091,34 @@ class PairingGroupingGraph(BaseModel):
                     if len(oldGroups[n0])==1 and len(oldGroups[n1])==1: #can only merge ungrouped nodes. This assumption is used later in the code WXS
                         #changedNodeIds.add(n0)
                         #changedNodeIds.add(n1)
-                        if self.useCurvedBBs:
-                            bbId0 = oldGroups[n0][0]
-                            bbId1 = oldGroups[n1][0]
-                            if bbId0 in oldToNewBBIndexes:
-                                newId0 = oldToNewBBIndexes[bbId0]
-                                bb0ToMerge = newBBs[newId0]
-                            else:
-                                newId0 = None
-                                bb0ToMerge = oldBBs[bbId0]
+                        bbId0 = oldGroups[n0][0]
+                        bbId1 = oldGroups[n1][0]
+                        newId0 = oldToNewBBIndexes[bbId0]
+                        bb0ToMerge = bbs[newId0]
 
-                            if bbId1 in oldToNewBBIndexes:
-                                newId1 = oldToNewBBIndexes[bbId1]
-                                bb1ToMerge = newBBs[newId1]
-                            else:
-                                newId1 = None
-                                bb1ToMerge = oldBBs[bbId1]
-                                #oldBBs[bbId1]=None
+                        newId1 = oldToNewBBIndexes[bbId1]
+                        bb1ToMerge = bbs[newId1]
 
 
-                            if newId0 is None and newId1 is None:
-                                bbMerged = TextLine(bb0ToMerge,bb1ToMerge) #creates new object so graph history can be preseved
-                                oldToNewBBIndexes[bbId0]=newBBIdCounter
-                                oldToNewBBIndexes[bbId1]=newBBIdCounter
-                                newBBs[newBBIdCounter]=bbMerged
-                                newBBIdCounter+=1
-                            elif newId0 is None:
-                                bb1ToMerge.merge(bb0ToMerge) #modifying new object
-                                oldToNewBBIndexes[bbId0]=newId1
-                                #newBBs[newId1]=bbMerged would be reassignemnt
-                            elif newId1 is None:
-                                bb0ToMerge.merge(bb1ToMerge) # "
-                                oldToNewBBIndexes[bbId1]=newId0
-                                #newBBs[newId0]=bbMerged
-                            elif newId0!=newId1:
-                                bb0ToMerge.merge(bb1ToMerge) # "
-                                #merge two merged bbs
-                                oldToNewBBIndexes = {k:(v if v!=newId1 else newId0) for k,v in oldToNewBBIndexes.items()}
-                                #oldToNewBBIndexes[bbId1]=newId0
-                                #newBBs[newId0].merge(newBBs[newId1])
-                                #print('merge {} and {} (d), because of {} and {}'.format(mergeNewId0,mergeNewId1,bbId0,bbId1))
-                                del newBBs[newId1]
-                        else:
-                            bbId0 = oldGroups[n0][0]
-                            bbId1 = oldGroups[n1][0]
-                            if bbId0 in oldToNewBBIndexes:
-                                mergeNewId0 = oldToNewBBIndexes[bbId0]
-                                bb0 = newBBs[mergeNewId0]
-                            else:
-                                mergeNewId0 = None
-                                bb0 = oldBBs[bbId0].cpu()
-                            if bbId1 in oldToNewBBIndexes:
-                                mergeNewId1 = oldToNewBBIndexes[bbId1]
-                                bb1 = newBBs[mergeNewId1]
-                            else:
-                                mergeNewId1 = None
-                                bb1 = oldBBs[bbId1].cpu()
-
-                            newBB= self.mergeBB(bb0,bb1,image)
-
-                            if mergeNewId0 is None and mergeNewId1 is None:
-                                oldToNewBBIndexes[bbId0]=newBBIdCounter
-                                oldToNewBBIndexes[bbId1]=newBBIdCounter
-                                newBBs[newBBIdCounter]=newBB
-                                newBBIdCounter+=1
-                            elif mergeNewId0 is None:
-                                oldToNewBBIndexes[bbId0]=mergeNewId1
-                                newBBs[mergeNewId1]=newBB
-                            elif mergeNewId1 is None:
-                                oldToNewBBIndexes[bbId1]=mergeNewId0
-                                newBBs[mergeNewId0]=newBB
-                            elif mergeNewId0!=mergeNewId1:
-                                #merge two merged bbs
-                                oldToNewBBIndexes[bbId1]=mergeNewId0
-                                for old,new in oldToNewBBIndexes.items():
-                                    if new == mergeNewId1:
-                                        oldToNewBBIndexes[old]=mergeNewId0
-                                newBBs[mergeNewId0]=newBB
-                                #print('merge {} and {} (d), because of {} and {}'.format(mergeNewId0,mergeNewId1,bbId0,bbId1))
-                                del newBBs[mergeNewId1]
+                        if newId0!=newId1:
+                            bb0ToMerge.merge(bb1ToMerge) # "
+                            #merge two merged bbs
+                            oldToNewBBIndexes = {k:(v if v!=newId1 else newId0) for k,v in oldToNewBBIndexes.items()}
+                            del bbs[newId1]
+                            if self.text_rec is not None:
+                                del bbTrans[newId1]
+                            mergedTo.add(newId0)
 
 
-            #Actually rewrite bbs
-            if len(newBBs)==0:
-                bbs = oldBBs
-                oldBBIdToNew=list(range(len(oldBBs)))
-            else:
-                if not self.useCurvedBBs:
-                    device = oldBBs.device
-                bbs=[]
-                oldBBIdToNew={}
-                if self.text_rec is not None:
-                    bbTransTmp=[]
-                for i in range(len(oldBBs)):
-                    if i not in oldToNewBBIndexes:
-                        oldBBIdToNew[i]=len(bbs)
-                        bbs.append(oldBBs[i])
-                        if self.text_rec is not None:
-                            bbTransTmp.append(bbTrans[i])
-                if self.text_rec is not None:
-                    bbTrans = bbTransTmp
-                #oldBBs=oldBBs.cpu()
-                for id,bb in newBBs.items():
-                    for old,new in oldToNewBBIndexes.items():
-                        if new==id:
-                            oldBBIdToNew[old]=len(bbs)
-                    if self.useCurvedBBs:
-                        bbs.append(bb)
-                    else:
-                        bbs.append(bb.to(device))
-                if not self.useCurvedBBs:
-                    bbs=torch.stack(bbs,dim=0)
+            oldBBIdToNew = oldToNewBBIndexes
                     
 
             if self.text_rec is not None and len(newBBs)>0:
-                newTrans = self.getTranscriptions(bbs[-len(newBBs):],image)
-                #newEmbeddings = self.embedding_model(newTrans)
-                #now we need to embed and append these and the old trans to node features
-                bbTrans += newTrans
+                doTransIndexes = [idx for idx in mergedTo is idx in bbs]
+                doBBs = [bbs[idx] for idx in doTransIndexes]
+                newTrans = self.getTranscriptions(doBBs,image)
+                for i,idx in enumerate(doTransIndexes):
+                    bbTrans[idx] = newTrans[i]
             if merge_only:
                 return bbs, bbTrans
 
@@ -1221,13 +1133,10 @@ class PairingGroupingGraph(BaseModel):
                     #del workGroups[id]
                 else:
                     workGroups[id] = newGroup
-                    #alreadyInGroup.update(newGroup)
                     for bbId in newGroup:
                         assignedGroup[bbId]=id
-                    #for bbId in bbIds:
-                    #    assignedGroup[bbId]=id
         
-
+            TODO LEFT OFF
             #rewrite the graph to reflect merged instances
             newNodeFeats=[]
             oldGroups=[]
@@ -1278,7 +1187,7 @@ class PairingGroupingGraph(BaseModel):
                         edgeFeats.append([oldEdgeFeats[i]])
                     #else:
                     #    It disapears
-            oldEdgeIndexes=None
+            #oldEdgeIndexes=None
 
             #print('!D! original edges:{}, above thresh:{}, kept edges:{}'.format(D_numOldEdges,D_numOldAboveThresh,len(edgeFeats)))
              
@@ -1291,7 +1200,7 @@ class PairingGroupingGraph(BaseModel):
                 if edgePreds[i]>keepEdgeThresh:
                     groupEdges.append((groupPreds[i].item(),n0,n1))
                     edgeFeats.append([oldEdgeFeats[i]])
-            oldEdgeIndexes=None
+            #oldEdgeIndexes=None
 
 
 
@@ -1379,11 +1288,7 @@ class PairingGroupingGraph(BaseModel):
                 oldToNewNodeIds[oldG]=len(newGroups)-1
             if self.text_rec is not None:
                 newTrans = ''
-                if self.useCurvedBBs:
-                    groupTrans = [(bbs[bbId].getReadPosition(),bbTrans[bbId]) for bbId in bbIds]
-                else:
-                    #Something to get read-order correct, assuming groups only vertical, so sorting by y-position
-                    groupTrans = [(bbs[bbId,yIndex].item(),bbTrans[bbId]) for bbId in bbIds]
+                groupTrans = [(bbs[bbId].getReadPosition(),bbTrans[bbId]) for bbId in bbIds]
                 groupTrans.sort(key=lambda a:a[0])
                 newNodeTrans.append(' '.join([t[1] for t in groupTrans]))
         newEdges = [(oldToIdx[g0],oldToIdx[g1]) for s,g0,g1 in groupEdges]
@@ -1487,6 +1392,404 @@ class PairingGroupingGraph(BaseModel):
         newEdgeFeats = newEdgeFeats.repeat(2,1)
 
         newGraph = (newNodeFeats, newEdgeIndexes, newEdgeFeats, oldUniversalFeats)
+
+        ###DEBUG###
+        newToOld = {v:k for k,v in oldToNewNodeIds.items()}
+        for n0,n1 in edges:
+            if n0 in newToOld and n1 in newToOld:
+                o0 = newToOld[n0]
+                o1 = newToOld[n1]
+                assert( (min(o0,o1),max(o0,o1)) in oldEdgeIndexes )
+
+        ##D###
+
+        return bbs, newGraph, newGroups, edges, bbTrans,  oldToNewNodeIds
+    def mergeAndGroup(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,dont_merge=False,merge_only=False):
+        if self.useCurvedBBs:
+            return self.mergeAndGroupCurved(mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,dont_merge,merge_only)
+        changedNodeIds=set()
+        newBBs={}
+        #newBBs_line={}
+        newBBIdCounter=0
+        #toMergeBBs={}
+        oldToNewBBIndexes={}
+        if not merge_only:
+            edgePreds = torch.sigmoid(edgePredictions[:,-1,0]).cpu().detach()
+            #relPreds = torch.sigmoid(edgePredictions[:,-1,1]).cpu().detach()
+            mergePreds = torch.sigmoid(edgePredictions[:,-1,2]).cpu().detach()
+            groupPreds = torch.sigmoid(edgePredictions[:,-1,3]).cpu().detach()
+        else:
+            mergePreds = torch.sigmoid(edgePredictions[:,-1,0]).cpu().detach()
+        ##Prevent all nodes from merging during first iterations (bad init):
+        if not dont_merge:
+        
+            #check for merges, where we will combine two BBs into one
+            for i,(n0,n1) in enumerate(oldEdgeIndexes):
+                #mergePred = edgePreds[i,-1,1]
+                
+                if mergePreds[i]>mergeThresh: #TODO condition this on whether it is correct. and GT?:
+                    if len(oldGroups[n0])==1 and len(oldGroups[n1])==1: #can only merge ungrouped nodes. This assumption is used later in the code WXS
+                        #changedNodeIds.add(n0)
+                        #changedNodeIds.add(n1)
+                        bbId0 = oldGroups[n0][0]
+                        bbId1 = oldGroups[n1][0]
+                        if bbId0 in oldToNewBBIndexes:
+                            mergeNewId0 = oldToNewBBIndexes[bbId0]
+                            bb0 = newBBs[mergeNewId0]
+                        else:
+                            mergeNewId0 = None
+                            bb0 = oldBBs[bbId0].cpu()
+                        if bbId1 in oldToNewBBIndexes:
+                            mergeNewId1 = oldToNewBBIndexes[bbId1]
+                            bb1 = newBBs[mergeNewId1]
+                        else:
+                            mergeNewId1 = None
+                            bb1 = oldBBs[bbId1].cpu()
+
+                        newBB= self.mergeBB(bb0,bb1,image)
+
+                        if mergeNewId0 is None and mergeNewId1 is None:
+                            oldToNewBBIndexes[bbId0]=newBBIdCounter
+                            oldToNewBBIndexes[bbId1]=newBBIdCounter
+                            newBBs[newBBIdCounter]=newBB
+                            newBBIdCounter+=1
+                        elif mergeNewId0 is None:
+                            oldToNewBBIndexes[bbId0]=mergeNewId1
+                            newBBs[mergeNewId1]=newBB
+                        elif mergeNewId1 is None:
+                            oldToNewBBIndexes[bbId1]=mergeNewId0
+                            newBBs[mergeNewId0]=newBB
+                        elif mergeNewId0!=mergeNewId1:
+                            #merge two merged bbs
+                            oldToNewBBIndexes[bbId1]=mergeNewId0
+                            for old,new in oldToNewBBIndexes.items():
+                                if new == mergeNewId1:
+                                    oldToNewBBIndexes[old]=mergeNewId0
+                            newBBs[mergeNewId0]=newBB
+                            #print('merge {} and {} (d), because of {} and {}'.format(mergeNewId0,mergeNewId1,bbId0,bbId1))
+                            del newBBs[mergeNewId1]
+
+
+            #Actually rewrite bbs
+            if len(newBBs)==0:
+                bbs = oldBBs
+                oldBBIdToNew=list(range(len(oldBBs)))
+            else:
+                device = oldBBs.device
+                bbs=[]
+                oldBBIdToNew={}
+                if self.text_rec is not None:
+                    bbTransTmp=[]
+                for i in range(len(oldBBs)):
+                    if i not in oldToNewBBIndexes:
+                        oldBBIdToNew[i]=len(bbs)
+                        bbs.append(oldBBs[i])
+                        if self.text_rec is not None:
+                            bbTransTmp.append(bbTrans[i])
+                if self.text_rec is not None:
+                    bbTrans = bbTransTmp
+                #oldBBs=oldBBs.cpu()
+                for id,bb in newBBs.items():
+                    for old,new in oldToNewBBIndexes.items():
+                        if new==id:
+                            oldBBIdToNew[old]=len(bbs)
+                    bbs.append(bb.to(device))
+                bbs=torch.stack(bbs,dim=0)
+
+                    
+
+            if self.text_rec is not None and len(newBBs)>0:
+                newTrans = self.getTranscriptions(bbs[-len(newBBs):],image)
+                #newEmbeddings = self.embedding_model(newTrans)
+                #now we need to embed and append these and the old trans to node features
+                bbTrans += newTrans
+            if merge_only:
+                return bbs, bbTrans
+
+            #rewrite groups with merged instances
+            assignedGroup={} #this will allow us to remove merged instances
+            oldGroupToNew={}
+            workGroups =  {}#{i:v for i,v in enumerate(oldGroups)}
+            for id,bbIds in enumerate(oldGroups):
+                newGroup = [oldBBIdToNew[oldId] for oldId in bbIds]
+                if len(newGroup)==1 and newGroup[0] in assignedGroup: #WXS
+                    oldGroupToNew[id]=assignedGroup[newGroup[0]]
+                    #del workGroups[id]
+                else:
+                    workGroups[id] = newGroup
+                    #alreadyInGroup.update(newGroup)
+                    for bbId in newGroup:
+                        assignedGroup[bbId]=id
+                    #for bbId in bbIds:
+                    #    assignedGroup[bbId]=id
+        
+
+            #rewrite the graph to reflect merged instances
+            newNodeFeats=[]
+            oldGroups=[]
+            newIdToPos={}
+            newGroupToOld=defaultdict(list)
+            for k,v in oldGroupToNew.items():
+                newGroupToOld[v].append(k)
+            for id,group in workGroups.items():
+                newIdToPos[id]=len(oldGroups)
+                oldGroups.append(group)
+                if id in newGroupToOld:
+                    oldNodes = newGroupToOld[id]+[id]
+                    #random.shuffle(oldNodes) 
+                    #newNodeFeat = self.groupNodeFunc(oldNodeFeats[oldNodes[0]],oldNodeFeats[oldNodes[1]])
+                    #for oldNode in oldNodes[2:]:
+                    #    newNodeFeat = self.groupNodeFunc(newNodeFeat,oldNodeFeats[oldNode])
+                    newNodeFeat = self.groupNodeFunc( [oldNodeFeats[on] for on in oldNodes] )
+                    newNodeFeats.append(newNodeFeat)
+                    changedNodeIds.update(oldNodes)
+                else:
+                    newNodeFeats.append(oldNodeFeats[id])
+            oldNodeFeats = torch.stack(newNodeFeats,dim=0)
+
+            #We'll adjust the edges to acount for merges as well as prune edges and get ready for grouping
+            #temp = oldEdgeIndexes
+            #oldEdgeIndexes = []
+
+            #Prune and adjust the edges (to groups)
+            groupEdges=[]
+            edgeFeats = []
+
+            D_numOldEdges=len(oldEdgeIndexes)
+            D_numOldAboveThresh=(edgePreds>keepEdgeThresh).sum()
+            for i,(n0,n1) in enumerate(oldEdgeIndexes):
+                if edgePreds[i]>keepEdgeThresh:
+                    if n0 in oldGroupToNew:
+                        n0=newIdToPos[oldGroupToNew[n0]]
+                    else:
+                        n0 = newIdToPos[n0]
+                    if n1 in oldGroupToNew:
+                        n1=newIdToPos[oldGroupToNew[n1]]
+                    else:
+                        n1 = newIdToPos[n1]
+                    assert(n0<len(bbs) and n1<len(bbs))
+                    if n0!=n1:
+                        #oldEdgeIndexes.append((n0,n1))
+                        groupEdges.append((groupPreds[i].item(),n0,n1))
+                        edgeFeats.append([oldEdgeFeats[i]])
+                    #else:
+                    #    It disapears
+            #oldEdgeIndexes=None
+
+            #print('!D! original edges:{}, above thresh:{}, kept edges:{}'.format(D_numOldEdges,D_numOldAboveThresh,len(edgeFeats)))
+             
+        else:
+            #skipping merging
+            bbs=oldBBs
+            groupEdges=[]
+            edgeFeats = []
+            for i,(n0,n1) in enumerate(oldEdgeIndexes):
+                if edgePreds[i]>keepEdgeThresh:
+                    groupEdges.append((groupPreds[i].item(),n0,n1))
+                    edgeFeats.append([oldEdgeFeats[i]])
+            #oldEdgeIndexes=None
+
+
+
+        #Find nodes that should be grouped
+        ##NEWER, just merge the groups with the highest score between them. when merging edges, sum the scores
+        #groupEdges=[]
+        #edgeFeats = [[oldEdgeFeats[i]] for i in range(oldEdgeFeats.size(0))]
+        newNodeFeats = {i:[oldNodeFeats[i]] for i in range(oldNodeFeats.size(0))}
+        workingGroups = {i:v for i,v in enumerate(oldGroups)}
+        #for i,(g0,g1) in enumerate(oldEdgeIndexes):
+        #    groupEdges.append((groupPreds[i].item(),g0,g1))
+        while len(groupEdges)>0:
+            groupEdges.sort(key=lambda x:x[0])
+            score, g0, g1 = groupEdges.pop()
+            if g0==g1:
+                continue
+            if score<groupThresh:
+                groupEdges.append((score, g0, g1))
+                break
+
+            changedNodeIds.add(g0)
+            changedNodeIds.add(g1)
+
+            workingGroups[g0] += workingGroups[g1]
+            del workingGroups[g1]
+
+            #Now combine the edges which the two nodes share (edges going to the same node)
+            newGroupEdges=[]
+            newEdgeFeats=[]
+            mEdges=defaultdict(list)
+            mEdgeFeats=defaultdict(list)
+            for i,(scoreE,g0E,g1E) in enumerate(groupEdges):
+                if g0E==g1E or ( (g0E==g1 or g0E==g0) and (g1E==g1 or g1E==g0) ):
+                    continue
+                #assert(not( (g0E==g1 or g0E==g0) and (g1E==g1 or g1E==g0) ))
+                if g0E==g1 or g0E==g0:
+                    mEdges[g1E].append(scoreE)
+                    mEdgeFeats[g1E] += edgeFeats[i]
+                elif g1E==g1 or g1E==g0:
+                    mEdges[g0E].append(scoreE)
+                    mEdgeFeats[g0E] += edgeFeats[i]
+                else:
+                    newGroupEdges.append((scoreE,g0E,g1E))
+                    newEdgeFeats.append(edgeFeats[i])
+
+            for g,scores in mEdges.items():
+                newGroupEdges.append((np.mean(scores),g0,g))
+                newEdgeFeats.append(mEdgeFeats[g])
+                #if len(mEdgeFeats[g])>1:
+                #    newEdgeFeat = self.groupEdgeFunc(mEdgeFeats[g][0],mEdgeFeats[g][1])
+                #    assert(len(mEdgeFeats[g])==2)
+                #    #for feat in mEdgeFeats[g][2:]:
+                #    #    newEdgeFeat = self.groupEdgeFunc(newEdgeFeat,feat)
+                #    newEdgeFeats.append(newEdgeFeat)
+                #else:
+                #    newEdgeFeats.append(mEdgeFeats[g][0])
+
+            groupEdges=newGroupEdges
+            edgeFeats=newEdgeFeats
+            assert(len(newEdgeFeats)==len(groupEdges))
+
+
+            newNodeFeats[g0] += newNodeFeats[g1] #self.groupNodeFunc(newNodeFeats[g0],newNodeFeats[g1])
+            del newNodeFeats[g1]
+        #print('!D! num edges after grouping {}'.format(len(groupEdges)))
+
+        newEdgeFeats = [self.groupEdgeFunc(feats) for feats in edgeFeats]
+
+        newNodeFeatsD=newNodeFeats
+        newNodeFeats=[]
+        if self.text_rec is not None:
+            newNodeTrans=[]
+        newGroups=[]
+        oldToIdx={}
+        if self.include_bb_conf:
+            yIndex=2
+        else:
+            yIndex=1
+        oldToNewNodeIds={}
+        for oldG,bbIds in workingGroups.items():
+            oldToIdx[oldG]=len(newGroups)
+            newGroups.append(bbIds)
+            newNodeFeats.append( self.groupNodeFunc(newNodeFeatsD[oldG]) )
+            if oldG not in changedNodeIds:
+                oldToNewNodeIds[oldG]=len(newGroups)-1
+            if self.text_rec is not None:
+                newTrans = ''
+                #Something to get read-order correct, assuming groups only vertical, so sorting by y-position
+                groupTrans = [(bbs[bbId,yIndex].item(),bbTrans[bbId]) for bbId in bbIds]
+                groupTrans.sort(key=lambda a:a[0])
+                newNodeTrans.append(' '.join([t[1] for t in groupTrans]))
+        newEdges = [(oldToIdx[g0],oldToIdx[g1]) for s,g0,g1 in groupEdges]
+        assert(len(newEdgeFeats)==len(newEdges))
+
+
+        ##import pdb;pdb.set_trace()
+        #oldIdToNew = {i:i for i in range(bbs.size(0))}
+        ##newIdToOld=defaultdict(list)
+        #newIdToOld = {i:[i] for i in range(bbs.size(0))}
+        ##newGroups=defaultdict(list) #map new node id->bbIds (new bbs)
+        ##for i,group in enumerate(oldGroups):
+        ##    newGroups[i]=group
+        #newGroups = {i:group for i,group in enumerate(oldGroups)}
+        #for i,(n0,n1) in enumerate(oldEdgeIndexes):
+        #    groupPred = edgePreds[i,-1,2]
+        #    if torch.sigmoid(groupPred)>self.groupThresh:
+        #        n0Id=oldIdToNew[n0]
+        #        n1Id=oldIdToNew[n1]
+        #        if n0Id!=n1Id:
+        #            if len(newGroups[n0Id])>=len(newGroups[n1Id]):
+        #                newGroups[n0Id] += newGroups[n1Id]
+        #                del newGroups[n1Id]
+        #                #oldIdToNew[n1]=n0Id
+        #                for oldId in newIdToOld[n1Id]:
+        #                    oldIdToNew[oldId]=n0Id
+        #                    newIdToOld[n0Id].append(oldId)
+        #                del newIdToOld[n1Id]
+        #                #mergedOrder[n0Id].append(n1)
+        #            else:
+        #                newGroups[n1Id] += newGroups[n0Id]
+        #                del newGroups[n0Id]
+        #                #oldIdToNew[n0]=n1Id
+        #                for oldId in newIdToOld[n0Id]:
+        #                    oldIdToNew[oldId]=n1Id
+        #                    newIdToOld[n1Id].append(oldId)
+        #                del newIdToOld[n0Id]
+
+
+
+        ##Create new graph
+        ##(nodeFeatures, edgeIndexes, edgeFeatures, universalFeatures)
+        #newIdToOld=defaultdict(list)
+        #for old,new in oldIdToNew.items():
+        #    newIdToOld[new].append(old)
+        #newNodeFeats=[]
+        #newNodeIdToPos={}
+        #tempGroups=newGroups
+        #newGroups=[]
+        #for newNode,oldNodes in newIdToOld.items():
+        #    if len(oldNodes)>1:
+        #        random.shuffle(oldNodes) #TODO something other than random
+        #        newNodeFeat = self.groupNodeFunc(oldNodeFeats[oldNodes[0]],oldNodeFeats[oldNodes[1]])
+        #        for oldNode in oldNodes[2:]:
+        #            newNodeFeat = self.groupNodeFunc(newNodeFeat,oldNodeFeats[oldNode])
+        #    else:
+        #        newNodeFeat = oldNodeFeats[oldNodes[0]]
+        #    newNodeIdToPos[newNode]=len(newNodeFeats)
+        #    newNodeFeats.append(newNodeFeat)
+        #    newGroups.append(tempGroups[newNode])
+        #newNodeFeats = torch.stack(newNodeFeats,dim=0)
+
+        #newEdges=[]
+        #newEdgeFeats=[]
+        #oldEdgeIds=defaultdict(list)
+        #for i,(n0,n1) in enumerate(oldEdgeIndexes):
+        #    n0Id=newNodeIdToPos[oldIdToNew[n0]]
+        #    n1Id=newNodeIdToPos[oldIdToNew[n1]]
+        #    if n0Id!=n1Id:
+        #        pair = (min(n0Id,n1Id),max(n0Id,n1Id))
+        #        oldEdgeIds[pair].append(i)
+        #        #newEdges.add(min(n0Id,n1Id),max(n0Id,n1Id))
+        #for newEdge,oldIds in oldEdgeIds.items():
+        #    newEdges.append(newEdge)
+        #    if len(oldIds)>1:
+        #        random.shuffle(oldIds) #TODO something other than random
+        #        newEdgeFeat = self.groupEdgeFunc(oldEdgeFeats[oldIds[0]],oldEdgeFeats[oldIds[1]])
+        #        for oldEdge in oldIds[2:]:
+        #            newEdgeFeat = self.groupEdgeFunc(newEdgeFeat,oldEdgeFeats[oldEdge])
+        #    else:
+        #        newEdgeFeat = oldEdgeFeats[oldIds[0]]
+        #    newEdgeFeats.append(newEdgeFeat)
+
+        newNodeFeats = torch.stack(newNodeFeats,dim=0)
+        if self.text_rec is not None:
+            newNodeEmbeddings = self.embedding_model(newNodeTrans)
+            if self.add_noise_to_word_embeddings>0:
+                newNodeEmbeddings += torch.randn_like(newNodeEmbeddings).to(newNodeEmbeddings.device)*self.add_noise_to_word_embeddings
+            newNodeFeats = self.merge_embedding_layer(torch.cat((newNodeFeats,newNodeEmbeddings),dim=1))
+
+        if len(newEdgeFeats)>0:
+            newEdgeFeats = torch.stack(newEdgeFeats,dim=0)
+        else:
+            newEdgeFeats = torch.FloatTensor(0)
+        edges = newEdges
+        newEdges = list(newEdges) + [(y,x) for x,y in newEdges] #add reverse edges so undirected/bidirectional
+        if len(newEdges)>0:
+            newEdgeIndexes = torch.LongTensor(newEdges).t().to(oldEdgeFeats.device)
+        else:
+            newEdgeIndexes = torch.LongTensor(0)
+        newEdgeFeats = newEdgeFeats.repeat(2,1)
+
+        newGraph = (newNodeFeats, newEdgeIndexes, newEdgeFeats, oldUniversalFeats)
+
+        ###DEBUG###
+        newToOld = {v:k for k,v in oldToNewNodeIds.items()}
+        for n0,n1 in edges:
+            if n0 in newToOld and n1 in newToOld:
+                o0 = newToOld[n0]
+                o1 = newToOld[n1]
+                assert( (min(o0,o1),max(o0,o1)) in oldEdgeIndexes )
+
+        ##D###
 
         return bbs, newGraph, newGroups, edges, bbTrans,  oldToNewNodeIds
 
