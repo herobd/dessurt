@@ -1204,7 +1204,7 @@ class PairingGroupingGraph(BaseModel):
                 workGroups[g0] += workGroups[g1]
                 oldGroupToNewGrouping = {k:(v if v!=new_g1 else new_g0) for k,v in oldGroupToNewGrouping.items()}
 
-                del workingGroups[g1]
+                del workGroups[g1]
 
 
             newNodeFeats[g0] += newNodeFeats[g1] #self.groupNodeFunc(newNodeFeats[g0],newNodeFeats[g1])
