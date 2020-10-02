@@ -1147,6 +1147,10 @@ class PairingGroupingGraph(BaseModel):
             for k,v in oldGroupToNew.items():
                 newGroupToOldMerge[v].append(k)
 
+            #D#
+            for i in range(oldNodeFeats.size(0)):
+                assert(i in oldGroupToNew or i in workGroups)
+
             #We'll adjust the edges to acount for merges as well as prune edges and get ready for grouping
             #temp = oldEdgeIndexes
             #oldEdgeIndexes = []
@@ -1163,7 +1167,7 @@ class PairingGroupingGraph(BaseModel):
                     if n1 in oldGroupToNew:
                         n1 = oldGroupToNew[n1]
 
-                    assert(n0<len(bbs) and n1<len(bbs))
+                    assert(n0 in bbs and n1 in bbs)
                     if n0!=n1:
                         #oldEdgeIndexes.append((n0,n1))
                         groupEdges.append((groupPreds[i].item(),n0,n1))
@@ -1197,7 +1201,7 @@ class PairingGroupingGraph(BaseModel):
             new_g0 = oldGroupToNewGrouping[g0]
             new_g1 = oldGroupToNewGrouping[g1]
             if new_g0!=new_g1:
-                workingGroups[g0] += workingGroups[g1]
+                workGroups[g0] += workGroups[g1]
                 oldGroupToNewGrouping = {k:(v if v!=new_g1 else new_g0) for k,v in oldGroupToNewGrouping.items()}
                 groupedTo.append(g0)
 
@@ -1209,7 +1213,9 @@ class PairingGroupingGraph(BaseModel):
         #print('!D! num edges after grouping {}'.format(len(groupEdges)))
 
 
-
+        #D#
+        for i in range(oldNodeFeats.size(0)):
+            assert(i in oldGroupToNewGrouping or i in oldGroupToNew)
 
         #Actually change bbs to list,  we'll adjusting appropriate values in groups as we convert groups to list
         bbIdToPos={}
@@ -1235,13 +1241,13 @@ class PairingGroupingGraph(BaseModel):
             newGroups.append([bbIdToPos[bbId] for bbId in bbIds])
             featsToCombine=[]
             for oldIdx in newGroupToOldGrouping[idx]:
+                oldToNewIds_all[oldIdx]=i
                 if oldIdx in newGroupToOldMerge:
                     for mergedIdx in newGroupToOldMerge[oldIdx]:
                         featsToCombine.append(oldNodeFeats[mergedIdx])
                         oldToNewIds_all[mergedIdx]=i
                 else:
                     featsToCombine.append(oldNodeFeats[oldIdx])
-                    oldToNewIds_all[oldIdx]=i
             if len(featsToCombine)==1:
                 oldToNewNodeIds_unchanged[oldIdx]=i
                 newNodeFeats[i]=featsToCombine[0]
@@ -1252,6 +1258,9 @@ class PairingGroupingGraph(BaseModel):
                 groupTrans = [(bbs[bbId].getReadPosition(),bbTrans[bbId]) for bbId in bbIds]
                 groupTrans.sort(key=lambda a:a[0])
                 groupNodeTrans.append(' '.join([t[1] for t in groupTrans]))
+
+        #D#
+        assert(all([x in oldToNewIds_all for x in range(oldNodeFeats.size(0))]))
 
         
         #find overlapped edges and combine
