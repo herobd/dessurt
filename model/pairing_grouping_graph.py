@@ -1203,7 +1203,6 @@ class PairingGroupingGraph(BaseModel):
             if new_g0!=new_g1:
                 workGroups[g0] += workGroups[g1]
                 oldGroupToNewGrouping = {k:(v if v!=new_g1 else new_g0) for k,v in oldGroupToNewGrouping.items()}
-                groupedTo.append(g0)
 
                 del workingGroups[g1]
 
