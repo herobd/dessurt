@@ -554,6 +554,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
              }
     for key,value in log.items():
         if key.startswith('final'):
+            print('\t{}: {}'.format(key,value))
             if type(value) is np.ndarray:
                 retData['!'+key]={i:[value[i]] for i in range(value.shape[0])}
             else:

@@ -45,12 +45,12 @@ def save_style(location,volume,styles,authors,ids=None,doIds=False, spaced=None,
 
 
 
-def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=None, config=None, thresh=None, addToConfig=None, test=False, toEval=None):
+def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=None, config=None, thresh=None, addToConfig=None, test=False, toEval=None,verbosity=2):
     np.random.seed(1234)
     torch.manual_seed(1234)
     if resume is not None:
         checkpoint = torch.load(resume, map_location=lambda storage, location: storage)
-        print('loaded iteration {}'.format(checkpoint['iteration']))
+        print('loaded {} iteration {}'.format(checkpoint['config']['name'],checkpoint['iteration']))
         if config is None:
             config = checkpoint['config']
         else:
@@ -163,7 +163,8 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
     else:
         model = eval(config['arch'])(config['model'])
     model.eval()
-    model.summary()
+    if verbosity>1:
+        model.summary()
 
     if type(config['loss'])==dict: 
         loss={}#[eval(l) for l in config['loss']]
@@ -293,7 +294,8 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                 #for validBatch
                     #if valyypidIndex/vBatchSize < len(valid_data_loader):
                 if batch < len(valid_data_loader):
-                        print('{} batch index: {}/{}       '.format(validName,batch,len(valid_data_loader)),end='\r')
+                        if verbosity>0:
+                            print('{} batch index: {}/{}       '.format(validName,batch,len(valid_data_loader)),end='\r')
                         #data, target = valid_iter.next() #valid_data_loader[validIndex]
                         #dataT  = _to_tensor(gpu,data)
                         #output = model(dataT)
@@ -338,7 +340,8 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                     #for trainIndex in range(index,index+step*batchSize, batchSize):
                     #    if trainIndex/batchSize < len(data_loader):
                     if batch < len(data_loader):
-                            print('train batch index: {}/{}        '.format(batch,len(data_loader)),end='\r')
+                            if verbosity>0:
+                                print('train batch index: {}/{}        '.format(batch,len(data_loader)),end='\r')
                             #data, target = train_iter.next() #data_loader[trainIndex]
                             #dataT = _to_tensor(gpu,data)
                             #output = model(dataT)
@@ -371,7 +374,8 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
             #if gpu is not None or numberOfImages==0:
             try:
                 for vi in range(batch,len(valid_data_loader)):
-                    print('{} batch index: {}\{} (not save)   '.format(validName,vi,len(valid_data_loader)),end='\r')
+                    if verbosity>0:
+                        print('{} batch index: {}\{} (not save)   '.format(validName,vi,len(valid_data_loader)),end='\r')
                     instance = valid_iter.next()
                     metricsO,aux = saveFunc(config,instance,trainer,metrics,toEval=toEval)
                     if type(metricsO) == dict:
@@ -509,6 +513,8 @@ if __name__ == '__main__':
                         help='Run test set')
     parser.add_argument('-N', '--notify', default='', type=str,
                         help='send messages to server, name')
+    parser.add_argument('-v', '--verbosity', default=2, type=int,
+                        help='How much stuff to print [0,1,2] (default: 2)')
     parser.add_argument('-e', '--eval', default=None, type=str,
             help='what to evaluate (print) list: "pred"=hwr prediction, "recon"=reconstruction using predicted mask, "recon_gt_mask"=reconstruction using GT mask, "mask"=generated mask for reconstruction "gen"=image generated from interpolated styles, "gen_mask"=mask generated for generated image')
     #parser.add_argument('-E', '--special_eval', default=None, type=str,
@@ -547,9 +553,9 @@ if __name__ == '__main__':
     try:
         if args.gpu is not None:
             with torch.cuda.device(args.gpu):
-                main(args.checkpoint, args.savedir, args.number, index, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,toEval=toEval)
+                main(args.checkpoint, args.savedir, args.number, index, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,toEval=toEval,verbosity=args.verbosity)
         else:
-            main(args.checkpoint, args.savedir, args.number, index, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,toEval=toEval)
+            main(args.checkpoint, args.savedir, args.number, index, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,toEval=toEval,verbosity=args.verbosity)
     except Exception as er:
         if len(args.notify)>0:
             update_status(name,er)
