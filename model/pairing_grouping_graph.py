@@ -1120,7 +1120,7 @@ class PairingGroupingGraph(BaseModel):
                     bbTrans[idx] = newTrans[i]
             if merge_only:
                 newBBs=[]
-                newBBTrans=[]
+                newBBTrans=[] if self.text_rec is not None else None
                 for bbId,bb in bbs.items():
                     newBBs.append(bb)
                     if self.text_rec is not None:
@@ -1308,7 +1308,7 @@ class PairingGroupingGraph(BaseModel):
 
         ##D###
 
-        return newBBs, newGraph, newGroups, edges, newBBTrans,  oldToNewNodeIds_unchanged
+        return newBBs, newGraph, newGroups, edges, newBBTrans if self.text_rec is not None else None,  oldToNewNodeIds_unchanged
 
     def mergeAndGroup(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,dont_merge=False,merge_only=False):
         if self.useCurvedBBs:
