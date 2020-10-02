@@ -7,7 +7,7 @@ with profiler.profile(profile_memory=True, record_shapes=True) as prof:
     for i in range(a.size(0)-1):
         m[i]=a[i]
 
-    a = torch.stack(m.values(),dim=0)
+    a = torch.stack(list(m.values()),dim=0)
 
 print(a.size())
 print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
