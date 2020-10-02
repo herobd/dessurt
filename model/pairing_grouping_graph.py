@@ -1167,7 +1167,7 @@ class PairingGroupingGraph(BaseModel):
                     if n1 in oldGroupToNew:
                         n1 = oldGroupToNew[n1]
 
-                    assert(n0 in workGroups and n1 in bbs)
+                    assert(n0 in workGroups and n1 in workGroups)
                     if n0!=n1:
                         #oldEdgeIndexes.append((n0,n1))
                         groupEdges.append((groupPreds[i].item(),n0,n1))
@@ -1201,10 +1201,10 @@ class PairingGroupingGraph(BaseModel):
             new_g0 = oldGroupToNewGrouping[g0]
             new_g1 = oldGroupToNewGrouping[g1]
             if new_g0!=new_g1:
-                workGroups[g0] += workGroups[g1]
+                workGroups[new_g0] += workGroups[new_g1]
                 oldGroupToNewGrouping = {k:(v if v!=new_g1 else new_g0) for k,v in oldGroupToNewGrouping.items()}
 
-                del workGroups[g1]
+                del workGroups[new_g1]
 
 
 
