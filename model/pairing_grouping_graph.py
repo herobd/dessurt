@@ -1207,10 +1207,6 @@ class PairingGroupingGraph(BaseModel):
                 del workGroups[g1]
 
 
-            newNodeFeats[g0] += newNodeFeats[g1] #self.groupNodeFunc(newNodeFeats[g0],newNodeFeats[g1])
-            del newNodeFeats[g1]
-        #print('!D! num edges after grouping {}'.format(len(groupEdges)))
-
 
         #D#
         for i in range(oldNodeFeats.size(0)):
@@ -1264,11 +1260,18 @@ class PairingGroupingGraph(BaseModel):
         
         #find overlapped edges and combine
         #first change all node ids to their new ones
+        D_newToOld = {v:k for k,v in oldToNewNodeIds_unchanged.items()}
         newEdges_map=defaultdict(list)
         for i,(n0,n1)  in  enumerate(oldEdgeIndexes):
             new_n0 = oldToNewIds_all[n0]
             new_n1 = oldToNewIds_all[n1]
             newEdges_map[(min(new_n0,new_n1),max(new_n0,new_n1))].append(i)
+
+            #D#
+            if new_n0 in D_newToOld and new_n1 in D_newToOld:
+                o0 = D_newToOld[n0]
+                o1 = D_newToOld[n1]
+                assert( (min(o0,o1),max(o0,o1)) in oldEdgeIndexes )
         #This leaves some old edges pointing to the same new edge, so combine their features
         newEdges=[]
         newEdgeFeats=torch.FloatTensor(len(newEdges_map),oldEdgeFeats.size(1)).to(oldEdgeFeats.device)
