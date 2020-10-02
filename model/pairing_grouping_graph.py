@@ -1237,12 +1237,11 @@ class PairingGroupingGraph(BaseModel):
             featsToCombine=[]
             for oldIdx in newGroupToOldGrouping[idx]:
                 oldToNewIds_all[oldIdx]=i
+                featsToCombine.append(oldNodeFeats[oldIdx])
                 if oldIdx in newGroupToOldMerge:
                     for mergedIdx in newGroupToOldMerge[oldIdx]:
                         featsToCombine.append(oldNodeFeats[mergedIdx])
                         oldToNewIds_all[mergedIdx]=i
-                else:
-                    featsToCombine.append(oldNodeFeats[oldIdx])
             if len(featsToCombine)==1:
                 oldToNewNodeIds_unchanged[oldIdx]=i
                 newNodeFeats[i]=featsToCombine[0]
@@ -1253,7 +1252,6 @@ class PairingGroupingGraph(BaseModel):
                 groupTrans = [(bbs[bbId].getReadPosition(),bbTrans[bbId]) for bbId in bbIds]
                 groupTrans.sort(key=lambda a:a[0])
                 groupNodeTrans.append(' '.join([t[1] for t in groupTrans]))
-
         #D#
         assert(all([x in oldToNewIds_all for x in range(oldNodeFeats.size(0))]))
 
