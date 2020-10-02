@@ -141,7 +141,7 @@
 
 
         "fix_bi_dir": true,
-        "reintroduce_visual_features": true,
+        "reintroduce_visual_features": false,
         "graph_config": [
         {
             "arch": "MetaGraphNet",
