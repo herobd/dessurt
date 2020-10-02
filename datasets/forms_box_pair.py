@@ -7,7 +7,7 @@ from skimage import draw
 #import skimage.transform as sktransform
 import os
 import math
-import cv2
+import utils.img_f as img_f
 from collections import defaultdict
 import random
 from random import shuffle
@@ -18,7 +18,7 @@ SKIP=['121','174']
 
 
 def getDistMask(queryMask,thresh=1000,reverse=True, negative=True):
-    dist_transform = cv2.distanceTransform(1-queryMask.astype(np.uint8),cv2.DIST_L2,5)
+    dist_transform = img_f.distanceTransform(1-queryMask.astype(np.uint8),cv2.DIST_L2,5)
     dist_transform = np.clip(dist_transform,None,thresh)
     if reverse:
         dist_transform = thresh-dist_transform
@@ -226,15 +226,15 @@ class FormsBoxPair(torch.utils.data.Dataset):
                         if self.cache_resized:
                             rescale = self.rescale_range[1]
                             if not os.path.exists(path):
-                                org_img = cv2.imread(org_path)
+                                org_img = img_f.imread(org_path)
                                 if org_img is None:
                                     print('WARNING, could not read {}'.format(org_img))
                                     continue
-                                resized = cv2.resize(org_img,(0,0),
+                                resized = img_f.resize(org_img,(0,0),
                                         fx=self.rescale_range[1],
                                         fy=self.rescale_range[1],
-                                        interpolation = cv2.INTER_CUBIC)
-                                cv2.imwrite(path,resized)
+                                        )
+                                img_f.imwrite(path,resized)
                         if annotations is None:
                             with open(os.path.join(jsonPath)) as f:
                                 annotations = json.loads(f.read())
@@ -282,17 +282,17 @@ class FormsBoxPair(torch.utils.data.Dataset):
         #xQueryC,yQueryC,reach,x0,y0,x1,y1 = self.instances[index]['helperStats'
 
 
-        np_img = cv2.imread(imagePath, 1 if self.color else 0)
+        np_img = img_f.imread(imagePath, 1 if self.color else 0)
         if np_img.shape[0]==0:
             print("ERROR, could not open "+imagePath)
             return self.__getitem__((index+1)%self.__len__())
         #Rescale
         scale = np.random.uniform(self.rescale_range[0], self.rescale_range[1])
         partial_rescale = scale/rescaled
-        np_img = cv2.resize(np_img,(0,0),
+        np_img = img_f.resize(np_img,(0,0),
                 fx=partial_rescale,
                 fy=partial_rescale,
-                interpolation = cv2.INTER_CUBIC)
+                )
         #queryPoly *=scale
 
         if not self.color:

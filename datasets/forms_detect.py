@@ -11,7 +11,7 @@ from utils import augmentation
 from collections import defaultdict
 import timeit
 
-import cv2
+import utils.img_f as img_f
 
 IAIN_CATCH=['193','194','197','200']
 ONE_DONE=[]
@@ -288,15 +288,15 @@ class FormsDetect(torch.utils.data.Dataset):
                         if self.cache_resized:
                             rescale = self.rescale_range[1]
                             if not os.path.exists(path):
-                                org_img = cv2.imread(org_path)
+                                org_img = img_f.imread(org_path)
                                 #target_dim1 = self.rescale_range[1]
                                 #target_dim0 = int(org_img.shape[0]/float(org_img.shape[1]) * target_dim1)
-                                #resized = cv2.resize(org_img,(target_dim1, target_dim0), interpolation = cv2.INTER_CUBIC)
-                                resized = cv2.resize(org_img,(0,0),
+                                #resized = img_f.resize(org_img,(target_dim1, target_dim0))
+                                resized = img_f.resize(org_img,(0,0),
                                         fx=self.rescale_range[1], 
                                         fy=self.rescale_range[1], 
-                                        interpolation = cv2.INTER_CUBIC)
-                                cv2.imwrite(path,resized)
+                                        )
+                                img_f.imwrite(path,resized)
                                 #rescale = target_dim1/float(org_img.shape[1])
                         #elif self.cache_resized:
                             #print(jsonPath)
@@ -352,7 +352,7 @@ class FormsDetect(torch.utils.data.Dataset):
                 del annotations['fieldBBs'][i]
 
         ##tic=timeit.default_timer()
-        np_img = cv2.imread(imagePath)#/255.0
+        np_img = img_f.imread(imagePath)#/255.0
         ##print('imread: {}  [{}, {}]'.format(timeit.default_timer()-tic,np_img.shape[0],np_img.shape[1]))
         ##print('       channels : {}'.format(len(np_img.shape)))
         if self.cropToPage:
@@ -377,11 +377,11 @@ class FormsDetect(torch.utils.data.Dataset):
         #print(s)
         #target_dim0 = int(np_img.shape[0]/float(np_img.shape[1]) * target_dim1)
         ##tic=timeit.default_timer()
-        #np_img = cv2.resize(np_img,(target_dim1, target_dim0), interpolation = cv2.INTER_CUBIC)
-        np_img = cv2.resize(np_img,(0,0),
+        #np_img = img_f.resize(np_img,(target_dim1, target_dim0))
+        np_img = img_f.resize(np_img,(0,0),
                 fx=partial_rescale,
                 fy=partial_rescale,
-                interpolation = cv2.INTER_CUBIC)
+                )
         ##print('resize: {}  [{}, {}]'.format(timeit.default_timer()-tic,np_img.shape[0],np_img.shape[1]))
         
         ##tic=timeit.default_timer()
@@ -673,7 +673,7 @@ class FormsDetect(torch.utils.data.Dataset):
                     toApp=[]
                     for id in ids:
                         toApp.append(table[id]['poly_points'])
-                        cv2.fillConvexPoly(pixelMap[:,:,0],(table[id]['poly_points']*s).astype(int),1)
+                        img_f.fillConvexPoly(pixelMap[:,:,0],(table[id]['poly_points']*s).astype(int),1)
                         del table[id]
 
                     if typ=='fieldRow':
@@ -691,7 +691,7 @@ class FormsDetect(torch.utils.data.Dataset):
                 else:
                     cols.append([bb['poly_points']])
                 #print(npBB*s)
-                cv2.fillConvexPoly(pixelMap[:,:,0],(bb['poly_points']*s).astype(int),1)
+                img_f.fillConvexPoly(pixelMap[:,:,0],(bb['poly_points']*s).astype(int),1)
 
             rows.sort(key=lambda a: a[0][0,1])#sort vertically by top-left point
             cols.sort(key=lambda a: a[0][0,0])#sort horizontally by top-left point

@@ -1,14 +1,17 @@
-import cv2
+import utils.img_f as img_f
 import numpy as np
 
 def tensmeyer_brightness(img, foreground=0, background=0):
     if img.shape[2]==3:
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        gray = img_f.rgb2gray(img)
     else:
         gray = img
-    ret,th = cv2.threshold(gray ,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    try:
+        ret,th = img_f.otsuThreshold(gray)
+    except ValueError:
+        th=img/2
 
-    th = (th.astype(np.float32) / 255)[...,None]
+    th = (th.astype(np.float32) / 255)#[...,None]
 
     img = img.astype(np.float32)
     img = img + (1.0 - th) * foreground
@@ -50,8 +53,8 @@ def apply_random_color_rotation(img, **kwargs):
     random_state = np.random.RandomState(kwargs.get("random_seed", None))
     shift = random_state.randint(0,255)
 
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    hsv = img_f.rgb2hsv(img)
     hsv[...,0] = hsv[...,0] + shift
-    img = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+    img = img_f.hsv2rgb(hsv)
 
     return img
