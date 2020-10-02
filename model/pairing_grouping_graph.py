@@ -1269,8 +1269,8 @@ class PairingGroupingGraph(BaseModel):
 
             #D#
             if new_n0 in D_newToOld and new_n1 in D_newToOld:
-                o0 = D_newToOld[n0]
-                o1 = D_newToOld[n1]
+                o0 = D_newToOld[new_n0]
+                o1 = D_newToOld[new_n1]
                 assert( (min(o0,o1),max(o0,o1)) in oldEdgeIndexes )
         #This leaves some old edges pointing to the same new edge, so combine their features
         newEdges=[]
