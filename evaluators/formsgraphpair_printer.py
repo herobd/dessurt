@@ -3,7 +3,7 @@ import os
 import numpy as np
 import torch
 import torch.nn.functional as F
-import cv2
+import utils.img_f as img_f
 from utils import util
 from model.alignment_loss import alignment_loss
 import math
@@ -28,10 +28,10 @@ def plotRect(img,color,xyrhw,lineWidth=1):
     br = ( int(w*math.cos(rot)+h*math.sin(rot) + xc),  int(w*math.sin(rot)-h*math.cos(rot) + yc) )
     bl = ( int(-w*math.cos(rot)+h*math.sin(rot) + xc), int(-w*math.sin(rot)-h*math.cos(rot) + yc) )
 
-    cv2.line(img,tl,tr,color,lineWidth)
-    cv2.line(img,tr,br,color,lineWidth)
-    cv2.line(img,br,bl,color,lineWidth)
-    cv2.line(img,bl,tl,color,lineWidth)
+    img_f.line(img,tl,tr,color,lineWidth)
+    img_f.line(img,tr,br,color,lineWidth)
+    img_f.line(img,br,bl,color,lineWidth)
+    img_f.line(img,bl,tl,color,lineWidth)
 
 def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, startIndex=None, lossFunc=None):
     def __eval_metrics(data,target):
@@ -576,7 +576,7 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
         for attL,attn in enumerate(attList):
             image = imageO.copy()
             if image.shape[2]==1:
-                image = cv2.cvtColor(image,cv2.COLOR_GRAY2RGB)
+                image = img_f.cvtColor(image,cv2.COLOR_GRAY2RGB)
             for i in range(len(relCand)):
                 
                 ind1 = relCand[i][0]
@@ -597,10 +597,10 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
                 color1 = (a1[0].item(),a1[1].item(),a1[2].item())
                 color2 = (a2[0].item(),a2[1].item(),a2[2].item())
 
-                cv2.line(image,(x1,y1),(xh,yh),color1,1)
-                cv2.line(image,(x2,y2),(xh,yh),color2,1)
-            #cv2.imshow('attention',image)
-            #cv2.waitKey()
+                img_f.line(image,(x1,y1),(xh,yh),color1,1)
+                img_f.line(image,(x2,y2),(xh,yh),color2,1)
+            #img_f.imshow('attention',image)
+            #img_f.waitKey()
             saveName='{}_att{}.png'.format(imageName,attL)
             io.imsave(os.path.join(outDir,saveName),image)
 
@@ -613,7 +613,7 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
 
         image = (1-((1+np.transpose(data[b][:,:,:],(1,2,0)))/2.0)).copy()
         if image.shape[2]==1:
-            image = cv2.cvtColor(image,cv2.COLOR_GRAY2RGB)
+            image = img_f.cvtColor(image,cv2.COLOR_GRAY2RGB)
         #if name=='text_start_gt':
 
         #Draw GT bbs
@@ -622,14 +622,14 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
                 plotRect(image,(1,0.5,0),targetBoxes[0,j,0:5])
             #x=int(targetBoxes[b,j,0])
             #y=int(targetBoxes[b,j,1]+targetBoxes[b,j,3])
-            #cv2.putText(image,'{:.2f}'.format(target_num_neighbors[b,j]),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(0.6,0.3,0),2,cv2.LINE_AA)
+            #img_f.putText(image,'{:.2f}'.format(target_num_neighbors[b,j]),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(0.6,0.3,0),2,cv2.LINE_AA)
             #if alignmentBBs[b] is not None:
             #    aj=alignmentBBs[b][j]
             #    xc_gt = targetBoxes[b,j,0]
             #    yc_gt = targetBoxes[b,j,1]
             #    xc=outputBoxes[b,aj,1]
             #    yc=outputBoxes[b,aj,2]
-            #    cv2.line(image,(xc,yc),(xc_gt,yc_gt),(0,1,0),1)
+            #    img_f.line(image,(xc,yc),(xc_gt,yc_gt),(0,1,0),1)
             #    shade = 0.0+(outputBoxes[b,aj,0]-threshConf)/(maxConf-threshConf)
             #    shade = max(0,shade)
             #    if outputBoxes[b,aj,6] > outputBoxes[b,aj,7]:
@@ -661,11 +661,11 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
                 shade = 0.0+(conf-minConf)/(maxConf-minConf)
                 #print(shade)
                 #if name=='text_start_gt' or name=='field_end_gt':
-                #    cv2.bb(bbImage[:,:,1],p1,p2,shade,2)
+                #    img_f.bb(bbImage[:,:,1],p1,p2,shade,2)
                 #if name=='text_end_gt':
-                #    cv2.bb(bbImage[:,:,2],p1,p2,shade,2)
+                #    img_f.bb(bbImage[:,:,2],p1,p2,shade,2)
                 #elif name=='field_end_gt' or name=='field_start_gt':
-                #    cv2.bb(bbImage[:,:,0],p1,p2,shade,2)
+                #    img_f.bb(bbImage[:,:,0],p1,p2,shade,2)
                 if bbs[j,6+extraPreds] > bbs[j,7+extraPreds]:
                     color=(0,0,shade) #text
                 else:
@@ -686,7 +686,7 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
                         gtNN = 0
                     pred_nn = predNN[j].item()
                     color = min(abs(pred_nn-gtNN),1)#*0.5
-                    cv2.putText(image,'{:.2}/{}'.format(pred_nn,gtNN),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(color,0,0),2,cv2.LINE_AA)
+                    img_f.putText(image,'{:.2}/{}'.format(pred_nn,gtNN),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(color,0,0),2,cv2.LINE_AA)
 
         #for j in alignmentBBsTarg[name][b]:
         #    p1 = (targetBoxes[name][b,j,0], targetBoxes[name][b,j,1])
@@ -695,7 +695,7 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
         #    rad = round(math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)/2.0)
         #    #print(mid)
         #    #print(rad)
-        #    cv2.circle(image,mid,rad,(1,0,1),1)
+        #    img_f.circle(image,mid,rad,(1,0,1),1)
 
 
         #Draw GT pairings
@@ -712,7 +712,7 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
                 y1 = round(targetBoxes[0,i,1].item())
                 x2 = round(targetBoxes[0,j,0].item())
                 y2 = round(targetBoxes[0,j,1].item())
-                cv2.line(image,(x1,y1),(x2,y2),gtcolor,wth)
+                img_f.line(image,(x1,y1),(x2,y2),gtcolor,wth)
 
         #Draw pred pairings
         draw_rel_thresh = relPred.max() * draw_rel_thresh_over
@@ -776,14 +776,14 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
                         hits[aId]=True
                     #if pruned:
                     #    color = color*0.7
-                    cv2.line(image,(x1,y1),(x2,y2),color.tolist(),lineWidth)
+                    img_f.line(image,(x1,y1),(x2,y2),color.tolist(),lineWidth)
                     #color=color/3
                     #x = int((x1+x2)/2)
                     #y = int((y1+y2)/2)
                     #if pruned:
-                    #    cv2.putText(image,'[{:.2}]'.format(score),(x,y), cv2.FONT_HERSHEY_PLAIN, 0.6,color.tolist(),1)
+                    #    img_f.putText(image,'[{:.2}]'.format(score),(x,y), cv2.FONT_HERSHEY_PLAIN, 0.6,color.tolist(),1)
                     #else:
-                    #    cv2.putText(image,'{:.2}'.format(score),(x,y), cv2.FONT_HERSHEY_PLAIN,1.1,color.tolist(),1)
+                    #    img_f.putText(image,'{:.2}'.format(score),(x,y), cv2.FONT_HERSHEY_PLAIN,1.1,color.tolist(),1)
                 else:
                     targ1 = bbAlignment[ind1].item()
                     targ2 = bbAlignment[ind2].item()
@@ -809,7 +809,7 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
                         #    print(bbFullHit[ind2])
                         #    print('{}, {}   {}, {}'.format(x1,y1,x2,y2))
                         #    import pdb;pdb.set_trace()
-                    cv2.line(image,(x1,y1),(x2,y2),color,lineWidth)
+                    img_f.line(image,(x1,y1),(x2,y2),color,lineWidth)
                 numrelpred+=1
         if pretty and pretty!="light" and pretty!="clean":
             for i in range(len(relCand)):
@@ -844,9 +844,9 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
                     x = int((x1+x2)/2)
                     y = int((y1+y2)/2)
                     if pruned:
-                        cv2.putText(image,'[{:.2}]'.format(score),(x,y), cv2.FONT_HERSHEY_PLAIN, 0.6,color.tolist(),1)
+                        img_f.putText(image,'[{:.2}]'.format(score),(x,y), cv2.FONT_HERSHEY_PLAIN, 0.6,color.tolist(),1)
                     else:
-                        cv2.putText(image,'{:.2}'.format(score),(x,y), cv2.FONT_HERSHEY_PLAIN,1.1,color.tolist(),1)
+                        img_f.putText(image,'{:.2}'.format(score),(x,y), cv2.FONT_HERSHEY_PLAIN,1.1,color.tolist(),1)
         #print('number of pred rels: {}'.format(numrelpred))
 
         #Draw alginment between gt and pred bbs
@@ -859,11 +859,11 @@ def FormsGraphPair_printer(config,instance, model, gpu, metrics, outDir=None, st
 
                     x2 = round(targetBoxes[0,targI,0].item())
                     y2 = round(targetBoxes[0,targI,1].item())
-                    cv2.line(image,(x1,y1),(x2,y2),(1,0,1),1)
+                    img_f.line(image,(x1,y1),(x2,y2),(1,0,1),1)
                 else:
                     #draw 'x', indicating not match
-                    cv2.line(image,(x1-5,y1-5),(x1+5,y1+5),(.1,0,.1),1)
-                    cv2.line(image,(x1+5,y1-5),(x1-5,y1+5),(.1,0,.1),1)
+                    img_f.line(image,(x1-5,y1-5),(x1+5,y1+5),(.1,0,.1),1)
+                    img_f.line(image,(x1+5,y1-5),(x1-5,y1+5),(.1,0,.1),1)
 
     
 

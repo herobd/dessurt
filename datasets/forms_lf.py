@@ -11,7 +11,7 @@ from utils import augmentation
 from collections import defaultdict
 import timeit
 
-import cv2
+import utils.img_f as img_f
 
 IAIN_CATCH=['193','194','197','200']
 ONE_DONE=[]
@@ -107,11 +107,11 @@ class FormsLF(torch.utils.data.Dataset):
                             annotations = json.loads(f.read())
                         rescale=1.0
                         if self.cache_resized and not os.path.exists(path):
-                            org_img = cv2.imread(org_path)
+                            org_img = img_f.imread(org_path)
                             target_dim1 = self.rescale_range[1]
                             target_dim0 = int(org_img.shape[0]/float(org_img.shape[1]) * target_dim1)
-                            resized = cv2.resize(org_img,(target_dim1, target_dim0), interpolation = cv2.INTER_CUBIC)
-                            cv2.imwrite(path,resized)
+                            resized = img_f.resize(org_img,(target_dim1, target_dim0))
+                            img_f.imwrite(path,resized)
                             rescale = target_dim1/float(org_img.shape[1])
                         elif self.cache_resized:
                             imW = annotations['width']
@@ -178,7 +178,7 @@ class FormsLF(torch.utils.data.Dataset):
         forwards = self.lines[index]['forwards']
 
         ##tic=timeit.default_timer()
-        img = cv2.imread(imagePath)#/255.0
+        img = img_f.imread(imagePath)#/255.0
         ##print('imread: {}  [{}, {}]'.format(timeit.default_timer()-tic,org_img.shape[0],org_img.shape[1]))
 
         #target_dim1 = int(np.random.uniform(self.rescale_range[0], self.rescale_range[1]))
@@ -187,7 +187,7 @@ class FormsLF(torch.utils.data.Dataset):
         #print(s)
         #target_dim0 = int(org_img.shape[0]/float(org_img.shape[1]) * target_dim1)
         ##tic=timeit.default_timer()
-        #org_img = cv2.resize(org_img,(target_dim1, target_dim0), interpolation = cv2.INTER_CUBIC)
+        #org_img = img_f.resize(org_img,(target_dim1, target_dim0))
         ##print('resize: {}  [{}, {}]'.format(timeit.default_timer()-tic,org_img.shape[0],org_img.shape[1]))
         
 

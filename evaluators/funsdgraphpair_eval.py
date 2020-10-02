@@ -3,7 +3,7 @@ import os
 import numpy as np
 import torch
 import torch.nn.functional as F
-import cv2
+import utils.img_f as img_f
 from utils import util
 from utils.util import plotRect
 from model.alignment_loss import alignment_loss
@@ -480,7 +480,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
             for attL,attn in enumerate(attList):
                 image = imageO.copy()
                 if image.shape[2]==1:
-                    image = cv2.cvtColor(image,cv2.COLOR_GRAY2RGB)
+                    image = img_f.cvtColor(image,cv2.COLOR_GRAY2RGB)
                 for i in range(len(relCand)):
                     
                     ind1 = relCand[i][0]
@@ -501,10 +501,10 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
                     color1 = (a1[0].item(),a1[1].item(),a1[2].item())
                     color2 = (a2[0].item(),a2[1].item(),a2[2].item())
 
-                    cv2.line(image,(x1,y1),(xh,yh),color1,1)
-                    cv2.line(image,(x2,y2),(xh,yh),color2,1)
-                #cv2.imshow('attention',image)
-                #cv2.waitKey()
+                    img_f.line(image,(x1,y1),(xh,yh),color1,1)
+                    img_f.line(image,(x2,y2),(xh,yh),color2,1)
+                #img_f.imshow('attention',image)
+                #img_f.waitKey()
                 saveName='{}_gI{}_att{}.png'.format(imageName,gIter,attL)
                 io.imsave(os.path.join(outDir,saveName),image)
 

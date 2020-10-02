@@ -42,7 +42,7 @@ def saveBoxes(data,dest,allTrans):
             crop = img[int(tl[1]):int(br[1])+1,int(tl[0]):int(br[0])+1]
             name = '{}_b{}.png'.format(imgName,i)
             path = os.path.join(dest,sub,name)
-            cv2.imwrite(path,crop)
+            img_f.imwrite(path,crop)
             #addTrans[name]=data['trans']
 
 

@@ -3,6 +3,28 @@ import numpy as np
 import torch
 import math
 
+def calcCorners(x,y,r,h,w):
+    tlX = -w*math.cos(r) -h*math.sin(r) +x
+    tlY = -h*math.cos(r) +w*math.sin(r) +y
+    trX =  w*math.cos(r) -h*math.sin(r) +x
+    trY = -h*math.cos(r) -w*math.sin(r) +y
+    brX =  w*math.cos(r) +h*math.sin(r) +x
+    brY =  h*math.cos(r) -w*math.sin(r) +y
+    blX = -w*math.cos(r) +h*math.sin(r) +x
+    blY =  h*math.cos(r) +w*math.sin(r) +y
+    return [[tlX,tlY],[trX,trY],[brX,brY],[blX,blY]]
+
+def calcCornersTorch(x,y,r,h,w):
+    tlX = -w*torch.cos(r) -h*torch.sin(r) +x
+    tlY = -h*torch.cos(r) +w*torch.sin(r) +y
+    trX =  w*torch.cos(r) -h*torch.sin(r) +x
+    trY = -h*torch.cos(r) -w*torch.sin(r) +y
+    brX =  w*torch.cos(r) +h*torch.sin(r) +x
+    brY =  h*torch.cos(r) -w*torch.sin(r) +y
+    blX = -w*torch.cos(r) +h*torch.sin(r) +x
+    blY =  h*torch.cos(r) +w*torch.sin(r) +y
+    return tlX,tlY,trX,trY,brX,brY,blX,blY
+
 def avg_y(bb):
     points = bb['poly_points']
     return (points[0][1]+points[1][1]+points[2][1]+points[3][1])/4.0

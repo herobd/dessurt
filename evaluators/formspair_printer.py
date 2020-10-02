@@ -2,7 +2,7 @@ from skimage import color, io
 import os
 import numpy as np
 import torch
-import cv2
+import utils.img_f as img_f
 from utils import util
 from model.alignment_loss import alignment_loss
 import math
@@ -67,17 +67,17 @@ def FormsPair_printer(config, instance, model, gpu, metrics, outDir=None, startI
     batchSize = data.shape[0]
     for i in range(batchSize):
         image = (1-np.transpose(data[i][0:3,:,:],(1,2,0)))/2.0
-        #image = cv2.resize(image,(target.size(-1),target.size(-2)))
+        #image = img_f.resize(image,(target.size(-1),target.size(-2)))
         queryMask = data[i][1,:,:]
-        #queryMask = cv2.resize(image,(target.size(-1),target.size(-2)))
+        #queryMask = img_f.resize(image,(target.size(-1),target.size(-2)))
 
         grayIm = color.rgb2grey(image)
 
         invQuery = 1-queryMask
         invTarget = 1-target[i]
         invOutput = output[i]<=0.0 #assume not sigmoided
-        invTarget = cv2.resize(invTarget.astype(np.float),(image.shape[1],image.shape[0]),interpolation=cv2.INTER_NEAREST)
-        invOutput = cv2.resize(invOutput.astype(np.float),(image.shape[1],image.shape[0]),interpolation=cv2.INTER_NEAREST)
+        invTarget = img_f.resize(invTarget.astype(np.float),(image.shape[1],image.shape[0]),interpolation=cv2.INTER_NEAREST)
+        invOutput = img_f.resize(invOutput.astype(np.float),(image.shape[1],image.shape[0]),interpolation=cv2.INTER_NEAREST)
 
 
         highlightIm = np.stack([grayIm*invOutput, grayIm*invTarget, grayIm*invQuery],axis=2)

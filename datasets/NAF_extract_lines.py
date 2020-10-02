@@ -45,10 +45,10 @@ def write(data,out_dir,out_print,out_handwriting,out_signature):
         #br = (math.cos(rot)*w-math.sin(rot)*-h +xc, math.sin(rot)*w+math.cos(rot)*-h +yc)
         #bl = (math.cos(rot)*-w-math.sin(rot)*-h +xc, math.sin(rot)*-w+math.cos(rot)*-h +yc)
         ##from https://jdhao.github.io/2019/02/23/crop_rotated_rectangle_opencv/
-        #rect = cv2.minAreaRect(np.array([bl,br,tr,tl]))
+        #rect = img_f.minAreaRect(np.array([bl,br,tr,tl]))
         ##import pdb;pdb.set_trace()
         rect = ((xc,yc),(2*w,2*h),-180*rot/np.pi)
-        box = cv2.boxPoints(rect)
+        box = img_f.boxPoints(rect)
         box = np.int0(box)
         width = int(rect[1][0])
         height = int(rect[1][1])
@@ -60,17 +60,17 @@ def write(data,out_dir,out_print,out_handwriting,out_signature):
                             [width-1, height-1]], dtype="float32")
 
         # the perspective transformation matrix
-        M = cv2.getPerspectiveTransform(src_pts, dst_pts)
+        M = img_f.getPerspectiveTransform(src_pts, dst_pts)
 
         # directly warp the rotated rectangle to get the straightened rectangle
-        warped = cv2.warpPerspective(img[:,:,0], M, (width, height))
+        warped = img_f.warpPerspective(img[:,:,0], M, (width, height))
         heights.append(warped.shape[0])
         widths.append(warped.shape[1])
         #line_img
         #print([tr,tl,br,bl])
         line_name = "{}_{}{}.png".format(data['imgName'],typeBB[0],i)
         path = os.path.join(out_dir,typeBB,line_name)
-        cv2.imwrite(path,warped)
+        img_f.imwrite(path,warped)
         if typeBB=='print':
             out_text=out_print
         elif typeBB=='handwriting':

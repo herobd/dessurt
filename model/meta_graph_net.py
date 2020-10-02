@@ -898,6 +898,7 @@ class MetaGraphNet(nn.Module):
 
     def forward(self, input):
         node_features, edge_indexes, edge_features, u_features = input
+        assert(node_features.min()<0 and 'Im assuming the input has not been ReLUed')
         if self.randomReps:
             if self.training:
                 repetitions=np.random.randint(self.minReps,self.maxReps+1)
