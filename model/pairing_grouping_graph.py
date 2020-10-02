@@ -1727,7 +1727,7 @@ class PairingGroupingGraph(BaseModel):
         #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
         #print('------prop------')
 
-        allMasks=self.makeAllMasks(imageHeight,imageWidth,bbs)
+        allMasks=self.makeAllMasks(imageHeight,imageWidth,bbs,merge_only)
         groups=[[i] for i in range(len(bbs))]
         relFeats = self.computeEdgeVisualFeatures(features,features2,imageHeight,imageWidth,bbs,groups,candidates,allMasks,flip,merge_only,debug_image)
 
@@ -1837,17 +1837,27 @@ class PairingGroupingGraph(BaseModel):
             #return bb_features, adjacencyMatrix, rel_features
             return bbAndRel_features, (adjacencyMatrix,numOfNeighbors), numBB, numRel, relIndexes, rel_prop_scores
 
-    def makeAllMasks(self,imageHeight,imageWidth,bbs):
+    def makeAllMasks(self,imageHeight,imageWidth,bbs,merge_only=False):
         #build all-mask image, may want to move this up and use for relationship proposals
         if self.expandedRelContext is not None:
             allMasks = torch.zeros(imageHeight,imageWidth)
             if self.use_fixed_masks:
-                for bbIdx in range(len(bbs)):
-                    if self.useCurvedBBs:
-                        rr, cc = draw.polygon(bbs[bbIdx].polyYs(),bbs[bbIdx].polyXs(), [imageHeight,imageWidth])
-                    else:
-                        rr, cc = draw.polygon([tlY[bbIdx],trY[bbIdx],brY[bbIdx],blY[bbIdx]],[tlX[bbIdx],trX[bbIdx],brX[bbIdx],blX[bbIdx]], [imageHeight,imageWidth])
-                    allMasks[rr,cc]=1
+                if merge_only:
+                    #since each bb fragment is an axis aligned rect, we'll speed things up
+                    for bb_id in range(len(bbs)):
+                        rect=bbs[bb_id].all_primitive_rects[0]
+                        lx = max(0,int(rect[0][0]))
+                        rx = min(imageWidth,int(rect[1][0]+1))
+                        ty = max(0,int(rect[0][1]))
+                        by = min(imageHeight,int(rect[2][1]+1))
+                        allMasks[ty:by,lx:rx]=1
+                else:
+                    for bbIdx in range(len(bbs)):
+                        if self.useCurvedBBs:
+                            rr, cc = draw.polygon(bbs[bbIdx].polyYs(),bbs[bbIdx].polyXs(), [imageHeight,imageWidth])
+                        else:
+                            rr, cc = draw.polygon([tlY[bbIdx],trY[bbIdx],brY[bbIdx],blY[bbIdx]],[tlX[bbIdx],trX[bbIdx],brX[bbIdx],blX[bbIdx]], [imageHeight,imageWidth])
+                        allMasks[rr,cc]=1
             return allMasks
         else:
             return None
@@ -2035,6 +2045,12 @@ class PairingGroupingGraph(BaseModel):
 
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
         relFeats=[] #where we'll store the feature of each batch
+        
+        if merge_only:
+            batch_size = 2*self.roi_batch_size
+        else:
+            batch_size = self.roi_batch_size
+
         innerbatches = [(s,min(s+self.roi_batch_size,len(edges))) for s in range(0,len(edges),self.roi_batch_size)]
         #crop from feats, ROI pool
         for ib,(b_start,b_end) in enumerate(innerbatches): #we can batch extracting computing the feature vector from rois to save memory
@@ -2102,18 +2118,35 @@ class PairingGroupingGraph(BaseModel):
             for i,(index1, index2) in enumerate(b_edges):
                 if self.useShapeFeats!='only':
                     if self.useCurvedBBs:
-                        for bb_id in groups[index1]:
-                            rr, cc = draw.polygon(
-                                    (bbs[bb_id].polyYs()-b_rois[i,2].item())*h_m[i].item(),
-                                    (bbs[bb_id].polyXs()-b_rois[i,1].item())*w_m[i].item(), 
-                                    [pool2_h,pool2_w])
-                            masks[i,0,rr,cc]=1
-                        for bb_id in groups[index2]:
-                            rr, cc = draw.polygon(
-                                    (bbs[bb_id].polyYs()-b_rois[i,2].item())*h_m[i].item(),
-                                    (bbs[bb_id].polyXs()-b_rois[i,1].item())*w_m[i].item(), 
-                                    [pool2_h,pool2_w])
-                            masks[i,1,rr,cc]=1
+                        if merge_only:
+                            #since each bb fragment is an axis aligned rect, we'll speed things up
+                            for bb_id in groups[index1]:
+                                rect=bbs[bb_id].all_primitive_rects[0]
+                                lx = max(0,int(rect[0][0]))
+                                rx = min(pool2_w,int(rect[1][0]+1))
+                                ty = max(0,int(rect[0][1]))
+                                by = min(pool2_h,int(rect[2][1]+1))
+                                masks[i,0,ty:by,lx:rx]=1
+                            for bb_id in groups[index2]:
+                                rect=bbs[bb_id].all_primitive_rects[0]
+                                lx = max(0,int(rect[0][0]))
+                                rx = min(pool2_w,int(rect[1][0]+1))
+                                ty = max(0,int(rect[0][1]))
+                                by = min(pool2_h,int(rect[2][1]+1))
+                                masks[i,1,ty:by,lx:rx]=1
+                        else:
+                            for bb_id in groups[index1]:
+                                rr, cc = draw.polygon(
+                                        (bbs[bb_id].polyYs()-b_rois[i,2].item())*h_m[i].item(),
+                                        (bbs[bb_id].polyXs()-b_rois[i,1].item())*w_m[i].item(), 
+                                        [pool2_h,pool2_w])
+                                masks[i,0,rr,cc]=1
+                            for bb_id in groups[index2]:
+                                rr, cc = draw.polygon(
+                                        (bbs[bb_id].polyYs()-b_rois[i,2].item())*h_m[i].item(),
+                                        (bbs[bb_id].polyXs()-b_rois[i,1].item())*w_m[i].item(), 
+                                        [pool2_h,pool2_w])
+                                masks[i,1,rr,cc]=1
                     else:
                         rr, cc = draw.polygon(
                                     [round(tlY1[i].item()),round(trY1[i].item()),
