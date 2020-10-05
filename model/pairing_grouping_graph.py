@@ -39,7 +39,7 @@ def minAndMaxXY(boundingRects):
 def combineShapeFeats(feats):
     if len(feats)==1:
         return torch.FloatTensor(feats[0])
-    feats = feats.sort(key=feats[17]) #sort into read order
+    feats = feats.sort(key=lambda x: x[17]) #sort into read order
     feats = torch.FloatTensor(feats)
     easy_feats = feats[:,0:6],mean(dim=0)
     tl=feats[0,6:8]
@@ -884,7 +884,7 @@ class PairingGroupingGraph(BaseModel):
 
             return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final
         else:
-            return [bbPredictions], offsetPredictions, None, None, None, None, None, (useBBs if self.useCurvedBBs else useBBs.cpu().detach(),None,None,transcriptions)
+            return [bbPredictions], offsetPredictions, None, None, None, None, None, None, (useBBs if self.useCurvedBBs else useBBs.cpu().detach(),None,None,transcriptions)
 
 
     #This ROIAligns features and creates mask images for each edge and node, and runs the embedding convnet and [appends?] these features to the graph... This is only neccesary if a node has been updated...
