@@ -10,7 +10,7 @@
         "data_dir": "../data/FUNSD",
         "batch_size": 1,
         "shuffle": true,
-        "num_workers": 0,
+        "num_workers": 3,
         "split_to_lines": true,
         "crop_to_page":false,
         "color":false,
