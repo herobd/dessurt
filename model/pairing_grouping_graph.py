@@ -577,6 +577,7 @@ class PairingGroupingGraph(BaseModel):
             self.debug=False
         #t#self.opt_cand=[]#t#
         #t#self.opt_createG=[]#t#
+        self.opt_history=defaultdict(list)
         if type(self.pairer) is BinaryPairReal and type(self.pairer.shape_layers) is not nn.Sequential:
             print("Shape feats aligned to feat dataset.")
 
@@ -737,7 +738,8 @@ class PairingGroupingGraph(BaseModel):
                     #We don't build a full graph, just propose edges and extract the edge features
                     edgeOuts,edgeIndexes,merge_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,image=image,merge_only=True)
                     #_,edgeIndexes, edgeFeatures,_ = graph
-                    #t#print('      m1st createGraph time: {}'.format(timeit.default_timer()-tic))#t#
+                    time = timeit.default_timer()-tic#t#
+                    self.opt_history['m1st createGraph'].append(time)#t#
                     #if graph is not None:
                     #    edgeOuts = self.mergepred(graph[2]) #classifier on edge features
                     #    edgeOuts = edgeOuts[:,None,:]
@@ -763,10 +765,12 @@ class PairingGroupingGraph(BaseModel):
                         useBBs,bbTrans=self.mergeAndGroup(
                                 self.mergeThresh[0],None,None,
                                 edgeIndexes,edgeOuts,groups,None,None,None,useBBs,bbTrans,image,dont_merge=False,merge_only=True)
-                        #t#print('      m1st mergeAndGroup time: {}'.format(timeit.default_timer()-tic2))#t#
+                        time = timeit.default_timer()-tic2#t#
+                        self.opt_history['m1st mergeAndGroup'].append(time)#t#
                         groups=[[i] for i in range(len(useBBs))]
                         print('merge first reduced graph by {} nodes ({}->{}). max edge pred:{}, mean:{}'.format(startBBs-len(useBBs),startBBs,len(useBBs),torch.sigmoid(edgeOuts.max()),torch.sigmoid(edgeOuts.mean())))
-                    #t#print('   merge first time: {}'.format(timeit.default_timer()-tic))#t#
+                    time = timeit.default_timer()-tic#t#
+                    self.opt_history['m1st Full'].append(time)#t#
                     if dont_merge:
                         return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, None, merge_prop_scores, None
 
@@ -784,7 +788,8 @@ class PairingGroupingGraph(BaseModel):
 
                 #print('createGraph')
                 #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
-                #t#print('   createGraph time: {}'.format(timeit.default_timer()-tic))#t#
+                time = timeit.default_timer()-tic#t#
+                self.opt_history['createGraph'].append(time)#t#
 
                 #undirected
                 #edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
@@ -873,7 +878,8 @@ class PairingGroupingGraph(BaseModel):
                 #print('all iters GCN')
                 #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
 
-                #t#print('   thru all iters: {}'.format(timeit.default_timer()-tic))#t#
+                time = timeit.default_timer()-tic#t#
+                self.opt_history['all graph iters'].append(time)#t#
 
 
             else:
@@ -881,6 +887,13 @@ class PairingGroupingGraph(BaseModel):
             #adjacencyMatrix = torch.zeros((bbPredictions.size(1),bbPredictions.size(1)))
             #for rel in relOuts:
             #    i,j,a=graphToDetectionsMap(
+
+            for name,times in self.opt_history.items():#t#
+                print('time {}({}): {}'.format(name,len(times),np.mean(times)))#t#
+                if len(times)>300: #t#
+                    times.pop(0) #t#
+                    if len(times)>600:#t#
+                        times.pop(0)#t#
 
             return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final
         else:
@@ -1715,7 +1728,8 @@ class PairingGroupingGraph(BaseModel):
             candidates, rel_prop_scores = self.selectFeatureNNEdges(bbs,imageHeight,imageWidth,image,features.device,merge_only=merge_only)
             if not self.useCurvedBBs:
                 bbs=bbs[:,1:] #discard confidence, we kept it so the proposer could see them
-        #t#print('     candidate: {}'.format(timeit.default_timer()-tic))#t#
+        self.opt_history['candidates per bb'].append((timeit.default_timer()-tic)/len(bbs))#t#
+        self.opt_history['candidates /bb^2'].append((timeit.default_timer()-tic)/(len(bbs)**2))#t#
         if len(candidates)==0:
             if self.useMetaGraph:
                 return None, None, None
@@ -1827,14 +1841,6 @@ class PairingGroupingGraph(BaseModel):
             #rel_features = (candidates,relFeats)
             #adjacencyMatrix = None
 
-            #t#time = timeit.default_timer()-tic#t#
-            print('   create graph: {}'.format(time)) #old 0.37
-            self.opt_createG.append(time)
-            if len(self.opt_createG)>17:
-                print('   create graph running mean: {}'.format(np.mean(self.opt_createG)))
-                if len(self.opt_createG)>30:
-                    self.opt_createG = self.opt_createG[1:]
-            #return bb_features, adjacencyMatrix, rel_features
             return bbAndRel_features, (adjacencyMatrix,numOfNeighbors), numBB, numRel, relIndexes, rel_prop_scores
 
     def makeAllMasks(self,imageHeight,imageWidth,bbs,merge_only=False):
@@ -1916,10 +1922,8 @@ class PairingGroupingGraph(BaseModel):
             rois = torch.zeros((len(edges),5)) #(batchIndex,x1,y1,x2,y2) as expected by ROI Align
             if self.useCurvedBBs:
 
-                ##old
                 bbs_index1 = [bbs[c[0]] for c in edges]
                 bbs_index2 = [bbs[c[1]] for c in edges]
-                t_tic = timeit.default_timer()
                 min_X1,min_Y1,max_X1,max_Y1 = torch.IntTensor([bb.boundingRect() for bb in bbs_index1]).permute(1,0)
                 min_X2,min_Y2,max_X2,max_Y2 = torch.IntTensor([bb.boundingRect() for bb in bbs_index2]).permute(1,0)
                 min_X = torch.min(min_X1,min_X2)
@@ -1927,15 +1931,6 @@ class PairingGroupingGraph(BaseModel):
                 max_X = torch.max(max_X1,max_X2)
                 max_Y = torch.max(max_Y1,max_Y2)
 
-                t_old_time = timeit.default_timer()-t_tic
-
-                ##new
-                t_tic = timeit.default_timer()
-                min_X,max_X,min_Y,max_Y=torch.IntTensor([minAndMaxXY(
-                    [bbs[b].boundingRect() for b in groups[c[0]]] + [bbs[b].boundingRect() for b in groups[c[1]]]
-                        ) for c in edges]).permute(1,0)
-                t_new_time = timeit.default_timer()-t_tic
-                print('minMax difference: {}, old: {}, new: {}'.format(t_old_time-t_new_time,t_old_time,t_new_time))
 
                 groups_index1 = [ [bbs[b] for b in groups[c[0]]] for c in edges ]
                 groups_index2 = [ [bbs[b] for b in groups[c[1]]] for c in edges ]
@@ -1984,6 +1979,8 @@ class PairingGroupingGraph(BaseModel):
                 padY = self.expandedMergeContextY
             else:
                 padX=padY=  self.expandedRelContext
+            assert((min_X<max_X).all())
+            assert((min_Y<max_Y).all())
             max_X = torch.min(max_X+padX,torch.IntTensor([imageWidth-1]))
             min_X = torch.max(min_X-padX,torch.IntTensor([0]))
             max_Y = torch.min(max_Y+padY,torch.IntTensor([imageHeight-1]))
@@ -2471,10 +2468,251 @@ class PairingGroupingGraph(BaseModel):
             node_features = None
         return node_features
 
+
+    #def selectFeatureEmbEdges(self,bbs,imageHeight,imageWidth,image,device,merge_only=False):
+    #    if len(bbs)<2:
+    #        return [], None
+    #    #t#tic=timeit.default_timer()#t#
+    #    
+    #    if self.useCurvedBBs:
+    #        #0: tlXDiff
+    #        #1: trXDiff
+    #        #2: brXDiff
+    #        #3: blXDiff
+    #        #4: centerXDiff
+    #        #5: w1
+    #        #6: w2
+    #        #7: tlYDiff
+    #        #8: trYDiff
+    #        #9: brYDiff
+    #        #10: blYDiff
+    #        #11: centerYDiff
+    #        #12: h1
+    #        #13: h2
+    #        #14: tlDist
+    #        #15: trDist
+    #        #16: brDist
+    #        #17: blDist
+    #        #18: centDist
+    #        #19: rel pos X1
+    #        #20: rel pos Y1
+    #        #21: rel pos X2
+    #        #22: rel pos Y2
+    #        #23: line of sight
+    #        #24: conf1
+    #        #25: conf2
+    #        #26-n: classpred1
+    #        #n+1-m: classpred2
+
+    #        numClassFeat = bbs[0].getCls().shape[0]
+    #        
+    #        #conf, x,y,r,h,w,tl, tr, br, bl = torch.FloatTensor([bb.getFeatureInfo() for bb in bbs]).permute(1,0)
+    #        #conf, x,y,r,h,w,tlx,tly,trx,try,brx,bry,blx,bly,r_left,r_rightA,classFeats = bb.getFeatureInfo()
+
+    #        #t#tic2=timeit.default_timer()#t#
+    #        allFeats = torch.FloatTensor([bb.getFeatureInfo() for bb in bbs])
+    #        #t#print('     candidates gather allFeats: {}'.format(timeit.default_timer()-tic2))#t#
+    #        features = torch.FloatTensor(len(bbs),len(bbs), num_feats)
+
+    #        conf1 = allFeats[:,None,0]
+    #        x1 = allFeats[:,None,1]
+    #        y1 = allFeats[:,None,2]
+    #        h1 = allFeats[:,None,4]
+    #        w1 = allFeats[:,None,5]
+    #        tlX1 = allFeats[:,None,6]
+    #        tlY1 = allFeats[:,None,7]
+    #        trX1 = allFeats[:,None,8]
+    #        trY1 = allFeats[:,None,9]
+    #        brX1 = allFeats[:,None,10]
+    #        brY1 = allFeats[:,None,11]
+    #        blX1 = allFeats[:,None,12]
+    #        blY1 = allFeats[:,None,13]
+    #        classFeat1 = allFeats[:,None,18:]
+    #        sin_r = torch.sin(allFeats[:,3])
+    #        cos_r = torch.cos(allFeats[:,3])
+    #        sin_r_left = torch.sin(allFeats[:,14])
+    #        cos_r_left = torch.cos(allFeats[:,14])
+    #        sin_r_right = torch.sin(allFeats[:,15])
+    #        cos_r_right = torch.cos(allFeats[:,15])
+    #        ro1 = allFeats[:,None,17]
+
+    #        features[:,0]=
+
+    #    else:
+    #        #features: tlXDiff,trXDiff,brXDiff,blXDiff,tlYDiff,trYDiff,brYDiff,blYDiff, centerXDiff, centerYDiff, absX, absY, h1, w1, h2, w2, classpred1, classpred2, line of sight (binary)
+
+    #        #0: tlXDiff
+    #        #1: trXDiff
+    #        #2: brXDiff
+    #        #3: blXDiff
+    #        #4: centerXDiff
+    #        #5: w1
+    #        #6: w2
+    #        #7: tlYDiff
+    #        #8: trYDiff
+    #        #9: brYDiff
+    #        #10: blYDiff
+    #        #11: centerYDiff
+    #        #12: h1
+    #        #13: h2
+    #        #14: tlDist
+    #        #15: trDist
+    #        #16: brDist
+    #        #17: blDist
+    #        #18: centDist
+    #        #19: rel pos X1
+    #        #20: rel pos Y1
+    #        #21: rel pos X2
+    #        #22: rel pos Y2
+    #        #23: line of sight
+    #        #24: conf1
+    #        #25: conf2
+    #        #26: sin r 1
+    #        #27: sin r 2
+    #        #28: cos r 1
+    #        #29: cos r 2
+    #        #30-n: classpred1
+    #        #n-m: classpred2
+    #        #if curvedBB:
+    #        #m:m+8: left and right sin/cos
+
+    #        conf = bbs[:,0]
+    #        x = bbs[:,1]
+    #        y = bbs[:,2]
+    #        r = bbs[:,3]
+    #        h = bbs[:,4]
+    #        w = bbs[:,5]
+    #        classFeat = bbs[:,6:]
+    #        numClassFeat = classFeat.size(1)
+    #        cos_r = torch.cos(r)
+    #        sin_r = torch.sin(r)
+    #        tlX = -w*cos_r + -h*sin_r +x
+    #        tlY =  w*sin_r + -h*cos_r +y
+    #        trX =  w*cos_r + -h*sin_r +x
+    #        trY = -w*sin_r + -h*cos_r +y
+    #        brX =  w*cos_r + h*sin_r +x
+    #        brY = -w*sin_r + h*cos_r +y
+    #        blX = -w*cos_r + h*sin_r +x
+    #        blY =  w*sin_r + h*cos_r +y
+
+    #        raise NotImplementedError('yep')
+
+
+    #    num_feats = 30+numClassFeat*2
+    #    if self.useCurvedBBs:
+    #        num_feats+=9
+    #        if not self.shape_feats_normal:
+    #            num_feats-=1
+    #    features = torch.FloatTensor(len(bbs),len(bbs), num_feats)
+    #    features[:,:,0] = tlX1-tlX2
+    #    features[:,:,1] = trX1-trX2
+    #    features[:,:,2] = brX1-brX2
+    #    features[:,:,3] = blX1-blX2
+    #    features[:,:,4] = x1-x2
+    #    features[:,:,5] = w1
+    #    features[:,:,6] = w2
+    #    features[:,:,7] = tlY1-tlY2
+    #    features[:,:,8] = trY1-trY2
+    #    features[:,:,9] = brY1-brY2
+    #    features[:,:,10] = blY1-blY2
+    #    features[:,:,11] = y1-y2
+    #    features[:,:,12] = h1
+    #    features[:,:,13] = h2
+    #    features[:,:,14] = torch.sqrt((tlY1-tlY2)**2 + (tlX1-tlX2)**2)
+    #    features[:,:,15] = torch.sqrt((trY1-trY2)**2 + (trX1-trX2)**2)
+    #    features[:,:,16] = torch.sqrt((brY1-brY2)**2 + (brX1-brX2)**2)
+    #    features[:,:,17] = torch.sqrt((blY1-blY2)**2 + (blX1-blX2)**2)
+    #    features[:,:,18] = torch.sqrt((y1-y2)**2 + (x1-x2)**2)
+    #    features[:,:,19] = x1/imageWidth
+    #    features[:,:,20] = y1/imageHeight
+    #    features[:,:,21] = x2/imageWidth
+    #    features[:,:,22] = y2/imageHeight
+    #    #features[:,:,23] = 1 if (index1,index2) in line_of_sight else 0
+    #    if self.useCurvedBBs:
+    #        features[:,:,23] = line_counts
+    #    else:
+    #        features[:,:,23].zero_()
+    #        for index1,index2 in line_of_sight:
+    #            features[index1,index2,23]=1
+    #            features[index2,index1,23]=1
+    #    features[:,:,24] = conf1
+    #    features[:,:,25] = conf2
+    #    features[:,:,26] = sin_r1
+    #    features[:,:,27] = sin_r2
+    #    features[:,:,28] = cos_r1
+    #    features[:,:,29] = cos_r2
+    #    features[:,:,30:30+numClassFeat] = classFeat1
+    #    features[:,:,30+numClassFeat:30+2*numClassFeat] = classFeat2
+    #    if self.useCurvedBBs:
+    #        features[:,:,30+2*numClassFeat] = sin_r_left1
+    #        features[:,:,31+2*numClassFeat] = sin_r_left2
+    #        features[:,:,32+2*numClassFeat] = cos_r_left1
+    #        features[:,:,33+2*numClassFeat] = cos_r_left2
+    #        features[:,:,34+2*numClassFeat] = sin_r_right1
+    #        features[:,:,35+2*numClassFeat] = sin_r_right2
+    #        features[:,:,36+2*numClassFeat] = cos_r_right1
+    #        features[:,:,37+2*numClassFeat] = cos_r_right2
+    #        if self.shape_feats_normal:
+    #            features[:,:,38+2*numClassFeat] = read_order_diff
+
+
+    #    #normalize distance features
+    #    features[:,:,0:7]/=self.normalizeHorz
+    #    features[:,:,7:14]/=self.normalizeVert
+    #    features[:,:,14:19]/=(self.normalizeVert+self.normalizeHorz)/2
+    #    features = features.view(len(bbs)**2,num_feats) #flatten
+    #    #t#time = timeit.default_timer()-tic#t#
+    #    #t#print('   candidates feats: {}'.format(time))#t#
+    #    #t#self.opt_cand.append(time)
+    #    #t#if len(self.opt_cand)>30:#t#
+    #    #t#    print('   candidates feats running mean: {}'.format(np.mean(self.opt_cand)))#t#
+    #    #t#    self.opt_cand = self.opt_cand[1:]#t#
+    #    #t#tic=timeit.default_timer()#t#
+    #    if merge_only:
+    #        rel_pred = self.merge_prop_nn(features.to(device))
+    #        #features=features.to(device)
+    #        #rel_pred = self.merge_prop_nn(features)
+    #        ##HARD CODED RULES FOR EARLY TRAINING
+    #        #avg_h = features[:,12:14].mean()
+    #        #avg_w = features[:,5:6].mean()
+    #        ##could_merge = ((y1-y2).abs()<4*avg_h).logical_and((x1-x2).abs()<10*avg_w)
+    #        ##could_merge = could_merge.view(-1)[:,None]
+    #        #could_merge = (features[:,11].abs()<4*avg_h).logical_and((features[:,4]).abs()<10*avg_w)[:,None]
+    #        #features=features.cpu()
+    #        #full_rel_pred = rel_pred
+    #        #minV=rel_pred.min()
+    #        #rel_pred=torch.where(could_merge,rel_pred,minV)
+    #        #could_merge=could_merge.cpu()
+    #    else:
+    #        rel_pred = self.rel_prop_nn(features.to(device))
+    #    rel_pred2d = rel_pred.view(len(bbs),len(bbs)) #unflatten
+    #    actual_rels = [(i,j) for i in range(len(bbs)) for j in range(i+1,len(bbs))]
+    #    rels_ordered = [ ((rel_pred2d[rel[0],rel[1]].item()+rel_pred2d[rel[1],rel[0]].item())/2,rel) for rel in actual_rels ]
+    #    rels = [(i,j) for i in range(len(bbs)) for j in range(len(bbs))]
+
+    #    rels_ordered.sort(key=lambda x: x[0], reverse=True)
+
+    #    keep = math.ceil(self.percent_rel_to_keep*len(rels_ordered))
+    #    if merge_only:
+    #        keep = min(keep,self.max_merge_rel_to_keep)
+    #    else:
+    #        keep = min(keep,self.max_rel_to_keep)
+    #    #print('keeping {} of {}'.format(keep,len(rels_ordered)))
+    #    keep_rels = [r[1] for r in rels_ordered[:keep]]
+    #    if keep<len(rels_ordered):
+    #        implicit_threshold = rels_ordered[keep][0]
+    #    else:
+    #        implicit_threshold = rels_ordered[-1][0]-0.1 #We're taking everything
+
+    #    #t#print('   candidates net and thresh: {}'.format(timeit.default_timer()-tic))#t#
+    #    return keep_rels, (rel_pred, rels, implicit_threshold)
+
+
+
     def selectFeatureNNEdges(self,bbs,imageHeight,imageWidth,image,device,merge_only=False):
         if len(bbs)<2:
             return [], None
-        #t#tic=timeit.default_timer()#t#
+        tic=timeit.default_timer()#t#
         
         if self.useCurvedBBs:
             #0: tlXDiff
@@ -2509,17 +2747,20 @@ class PairingGroupingGraph(BaseModel):
             if merge_only:
                 line_counts=0
             else:
-                #t#tic2=timeit.default_timer()#t#
+                tic2=timeit.default_timer()#t#
                 line_counts = self.betweenPixels(bbs,image)
-                #t#print('     candidates betweenPixels: {}'.format(timeit.default_timer()-tic2))#t#
+                time=timeit.default_timer()-tic2#t#
+                self.opt_history['candidates betweenPixels{}'.format(' m1st' if merge_only else '')].append(time) #t#
             numClassFeat = bbs[0].getCls().shape[0]
             
             #conf, x,y,r,h,w,tl, tr, br, bl = torch.FloatTensor([bb.getFeatureInfo() for bb in bbs]).permute(1,0)
             #conf, x,y,r,h,w,tlx,tly,trx,try,brx,bry,blx,bly,r_left,r_rightA,classFeats = bb.getFeatureInfo()
 
-            #t#tic2=timeit.default_timer()#t#
+            tic2=timeit.default_timer()#t#
             allFeats = torch.FloatTensor([bb.getFeatureInfo() for bb in bbs])
-            #t#print('     candidates gather allFeats: {}'.format(timeit.default_timer()-tic2))#t#
+            time=timeit.default_timer()-tic2#t#
+            self.opt_history['candidates getFeatureInfo{}'.format(' m1st' if merge_only else '')].append(time) #t#
+            tic2=timeit.default_timer()#t#
             num_bb = allFeats.size(0)
             conf1 = allFeats[:,None,0].expand(-1,num_bb)
             conf2 = allFeats[None,:,0].expand(num_bb,-1)
@@ -2572,6 +2813,9 @@ class PairingGroupingGraph(BaseModel):
             ro1 = allFeats[:,None,17].expand(-1,num_bb)
             ro2 = allFeats[None,:,17].expand(num_bb,-1)
             read_order_diff=ro1-ro2
+
+            time=timeit.default_timer()-tic2#t#
+            self.opt_history['candidates expand features{}'.format(' m1st' if merge_only else '')].append(time) #t#
 
         else:
             #features: tlXDiff,trXDiff,brXDiff,blXDiff,tlYDiff,trYDiff,brYDiff,blYDiff, centerXDiff, centerYDiff, absX, absY, h1, w1, h2, w2, classpred1, classpred2, line of sight (binary)
@@ -2669,6 +2913,7 @@ class PairingGroupingGraph(BaseModel):
             blY1 = blY[:,None].expand(-1,blY.size(0))
             blY2 = blY[None,:].expand(blY.size(0),-1)
 
+        tic2 = timeit.default_timer()#t#
         num_feats = 30+numClassFeat*2
         if self.useCurvedBBs:
             num_feats+=9
@@ -2732,13 +2977,16 @@ class PairingGroupingGraph(BaseModel):
         features[:,:,7:14]/=self.normalizeVert
         features[:,:,14:19]/=(self.normalizeVert+self.normalizeHorz)/2
         features = features.view(len(bbs)**2,num_feats) #flatten
+
+        time=timeit.default_timer()-tic2#t#
+        self.opt_history['candidates place features{}'.format(' m1st' if merge_only else '')].append(time) #t#
         #t#time = timeit.default_timer()-tic#t#
         #t#print('   candidates feats: {}'.format(time))#t#
         #t#self.opt_cand.append(time)
         #t#if len(self.opt_cand)>30:#t#
         #t#    print('   candidates feats running mean: {}'.format(np.mean(self.opt_cand)))#t#
         #t#    self.opt_cand = self.opt_cand[1:]#t#
-        #t#tic=timeit.default_timer()#t#
+        tic=timeit.default_timer()#t#
         if merge_only:
             rel_pred = self.merge_prop_nn(features.to(device))
             #features=features.to(device)
@@ -2756,12 +3004,36 @@ class PairingGroupingGraph(BaseModel):
             #could_merge=could_merge.cpu()
         else:
             rel_pred = self.rel_prop_nn(features.to(device))
+
+        time=timeit.default_timer()-tic#t#
+        self.opt_history['candidates net{}'.format(' m1st' if merge_only else '')].append(time) #t#
+        tic=timeit.default_timer()#t#
+
         rel_pred2d = rel_pred.view(len(bbs),len(bbs)) #unflatten
-        actual_rels = [(i,j) for i in range(len(bbs)) for j in range(i+1,len(bbs))]
-        rels_ordered = [ ((rel_pred2d[rel[0],rel[1]].item()+rel_pred2d[rel[1],rel[0]].item())/2,rel) for rel in actual_rels ]
-        rels = [(i,j) for i in range(len(bbs)) for j in range(len(bbs))]
+        rel_pred2d_comb = (torch.triu(rel_pred2d,diagonal=1)+torch.tril(rel_pred2d,diagonal=-1).permute(1,0))/2
+        rel_coords=torch.triu_indices(len(bbs),len(bbs),offset=1)
+        rel_pred = rel_pred2d_comb[rel_coords.tolist()]
+        #I need to convert to tuples so that later "(x,y) in rels" works
+        rel_coords = [(i,j) for i,j in rel_coords.permute(1,0).tolist()]#rel_coords.permute(1,0).tolist()
+        #rel_coords = [(i.item(),j.item()) for i,j in rel_coords.permute(1,0)]
+        rels_ordered = list(zip(rel_pred.cpu(),rel_coords))
+
+        #DDDD
+        #actual_rels = [(i,j) for i in range(len(bbs)) for j in range(i+1,len(bbs))]
+        #rels_ordered_D = [ ((rel_pred2d[rel[0],rel[1]].item()+rel_pred2d[rel[1],rel[0]].item())/2,rel) for rel in actual_rels ]
+        #for (score,rel),(scoreD,relD) in zip(rels_ordered,rels_ordered_D):
+        #    assert(abs(score-scoreD)<0.00001 and rel==relD)
+        #DDDD
+
+        time=timeit.default_timer()-tic#t#
+        self.opt_history['candidates edge lists{}'.format(' m1st' if merge_only else '')].append(time) #t#
+        tic=timeit.default_timer()#t#
 
         rels_ordered.sort(key=lambda x: x[0], reverse=True)
+
+        time=timeit.default_timer()-tic#t#
+        self.opt_history['candidates sort{}'.format(' m1st' if merge_only else '')].append(time) #t#
+        tic=timeit.default_timer()#t#
 
         keep = math.ceil(self.percent_rel_to_keep*len(rels_ordered))
         if merge_only:
@@ -2775,8 +3047,11 @@ class PairingGroupingGraph(BaseModel):
         else:
             implicit_threshold = rels_ordered[-1][0]-0.1 #We're taking everything
 
+        time=timeit.default_timer()-tic#t#
+        self.opt_history['candidates final bookkeeping{}'.format(' m1st' if merge_only else '')].append(time) #t#
+
         #t#print('   candidates net and thresh: {}'.format(timeit.default_timer()-tic))#t#
-        return keep_rels, (rel_pred, rels, implicit_threshold)
+        return keep_rels, (rel_pred,rel_coords, implicit_threshold)
 
 
     def betweenPixels(self,bbs,image):

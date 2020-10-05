@@ -2,6 +2,9 @@ import numpy as np
 import math, os, random
 import utils.img_f as img_f
 from skimage import color, io
+from PIL import Image
+from PIL import ImageFont
+from PIL import ImageDraw
 
 def getCorners(xyrhw):
     xc=xyrhw[0].item()
@@ -44,6 +47,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
             for j in range(targetBoxes.size(1)):
                 plotRect(image,(1,0.5,0),targetBoxes[0,j,0:5])
 
+        to_write_text=[]
         if verbosity>1 and outputBoxes is not None:
             #Draw pred bbs
             bbs = outputBoxes
@@ -95,10 +99,19 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                     color = min(abs(pred_nn-gtNN),1)#*0.5
                     img_f.putText(image,'{:.2}/{}'.format(pred_nn,gtNN),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(color,0,0),2,cv2.LINE_AA)
                 if bbTrans is not None:
-                    img_f.putText(image,'{}'.format(j),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,color,2,cv2.LINE_AA)
+                    to_write_text.append('{}'.format(j),(x,y),color)
+                    #img_f.putText(image,'{}'.format(j),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,color,2,cv2.LINE_AA)
                     transOut.write('{}: {}\n'.format(j,bbTrans[j]))
         if bbTrans is not None:
             transOut.close()
+            if len(to_write_text)>0:
+                pil_image = Image.fromarray(image)
+                pil_draw = ImageDraw.Draw(pil_image)
+                font = ImageFont.truetype("times-ro.ttf", 9)
+                for text,loc,color in to_write_text:
+                    pil_draw.text(loc,text,color,font=font)
+                image = numpy.array(pil_image)
+
 
         #Draw pred groups (based on bb pred)
         groupCenters=[]

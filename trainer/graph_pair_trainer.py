@@ -114,6 +114,8 @@ class GraphPairTrainer(BaseTrainer):
         if 'edge' in self.loss:
             self.loss['rel'] = self.loss['edge']
 
+        self.opt_history = defaultdict(list)#t#
+
     def _to_tensor(self, instance):
         image = instance['img']
         bbs = instance['bb_gt']
