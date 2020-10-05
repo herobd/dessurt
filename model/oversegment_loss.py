@@ -274,7 +274,7 @@ class MultiScaleOversegmentLoss (nn.Module):
             else:
                 return (
                     loss,
-                    (loss_L.item()+loss_T.item()+loss_R.item()+loss_B.item())/4,
+                    (loss_L.item()+loss_T.item()+loss_R.item()+loss_B.item())/4 if loss_L !=0 else 0,
                     loss_conf.item(),
                     loss_cls.item(),
                     loss_r.item(),
