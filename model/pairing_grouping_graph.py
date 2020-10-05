@@ -590,7 +590,7 @@ class PairingGroupingGraph(BaseModel):
         
 
     def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=300, debug=False,old_nn=False,gtTrans=None,dont_merge=False):
-        tic=timeit.default_timer()#t#
+        #t#tic=timeit.default_timer()#t#
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
         bbPredictions, offsetPredictions, _,_,_,_ = self.detector(image)
         _=None
@@ -603,14 +603,14 @@ class PairingGroupingGraph(BaseModel):
             saved_features2=self.detector.saved_features2
         else:
             saved_features2=None
-        print('   detector: {}'.format(timeit.default_timer()-tic))#t#
+        #t#print('   detector: {}'.format(timeit.default_timer()-tic))#t#
 
         if saved_features is None:
             print('ERROR:no saved features!')
             import pdb;pdb.set_trace()
 
         
-        tic=timeit.default_timer()#t#
+        #t#tic=timeit.default_timer()#t#
         if self.useHardConfThresh:
             self.used_threshConf = self.confThresh
         else:
@@ -643,7 +643,7 @@ class PairingGroupingGraph(BaseModel):
         bbPredictions=bbPredictions[0]
         if self.no_grad_feats:
             bbPredictions=bbPredictions.detach()
-        print('   process boxes: {}'.format(timeit.default_timer()-tic))#t#
+        #t#print('   process boxes: {}'.format(timeit.default_timer()-tic))#t#
         #bbPredictions should be switched for GT for training? Then we can easily use BCE loss. 
         #Otherwise we have to to alignment first
         if not useGTBBs:
@@ -732,12 +732,12 @@ class PairingGroupingGraph(BaseModel):
                 groups=[[i] for i in range(len(useBBs))]
                 bbTrans = transcriptions
                 if self.merge_first:
-                    tic=timeit.default_timer()#t#
+                    #t#tic=timeit.default_timer()#t#
                     #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
                     #We don't build a full graph, just propose edges and extract the edge features
                     edgeOuts,edgeIndexes,merge_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,image=image,merge_only=True)
                     #_,edgeIndexes, edgeFeatures,_ = graph
-                    print('      m1st createGraph time: {}'.format(timeit.default_timer()-tic))#t#
+                    #t#print('      m1st createGraph time: {}'.format(timeit.default_timer()-tic))#t#
                     #if graph is not None:
                     #    edgeOuts = self.mergepred(graph[2]) #classifier on edge features
                     #    edgeOuts = edgeOuts[:,None,:]
@@ -759,14 +759,14 @@ class PairingGroupingGraph(BaseModel):
                     if edgeIndexes is not None:
                         startBBs = len(useBBs)
                         #perform predicted merges
-                        tic2=timeit.default_timer()#t#
+                        #t#tic2=timeit.default_timer()#t#
                         useBBs,bbTrans=self.mergeAndGroup(
                                 self.mergeThresh[0],None,None,
                                 edgeIndexes,edgeOuts,groups,None,None,None,useBBs,bbTrans,image,dont_merge=False,merge_only=True)
-                        print('      m1st mergeAndGroup time: {}'.format(timeit.default_timer()-tic2))#t#
+                        #t#print('      m1st mergeAndGroup time: {}'.format(timeit.default_timer()-tic2))#t#
                         groups=[[i] for i in range(len(useBBs))]
                         print('merge first reduced graph by {} nodes ({}->{}). max edge pred:{}, mean:{}'.format(startBBs-len(useBBs),startBBs,len(useBBs),torch.sigmoid(edgeOuts.max()),torch.sigmoid(edgeOuts.mean())))
-                    print('   merge first time: {}'.format(timeit.default_timer()-tic))#t#
+                    #t#print('   merge first time: {}'.format(timeit.default_timer()-tic))#t#
                     if dont_merge:
                         return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, None, merge_prop_scores, None
 
@@ -778,13 +778,13 @@ class PairingGroupingGraph(BaseModel):
                     allGroups=[]
                     allEdgeIndexes=[]
 
-                tic=timeit.default_timer()#t#
+                #t#tic=timeit.default_timer()#t#
                 #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
                 graph,edgeIndexes,rel_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,image=image)
 
                 #print('createGraph')
                 #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
-                print('   createGraph time: {}'.format(timeit.default_timer()-tic))#t#
+                #t#print('   createGraph time: {}'.format(timeit.default_timer()-tic))#t#
 
                 #undirected
                 #edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
@@ -794,7 +794,7 @@ class PairingGroupingGraph(BaseModel):
                 last_node_visual_feats = graph[0]
                 last_edge_visual_feats = graph[2]
 
-                tic=timeit.default_timer()#t#
+                #t#tic=timeit.default_timer()#t#
 
                 #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
                 nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = self.graphnets[0](graph)
@@ -873,7 +873,7 @@ class PairingGroupingGraph(BaseModel):
                 #print('all iters GCN')
                 #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
 
-                print('   thru all iters: {}'.format(timeit.default_timer()-tic))#t#
+                #t#print('   thru all iters: {}'.format(timeit.default_timer()-tic))#t#
 
 
             else:
@@ -1705,7 +1705,7 @@ class PairingGroupingGraph(BaseModel):
 
 
     def createGraph(self,bbs,features,features2,imageHeight,imageWidth,text_emb=None,flip=None,debug_image=None,image=None,merge_only=False):
-        tic=timeit.default_timer()#t#
+        #t#tic=timeit.default_timer()#t#
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
         if self.relationshipProposal == 'line_of_sight':
             assert(not merge_only)
@@ -1715,7 +1715,7 @@ class PairingGroupingGraph(BaseModel):
             candidates, rel_prop_scores = self.selectFeatureNNEdges(bbs,imageHeight,imageWidth,image,features.device,merge_only=merge_only)
             if not self.useCurvedBBs:
                 bbs=bbs[:,1:] #discard confidence, we kept it so the proposer could see them
-        print('     candidate: {}'.format(timeit.default_timer()-tic))#t#
+        #t#print('     candidate: {}'.format(timeit.default_timer()-tic))#t#
         if len(candidates)==0:
             if self.useMetaGraph:
                 return None, None, None
