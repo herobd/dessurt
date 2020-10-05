@@ -21,13 +21,8 @@ class TextLine:
             pred_bb_info = pred_bb_info.cpu().detach()
             self.all_conf = [pred_bb_info[0].item()]
             self.all_cls = [pred_bb_info[6:].numpy()]
-            self.cls=None
-            self.conf=None
             #assert(self.all_cls[0].shape[0]==4)
 
-            self.median_angle = None
-            self.poly_points=None
-            self.point_pairs=None
 
             if pred_bb_info[2]>pred_bb_info[4]: #I think this only occured after changing things on a trained model...
                 tmp = pred_bb_info[2]
@@ -49,6 +44,50 @@ class TextLine:
             assert(self.all_primitive_rects[0][1,1]!=self.all_primitive_rects[0][2,1])
             
             self.all_angles = [pred_bb_info[5].item()]
+
+            #to skip a call to compute(), we'll solve this as it's one rectangle
+            self.cls=self.all_cls[0]
+            self.conf=np.array(self.all_conf[0])
+            self.median_angle =  self.all_angles[0]
+
+            if self.median_angle>=-math.pi/4 and self.median_angle<=math.pi/4:
+                #horz=True
+                #readright=True
+                top_points = [self.all_primitive_rects[0][0],self.all_primitive_rects[0][1]]
+                bot_points = [self.all_primitive_rects[0][2],self.all_primitive_rects[0][3]]
+                self.height = self.all_primitive_rects[0][3][1]-self.all_primitive_rects[0][0][1]
+                self.width = self.all_primitive_rects[0][1][0]-self.all_primitive_rects[0][0][0]
+            elif self.median_angle>=-math.pi*3/4 and self.median_angle<=-math.pi/4:
+                #horz=False
+                #readup=False
+                top_points = [self.all_primitive_rects[0][1],self.all_primitive_rects[0][2]]
+                bot_points = [self.all_primitive_rects[0][0],self.all_primitive_rects[0][3]]
+                self.width = self.all_primitive_rects[0][3][1]-self.all_primitive_rects[0][0][1]
+                self.height = self.all_primitive_rects[0][1][0]-self.all_primitive_rects[0][0][0]
+            elif self.median_angle>=math.pi/4 and self.median_angle<=math.pi*3/4:
+                #horz=False
+                #readup=True
+                top_points = [self.all_primitive_rects[0][3],self.all_primitive_rects[0][0]]
+                bot_points = [self.all_primitive_rects[0][2],self.all_primitive_rects[0][1]]
+                self.width = self.all_primitive_rects[0][3][1]-self.all_primitive_rects[0][0][1]
+                self.height = self.all_primitive_rects[0][1][0]-self.all_primitive_rects[0][0][0]
+            else:
+                #horz=True
+                #readright=False
+                top_points = [self.all_primitive_rects[0][2],self.all_primitive_rects[0][3]]
+                bot_points = [self.all_primitive_rects[0][1],self.all_primitive_rects[0][0]]
+                self.height = self.all_primitive_rects[0][3][1]-self.all_primitive_rects[0][0][1]
+                self.width = self.all_primitive_rects[0][1][0]-self.all_primitive_rects[0][0][0]
+            
+            self.poly_points = np.array( top_points+bot_points )
+
+            self.center_point = self.poly_points.mean(axis=0)
+            self.point_pairs=list(zip(top_points,bot_points))
+                #assert(type(self.cls) is np.ndarray)
+            self.std_r = 0
+            self.r_left = self.median_angle
+            self.r_right = self.median_angle
+            
         else:
             if pred_bb_info.all_conf is not None and other.all_conf is not None:
                 self.all_conf =  pred_bb_info.all_conf+other.all_conf
