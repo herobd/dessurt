@@ -41,12 +41,12 @@ def combineShapeFeats(feats):
         return torch.FloatTensor(feats[0])
     feats.sort(key=lambda x: x[17]) #sort into read order
     feats = torch.FloatTensor(feats)
-    easy_feats = feats[:,0:6],mean(dim=0)
+    easy_feats = feats[:,0:6].mean(dim=0)
     tl=feats[0,6:8]
     tr=feats[0,8:10]
-    br=feats[-1,12:14]
-    bl=feats[-1,14:16]
-    easy2_feats=feats[:,16:].mean(dim=0)
+    br=feats[-1,10:12]
+    bl=feats[-1,12:14]
+    easy2_feats=feats[:,14:].mean(dim=0)
     return torch.cat((easy_feats,tl,tr,br,bl,easy2_feats),dim=0)
 def correctTrans(pred,predBB,gt,gtBB):
     thresh=100
@@ -1078,7 +1078,10 @@ class PairingGroupingGraph(BaseModel):
     def mergeAndGroupCurved(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,oldBBTrans,image,dont_merge=False,merge_only=False):
         assert(len(oldBBs)==0 or type(oldBBs[0]) is TextLine)
         #changedNodeIds=set()
-        bbs={i:v for i,v in enumerate(oldBBs)}
+        if self.useCurvedBBs:
+            bbs={i:TextLine(clone=v) for i,v in enumerate(oldBBs)}
+        else:
+            bbs={i:v for i,v in enumerate(oldBBs)}
         if self.text_rec is not None:
             bbTrans={i:v for i,v  in enumerate(oldBBTrans)}
         oldToNewBBIndexes={i:i for i in range(len(oldBBs))}
@@ -3016,7 +3019,7 @@ class PairingGroupingGraph(BaseModel):
         #I need to convert to tuples so that later "(x,y) in rels" works
         rel_coords = [(i,j) for i,j in rel_coords.permute(1,0).tolist()]#rel_coords.permute(1,0).tolist()
         #rel_coords = [(i.item(),j.item()) for i,j in rel_coords.permute(1,0)]
-        rels_ordered = list(zip(rel_pred.cpu(),rel_coords))
+        rels_ordered = list(zip(rel_pred.cpu().tolist(),rel_coords))
 
         #DDDD
         #actual_rels = [(i,j) for i in range(len(bbs)) for j in range(i+1,len(bbs))]
