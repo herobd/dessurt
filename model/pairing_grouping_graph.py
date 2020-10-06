@@ -733,7 +733,7 @@ class PairingGroupingGraph(BaseModel):
                 groups=[[i] for i in range(len(useBBs))]
                 bbTrans = transcriptions
                 if self.merge_first:
-                    #t#tic=timeit.default_timer()#t#
+                    tic=timeit.default_timer()#t#
                     #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
                     #We don't build a full graph, just propose edges and extract the edge features
                     edgeOuts,edgeIndexes,merge_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,image=image,merge_only=True)
@@ -761,7 +761,7 @@ class PairingGroupingGraph(BaseModel):
                     if edgeIndexes is not None:
                         startBBs = len(useBBs)
                         #perform predicted merges
-                        #t#tic2=timeit.default_timer()#t#
+                        tic2=timeit.default_timer()#t#
                         useBBs,bbTrans=self.mergeAndGroup(
                                 self.mergeThresh[0],None,None,
                                 edgeIndexes,edgeOuts,groups,None,None,None,useBBs,bbTrans,image,dont_merge=False,merge_only=True)
@@ -782,7 +782,7 @@ class PairingGroupingGraph(BaseModel):
                     allGroups=[]
                     allEdgeIndexes=[]
 
-                #t#tic=timeit.default_timer()#t#
+                tic=timeit.default_timer()#t#
                 #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
                 graph,edgeIndexes,rel_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,image=image)
 
@@ -799,7 +799,7 @@ class PairingGroupingGraph(BaseModel):
                 last_node_visual_feats = graph[0]
                 last_edge_visual_feats = graph[2]
 
-                #t#tic=timeit.default_timer()#t#
+                tic=timeit.default_timer()#t#
 
                 #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
                 nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = self.graphnets[0](graph)
@@ -1718,7 +1718,7 @@ class PairingGroupingGraph(BaseModel):
 
 
     def createGraph(self,bbs,features,features2,imageHeight,imageWidth,text_emb=None,flip=None,debug_image=None,image=None,merge_only=False):
-        #t#tic=timeit.default_timer()#t#
+        tic=timeit.default_timer()#t#
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
         if self.relationshipProposal == 'line_of_sight':
             assert(not merge_only)
@@ -1879,7 +1879,7 @@ class PairingGroupingGraph(BaseModel):
             pool_w=self.pool_w
             pool2_h=self.pool2_h
             pool2_w=self.pool2_w
-        #t#tic=timeit.default_timer()#t#
+        #tic=timeit.default_timer()#t#
 
         #stackedEdgeFeatWindows = torch.FloatTensor((len(edges),features.size(1)+2,self.relWindowSize,self.relWindowSize)).to(features.device())
 
