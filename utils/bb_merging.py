@@ -32,10 +32,10 @@ class TextLine:
                 tmp = pred_bb_info[1]
                 pred_bb_info[1]=pred_bb_info[3]
                 pred_bb_info[3]=tmp
-            if abs(pred_bb_info[2]-pred_bb_info[4])<0.001: #detector sometimes predicts flat BBs
+            if abs(pred_bb_info[2]-pred_bb_info[4])<1: #detector sometimes predicts flat BBs
                 pred_bb_info[2]-=1
                 pred_bb_info[4]+=1
-            if abs(pred_bb_info[1]-pred_bb_info[3])<0.001:
+            if abs(pred_bb_info[1]-pred_bb_info[3])<1:
                 pred_bb_info[1]-=1
                 pred_bb_info[3]+=1
 
