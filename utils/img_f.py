@@ -1,4 +1,7 @@
 import skimage
+from skimage import io as io
+from skimage import filters as filters
+from skimage import transform as transform
 import numpy as np
 
 #These are all based on the OpenCV functions, to make the conversion to scikit image easier (also should make future changes easier as well)
@@ -37,31 +40,31 @@ def line(img,p1,p2,color,thickness=1):
 
 
 def imread(path,color=True):
-    return skimage.io.imread(path,not color)
+    return io.imread(path,not color)
 
 def imwrite(path,img):
-    return skimage.io.imsave(path,img)
+    return io.imsave(path,img)
 
 def imshow(name,img):
-    return skimage.io.imshow(img)
+    return io.imshow(img)
 
 def show(): #replaces cv2.waitKey()
-    return skimage.io.imshow(img)
+    return io.imshow(img)
 
 def resize(img,dim,fx=None,fy=None): #remove ",interpolation = cv2.INTER_CUBIC"
     hasColor = len(img.shape)==3
     if dim[0]==0:
         downsize = fx<1 and fy<1
         
-        return skimage.transform.rescale(img,(fy,fx),3,multichannel=hasColor,anti_aliasing=downsize)
+        return transform.rescale(img,(fy,fx),3,multichannel=hasColor,anti_aliasing=downsize)
     else:
         downsize = dim[0]<img.shape[0] and dim[1]<img.shape[1]
-        return skimage.transform.resize(img,dim,3,multichannel=hasColor,anti_aliasing=downsize)
+        return transform.resize(img,dim,3,multichannel=hasColor,anti_aliasing=downsize)
 
 def otsuThreshold(img):
     #if len(img.shape)==3 and img.shape[2]==1:
     #    img=img[:,:,0]
-    t = skimage.filters.threshold_otsu(img)
+    t = filters.threshold_otsu(img)
     return  t,(img>t)*255
 
 def rgb2hsv(img):
@@ -79,7 +82,11 @@ def polylines(img,points,isClosed,color,thickness=1):
     if len(points.shape)==3:
         assert(points.shape[1]==1)
         points=points[:,0]
-    if isClosed:
+    if isClosed=='transparent':
+        rr,cc = skimage.draw.polygon_perimeter(points[:,1],points[:,0],shape=img.shape)
+        rr_f,cc_f = skimage.draw.polygon(points[:,1],points[:,0],shape=img.shape)
+        img[rr_f,cc_f] = img[rr_f,cc_f]*0.7+np.array(color)*0.3
+    elif isClosed:
         rr,cc = skimage.draw.polygon(points[:,1],points[:,0],shape=img.shape)
     else:
         rr,cc = skimage.draw.polygon_perimeter(points[:,1],points[:,0],shape=img.shape)
@@ -90,5 +97,5 @@ def warpAffine(img,M,shape=None):
         shape=img.shape
     if M.shape[0]==2: #OpenCV takes 2x3 instead of 3x3
         M = np.concatenate((M,np.array([[0.0,0.0,1.0]])),axis=0)
-    T = skimage.transform.AffineTransform(M)
-    return skimage.transform.warp(img,T,output_shape=shape)
+    T = transform.AffineTransform(M)
+    return transform.warp(img,T,output_shape=shape)
