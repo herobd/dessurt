@@ -15,8 +15,26 @@ def xyrwh_TextLine(bb):
 
 class TextLine:
     #two constructors. One takes vector, other two TextLines and merges them
-    def __init__(self,pred_bb_info,other=None):
-        if other is None:
+    def __init__(self,pred_bb_info=None,other=None,clone=None):
+        if clone is not None:
+            self.all_conf = list(clone.all_conf) if clone.all_conf is not None else None
+            self.all_cls = list(clone.all_cls) if clone.all_cls is not None else None
+            self.all_primitive_rects = list(clone.all_primitive_rects)
+            self.all_angles = list(clone.all_angles)
+
+            self.cls=clone.cls
+            self.conf = clone.conf
+            self.median_angle = clone.median_angle
+            self.height = clone.height
+            self.width = clone.width
+            self.std_r = clone.std_r
+            self.r_left = clone.r_left
+            self.r_right = clone.r_right
+
+            self.poly_points = clone.poly_points.copy()
+            self.center_point = clone.center_point
+            self.point_pairs = list(clone.point_pairs)
+        elif other is None:
 
             pred_bb_info = pred_bb_info.cpu().detach()
             self.all_conf = [pred_bb_info[0].item()]

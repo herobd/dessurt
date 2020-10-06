@@ -21,7 +21,6 @@ def display(data):
 
 
     fig = plt.figure()
-    #gs = gridspec.GridSpec(1, 3)
 
     ax_im = plt.subplot()
     ax_im.set_axis_off()
@@ -108,10 +107,11 @@ if __name__ == "__main__":
         'color':False,
         'rescale_range':[0.8,1.2],
         'Xrescale_range':[0.4,0.65],
-        'crop_params':{"crop_size":[800,800],"pad":60,"rot_degree_std_dev": 0.7}, 
-        'rotation':False,
+        'crop_params':{
+            "crop_size":[600,800],
+            "pad":70,
+            "xxrot_degree_std_dev": 0.7}, 
         'split_to_lines': True,
-        'overfit': True
 })
 
     dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False, num_workers=0, collate_fn=funsd_graph_pair.collate)

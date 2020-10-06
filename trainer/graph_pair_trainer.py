@@ -1764,9 +1764,9 @@ class GraphPairTrainer(BaseTrainer):
             elif name=='nodePred':
                  got['nodePred'] = nodePred.detach().cpu()
             elif name=='allNodePred':
-                 got[name] = [n.detach().cpu() for n in allNodePred]
+                 got[name] = [n.detach().cpu() if n is not None else None for n in allNodePred] if allNodePred is not None else None
             elif name=='allEdgePred':
-                 got[name] = [n.detach().cpu() for n in allEdgePred]
+                 got[name] = [n.detach().cpu() if n is not None else None for n in allEdgePred] if allEdgePred is not None else None
             elif name=='allEdgeIndexes':
                  got[name] = allEdgeIndexes
             elif name=='allPredGroups':
