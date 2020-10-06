@@ -85,7 +85,7 @@
 
         "unfreeze_detector": 2000,
         "partial_from_gt": 0,
-        "stop_from_gt": 20000,
+        "stop_from_gt": 500,
         "max_use_pred": 0.5,
         "use_all_bb_pred_for_rel_loss": true,
 
