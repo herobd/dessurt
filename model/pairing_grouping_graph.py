@@ -39,7 +39,7 @@ def minAndMaxXY(boundingRects):
 def combineShapeFeats(feats):
     if len(feats)==1:
         return torch.FloatTensor(feats[0])
-    feats = feats.sort(key=lambda x: x[17]) #sort into read order
+    feats.sort(key=lambda x: x[17]) #sort into read order
     feats = torch.FloatTensor(feats)
     easy_feats = feats[:,0:6],mean(dim=0)
     tl=feats[0,6:8]
