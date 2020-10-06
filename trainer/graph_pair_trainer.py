@@ -869,7 +869,7 @@ class GraphPairTrainer(BaseTrainer):
 
             relPropScores,relPropIds, threshPropRel = rel_prop_pred
 
-            print('\tcount rel prop: {}'.format(len(relPropIds)))
+            #print('\tcount rel prop: {}'.format(len(relPropIds)))
             #t#tic=timeit.default_timer()#t#
             truePropPred=falsePropPred=falseNegProp=0
             propPredsPos=[]
