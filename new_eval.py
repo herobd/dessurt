@@ -313,7 +313,10 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                                 else:
                                     if type(typeLists) is float or type(typeLists) is int:
                                         typeLists = [typeLists]
-                                    val_comb_metrics[typ]+=typeLists
+                                    if type(typeLists) is np.ndarray:
+                                        val_comb_metrics[typ].append(typeLists)
+                                    else:
+                                        val_comb_metrics[typ]+=typeLists
                         else:
                             val_metrics_sum += metricsO.sum(axis=0)/metricsO.shape[0]
                         if 'save_spaced' in config:
@@ -387,7 +390,10 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                             elif typeLists is not None:
                                 if type(typeLists) is float or type(typeLists) is int:
                                     typeLists = [typeLists]
-                                val_comb_metrics[typ]+=typeLists
+                                if type(typeLists) is np.ndarray:
+                                    val_comb_metrics[typ].append(typeLists)
+                                else:
+                                    val_comb_metrics[typ]+=typeLists
                     else:
                         val_metrics_sum += metricsO.sum(axis=0)/metricsO.shape[0]
                     if 'save_spaced' in config:
