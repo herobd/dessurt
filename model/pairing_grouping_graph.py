@@ -768,7 +768,7 @@ class PairingGroupingGraph(BaseModel):
                         time = timeit.default_timer()-tic2#t#
                         self.opt_history['m1st mergeAndGroup'].append(time)#t#
                         groups=[[i] for i in range(len(useBBs))]
-                        print('merge first reduced graph by {} nodes ({}->{}). max edge pred:{}, mean:{}'.format(startBBs-len(useBBs),startBBs,len(useBBs),torch.sigmoid(edgeOuts.max()),torch.sigmoid(edgeOuts.mean())))
+                        #print('merge first reduced graph by {} nodes ({}->{}). max edge pred:{}, mean:{}'.format(startBBs-len(useBBs),startBBs,len(useBBs),torch.sigmoid(edgeOuts.max()),torch.sigmoid(edgeOuts.mean())))
                     time = timeit.default_timer()-tic#t#
                     self.opt_history['m1st Full'].append(time)#t#
                     if dont_merge:
