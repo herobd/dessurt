@@ -31,9 +31,9 @@ class TextLine:
             self.r_left = clone.r_left
             self.r_right = clone.r_right
 
-            self.poly_points = clone.poly_points.copy()
+            self.poly_points = clone.poly_points.copy() if clone.poly_points is not None else None
             self.center_point = clone.center_point
-            self.point_pairs = list(clone.point_pairs)
+            self.point_pairs = list(clone.point_pairs) if clone.point_pairs is not None else None
         elif other is None:
 
             pred_bb_info = pred_bb_info.cpu().detach()
