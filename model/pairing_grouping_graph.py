@@ -1984,10 +1984,13 @@ class PairingGroupingGraph(BaseModel):
                 padX=padY=  self.expandedRelContext
             assert((min_X<max_X).all())
             assert((min_Y<max_Y).all())
-            max_X = torch.min(max_X+padX,torch.IntTensor([imageWidth-1]))
-            min_X = torch.max(min_X-padX,torch.IntTensor([0]))
-            max_Y = torch.min(max_Y+padY,torch.IntTensor([imageHeight-1]))
-            min_Y = torch.max(min_Y-padY,torch.IntTensor([0]))
+            max_X = torch.max(torch.min(max_X+padX,torch.IntTensor([imageWidth-1])),torch.IntTensor([1]))
+            min_X = torch.max(torch.min(min_X-padX,torch.IntTensor([imageWidth-2])),torch.IntTensor([0]))
+            max_Y = torch.max(torch.min(max_Y+padY,torch.IntTensor([imageHeight-1])),torch.IntTensor([1]))
+            min_Y = torch.max(torch.min(min_Y-padY,torch.IntTensor([imageHeight-2])),torch.IntTensor([0]))
+            #min_X = torch.max(min_X-padX,torch.IntTensor([0]))
+            #max_Y = torch.min(max_Y+padY,torch.IntTensor([imageHeight-1]))
+            #min_Y = torch.max(min_Y-padY,torch.IntTensor([0]))
             rois[:,1]=min_X
             rois[:,2]=min_Y
             rois[:,3]=max_X
@@ -2339,10 +2342,15 @@ class PairingGroupingGraph(BaseModel):
                 min_X,_ = torch.min(torch.stack([tlX,trX,blX,brX],dim=0),dim=0) 
                 max_X,_ = torch.max(torch.stack([tlX,trX,blX,brX],dim=0),dim=0) 
             if self.expandedBBContext is not None:
-                max_X = torch.min(max_X+self.expandedBBContext,torch.IntTensor([imageWidth-1]))
-                min_X = torch.max(min_X-self.expandedBBContext,torch.IntTensor([0]))
-                max_Y = torch.min(max_Y+self.expandedBBContext,torch.IntTensor([imageHeight-1]))
-                min_Y = torch.max(min_Y-self.expandedBBContext,torch.IntTensor([0]))
+                #max_X = torch.min(max_X+self.expandedBBContext,torch.IntTensor([imageWidth-1]))
+                #min_X = torch.max(min_X-self.expandedBBContext,torch.IntTensor([0]))
+                #max_Y = torch.min(max_Y+self.expandedBBContext,torch.IntTensor([imageHeight-1]))
+                #min_Y = torch.max(min_Y-self.expandedBBContext,torch.IntTensor([0]))
+
+                max_X = torch.max(torch.min(max_X+self.expandedBBContext,torch.IntTensor([imageWidth-1])),torch.IntTensor([1]))
+                min_X = torch.max(torch.min(min_X-self.expandedBBContext,torch.IntTensor([imageWidth-2])),torch.IntTensor([0]))
+                max_Y = torch.max(torch.min(max_Y+self.expandedBBContext,torch.IntTensor([imageHeight-1])),torch.IntTensor([1]))
+                min_Y = torch.max(torch.min(min_Y-self.expandedBBContext,torch.IntTensor([imageHeight-2])),torch.IntTensor([0]))
             rois[:,1]=min_X
             rois[:,2]=min_Y
             rois[:,3]=max_X
