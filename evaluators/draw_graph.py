@@ -2,6 +2,9 @@ import numpy as np
 import math, os, random
 import utils.img_f as img_f
 from skimage import color, io
+from PIL import Image
+from PIL import ImageFont
+from PIL import ImageDraw
 
 def getCorners(xyrhw):
     xc=xyrhw[0].item()
@@ -32,11 +35,11 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
             transOut = open(transPath,'w')
         if not useTextLines and outputBoxes is not None and not useTextLines:
             outputBoxes = outputBoxes.data.numpy()
-        data = image.cpu().numpy()
+        image = image.cpu().numpy()
         b=0
-        image = (1-((1+np.transpose(data[b][:,:,:],(1,2,0)))/2.0)).copy()
+        image = (1-((1+np.transpose(image[b][:,:,:],(1,2,0)))/2.0))
         if image.shape[2]==1:
-            image = img_f.gray2rgb(image)
+            image = img_f.gray2rgb(image*255)/255
         #if name=='text_start_gt':
 
         if verbosity>1 and targetBoxes is not None:
@@ -44,6 +47,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
             for j in range(targetBoxes.size(1)):
                 plotRect(image,(1,0.5,0),targetBoxes[0,j,0:5])
 
+        to_write_text=[]
         if verbosity>1 and outputBoxes is not None:
             #Draw pred bbs
             bbs = outputBoxes
@@ -52,10 +56,12 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                 if useTextLines:
                     conf = bbs[j].getConf()
                     maxIndex = np.argmax(bbs[j].getCls())
+                    if 'gI0' in path:
+                        assert(len(bbs[j].all_primitive_rects)==1)
                 else:
                     conf = bbs[j,0]
                     maxIndex =np.argmax(bbs[j,5+model.nodeIdxClass:5+model.nodeIdxClassEnd])
-                shade = (conf-bb_thresh)/(1-bb_thresh)
+                shade = conf#(conf-bb_thresh)/(1-bb_thresh)
                 #print(shade)
                 #if name=='text_start_gt' or name=='field_end_gt':
                 #    img_f.bb(bbImage[:,:,1],p1,p2,shade,2)
@@ -78,7 +84,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                 if useTextLines:
                     pts = bbs[j].polyPoints()
                     pts = pts.reshape((-1,1,2))
-                    img_f.polylines(image,pts.astype(np.int),True,color,lineWidth)
+                    img_f.polylines(image,pts.astype(np.int),'transparent',color,lineWidth)
                     x,y = bbs[j].getCenterPoint()
                 else:
                     plotRect(image,color,bbs[j,1:6],lineWidth)
@@ -95,10 +101,19 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                     color = min(abs(pred_nn-gtNN),1)#*0.5
                     img_f.putText(image,'{:.2}/{}'.format(pred_nn,gtNN),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(color,0,0),2,cv2.LINE_AA)
                 if bbTrans is not None:
-                    img_f.putText(image,'{}'.format(j),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,color,2,cv2.LINE_AA)
+                    to_write_text.append('{}'.format(j),(x,y),color)
+                    #img_f.putText(image,'{}'.format(j),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,color,2,cv2.LINE_AA)
                     transOut.write('{}: {}\n'.format(j,bbTrans[j]))
         if bbTrans is not None:
             transOut.close()
+            if len(to_write_text)>0:
+                pil_image = Image.fromarray(image)
+                pil_draw = ImageDraw.Draw(pil_image)
+                font = ImageFont.truetype("times-ro.ttf", 9)
+                for text,loc,color in to_write_text:
+                    pil_draw.text(loc,text,color,font=font)
+                image = numpy.array(pil_image)
+
 
         #Draw pred groups (based on bb pred)
         groupCenters=[]
@@ -164,6 +179,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                 if (predTypes is not None and
                     (predTypes[0][i]=='TN' or predTypes[0][i]=='UN') and
                      (predTypes[1][i]=='TN' or predTypes[1][i]=='UN') and
+                     (predTypes[3][i]=='TN' or predTypes[3][i]=='UN') and
                      (predTypes[2][i]=='TN' or predTypes[2][i]=='UN') ):
                     lineColor = (0,0,edgePred[i,-1,0].item()) #BLUE
                     img_f.line(image,(x1,y1),(x2,y2),lineColor,1)
@@ -244,6 +260,8 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
 
     
 
-        io.imsave(path,image)
+        #io.imsave(path,image)
+        image*=255
+        img_f.imwrite(path,image)
 
 

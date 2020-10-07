@@ -6,6 +6,9 @@ def getGTGroup(targetIndexes,gtGroups):
         for gtId, ts in enumerate(gtGroups):
             if t in ts:
                 ids[gtId]+=1
+                break #a bb won't be in two groups
+    #if len(targetIndexes)==1:
+    #    return ids.keys()[0]
 
     bestId=-1
     bestCount=-1

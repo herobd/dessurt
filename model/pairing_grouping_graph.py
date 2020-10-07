@@ -33,6 +33,21 @@ import torch.autograd.profiler as profiler
 MAX_CANDIDATES=2000
 MAX_GRAPH_SIZE=4000
 
+def minAndMaxXY(boundingRects):
+    min_X,min_Y,max_X,max_Y = np.array(boundingRects).transpose(1,0)
+    return min_X.min(),max_X.max(),min_Y.min(),max_Y.max()
+def combineShapeFeats(feats):
+    if len(feats)==1:
+        return torch.FloatTensor(feats[0])
+    feats.sort(key=lambda x: x[17]) #sort into read order
+    feats = torch.FloatTensor(feats)
+    easy_feats = feats[:,0:6].mean(dim=0)
+    tl=feats[0,6:8]
+    tr=feats[0,8:10]
+    br=feats[-1,10:12]
+    bl=feats[-1,12:14]
+    easy2_feats=feats[:,14:].mean(dim=0)
+    return torch.cat((easy_feats,tl,tr,br,bl,easy2_feats),dim=0)
 def correctTrans(pred,predBB,gt,gtBB):
     thresh=100
     #x0,y0,r0,h0,w0 = bb0[locIdx:classIdx]
@@ -170,8 +185,7 @@ class PairingGroupingGraph(BaseModel):
         self.merge_pool_h = self.merge_pool2_h = config['merge_featurizer_start_h']
         self.merge_pool_w = self.merge_pool2_w = config['merge_featurizer_start_w']
 
-        self.reintroduce_visual_features = False
-        print('WARNING: not reintroduce_visual_features, which needs implemented')
+        self.reintroduce_visual_features = config['reintroduce_visual_features']
 
 
         if 'use_rel_shape_feats' in config:
@@ -196,11 +210,16 @@ class PairingGroupingGraph(BaseModel):
             detect_save2_scale = self.detector.save2_scale
 
         if self.useShapeFeats:
+           self.shape_feats_normal = config['shape_feats_normal'] if 'shape_feats_normal' in config else True
            if self.useCurvedBBs:
                self.numShapeFeats=20+2*self.numBBTypes
+               if self.shape_feats_normal:
+                   self.numShapeFeatsBB=6+self.numBBTypes
+               else:
+                   self.numShapeFeatsBB=3+self.numBBTypes
            else:
                self.numShapeFeats=8+2*self.numBBTypes #we'll append some extra feats
-           self.numShapeFeatsBB=3+self.numBBTypes
+               self.numShapeFeatsBB=3+self.numBBTypes
            if self.useShapeFeats!='old' and not self.useCurvedBBs:
                self.numShapeFeats+=4
            if self.detector.predNumNeighbors and not self.useCurvedBBs:
@@ -443,7 +462,6 @@ class PairingGroupingGraph(BaseModel):
             
             if 'group_node_method' not in config or config['group_node_method']=='mean':
                 self.groupNodeFunc = lambda l: torch.stack(l,dim=0).mean(dim=0)
-                #TODO should this be where the visual features are recomputed?, No node and edge recomputation can share... mask maps, I guess that could just be passed in
             else:
                 raise NotImplementedError('Error, unknown node group method: {}'.format(config['group_node_method']))
             if 'group_edge_method' not in config or config['group_edge_method']=='mean':
@@ -453,7 +471,7 @@ class PairingGroupingGraph(BaseModel):
         else:
             self.pairer = eval(config['graph_config']['arch'])(config['graph_config'])
             self.useMetaGraph = type(self.pairer) is MetaGraphNet
-        self.fixBiDirection= config['fix_bi_dir'] if 'fix_bi_dir' in config else False
+        self.fixBiDirection= config['fix_bi_dir'] #should be True unless this is a really old model
         if 'max_graph_size' in config:
             MAX_GRAPH_SIZE = config['max_graph_size']
 
@@ -465,15 +483,21 @@ class PairingGroupingGraph(BaseModel):
             self.include_bb_conf=True
             #num_classes = config['num_class']
             num_bb_feat = self.numBBTypes + (1 if self.detector.predNumNeighbors else 0) #config['graph_config']['bb_out']
+            prop_feats = 30+2*num_bb_feat
+            if self.useCurvedBBs:
+                prop_feats += 8
+                if self.shape_feats_normal:
+                    prop_feats += 1
             self.rel_prop_nn = nn.Sequential(
-                                nn.Linear(30+2*num_bb_feat+(8 if self.useCurvedBBs else 0),64),
+                                nn.Linear(prop_feats,64),
                                 nn.Dropout(0.25),
                                 nn.ReLU(True),
                                 nn.Linear(64,1)
                                 )
             if self.merge_first:
+                
                 self.merge_prop_nn = nn.Sequential(
-                                    nn.Linear(30+2*num_bb_feat+(8 if self.useCurvedBBs else 0),64),
+                                    nn.Linear(prop_feats,64),
                                     nn.Dropout(0.25),
                                     nn.ReLU(True),
                                     nn.Linear(64,1)
@@ -553,6 +577,7 @@ class PairingGroupingGraph(BaseModel):
             self.debug=False
         #t#self.opt_cand=[]#t#
         #t#self.opt_createG=[]#t#
+        self.opt_history=defaultdict(list)
         if type(self.pairer) is BinaryPairReal and type(self.pairer.shape_layers) is not nn.Sequential:
             print("Shape feats aligned to feat dataset.")
 
@@ -566,7 +591,7 @@ class PairingGroupingGraph(BaseModel):
         
 
     def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=300, debug=False,old_nn=False,gtTrans=None,dont_merge=False):
-        #t##t#tic=timeit.default_timer()#t##t#
+        #t#tic=timeit.default_timer()#t#
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
         bbPredictions, offsetPredictions, _,_,_,_ = self.detector(image)
         _=None
@@ -586,7 +611,7 @@ class PairingGroupingGraph(BaseModel):
             import pdb;pdb.set_trace()
 
         
-        #t##t#tic=timeit.default_timer()#t##t#
+        #t#tic=timeit.default_timer()#t#
         if self.useHardConfThresh:
             self.used_threshConf = self.confThresh
         else:
@@ -708,15 +733,21 @@ class PairingGroupingGraph(BaseModel):
                 groups=[[i] for i in range(len(useBBs))]
                 bbTrans = transcriptions
                 if self.merge_first:
+                    tic=timeit.default_timer()#t#
                     #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
                     #We don't build a full graph, just propose edges and extract the edge features
-                    graph,edgeIndexes,merge_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,image=image,merge_only=True)
+                    edgeOuts,edgeIndexes,merge_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,image=image,merge_only=True)
                     #_,edgeIndexes, edgeFeatures,_ = graph
-                    if graph is not None:
-                        edgeOuts = self.mergepred(graph[2]) #classifier on edge features
-                        edgeOuts = edgeOuts[:,None,:]
-                    else:
-                        edgeOuts = None
+                    time = timeit.default_timer()-tic#t#
+                    self.opt_history['m1st createGraph'].append(time)#t#
+                    #if graph is not None:
+                    #    edgeOuts = self.mergepred(graph[2]) #classifier on edge features
+                    #    edgeOuts = edgeOuts[:,None,:]
+                    #else:
+                    #    edgeOuts = None
+                    if edgeOuts is not None:
+                        edgeOuts = self.mergepred(edgeOuts)
+                        edgeOuts = edgeOuts[:,None,:] #introduce repition dim (to match graph network)
 
                     allOutputBoxes=[useBBs]
                     allNodeOuts=[None]
@@ -730,11 +761,16 @@ class PairingGroupingGraph(BaseModel):
                     if edgeIndexes is not None:
                         startBBs = len(useBBs)
                         #perform predicted merges
+                        tic2=timeit.default_timer()#t#
                         useBBs,bbTrans=self.mergeAndGroup(
                                 self.mergeThresh[0],None,None,
                                 edgeIndexes,edgeOuts,groups,None,None,None,useBBs,bbTrans,image,dont_merge=False,merge_only=True)
+                        time = timeit.default_timer()-tic2#t#
+                        self.opt_history['m1st mergeAndGroup'].append(time)#t#
                         groups=[[i] for i in range(len(useBBs))]
-                        print('merge first reduced graph by {} nodes ({}->{}). max edge pred:{}, mean:{}'.format(startBBs-len(useBBs),startBBs,len(useBBs),torch.sigmoid(edgeOuts.max()),torch.sigmoid(edgeOuts.mean())))
+                        #print('merge first reduced graph by {} nodes ({}->{}). max edge pred:{}, mean:{}'.format(startBBs-len(useBBs),startBBs,len(useBBs),torch.sigmoid(edgeOuts.max()),torch.sigmoid(edgeOuts.mean())))
+                    time = timeit.default_timer()-tic#t#
+                    self.opt_history['m1st Full'].append(time)#t#
                     if dont_merge:
                         return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, None, merge_prop_scores, None
 
@@ -746,15 +782,24 @@ class PairingGroupingGraph(BaseModel):
                     allGroups=[]
                     allEdgeIndexes=[]
 
+                tic=timeit.default_timer()#t#
                 #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
                 graph,edgeIndexes,rel_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,image=image)
+
                 #print('createGraph')
                 #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
+                time = timeit.default_timer()-tic#t#
+                self.opt_history['createGraph'].append(time)#t#
 
                 #undirected
                 #edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
                 if graph is None:
                     return [bbPredictions], offsetPredictions, None, None, None, None, rel_prop_scores, merge_prop_scores, (useBBs if self.useCurvedBBs else useBBs.cpu().detach(),None,None,transcriptions)
+
+                last_node_visual_feats = graph[0]
+                last_edge_visual_feats = graph[2]
+
+                tic=timeit.default_timer()#t#
 
                 #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
                 nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = self.graphnets[0](graph)
@@ -772,22 +817,47 @@ class PairingGroupingGraph(BaseModel):
 
                 #print('graph 0:   bbs:{}, nodes:{}, edges:{}'.format(useBBs.size(0),nodeOuts.size(0),edgeOuts.size(0)))
                 
-                #t##t#tic=timeit.default_timer()#t##t#
                 for gIter,graphnet in enumerate(self.graphnets[1:]):
                     if self.merge_first:
                         gIter+=1
 
-                    print('!D! {} before edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(gIter,edgeFeats.size(),len(useBBs),nodeFeats.size(),len(edgeIndexes)))
+                    #print('!D! {} before edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(gIter,edgeFeats.size(),len(useBBs),nodeFeats.size(),len(edgeIndexes)))
                     #print('      graph num edges: {}'.format(graph[1].size()))
-                    useBBs,graph,groups,edgeIndexes,bbTrans=self.mergeAndGroup(
-                            self.mergeThresh[gIter],self.keepEdgeThresh[gIter],self.groupThresh[gIter],
-                            edgeIndexes,edgeOuts,groups,nodeFeats,edgeFeats,uniFeats,useBBs,bbTrans,image,dont_merge)
+                    useBBs,graph,groups,edgeIndexes,bbTrans,same_node_map=self.mergeAndGroup(
+                            self.mergeThresh[gIter],
+                            self.keepEdgeThresh[gIter],
+                            self.groupThresh[gIter],
+                            edgeIndexes,
+                            edgeOuts,
+                            groups,
+                            nodeFeats,
+                            edgeFeats,
+                            uniFeats,
+                            useBBs,
+                            bbTrans,
+                            image,
+                            dont_merge)
+
                     if self.reintroduce_visual_features:
-                        graph = self.appendVisualFeatures(useBBs,graph,groups)
+                        graph,last_node_visual_feats,last_edge_visual_feats = self.appendVisualFeatures(
+                                useBBs,
+                                graph,
+                                groups,
+                                edgeIndexes,
+                                saved_features,
+                                saved_features2,
+                                embeddings,
+                                image.size(-2),
+                                image.size(-1),
+                                same_node_map,
+                                last_node_visual_feats,
+                                last_edge_visual_feats,
+                                allEdgeIndexes[-1],
+                                debug_image=None)
                     #print('graph 1-:   bbs:{}, nodes:{}, edges:{}'.format(useBBs.size(0),len(groups),len(edgeIndexes)))
                     if len(edgeIndexes)==0:
                         break #we have no graph, so we can just end here
-                    print('!D! after  edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(graph[2].size(),len(useBBs),graph[0].size(),len(edgeIndexes)))
+                    #print('!D! after  edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(graph[2].size(),len(useBBs),graph[0].size(),len(edgeIndexes)))
                     #print('      graph num edges: {}'.format(graph[1].size()))
                     nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = graphnet(graph)
                     #edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
@@ -800,7 +870,7 @@ class PairingGroupingGraph(BaseModel):
 
                 ##Final state of the graph
                 #print('!D! F before edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(edgeFeats.size(),useBBs.size(),nodeFeats.size(),len(edgeIndexes)))
-                useBBs,graph,groups,edgeIndexes,bbTrans=self.mergeAndGroup(
+                useBBs,graph,groups,edgeIndexes,bbTrans,same_node_map=self.mergeAndGroup(
                         self.mergeThresh[-1],self.keepEdgeThresh[-1],self.groupThresh[-1],
                         edgeIndexes,edgeOuts.detach(),groups,nodeFeats.detach(),edgeFeats.detach(),uniFeats.detach() if uniFeats is not None else None,useBBs,bbTrans,image,dont_merge)
                 #print('!D! after  edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(graph[2].size(),useBBs.size(),graph[0].size(),len(edgeIndexes)))
@@ -808,7 +878,8 @@ class PairingGroupingGraph(BaseModel):
                 #print('all iters GCN')
                 #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
 
-                #t#print('   thru all iters: {}'.format(timeit.default_timer()-tic))#t#
+                time = timeit.default_timer()-tic#t#
+                self.opt_history['all graph iters'].append(time)#t#
 
 
             else:
@@ -817,17 +888,92 @@ class PairingGroupingGraph(BaseModel):
             #for rel in relOuts:
             #    i,j,a=graphToDetectionsMap(
 
+            for name,times in self.opt_history.items():#t#
+                print('time {}({}): {}'.format(name,len(times),np.mean(times)))#t#
+                if len(times)>300: #t#
+                    times.pop(0) #t#
+                    if len(times)>600:#t#
+                        times.pop(0)#t#
+
             return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final
         else:
-            return [bbPredictions], offsetPredictions, None, None, None, None, None, (useBBs.cpu().detach(),None,None,transcriptions)
+            return [bbPredictions], offsetPredictions, None, None, None, None, None, None, (useBBs if self.useCurvedBBs else useBBs.cpu().detach(),None,None,transcriptions)
 
 
     #This ROIAligns features and creates mask images for each edge and node, and runs the embedding convnet and [appends?] these features to the graph... This is only neccesary if a node has been updated...
     #perhaps we need a saved visual feature. If the node/edge is updated, it is recomputed. It is appended  to the graphs current features at each call of a GCN
-    #TODO
-    #def appendVisualFeatures(self,useBBs,graph,groups)
+    def appendVisualFeatures(self,
+            bbs,
+            graph,
+            groups,
+            edge_indexes,
+            features,
+            features2,
+            text_emb,
+            image_height,
+            image_width,
+            same_node_map,
+            prev_node_visual_feats,
+            prev_edge_visual_feats,
+            prev_edge_indexes,
+            merge_only=False,
+            debug_image=None,
+            flip=None):
 
+        node_features, _edge_indexes, edge_features, universal_features = graph
+        #same_node_map, maps the old node id (index) to the new one
 
+        node_visual_feats = torch.FloatTensor(node_features.size(0),prev_node_visual_feats.size(1)).to(node_features.device)
+        has_feat = [False]*node_features.size(0)
+        for old_id,new_id in same_node_map.items():
+            has_feat[new_id]=True
+            node_visual_feats[new_id] = prev_node_visual_feats[old_id]
+
+        if not all(has_feat):
+            if text_emb is not None:    
+                need_new_ids,need_groups,need_text_emb = zip(* [(i,g,t) for i,(has,g,t) in enumerate(zip(has_feat,groups,text_emb)) if not has])
+            else:
+                need_new_ids,need_groups = zip(* [(i,g) for i,(has,g) in enumerate(zip(has_feat,groups)) if not has])
+                need_text_emb = None
+            if len(need_new_ids)>0:
+                need_new_ids=list(need_new_ids)
+                need_new_ids=list(need_new_ids)
+                allMasks=self.makeAllMasks(image_height,image_width,bbs)
+                node_visual_feats[need_new_ids] = self.computeNodeVisualFeatures(features,features2,image_height,image_width,bbs,need_groups,need_text_emb,allMasks,merge_only,debug_image)
+
+        new_to_old_ids = {v:k for k,v in same_node_map.items()}
+        edge_visual_feats = torch.FloatTensor(len(edge_indexes),prev_edge_visual_feats.size(1)).to(edge_features.device)
+        need_edge_ids=[]
+        need_edge_node_ids=[]
+        for ei,(n0,n1) in enumerate(edge_indexes):
+            if n0 in new_to_old_ids and n1 in new_to_old_ids:
+                old_id0 = new_to_old_ids[n0]
+                old_id1 = new_to_old_ids[n1]
+                try:
+                    old_ei =  prev_edge_indexes.index((min(old_id0,old_id1),max(old_id0,old_id1)))
+                    edge_visual_feats[ei]=prev_edge_visual_feats[old_ei]
+                except ValueError:
+                    print('{ERROR ERROR ERROR')
+                    print('Edge {} could not be found in prev edges, but is in new as {}'.format((min(old_id0,old_id1),max(old_id0,old_id1)),(n0,n1)))
+                    print('ERROR ERROR ERROR}')
+                    need_edge_ids.append(ei)
+                    need_edge_node_ids.append((n0,n1))
+            else:
+                need_edge_ids.append(ei)
+                need_edge_node_ids.append((n0,n1))
+        if len(need_edge_ids)>0:
+            edge_visual_feats[need_edge_ids] = self.computeEdgeVisualFeatures(features,features2,image_height,image_width,bbs,groups,need_edge_node_ids,allMasks,flip,merge_only,debug_image)
+
+        #for now, we'll just sum the features.
+        #new_graph = (torch.cat((node_features,node_visual_feats),dim=1),edge_indexes,torch.cat((edge_features,edge_visual_feats),dim=1),universal_features)
+        if edge_features.size(1)==0:
+            new_graph = (node_features+node_visual_feats,_edge_indexes,edge_visual_feats,universal_features)
+        elif edge_features.size(0)==edge_visual_feats.size(0)*2:
+            new_graph = (node_features+node_visual_feats,_edge_indexes,edge_features+edge_visual_feats.repeat(2,1),universal_features)
+        else:
+            new_graph = (node_features+node_visual_feats,_edge_indexes,edge_features+edge_visual_feats,universal_features)
+        #edge features get repeated for bidirectional graph
+        return new_graph, node_visual_feats, edge_visual_feats
 
     #This rewrites the confidence and class predictions based on the (re)predictions from the graph network
     def updateBBs(self,bbs,groups,nodeOuts):
@@ -929,8 +1075,261 @@ class PairingGroupingGraph(BaseModel):
         #resBatch = self.text_rec(lines)
 
     #Use the graph network's predictions to merge oversegmented detections and group nodes into a single node
+    def mergeAndGroupCurved(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,oldBBTrans,image,dont_merge=False,merge_only=False):
+        assert(len(oldBBs)==0 or type(oldBBs[0]) is TextLine)
+        #changedNodeIds=set()
+        if self.useCurvedBBs:
+            bbs={i:TextLine(clone=v) for i,v in enumerate(oldBBs)}
+        else:
+            bbs={i:v for i,v in enumerate(oldBBs)}
+        if self.text_rec is not None:
+            bbTrans={i:v for i,v  in enumerate(oldBBTrans)}
+        oldToNewBBIndexes={i:i for i in range(len(oldBBs))}
+        #newBBs_line={}
+        newBBIdCounter=0
+        #toMergeBBs={}
+        if not merge_only:
+            edgePreds = torch.sigmoid(edgePredictions[:,-1,0]).cpu().detach()
+            #relPreds = torch.sigmoid(edgePredictions[:,-1,1]).cpu().detach()
+            mergePreds = torch.sigmoid(edgePredictions[:,-1,2]).cpu().detach()
+            groupPreds = torch.sigmoid(edgePredictions[:,-1,3]).cpu().detach()
+        else:
+            mergePreds = torch.sigmoid(edgePredictions[:,-1,0]).cpu().detach()
+        ##Prevent all nodes from merging during first iterations (bad init):
+        if not dont_merge:
+            mergedTo=set()
+            #check for merges, where we will combine two BBs into one
+            for i,(n0,n1) in enumerate(oldEdgeIndexes):
+                #mergePred = edgePreds[i,-1,1]
+                
+                if mergePreds[i]>mergeThresh: #TODO condition this on whether it is correct. and GT?:
+                    if len(oldGroups[n0])==1 and len(oldGroups[n1])==1: #can only merge ungrouped nodes. This assumption is used later in the code WXS
+                        #changedNodeIds.add(n0)
+                        #changedNodeIds.add(n1)
+                        bbId0 = oldGroups[n0][0]
+                        bbId1 = oldGroups[n1][0]
+                        newId0 = oldToNewBBIndexes[bbId0]
+                        bb0ToMerge = bbs[newId0]
+
+                        newId1 = oldToNewBBIndexes[bbId1]
+                        bb1ToMerge = bbs[newId1]
+
+
+                        if newId0!=newId1:
+                            bb0ToMerge.merge(bb1ToMerge) # "
+                            #merge two merged bbs
+                            oldToNewBBIndexes = {k:(v if v!=newId1 else newId0) for k,v in oldToNewBBIndexes.items()}
+                            del bbs[newId1]
+                            if self.text_rec is not None:
+                                del bbTrans[newId1]
+                            mergedTo.add(newId0)
+
+
+            oldBBIdToNew = oldToNewBBIndexes
+                    
+
+            if self.text_rec is not None and len(newBBs)>0:
+                doTransIndexes = [idx for idx in mergedTo is idx in bbs]
+                doBBs = [bbs[idx] for idx in doTransIndexes]
+                newTrans = self.getTranscriptions(doBBs,image)
+                for i,idx in enumerate(doTransIndexes):
+                    bbTrans[idx] = newTrans[i]
+            if merge_only:
+                newBBs=[]
+                newBBTrans=[] if self.text_rec is not None else None
+                for bbId,bb in bbs.items():
+                    newBBs.append(bb)
+                    if self.text_rec is not None:
+                        newBBTrans.append(bbTrans[bbId])
+                return newBBs, newBBTrans
+
+            #rewrite groups with merged instances
+            assignedGroup={} #this will allow us to remove merged instances
+            oldGroupToNew={}
+            workGroups =  {}#{i:v for i,v in enumerate(oldGroups)}
+            changedGroups = []
+            for id,bbIds in enumerate(oldGroups):
+                newGroup = [oldBBIdToNew[oldId] for oldId in bbIds]
+                if len(newGroup)==1 and newGroup[0] in assignedGroup: #WXS
+                    oldGroupToNew[id]=assignedGroup[newGroup[0]]
+                    changedGroups.append(newGroup[0])
+                    #nothing else needs done, since the group has the ID,
+                else:
+                    workGroups[id] = newGroup
+                    for bbId in newGroup:
+                        assignedGroup[bbId]=id
+        
+            newGroupToOldMerge=defaultdict(list) #tracks what has been merged
+            for k,v in oldGroupToNew.items():
+                newGroupToOldMerge[v].append(k)
+
+            #D#
+            for i in range(oldNodeFeats.size(0)):
+                assert(i in oldGroupToNew or i in workGroups)
+
+            #We'll adjust the edges to acount for merges as well as prune edges and get ready for grouping
+            #temp = oldEdgeIndexes
+            #oldEdgeIndexes = []
+
+            #Prune and adjust the edges (to groups)
+            groupEdges=[]
+
+            #D_numOldEdges=len(oldEdgeIndexes)
+            #D_numOldAboveThresh=(edgePreds>keepEdgeThresh).sum()
+            for i,(n0,n1) in enumerate(oldEdgeIndexes):
+                if edgePreds[i]>keepEdgeThresh:
+                    if n0 in oldGroupToNew:
+                        n0 = oldGroupToNew[n0]
+                    if n1 in oldGroupToNew:
+                        n1 = oldGroupToNew[n1]
+
+                    assert(n0 in workGroups and n1 in workGroups)
+                    if n0!=n1:
+                        #oldEdgeIndexes.append((n0,n1))
+                        groupEdges.append((groupPreds[i].item(),n0,n1))
+                    #else:
+                    #    It disapears
+
+            #print('!D! original edges:{}, above thresh:{}, kept edges:{}'.format(D_numOldEdges,D_numOldAboveThresh,len(edgeFeats)))
+             
+        else:
+            #skipping merging
+            groupEdges=[]
+            for i,(n0,n1) in enumerate(oldEdgeIndexes):
+                if edgePreds[i]>keepEdgeThresh:
+                    groupEdges.append((groupPreds[i].item(),n0,n1))
+            #oldEdgeIndexes=None
+
+
+
+        #Find nodes that should be grouped
+        ##NEWER, just merge the groups with the highest score between them. when merging edges, sum the scores
+        #newNodeFeats = {i:[oldNodeFeats[i]] for i in range(oldNodeFeats.size(0))}
+        oldGroupToNewGrouping = {i:i for i in workGroups.keys()}
+        while len(groupEdges)>0:
+            groupEdges.sort(key=lambda x:x[0])
+            score, g0, g1 = groupEdges.pop()
+            assert(g0!=g1)
+            if score<groupThresh:
+                groupEdges.append((score, g0, g1))
+                break
+            
+            new_g0 = oldGroupToNewGrouping[g0]
+            new_g1 = oldGroupToNewGrouping[g1]
+            if new_g0!=new_g1:
+                workGroups[new_g0] += workGroups[new_g1]
+                oldGroupToNewGrouping = {k:(v if v!=new_g1 else new_g0) for k,v in oldGroupToNewGrouping.items()}
+
+                del workGroups[new_g1]
+
+
+
+        #D#
+        for i in range(oldNodeFeats.size(0)):
+            assert(i in oldGroupToNewGrouping or i in oldGroupToNew)
+
+        #Actually change bbs to list,  we'll adjusting appropriate values in groups as we convert groups to list
+        bbIdToPos={}
+        newBBs=[]
+        newBBTrans=[]
+        for i,(bbId,bb) in enumerate(bbs.items()):
+            bbIdToPos[bbId]=i
+            newBBs.append(bb)
+            if self.text_rec is not None:
+                newBBTrans.append(bbTrans[bbId])
+
+        ##pull the features together for nodes
+        #Actually change workGroups to list
+        newGroupToOldGrouping=defaultdict(list) #tracks what has been merged
+        for k,v in oldGroupToNewGrouping.items():
+            newGroupToOldGrouping[v].append(k)
+        newNodeFeats = torch.FloatTensor(len(workGroups),oldNodeFeats.size(1)).to(oldNodeFeats.device)
+        oldToNewNodeIds_unchanged={}
+        oldToNewIds_all={}
+        newGroups=[]
+        groupNodeTrans=[]
+        for i,(idx,bbIds) in enumerate(workGroups.items()):
+            newGroups.append([bbIdToPos[bbId] for bbId in bbIds])
+            featsToCombine=[]
+            for oldIdx in newGroupToOldGrouping[idx]:
+                oldToNewIds_all[oldIdx]=i
+                featsToCombine.append(oldNodeFeats[oldIdx])
+                if oldIdx in newGroupToOldMerge:
+                    for mergedIdx in newGroupToOldMerge[oldIdx]:
+                        featsToCombine.append(oldNodeFeats[mergedIdx])
+                        oldToNewIds_all[mergedIdx]=i
+            if len(featsToCombine)==1:
+                oldToNewNodeIds_unchanged[oldIdx]=i
+                newNodeFeats[i]=featsToCombine[0]
+            else:
+                newNodeFeats[i]=self.groupNodeFunc(featsToCombine)
+
+            if self.text_rec is not None:
+                groupTrans = [(bbs[bbId].getReadPosition(),bbTrans[bbId]) for bbId in bbIds]
+                groupTrans.sort(key=lambda a:a[0])
+                groupNodeTrans.append(' '.join([t[1] for t in groupTrans]))
+        #D#
+        assert(all([x in oldToNewIds_all for x in range(oldNodeFeats.size(0))]))
+
+        
+        #find overlapped edges and combine
+        #first change all node ids to their new ones
+        D_newToOld = {v:k for k,v in oldToNewNodeIds_unchanged.items()}
+        newEdges_map=defaultdict(list)
+        for i,(n0,n1)  in  enumerate(oldEdgeIndexes):
+            new_n0 = oldToNewIds_all[n0]
+            new_n1 = oldToNewIds_all[n1]
+            newEdges_map[(min(new_n0,new_n1),max(new_n0,new_n1))].append(i)
+
+            #D#
+            if new_n0 in D_newToOld and new_n1 in D_newToOld:
+                o0 = D_newToOld[new_n0]
+                o1 = D_newToOld[new_n1]
+                assert( (min(o0,o1),max(o0,o1)) in oldEdgeIndexes )
+        #This leaves some old edges pointing to the same new edge, so combine their features
+        newEdges=[]
+        newEdgeFeats=torch.FloatTensor(len(newEdges_map),oldEdgeFeats.size(1)).to(oldEdgeFeats.device)
+        for edge,oldIds in newEdges_map.items():
+            if len(oldIds)==1:
+                newEdgeFeats[len(newEdges)]=oldEdgeFeats[oldIds[0]]
+            else:
+                newEdgeFeats[len(newEdges)]=self.groupEdgeFunc([oldEdgeFeats[oId] for oId in oldIds])
+            newEdges.append(edge)
+
+
+
+        if self.text_rec is not None:
+            newNodeEmbeddings = self.embedding_model(groupNodeTrans)
+            if self.add_noise_to_word_embeddings>0:
+                newNodeEmbeddings += torch.randn_like(newNodeEmbeddings).to(newNodeEmbeddings.device)*self.add_noise_to_word_embeddings
+            newNodeFeats = self.merge_embedding_layer(torch.cat((newNodeFeats,newNodeEmbeddings),dim=1))
+
+        edges = newEdges
+        newEdges = list(newEdges) + [(y,x) for x,y in newEdges] #add reverse edges so undirected/bidirectional
+        if len(newEdges)>0:
+            newEdgeIndexes = torch.LongTensor(newEdges).t().to(oldEdgeFeats.device)
+        else:
+            newEdgeIndexes = torch.LongTensor(0)
+        newEdgeFeats = newEdgeFeats.repeat(2,1)
+
+        newGraph = (newNodeFeats, newEdgeIndexes, newEdgeFeats, oldUniversalFeats)
+
+        ###DEBUG###
+        newToOld = {v:k for k,v in oldToNewNodeIds_unchanged.items()}
+        for n0,n1 in edges:
+            if n0 in newToOld and n1 in newToOld:
+                o0 = newToOld[n0]
+                o1 = newToOld[n1]
+                assert( (min(o0,o1),max(o0,o1)) in oldEdgeIndexes )
+
+        ##D###
+
+        return newBBs, newGraph, newGroups, edges, newBBTrans if self.text_rec is not None else None,  oldToNewNodeIds_unchanged
+
     def mergeAndGroup(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,dont_merge=False,merge_only=False):
-        assert(not self.useCurvedBBs or len(oldBBs)==0 or type(oldBBs[0]) is TextLine)
+        if self.useCurvedBBs:
+            return self.mergeAndGroupCurved(mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,dont_merge,merge_only)
+        changedNodeIds=set()
         newBBs={}
         #newBBs_line={}
         newBBIdCounter=0
@@ -951,86 +1350,46 @@ class PairingGroupingGraph(BaseModel):
                 #mergePred = edgePreds[i,-1,1]
                 
                 if mergePreds[i]>mergeThresh: #TODO condition this on whether it is correct. and GT?:
-                    if len(oldGroups[n0])==1 and len(oldGroups[n1])==1: #can only merge ungrouped nodes
-                        if self.useCurvedBBs:
-                            bbId0 = oldGroups[n0][0]
-                            bbId1 = oldGroups[n1][0]
-                            if bbId0 in oldToNewBBIndexes:
-                                newId0 = oldToNewBBIndexes[bbId0]
-                                bb0ToMerge = newBBs[newId0]
-                            else:
-                                newId0 = None
-                                bb0ToMerge = oldBBs[bbId0]
-
-                            if bbId1 in oldToNewBBIndexes:
-                                newId1 = oldToNewBBIndexes[bbId1]
-                                bb1ToMerge = newBBs[newId1]
-                            else:
-                                newId1 = None
-                                bb1ToMerge = oldBBs[bbId1]
-                                #oldBBs[bbId1]=None
-
-
-                            if newId0 is None and newId1 is None:
-                                bbMerged = TextLine(bb0ToMerge,bb1ToMerge) #creates new object so graph history can be preseved
-                                oldToNewBBIndexes[bbId0]=newBBIdCounter
-                                oldToNewBBIndexes[bbId1]=newBBIdCounter
-                                newBBs[newBBIdCounter]=bbMerged
-                                newBBIdCounter+=1
-                            elif newId0 is None:
-                                bb1ToMerge.merge(bb0ToMerge) #modifying new object
-                                oldToNewBBIndexes[bbId0]=newId1
-                                #newBBs[newId1]=bbMerged would be reassignemnt
-                            elif newId1 is None:
-                                bb0ToMerge.merge(bb1ToMerge) # "
-                                oldToNewBBIndexes[bbId1]=newId0
-                                #newBBs[newId0]=bbMerged
-                            elif newId0!=newId1:
-                                bb0ToMerge.merge(bb1ToMerge) # "
-                                #merge two merged bbs
-                                oldToNewBBIndexes = {k:(v if v!=newId1 else newId0) for k,v in oldToNewBBIndexes.items()}
-                                #oldToNewBBIndexes[bbId1]=newId0
-                                #newBBs[newId0].merge(newBBs[newId1])
-                                #print('merge {} and {} (d), because of {} and {}'.format(mergeNewId0,mergeNewId1,bbId0,bbId1))
-                                del newBBs[newId1]
+                    if len(oldGroups[n0])==1 and len(oldGroups[n1])==1: #can only merge ungrouped nodes. This assumption is used later in the code WXS
+                        #changedNodeIds.add(n0)
+                        #changedNodeIds.add(n1)
+                        bbId0 = oldGroups[n0][0]
+                        bbId1 = oldGroups[n1][0]
+                        if bbId0 in oldToNewBBIndexes:
+                            mergeNewId0 = oldToNewBBIndexes[bbId0]
+                            bb0 = newBBs[mergeNewId0]
                         else:
-                            bbId0 = oldGroups[n0][0]
-                            bbId1 = oldGroups[n1][0]
-                            if bbId0 in oldToNewBBIndexes:
-                                mergeNewId0 = oldToNewBBIndexes[bbId0]
-                                bb0 = newBBs[mergeNewId0]
-                            else:
-                                mergeNewId0 = None
-                                bb0 = oldBBs[bbId0].cpu()
-                            if bbId1 in oldToNewBBIndexes:
-                                mergeNewId1 = oldToNewBBIndexes[bbId1]
-                                bb1 = newBBs[mergeNewId1]
-                            else:
-                                mergeNewId1 = None
-                                bb1 = oldBBs[bbId1].cpu()
+                            mergeNewId0 = None
+                            bb0 = oldBBs[bbId0].cpu()
+                        if bbId1 in oldToNewBBIndexes:
+                            mergeNewId1 = oldToNewBBIndexes[bbId1]
+                            bb1 = newBBs[mergeNewId1]
+                        else:
+                            mergeNewId1 = None
+                            bb1 = oldBBs[bbId1].cpu()
 
-                            newBB= self.mergeBB(bb0,bb1,image)
+                        newBB= self.mergeBB(bb0,bb1,image)
 
-                            if mergeNewId0 is None and mergeNewId1 is None:
-                                oldToNewBBIndexes[bbId0]=newBBIdCounter
-                                oldToNewBBIndexes[bbId1]=newBBIdCounter
-                                newBBs[newBBIdCounter]=newBB
-                                newBBIdCounter+=1
-                            elif mergeNewId0 is None:
-                                oldToNewBBIndexes[bbId0]=mergeNewId1
-                                newBBs[mergeNewId1]=newBB
-                            elif mergeNewId1 is None:
-                                oldToNewBBIndexes[bbId1]=mergeNewId0
-                                newBBs[mergeNewId0]=newBB
-                            elif mergeNewId0!=mergeNewId1:
-                                #merge two merged bbs
-                                oldToNewBBIndexes[bbId1]=mergeNewId0
-                                for old,new in oldToNewBBIndexes.items():
-                                    if new == mergeNewId1:
-                                        oldToNewBBIndexes[old]=mergeNewId0
-                                newBBs[mergeNewId0]=newBB
-                                #print('merge {} and {} (d), because of {} and {}'.format(mergeNewId0,mergeNewId1,bbId0,bbId1))
-                                del newBBs[mergeNewId1]
+                        if mergeNewId0 is None and mergeNewId1 is None:
+                            oldToNewBBIndexes[bbId0]=newBBIdCounter
+                            oldToNewBBIndexes[bbId1]=newBBIdCounter
+                            newBBs[newBBIdCounter]=newBB
+                            newBBIdCounter+=1
+                        elif mergeNewId0 is None:
+                            oldToNewBBIndexes[bbId0]=mergeNewId1
+                            newBBs[mergeNewId1]=newBB
+                        elif mergeNewId1 is None:
+                            oldToNewBBIndexes[bbId1]=mergeNewId0
+                            newBBs[mergeNewId0]=newBB
+                        elif mergeNewId0!=mergeNewId1:
+                            #merge two merged bbs
+                            oldToNewBBIndexes[bbId1]=mergeNewId0
+                            for old,new in oldToNewBBIndexes.items():
+                                if new == mergeNewId1:
+                                    oldToNewBBIndexes[old]=mergeNewId0
+                            newBBs[mergeNewId0]=newBB
+                            #print('merge {} and {} (d), because of {} and {}'.format(mergeNewId0,mergeNewId1,bbId0,bbId1))
+                            del newBBs[mergeNewId1]
 
 
             #Actually rewrite bbs
@@ -1038,8 +1397,7 @@ class PairingGroupingGraph(BaseModel):
                 bbs = oldBBs
                 oldBBIdToNew=list(range(len(oldBBs)))
             else:
-                if not self.useCurvedBBs:
-                    device = oldBBs.device
+                device = oldBBs.device
                 bbs=[]
                 oldBBIdToNew={}
                 if self.text_rec is not None:
@@ -1057,12 +1415,9 @@ class PairingGroupingGraph(BaseModel):
                     for old,new in oldToNewBBIndexes.items():
                         if new==id:
                             oldBBIdToNew[old]=len(bbs)
-                    if self.useCurvedBBs:
-                        bbs.append(bb)
-                    else:
-                        bbs.append(bb.to(device))
-                if not self.useCurvedBBs:
-                    bbs=torch.stack(bbs,dim=0)
+                    bbs.append(bb.to(device))
+                bbs=torch.stack(bbs,dim=0)
+
                     
 
             if self.text_rec is not None and len(newBBs)>0:
@@ -1076,12 +1431,12 @@ class PairingGroupingGraph(BaseModel):
             #rewrite groups with merged instances
             assignedGroup={} #this will allow us to remove merged instances
             oldGroupToNew={}
-            workGroups = {i:v for i,v in enumerate(oldGroups)}
+            workGroups =  {}#{i:v for i,v in enumerate(oldGroups)}
             for id,bbIds in enumerate(oldGroups):
                 newGroup = [oldBBIdToNew[oldId] for oldId in bbIds]
-                if len(newGroup)==1 and newGroup[0] in assignedGroup:
+                if len(newGroup)==1 and newGroup[0] in assignedGroup: #WXS
                     oldGroupToNew[id]=assignedGroup[newGroup[0]]
-                    del workGroups[id]
+                    #del workGroups[id]
                 else:
                     workGroups[id] = newGroup
                     #alreadyInGroup.update(newGroup)
@@ -1109,6 +1464,7 @@ class PairingGroupingGraph(BaseModel):
                     #    newNodeFeat = self.groupNodeFunc(newNodeFeat,oldNodeFeats[oldNode])
                     newNodeFeat = self.groupNodeFunc( [oldNodeFeats[on] for on in oldNodes] )
                     newNodeFeats.append(newNodeFeat)
+                    changedNodeIds.update(oldNodes)
                 else:
                     newNodeFeats.append(oldNodeFeats[id])
             oldNodeFeats = torch.stack(newNodeFeats,dim=0)
@@ -1121,8 +1477,8 @@ class PairingGroupingGraph(BaseModel):
             groupEdges=[]
             edgeFeats = []
 
-            D_numOldEdges=len(oldEdgeIndexes)
-            D_numOldAboveThresh=(edgePreds>keepEdgeThresh).sum()
+            #D_numOldEdges=len(oldEdgeIndexes)
+            #D_numOldAboveThresh=(edgePreds>keepEdgeThresh).sum()
             for i,(n0,n1) in enumerate(oldEdgeIndexes):
                 if edgePreds[i]>keepEdgeThresh:
                     if n0 in oldGroupToNew:
@@ -1140,11 +1496,12 @@ class PairingGroupingGraph(BaseModel):
                         edgeFeats.append([oldEdgeFeats[i]])
                     #else:
                     #    It disapears
-            oldEdgeIndexes=None
+            #oldEdgeIndexes=None
 
             #print('!D! original edges:{}, above thresh:{}, kept edges:{}'.format(D_numOldEdges,D_numOldAboveThresh,len(edgeFeats)))
              
         else:
+            #skipping merging
             bbs=oldBBs
             groupEdges=[]
             edgeFeats = []
@@ -1152,7 +1509,7 @@ class PairingGroupingGraph(BaseModel):
                 if edgePreds[i]>keepEdgeThresh:
                     groupEdges.append((groupPreds[i].item(),n0,n1))
                     edgeFeats.append([oldEdgeFeats[i]])
-            oldEdgeIndexes=None
+            #oldEdgeIndexes=None
 
 
 
@@ -1173,10 +1530,13 @@ class PairingGroupingGraph(BaseModel):
                 groupEdges.append((score, g0, g1))
                 break
 
+            changedNodeIds.add(g0)
+            changedNodeIds.add(g1)
+
             workingGroups[g0] += workingGroups[g1]
             del workingGroups[g1]
 
-
+            #Now combine the edges which the two nodes share (edges going to the same node)
             newGroupEdges=[]
             newEdgeFeats=[]
             mEdges=defaultdict(list)
@@ -1228,17 +1588,17 @@ class PairingGroupingGraph(BaseModel):
             yIndex=2
         else:
             yIndex=1
+        oldToNewNodeIds={}
         for oldG,bbIds in workingGroups.items():
             oldToIdx[oldG]=len(newGroups)
             newGroups.append(bbIds)
             newNodeFeats.append( self.groupNodeFunc(newNodeFeatsD[oldG]) )
+            if oldG not in changedNodeIds:
+                oldToNewNodeIds[oldG]=len(newGroups)-1
             if self.text_rec is not None:
                 newTrans = ''
                 #Something to get read-order correct, assuming groups only vertical, so sorting by y-position
-                if self.useCurvedBBs:
-                    groupTrans = [(bbs[bbId].getReadPosition(),bbTrans[bbId]) for bbId in bbIds]
-                else:
-                    groupTrans = [(bbs[bbId,yIndex].item(),bbTrans[bbId]) for bbId in bbIds]
+                groupTrans = [(bbs[bbId,yIndex].item(),bbTrans[bbId]) for bbId in bbIds]
                 groupTrans.sort(key=lambda a:a[0])
                 newNodeTrans.append(' '.join([t[1] for t in groupTrans]))
         newEdges = [(oldToIdx[g0],oldToIdx[g1]) for s,g0,g1 in groupEdges]
@@ -1343,7 +1703,17 @@ class PairingGroupingGraph(BaseModel):
 
         newGraph = (newNodeFeats, newEdgeIndexes, newEdgeFeats, oldUniversalFeats)
 
-        return bbs, newGraph, newGroups, edges, bbTrans
+        ###DEBUG###
+        newToOld = {v:k for k,v in oldToNewNodeIds.items()}
+        for n0,n1 in edges:
+            if n0 in newToOld and n1 in newToOld:
+                o0 = newToOld[n0]
+                o1 = newToOld[n1]
+                assert( (min(o0,o1),max(o0,o1)) in oldEdgeIndexes )
+
+        ##D###
+
+        return bbs, newGraph, newGroups, edges, bbTrans,  oldToNewNodeIds
 
 
                 
@@ -1351,7 +1721,7 @@ class PairingGroupingGraph(BaseModel):
 
 
     def createGraph(self,bbs,features,features2,imageHeight,imageWidth,text_emb=None,flip=None,debug_image=None,image=None,merge_only=False):
-        #t##t#tic=timeit.default_timer()#t##t#
+        tic=timeit.default_timer()#t#
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
         if self.relationshipProposal == 'line_of_sight':
             assert(not merge_only)
@@ -1361,7 +1731,8 @@ class PairingGroupingGraph(BaseModel):
             candidates, rel_prop_scores = self.selectFeatureNNEdges(bbs,imageHeight,imageWidth,image,features.device,merge_only=merge_only)
             if not self.useCurvedBBs:
                 bbs=bbs[:,1:] #discard confidence, we kept it so the proposer could see them
-        #t#print('   candidate: {}'.format(timeit.default_timer()-tic))#t#
+        self.opt_history['candidates per bb'].append((timeit.default_timer()-tic)/len(bbs))#t#
+        self.opt_history['candidates /bb^2'].append((timeit.default_timer()-tic)/(len(bbs)**2))#t#
         if len(candidates)==0:
             if self.useMetaGraph:
                 return None, None, None
@@ -1373,6 +1744,134 @@ class PairingGroupingGraph(BaseModel):
         #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
         #print('------prop------')
 
+        allMasks=self.makeAllMasks(imageHeight,imageWidth,bbs,merge_only)
+        groups=[[i] for i in range(len(bbs))]
+        relFeats = self.computeEdgeVisualFeatures(features,features2,imageHeight,imageWidth,bbs,groups,candidates,allMasks,flip,merge_only,debug_image)
+
+        #if self.useShapeFeats=='sp
+        #print('rel features built')
+        #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
+        #print('------rel------')
+        if merge_only:
+            return relFeats, candidates, rel_prop_scores #we won't build the graph
+    
+        #compute features for the bounding boxes by themselves
+        #This will be replaced with/appended to some type of word embedding
+        #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
+        bb_features = self.computeNodeVisualFeatures(features,features2,imageHeight,imageWidth,bbs,groups,text_emb,allMasks,merge_only,debug_image)
+        #rint('node features built')
+        #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
+        #print('------node------')
+        
+        #We're not adding diagonal (self-rels) here!
+        #Expecting special handeling during graph conv
+        #candidateLocs = torch.LongTensor(candidates).t().to(relFeats.device)
+        #ones = torch.ones(len(candidates)).to(relFeats.device)
+        #adjacencyMatrix = torch.sparse.FloatTensor(candidateLocs,ones,torch.Size([bbs.size(0),bbs.size(0)]))
+
+        #assert(relFeats.requries_grad)
+        #rel_features = torch.sparse.FloatTensor(candidateLocs,relFeats,torch.Size([bbs.size(0),bbs.size(0),relFeats.size(1)]))
+        #assert(rel_features.requries_grad)
+        relIndexes=candidates
+        numBB = len(bbs)
+        numRel = len(candidates)
+        if self.useMetaGraph:
+            nodeFeatures= bb_features
+            edgeFeatures= relFeats
+
+            edges=candidates
+            edges += [(y,x) for x,y in edges] #add backward edges for undirected graph
+            edgeIndexes = torch.LongTensor(edges).t().to(relFeats.device)
+            #now we need to also replicate the edgeFeatures
+            edgeFeatures = edgeFeatures.repeat(2,1)
+
+            #features
+            universalFeatures=None
+
+            #t#time = timeit.default_timer()-tic#t#
+            #t#print('   create graph: {}'.format(time)) #old 0.37, new 0.16
+            #t#self.opt_createG.append(time)
+            #t#if len(self.opt_createG)>17:#t#
+            #t#    print('   create graph running mean: {}'.format(np.mean(self.opt_createG)))#t#
+            #t#    if len(self.opt_createG)>30:#t#
+            #t#        self.opt_createG = self.opt_createG[1:]#t#
+            return (nodeFeatures, edgeIndexes, edgeFeatures, universalFeatures), relIndexes, rel_prop_scores
+        else:
+            if bb_features is None:
+                numBB=0
+                bbAndRel_features=relFeats
+                adjacencyMatrix = None
+                numOfNeighbors = None
+            else:
+                bbAndRel_features = torch.cat((bb_features,relFeats),dim=0)
+                numOfNeighbors = torch.ones(len(bbs)+len(candidates)) #starts at one for yourself
+                edges=[]
+                i=0
+                for bb1,bb2 in candidates:
+                    edges.append( (bb1,numBB+i) )
+                    edges.append( (bb2,numBB+i) )
+                    numOfNeighbors[bb1]+=1
+                    numOfNeighbors[bb2]+=1
+                    numOfNeighbors[numBB+i]+=2
+                    i+=1
+                if self.includeRelRelEdges:
+                    relEdges=set()
+                    i=0
+                    for bb1,bb2 in candidates:
+                        j=0
+                        for bbA,bbB in candidates[i:]:
+                            if i!=j and bb1==bbA or bb1==bbB or bb2==bbA or bb2==bbB:
+                                relEdges.add( (numBB+i,numBB+j) ) #i<j always
+                            j+=1   
+                        i+=1
+                    relEdges = list(relEdges)
+                    for r1, r2 in relEdges:
+                        numOfNeighbors[r1]+=1
+                        numOfNeighbors[r2]+=1
+                    edges += relEdges
+                #add reverse edges
+                edges+=[(y,x) for x,y in edges]
+                #add diagonal (self edges)
+                for i in range(bbAndRel_features.size(0)):
+                    edges.append((i,i))
+
+                edgeLocs = torch.LongTensor(edges).t().to(relFeats.device)
+                ones = torch.ones(len(edges)).to(relFeats.device)
+                adjacencyMatrix = torch.sparse.FloatTensor(edgeLocs,ones,torch.Size([bbAndRel_features.size(0),bbAndRel_features.size(0)]))
+                #numOfNeighbors is for convienence in tracking the normalization term
+                numOfNeighbors=numOfNeighbors.to(relFeats.device)
+
+            #rel_features = (candidates,relFeats)
+            #adjacencyMatrix = None
+
+            return bbAndRel_features, (adjacencyMatrix,numOfNeighbors), numBB, numRel, relIndexes, rel_prop_scores
+
+    def makeAllMasks(self,imageHeight,imageWidth,bbs,merge_only=False):
+        #build all-mask image, may want to move this up and use for relationship proposals
+        if self.expandedRelContext is not None:
+            allMasks = torch.zeros(imageHeight,imageWidth)
+            if self.use_fixed_masks:
+                if merge_only:
+                    #since each bb fragment is an axis aligned rect, we'll speed things up
+                    for bb_id in range(len(bbs)):
+                        rect=bbs[bb_id].all_primitive_rects[0]
+                        lx = max(0,int(rect[0][0]))
+                        rx = min(imageWidth,int(rect[1][0]+1))
+                        ty = max(0,int(rect[0][1]))
+                        by = min(imageHeight,int(rect[2][1]+1))
+                        allMasks[ty:by,lx:rx]=1
+                else:
+                    for bbIdx in range(len(bbs)):
+                        if self.useCurvedBBs:
+                            rr, cc = draw.polygon(bbs[bbIdx].polyYs(),bbs[bbIdx].polyXs(), [imageHeight,imageWidth])
+                        else:
+                            rr, cc = draw.polygon([tlY[bbIdx],trY[bbIdx],brY[bbIdx],blY[bbIdx]],[tlX[bbIdx],trX[bbIdx],brX[bbIdx],blX[bbIdx]], [imageHeight,imageWidth])
+                        allMasks[rr,cc]=1
+            return allMasks
+        else:
+            return None
+
+    def computeEdgeVisualFeatures(self,features,features2,imageHeight,imageWidth,bbs,groups,edges,allMasks,flip,merge_only,debug_image):
         if merge_only:
             pool_h=self.merge_pool_h
             pool_w=self.merge_pool_w
@@ -1383,11 +1882,12 @@ class PairingGroupingGraph(BaseModel):
             pool_w=self.pool_w
             pool2_h=self.pool2_h
             pool2_w=self.pool2_w
-        #t##t#tic=timeit.default_timer()#t##t#
+        #tic=timeit.default_timer()#t#
 
-        #stackedEdgeFeatWindows = torch.FloatTensor((len(candidates),features.size(1)+2,self.relWindowSize,self.relWindowSize)).to(features.device())
+        #stackedEdgeFeatWindows = torch.FloatTensor((len(edges),features.size(1)+2,self.relWindowSize,self.relWindowSize)).to(features.device())
 
         if not self.useCurvedBBs:
+            assert(all([len(g)==1 for g in groups]) )#not implemented for groups
             #get corners from bb predictions
             x = bbs[:,0]
             y = bbs[:,1]
@@ -1418,13 +1918,15 @@ class PairingGroupingGraph(BaseModel):
             debug_images=[]
             debug_masks=[]
 
+
+
         if self.useShapeFeats!='only':
             #get axis aligned rectangle from corners
-            rois = torch.zeros((len(candidates),5)) #(batchIndex,x1,y1,x2,y2) as expected by ROI Align
+            rois = torch.zeros((len(edges),5)) #(batchIndex,x1,y1,x2,y2) as expected by ROI Align
             if self.useCurvedBBs:
-                bbs_index1 = [bbs[c[0]] for c in candidates]
-                bbs_index2 = [bbs[c[1]] for c in candidates]
 
+                bbs_index1 = [bbs[c[0]] for c in edges]
+                bbs_index2 = [bbs[c[1]] for c in edges]
                 min_X1,min_Y1,max_X1,max_Y1 = torch.IntTensor([bb.boundingRect() for bb in bbs_index1]).permute(1,0)
                 min_X2,min_Y2,max_X2,max_Y2 = torch.IntTensor([bb.boundingRect() for bb in bbs_index2]).permute(1,0)
                 min_X = torch.min(min_X1,min_X2)
@@ -1432,26 +1934,32 @@ class PairingGroupingGraph(BaseModel):
                 max_X = torch.max(max_X1,max_X2)
                 max_Y = torch.max(max_Y1,max_Y2)
 
-            else:
-                bbs_index1 = bbs[[c[0] for c in candidates]]
-                bbs_index2 = bbs[[c[1] for c in candidates]]
 
-                tlX_index1 = tlX[[c[0] for c in candidates]]
-                tlX_index2 = tlX[[c[1] for c in candidates]]
-                trX_index1 = trX[[c[0] for c in candidates]]
-                trX_index2 = trX[[c[1] for c in candidates]]
-                blX_index1 = blX[[c[0] for c in candidates]]
-                blX_index2 = blX[[c[1] for c in candidates]]
-                brX_index1 = brX[[c[0] for c in candidates]]
-                brX_index2 = brX[[c[1] for c in candidates]]
-                tlY_index1 = tlY[[c[0] for c in candidates]]
-                tlY_index2 = tlY[[c[1] for c in candidates]]
-                trY_index1 = trY[[c[0] for c in candidates]]
-                trY_index2 = trY[[c[1] for c in candidates]]
-                blY_index1 = blY[[c[0] for c in candidates]]
-                blY_index2 = blY[[c[1] for c in candidates]]
-                brY_index1 = brY[[c[0] for c in candidates]]
-                brY_index2 = brY[[c[1] for c in candidates]]
+                groups_index1 = [ [bbs[b] for b in groups[c[0]]] for c in edges ]
+                groups_index2 = [ [bbs[b] for b in groups[c[1]]] for c in edges ]
+
+
+            else:
+                assert(all([len(g)==1 for g in groups])) #not implemented for groups
+                bbs_index1 = bbs[[c[0] for c in edges]]
+                bbs_index2 = bbs[[c[1] for c in edges]]
+
+                tlX_index1 = tlX[[c[0] for c in edges]]
+                tlX_index2 = tlX[[c[1] for c in edges]]
+                trX_index1 = trX[[c[0] for c in edges]]
+                trX_index2 = trX[[c[1] for c in edges]]
+                blX_index1 = blX[[c[0] for c in edges]]
+                blX_index2 = blX[[c[1] for c in edges]]
+                brX_index1 = brX[[c[0] for c in edges]]
+                brX_index2 = brX[[c[1] for c in edges]]
+                tlY_index1 = tlY[[c[0] for c in edges]]
+                tlY_index2 = tlY[[c[1] for c in edges]]
+                trY_index1 = trY[[c[0] for c in edges]]
+                trY_index2 = trY[[c[1] for c in edges]]
+                blY_index1 = blY[[c[0] for c in edges]]
+                blY_index2 = blY[[c[1] for c in edges]]
+                brY_index1 = brY[[c[0] for c in edges]]
+                brY_index2 = brY[[c[1] for c in edges]]
                 max_X,_ = torch.max(torch.stack([tlX_index1,tlX_index2,
                                             trX_index1,trX_index2,
                                             blX_index1,blX_index2,
@@ -1474,10 +1982,15 @@ class PairingGroupingGraph(BaseModel):
                 padY = self.expandedMergeContextY
             else:
                 padX=padY=  self.expandedRelContext
-            max_X = torch.min(max_X+padX,torch.IntTensor([imageWidth-1]))
-            min_X = torch.max(min_X-padX,torch.IntTensor([0]))
-            max_Y = torch.min(max_Y+padY,torch.IntTensor([imageHeight-1]))
-            min_Y = torch.max(min_Y-padY,torch.IntTensor([0]))
+            assert((min_X<max_X).all())
+            assert((min_Y<max_Y).all())
+            max_X = torch.max(torch.min(max_X+padX,torch.IntTensor([imageWidth-1])),torch.IntTensor([1]))
+            min_X = torch.max(torch.min(min_X-padX,torch.IntTensor([imageWidth-2])),torch.IntTensor([0]))
+            max_Y = torch.max(torch.min(max_Y+padY,torch.IntTensor([imageHeight-1])),torch.IntTensor([1]))
+            min_Y = torch.max(torch.min(min_Y-padY,torch.IntTensor([imageHeight-2])),torch.IntTensor([0]))
+            #min_X = torch.max(min_X-padX,torch.IntTensor([0]))
+            #max_Y = torch.min(max_Y+padY,torch.IntTensor([imageHeight-1]))
+            #min_Y = torch.max(min_Y-padY,torch.IntTensor([0]))
             rois[:,1]=min_X
             rois[:,2]=min_Y
             rois[:,3]=max_X
@@ -1492,7 +2005,7 @@ class PairingGroupingGraph(BaseModel):
                 w_m = pool2_w/feature_w
                 h_m = pool2_h/feature_h
                 for i in range(4):
-                    index1,index2 = candidates[i]
+                    index1,index2 = edges[i]
                     minY = min_Y[i]
                     minX = min_X[i]
                     maxY = max_Y[i]
@@ -1528,30 +2041,28 @@ class PairingGroupingGraph(BaseModel):
 
         #build all-mask image, may want to move this up and use for relationship proposals
         if self.expandedRelContext is not None:
-            #We're going to add a third mask for all bbs, which we'll precompute here
+            #We're going to add a third mask for all bbs
             numMasks=3
-            allMasks = torch.zeros(imageHeight,imageWidth)
-            if self.use_fixed_masks:
-                for bbIdx in range(len(bbs)):
-                    if self.useCurvedBBs:
-                        rr, cc = draw.polygon(bbs[bbIdx].polyYs(),bbs[bbIdx].polyXs(), [imageHeight,imageWidth])
-                    else:
-                        rr, cc = draw.polygon([tlY[bbIdx],trY[bbIdx],brY[bbIdx],blY[bbIdx]],[tlX[bbIdx],trX[bbIdx],brX[bbIdx],blX[bbIdx]], [imageHeight,imageWidth])
-                    allMasks[rr,cc]=1
         else:
             numMasks=2
 
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
         relFeats=[] #where we'll store the feature of each batch
-        innerbatches = [(s,min(s+self.roi_batch_size,len(candidates))) for s in range(0,len(candidates),self.roi_batch_size)]
+        
+        if merge_only:
+            batch_size = 2*self.roi_batch_size
+        else:
+            batch_size = self.roi_batch_size
+
+        innerbatches = [(s,min(s+self.roi_batch_size,len(edges))) for s in range(0,len(edges),self.roi_batch_size)]
         #crop from feats, ROI pool
         for ib,(b_start,b_end) in enumerate(innerbatches): #we can batch extracting computing the feature vector from rois to save memory
             if ib>0:
                 torch.set_grad_enabled(False)
             b_rois = rois[b_start:b_end]
-            b_candidates = candidates[b_start:b_end]
-            b_bbs_index1 = bbs_index1[b_start:b_end]
-            b_bbs_index2 = bbs_index2[b_start:b_end]
+            b_edges = edges[b_start:b_end]
+            b_groups_index1 = groups_index1[b_start:b_end]
+            b_groups_index2 = groups_index2[b_start:b_end]
             #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
 
             if merge_only:
@@ -1607,19 +2118,38 @@ class PairingGroupingGraph(BaseModel):
                     brY2 = (brY_index2-b_rois[:,2])*h_m
                     blY2 = (blY_index2-b_rois[:,2])*h_m
 
-            for i,(index1, index2) in enumerate(b_candidates):
+            for i,(index1, index2) in enumerate(b_edges):
                 if self.useShapeFeats!='only':
                     if self.useCurvedBBs:
-                        rr, cc = draw.polygon(
-                                (bbs[index1].polyYs()-b_rois[i,2].item())*h_m[i].item(),
-                                (bbs[index1].polyXs()-b_rois[i,1].item())*w_m[i].item(), 
-                                [pool2_h,pool2_w])
-                        masks[i,0,rr,cc]=1
-                        rr, cc = draw.polygon(
-                                (bbs[index2].polyYs()-b_rois[i,2].item())*h_m[i].item(),
-                                (bbs[index2].polyXs()-b_rois[i,1].item())*w_m[i].item(), 
-                                [pool2_h,pool2_w])
-                        masks[i,1,rr,cc]=1
+                        if merge_only:
+                            #since each bb fragment is an axis aligned rect, we'll speed things up
+                            for bb_id in groups[index1]:
+                                rect=bbs[bb_id].all_primitive_rects[0]
+                                lx = max(0,int(rect[0][0]))
+                                rx = min(pool2_w,int(rect[1][0]+1))
+                                ty = max(0,int(rect[0][1]))
+                                by = min(pool2_h,int(rect[2][1]+1))
+                                masks[i,0,ty:by,lx:rx]=1
+                            for bb_id in groups[index2]:
+                                rect=bbs[bb_id].all_primitive_rects[0]
+                                lx = max(0,int(rect[0][0]))
+                                rx = min(pool2_w,int(rect[1][0]+1))
+                                ty = max(0,int(rect[0][1]))
+                                by = min(pool2_h,int(rect[2][1]+1))
+                                masks[i,1,ty:by,lx:rx]=1
+                        else:
+                            for bb_id in groups[index1]:
+                                rr, cc = draw.polygon(
+                                        (bbs[bb_id].polyYs()-b_rois[i,2].item())*h_m[i].item(),
+                                        (bbs[bb_id].polyXs()-b_rois[i,1].item())*w_m[i].item(), 
+                                        [pool2_h,pool2_w])
+                                masks[i,0,rr,cc]=1
+                            for bb_id in groups[index2]:
+                                rr, cc = draw.polygon(
+                                        (bbs[bb_id].polyYs()-b_rois[i,2].item())*h_m[i].item(),
+                                        (bbs[bb_id].polyXs()-b_rois[i,1].item())*w_m[i].item(), 
+                                        [pool2_h,pool2_w])
+                                masks[i,1,rr,cc]=1
                     else:
                         rr, cc = draw.polygon(
                                     [round(tlY1[i].item()),round(trY1[i].item()),
@@ -1646,12 +2176,14 @@ class PairingGroupingGraph(BaseModel):
                         if debug_image is not None:
                             debug_masks.append(cropArea)
 
+        
+
             if self.useShapeFeats:
                 if self.useCurvedBBs:
 
                     #conf, x,y,r,h,w,tlx,tly,trx,try,brx,bry,blx,bly,r_left,r_rightA,classFeats = bb.getFeatureInfo()
-                    allFeats1 = torch.FloatTensor([bb.getFeatureInfo() for bb in b_bbs_index1])
-                    allFeats2 = torch.FloatTensor([bb.getFeatureInfo() for bb in b_bbs_index2])
+                    allFeats1 = torch.stack([combineShapeFeats([bb.getFeatureInfo() for bb in group]) for group in b_groups_index1],dim=0)
+                    allFeats2 = torch.stack([combineShapeFeats([bb.getFeatureInfo() for bb in group]) for group in b_groups_index2],dim=0)
                     shapeFeats[:,0] = allFeats1[:,4]/self.normalizeVert #height
                     shapeFeats[:,1] = allFeats2[:,4]/self.normalizeVert
                     shapeFeats[:,2] = allFeats1[:,5]/self.normalizeHorz #width
@@ -1684,9 +2216,10 @@ class PairingGroupingGraph(BaseModel):
                     shapeFeats[:,17] = allFeats1[:,16] #std angle
                     shapeFeats[:,18] = allFeats2[:,16]
 
-                    shapeFeats[:,19] = torch.FloatTensor([bb1.getReadPosition()-bb2.getReadPosition() for bb1,bb2 in zip(b_bbs_index1,b_bbs_index2)])//self.normalizeDist #read pos
-                    shapeFeats[:,20:20+self.numBBTypes] = allFeats1[:,17:]
-                    shapeFeats[:,20+self.numBBTypes:20+2*self.numBBTypes] = allFeats2[:,17:]
+                    #shapeFeats[:,19] = torch.FloatTensor([bb1.getReadPosition()-bb2.getReadPosition() for bb1,bb2 in zip(b_bbs_index1,b_bbs_index2)])/self.normalizeDist #read pos
+                    shapeFeats[:,19] = (allFeats1[:,17]-allFeats2[:,17])/self.normalizeDist 
+                    shapeFeats[:,20:20+self.numBBTypes] = allFeats1[:,18:]
+                    shapeFeats[:,20+self.numBBTypes:20+2*self.numBBTypes] = allFeats2[:,18:]
                     assert(not torch.isnan(shapeFeats).any())
 
 
@@ -1782,37 +2315,42 @@ class PairingGroupingGraph(BaseModel):
         b_relFeats=None
 
         if self.blankRelFeats:
+            assert(False and 'code this better')
             relFeats = relFeats.zero_()
         if self.relFeaturizerFC is not None:
             relFeats = self.relFeaturizerFC(relFeats)
-        #if self.useShapeFeats=='sp
-        #print('rel features built')
-        #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
-        #print('------rel------')
-    
-        #compute features for the bounding boxes by themselves
-        #This will be replaced with/appended to some type of word embedding
-        #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
+        return relFeats
+
+
+    def computeNodeVisualFeatures(self,features,features2,imageHeight,imageWidth,bbs,groups,text_emb,allMasks,merge_only,debug_image):
         if self.useBBVisualFeats and not merge_only:
             assert(features.size(0)==1)
             if self.useShapeFeats:
-                bb_shapeFeats=torch.FloatTensor(len(bbs),self.numShapeFeatsBB)
+                node_shapeFeats=torch.FloatTensor(len(groups),self.numShapeFeatsBB)
             if self.useShapeFeats != "only" and self.expandedBBContext:
-                masks = torch.zeros(len(bbs),2,self.poolBB2_h,self.poolBB2_w)
+                masks = torch.zeros(len(groups),2,self.poolBB2_h,self.poolBB2_w)
 
-            rois = torch.zeros((len(bbs),5))
+            rois = torch.zeros((len(groups),5))
             if self.useCurvedBBs:
-                min_X,min_Y,max_X,max_Y = torch.IntTensor([bb.boundingRect() for bb in bbs]).permute(1,0)
+                min_X,max_X,min_Y,max_Y=torch.IntTensor([
+                        minAndMaxXY([bbs[b].boundingRect() for b in group])
+                        for group in groups]).permute(1,0)
             else:
+                assert(all([len(g)==1 for g in groups])) #not implemented for groups
                 min_Y,_ = torch.min(torch.stack([tlY,trY,blY,brY],dim=0),dim=0)
                 max_Y,_ = torch.max(torch.stack([tlY,trY,blY,brY],dim=0),dim=0) 
                 min_X,_ = torch.min(torch.stack([tlX,trX,blX,brX],dim=0),dim=0) 
                 max_X,_ = torch.max(torch.stack([tlX,trX,blX,brX],dim=0),dim=0) 
             if self.expandedBBContext is not None:
-                max_X = torch.min(max_X+self.expandedBBContext,torch.IntTensor([imageWidth-1]))
-                min_X = torch.max(min_X-self.expandedBBContext,torch.IntTensor([0]))
-                max_Y = torch.min(max_Y+self.expandedBBContext,torch.IntTensor([imageHeight-1]))
-                min_Y = torch.max(min_Y-self.expandedBBContext,torch.IntTensor([0]))
+                #max_X = torch.min(max_X+self.expandedBBContext,torch.IntTensor([imageWidth-1]))
+                #min_X = torch.max(min_X-self.expandedBBContext,torch.IntTensor([0]))
+                #max_Y = torch.min(max_Y+self.expandedBBContext,torch.IntTensor([imageHeight-1]))
+                #min_Y = torch.max(min_Y-self.expandedBBContext,torch.IntTensor([0]))
+
+                max_X = torch.max(torch.min(max_X+self.expandedBBContext,torch.IntTensor([imageWidth-1])),torch.IntTensor([1]))
+                min_X = torch.max(torch.min(min_X-self.expandedBBContext,torch.IntTensor([imageWidth-2])),torch.IntTensor([0]))
+                max_Y = torch.max(torch.min(max_Y+self.expandedBBContext,torch.IntTensor([imageHeight-1])),torch.IntTensor([1]))
+                min_Y = torch.max(torch.min(min_Y-self.expandedBBContext,torch.IntTensor([imageHeight-2])),torch.IntTensor([0]))
             rois[:,1]=min_X
             rois[:,2]=min_Y
             rois[:,3]=max_X
@@ -1820,33 +2358,44 @@ class PairingGroupingGraph(BaseModel):
 
             if self.useShapeFeats:
                 if self.useCurvedBBs:
-                    allFeats = torch.FloatTensor([bb.getFeatureInfo() for bb in bbs])
-                    bb_shapeFeats[:,0]= (allFeats[:,3]+math.pi)/(2*math.pi)
-                    bb_shapeFeats[:,1]=allFeats[:,4]/self.normalizeVert
-                    bb_shapeFeats[:,2]=allFeats[:,5]/self.normalizeHorz
-                    bb_shapeFeats[:,3+extraPred:self.numBBTypes+3+extraPred]=torch.sigmoid(allFeats[:,17:])
-                    if self.usePositionFeature:
-                        if self.usePositionFeature=='absolute':
-                            bb_shapeFeats[:,self.numBBTypes+3+extraPred] = (allFeats[:,1]-imageWidth/2)/(5*self.normalizeHorz)
-                            bb_shapeFeats[:,self.numBBTypes+4+extraPred] = (allFeats[:,2]-imageHeight/2)/(10*self.normalizeVert)
-                        else:
-                            bb_shapeFeats[:,self.numBBTypes+3+extraPred] = (allFeats[:,1]-imageWidth/2)/(imageWidth/2)
-                            bb_shapeFeats[:,self.numBBTypes+4+extraPred] = (allFeats[:,2]-imageHeight/2)/(imageHeight/2)
+                    allFeats = torch.stack([combineShapeFeats([bbs[bb_id].getFeatureInfo() for bb_id in group]) for group in groups],dim=0)
+                    if self.shape_feats_normal:
+                        node_shapeFeats[:,0]= allFeats[:,0]
+                        node_shapeFeats[:,1]= (allFeats[:,3]+math.pi)/(2*math.pi)
+                        node_shapeFeats[:,2]=allFeats[:,4]/self.normalizeVert
+                        node_shapeFeats[:,3]=allFeats[:,5]/self.normalizeHorz
+                        node_shapeFeats[:,4]=torch.sqrt( ((allFeats[:,6:8]+allFeats[:,8:10])/2 - (allFeats[:,12:14]+allFeats[:,10:12])/2).pow(2).sum(dim=1))/self.normalizeVert
+                        node_shapeFeats[:,5]=torch.sqrt( ((allFeats[:,6:8]+allFeats[:,12:14])/2 - (allFeats[:,8:10]+allFeats[:,10:12])/2).pow(2).sum(dim=1))/self.normalizeHorz
+                        node_shapeFeats[:,6:6+self.numBBTypes]=torch.sigmoid(allFeats[:,18:])
+                        if self.usePositionFeature:
+                            if self.usePositionFeature=='absolute':
+                                node_shapeFeats[:,self.numBBTypes+6] = (allFeats[:,1]-imageWidth/2)/(5*self.normalizeHorz)
+                                node_shapeFeats[:,self.numBBTypes+7] = (allFeats[:,2]-imageHeight/2)/(10*self.normalizeVert)
+                            else:
+                                node_shapeFeats[:,self.numBBTypes+6] = (allFeats[:,1]-imageWidth/2)/(imageWidth/2)
+                                node_shapeFeats[:,self.numBBTypes+7] = (allFeats[:,2]-imageHeight/2)/(imageHeight/2)
+                    else:
+                        node_shapeFeats[:,0]= (allFeats[:,3]+math.pi)/(2*math.pi)
+                        node_shapeFeats[:,1]=allFeats[:,4]/self.normalizeVert
+                        node_shapeFeats[:,2]=allFeats[:,5]/self.normalizeHorz
+                        node_shapeFeats[:,3:3+self.numBBTypes]=torch.sigmoid(allFeats[:,18:])
+                        assert(not self.usePositionFeature)
+
 
                 else:
-                    bb_shapeFeats[:,0]= (bbs[:,2]+math.pi)/(2*math.pi)
-                    bb_shapeFeats[:,1]=bbs[:,3]/self.normalizeVert
-                    bb_shapeFeats[:,2]=bbs[:,4]/self.normalizeHorz
+                    node_shapeFeats[:,0]= (bbs[:,2]+math.pi)/(2*math.pi)
+                    node_shapeFeats[:,1]=bbs[:,3]/self.normalizeVert
+                    node_shapeFeats[:,2]=bbs[:,4]/self.normalizeHorz
                     if self.detector.predNumNeighbors:
-                        bb_shapeFeats[:,3]=bbs[:,5]
-                    bb_shapeFeats[:,3+extraPred:self.numBBTypes+3+extraPred]=torch.sigmoid(bbs[:,5+extraPred:self.numBBTypes+5+extraPred])
+                        node_shapeFeats[:,3]=bbs[:,5]
+                    node_shapeFeats[:,3+extraPred:self.numBBTypes+3+extraPred]=torch.sigmoid(bbs[:,5+extraPred:self.numBBTypes+5+extraPred])
                     if self.usePositionFeature:
                         if self.usePositionFeature=='absolute':
-                            bb_shapeFeats[:,self.numBBTypes+3+extraPred] = (bbs[:,0]-imageWidth/2)/(5*self.normalizeHorz)
-                            bb_shapeFeats[:,self.numBBTypes+4+extraPred] = (bbs[:,1]-imageHeight/2)/(10*self.normalizeVert)
+                            node_shapeFeats[:,self.numBBTypes+3+extraPred] = (bbs[:,0]-imageWidth/2)/(5*self.normalizeHorz)
+                            node_shapeFeats[:,self.numBBTypes+4+extraPred] = (bbs[:,1]-imageHeight/2)/(10*self.normalizeVert)
                         else:
-                            bb_shapeFeats[:,self.numBBTypes+3+extraPred] = (bbs[:,0]-imageWidth/2)/(imageWidth/2)
-                            bb_shapeFeats[:,self.numBBTypes+4+extraPred] = (bbs[:,1]-imageHeight/2)/(imageHeight/2)
+                            node_shapeFeats[:,self.numBBTypes+3+extraPred] = (bbs[:,0]-imageWidth/2)/(imageWidth/2)
+                            node_shapeFeats[:,self.numBBTypes+4+extraPred] = (bbs[:,1]-imageHeight/2)/(imageHeight/2)
             if self.useShapeFeats != "only" and self.expandedBBContext:
                 #Add detected BB masks
                 #warp to roi space
@@ -1865,15 +2414,16 @@ class PairingGroupingGraph(BaseModel):
                     brY1 = (brY-rois[:,2])*h_m
                     blY1 = (blY-rois[:,2])*h_m
 
-                for i in range(len(bbs)):
+                for i in range(len(groups)):
                     if self.useCurvedBBs:
-                        rr, cc = draw.polygon(
-                                (bbs[i].polyYs()-rois[i,2].item())*h_m[i].item(),
-                                (bbs[i].polyXs()-rois[i,1].item())*w_m[i].item(), 
-                                [self.poolBB2_h,self.poolBB2_w])
+                        for bb_id in groups[i]:
+                            rr, cc = draw.polygon(
+                                    (bbs[bb_id].polyYs()-rois[i,2].item())*h_m[i].item(),
+                                    (bbs[bb_id].polyXs()-rois[i,1].item())*w_m[i].item(), 
+                                    [self.poolBB2_h,self.poolBB2_w])
                     else:
-                        rr, cc = draw.polygon([round(tlY1[i].item()),round(trY1[i].item()),round(brY1[i].item()),round(blY1[i].item())],[round(tlX1[i].item()),round(trX1[i].item()),round(brX1[i].item()),round(blX1[i].item())], (self.poolBB2_h,self.poolBB2_w))
-                    masks[i,0,rr,cc]=1
+                        rr, cc = draw.polygon([round(tlY1[bb_id].item()),round(trY1[bb_id].item()),round(brY1[bb_id].item()),round(blY1[bb_id].item())],[round(tlX1[bb_id].item()),round(trX1[bb_id].item()),round(brX1[bb_id].item()),round(blX1[bb_id].item())], (self.poolBB2_h,self.poolBB2_w))
+                        masks[i,0,rr,cc]=1
                     if self.expandedBBContext is not None:
                         cropArea = allMasks[round(rois[i,2].item()):round(rois[i,4].item())+1,round(rois[i,1].item()):round(rois[i,3].item())+1]
                         masks[i,1] = F.interpolate(cropArea[None,None,...], size=(self.poolBB2_h,self.poolBB2_w), mode='bilinear',align_corners=False)[0,0]
@@ -1894,141 +2444,286 @@ class PairingGroupingGraph(BaseModel):
             if debug_image is not None:
                 img_f.waitKey()
             if self.useShapeFeats != "only":
-                #bb_features[i]= F.avg_pool2d(features[0,:,minY:maxY+1,minX:maxX+1], (1+maxY-minY,1+maxX-minX)).view(-1)
-                bb_features = self.roi_alignBB(features,rois.to(features.device))
-                assert(not torch.isnan(bb_features).any())
+                #node_features[i]= F.avg_pool2d(features[0,:,minY:maxY+1,minX:maxX+1], (1+maxY-minY,1+maxX-minX)).view(-1)
+                node_features = self.roi_alignBB(features,rois.to(features.device))
+                assert(not torch.isnan(node_features).any())
                 if features2 is not None:
-                    bb_features2 = self.roi_alignBB2(features2,rois.to(features.device))
+                    node_features2 = self.roi_alignBB2(features2,rois.to(features.device))
                     if not self.splitFeatures:
-                        bb_features = torch.cat( (bb_features,bb_features2), dim=1)
+                        node_features = torch.cat( (node_features,node_features2), dim=1)
                 if self.expandedBBContext:
                     if self.splitFeatures:
-                        bb_features2 = torch.cat( (bb_features2,masks.to(bb_features2.device)) ,dim=1)
-                        bb_features2 = self.bbFeaturizerConv2(bb_features2)
-                        bb_features = torch.cat( (bb_features,bb_features2), dim=1)
+                        node_features2 = torch.cat( (node_features2,masks.to(node_features2.device)) ,dim=1)
+                        node_features2 = self.bbFeaturizerConv2(node_features2)
+                        node_features = torch.cat( (node_features,node_features2), dim=1)
                     else:
-                        bb_features = torch.cat( (bb_features,masks.to(bb_features.device)) ,dim=1)
-                bb_features = self.bbFeaturizerConv(bb_features)
-                bb_features = bb_features.view(bb_features.size(0),bb_features.size(1))
+                        node_features = torch.cat( (node_features,masks.to(node_features.device)) ,dim=1)
+                node_features = self.bbFeaturizerConv(node_features)
+                node_features = node_features.view(node_features.size(0),node_features.size(1))
                 #THESE ARE THE VISUAL FEATURES FOR NODES
                 if self.useShapeFeats:
-                    bb_features = torch.cat( (bb_features,bb_shapeFeats.to(bb_features.device)), dim=1 )
+                    node_features = torch.cat( (node_features,node_shapeFeats.to(node_features.device)), dim=1 )
                 if text_emb is not None:
-                    bb_features = torch.cat( (bb_features,text_emb), dim=1 )
+                    node_features = torch.cat( (node_features,text_emb), dim=1 )
             else:
                 assert(self.useShapeFeats)
-                bb_features = bb_shapeFeats.to(features.device)
+                node_features = node_shapeFeats.to(features.device)
 
-            assert(not torch.isnan(bb_features).any())
+            assert(not torch.isnan(node_features).any())
             if self.bbFeaturizerFC is not None:
-                bb_features = self.bbFeaturizerFC(bb_features) #if uncommented, change rot on bb_shapeFeats, maybe not
-            assert(not torch.isnan(bb_features).any())
+                node_features = self.bbFeaturizerFC(node_features) #if uncommented, change rot on node_shapeFeats, maybe not
+            assert(not torch.isnan(node_features).any())
         elif text_emb is not None:
-            bb_features = text_emb
+            node_features = text_emb
         else:
-            bb_features = None
-        #rint('node features built')
-        #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
-        #print('------node------')
-        
-        #We're not adding diagonal (self-rels) here!
-        #Expecting special handeling during graph conv
-        #candidateLocs = torch.LongTensor(candidates).t().to(relFeats.device)
-        #ones = torch.ones(len(candidates)).to(relFeats.device)
-        #adjacencyMatrix = torch.sparse.FloatTensor(candidateLocs,ones,torch.Size([bbs.size(0),bbs.size(0)]))
+            node_features = None
+        return node_features
 
-        #assert(relFeats.requries_grad)
-        #rel_features = torch.sparse.FloatTensor(candidateLocs,relFeats,torch.Size([bbs.size(0),bbs.size(0),relFeats.size(1)]))
-        #assert(rel_features.requries_grad)
-        relIndexes=candidates
-        numBB = len(bbs)
-        numRel = len(candidates)
-        if self.useMetaGraph:
-            nodeFeatures= bb_features
-            edgeFeatures= relFeats
 
-            edges=candidates
-            edges += [(y,x) for x,y in edges] #add backward edges for undirected graph
-            edgeIndexes = torch.LongTensor(edges).t().to(relFeats.device)
-            #now we need to also replicate the edgeFeatures
-            edgeFeatures = edgeFeatures.repeat(2,1)
+    #def selectFeatureEmbEdges(self,bbs,imageHeight,imageWidth,image,device,merge_only=False):
+    #    if len(bbs)<2:
+    #        return [], None
+    #    #t#tic=timeit.default_timer()#t#
+    #    
+    #    if self.useCurvedBBs:
+    #        #0: tlXDiff
+    #        #1: trXDiff
+    #        #2: brXDiff
+    #        #3: blXDiff
+    #        #4: centerXDiff
+    #        #5: w1
+    #        #6: w2
+    #        #7: tlYDiff
+    #        #8: trYDiff
+    #        #9: brYDiff
+    #        #10: blYDiff
+    #        #11: centerYDiff
+    #        #12: h1
+    #        #13: h2
+    #        #14: tlDist
+    #        #15: trDist
+    #        #16: brDist
+    #        #17: blDist
+    #        #18: centDist
+    #        #19: rel pos X1
+    #        #20: rel pos Y1
+    #        #21: rel pos X2
+    #        #22: rel pos Y2
+    #        #23: line of sight
+    #        #24: conf1
+    #        #25: conf2
+    #        #26-n: classpred1
+    #        #n+1-m: classpred2
 
-            #features
-            universalFeatures=None
+    #        numClassFeat = bbs[0].getCls().shape[0]
+    #        
+    #        #conf, x,y,r,h,w,tl, tr, br, bl = torch.FloatTensor([bb.getFeatureInfo() for bb in bbs]).permute(1,0)
+    #        #conf, x,y,r,h,w,tlx,tly,trx,try,brx,bry,blx,bly,r_left,r_rightA,classFeats = bb.getFeatureInfo()
 
-            #t#time = timeit.default_timer()-tic#t#
-            #t#print('   create graph: {}'.format(time)) #old 0.37, new 0.16
-            #t#self.opt_createG.append(time)
-            #t#if len(self.opt_createG)>17:#t#
-            #t#    print('   create graph running mean: {}'.format(np.mean(self.opt_createG)))#t#
-            #t#    if len(self.opt_createG)>30:#t#
-            #t#        self.opt_createG = self.opt_createG[1:]#t#
-            return (nodeFeatures, edgeIndexes, edgeFeatures, universalFeatures), relIndexes, rel_prop_scores
-        else:
-            if bb_features is None:
-                numBB=0
-                bbAndRel_features=relFeats
-                adjacencyMatrix = None
-                numOfNeighbors = None
-            else:
-                bbAndRel_features = torch.cat((bb_features,relFeats),dim=0)
-                numOfNeighbors = torch.ones(len(bbs)+len(candidates)) #starts at one for yourself
-                edges=[]
-                i=0
-                for bb1,bb2 in candidates:
-                    edges.append( (bb1,numBB+i) )
-                    edges.append( (bb2,numBB+i) )
-                    numOfNeighbors[bb1]+=1
-                    numOfNeighbors[bb2]+=1
-                    numOfNeighbors[numBB+i]+=2
-                    i+=1
-                if self.includeRelRelEdges:
-                    relEdges=set()
-                    i=0
-                    for bb1,bb2 in candidates:
-                        j=0
-                        for bbA,bbB in candidates[i:]:
-                            if i!=j and bb1==bbA or bb1==bbB or bb2==bbA or bb2==bbB:
-                                relEdges.add( (numBB+i,numBB+j) ) #i<j always
-                            j+=1   
-                        i+=1
-                    relEdges = list(relEdges)
-                    for r1, r2 in relEdges:
-                        numOfNeighbors[r1]+=1
-                        numOfNeighbors[r2]+=1
-                    edges += relEdges
-                #add reverse edges
-                edges+=[(y,x) for x,y in edges]
-                #add diagonal (self edges)
-                for i in range(bbAndRel_features.size(0)):
-                    edges.append((i,i))
+    #        #t#tic2=timeit.default_timer()#t#
+    #        allFeats = torch.FloatTensor([bb.getFeatureInfo() for bb in bbs])
+    #        #t#print('     candidates gather allFeats: {}'.format(timeit.default_timer()-tic2))#t#
+    #        features = torch.FloatTensor(len(bbs),len(bbs), num_feats)
 
-                edgeLocs = torch.LongTensor(edges).t().to(relFeats.device)
-                ones = torch.ones(len(edges)).to(relFeats.device)
-                adjacencyMatrix = torch.sparse.FloatTensor(edgeLocs,ones,torch.Size([bbAndRel_features.size(0),bbAndRel_features.size(0)]))
-                #numOfNeighbors is for convienence in tracking the normalization term
-                numOfNeighbors=numOfNeighbors.to(relFeats.device)
+    #        conf1 = allFeats[:,None,0]
+    #        x1 = allFeats[:,None,1]
+    #        y1 = allFeats[:,None,2]
+    #        h1 = allFeats[:,None,4]
+    #        w1 = allFeats[:,None,5]
+    #        tlX1 = allFeats[:,None,6]
+    #        tlY1 = allFeats[:,None,7]
+    #        trX1 = allFeats[:,None,8]
+    #        trY1 = allFeats[:,None,9]
+    #        brX1 = allFeats[:,None,10]
+    #        brY1 = allFeats[:,None,11]
+    #        blX1 = allFeats[:,None,12]
+    #        blY1 = allFeats[:,None,13]
+    #        classFeat1 = allFeats[:,None,18:]
+    #        sin_r = torch.sin(allFeats[:,3])
+    #        cos_r = torch.cos(allFeats[:,3])
+    #        sin_r_left = torch.sin(allFeats[:,14])
+    #        cos_r_left = torch.cos(allFeats[:,14])
+    #        sin_r_right = torch.sin(allFeats[:,15])
+    #        cos_r_right = torch.cos(allFeats[:,15])
+    #        ro1 = allFeats[:,None,17]
 
-            #rel_features = (candidates,relFeats)
-            #adjacencyMatrix = None
+    #        features[:,0]=
 
-            #t#time = timeit.default_timer()-tic#t#
-            print('   create graph: {}'.format(time)) #old 0.37
-            self.opt_createG.append(time)
-            if len(self.opt_createG)>17:
-                print('   create graph running mean: {}'.format(np.mean(self.opt_createG)))
-                if len(self.opt_createG)>30:
-                    self.opt_createG = self.opt_createG[1:]
-            #return bb_features, adjacencyMatrix, rel_features
-            return bbAndRel_features, (adjacencyMatrix,numOfNeighbors), numBB, numRel, relIndexes, rel_prop_scores
+    #    else:
+    #        #features: tlXDiff,trXDiff,brXDiff,blXDiff,tlYDiff,trYDiff,brYDiff,blYDiff, centerXDiff, centerYDiff, absX, absY, h1, w1, h2, w2, classpred1, classpred2, line of sight (binary)
 
+    #        #0: tlXDiff
+    #        #1: trXDiff
+    #        #2: brXDiff
+    #        #3: blXDiff
+    #        #4: centerXDiff
+    #        #5: w1
+    #        #6: w2
+    #        #7: tlYDiff
+    #        #8: trYDiff
+    #        #9: brYDiff
+    #        #10: blYDiff
+    #        #11: centerYDiff
+    #        #12: h1
+    #        #13: h2
+    #        #14: tlDist
+    #        #15: trDist
+    #        #16: brDist
+    #        #17: blDist
+    #        #18: centDist
+    #        #19: rel pos X1
+    #        #20: rel pos Y1
+    #        #21: rel pos X2
+    #        #22: rel pos Y2
+    #        #23: line of sight
+    #        #24: conf1
+    #        #25: conf2
+    #        #26: sin r 1
+    #        #27: sin r 2
+    #        #28: cos r 1
+    #        #29: cos r 2
+    #        #30-n: classpred1
+    #        #n-m: classpred2
+    #        #if curvedBB:
+    #        #m:m+8: left and right sin/cos
+
+    #        conf = bbs[:,0]
+    #        x = bbs[:,1]
+    #        y = bbs[:,2]
+    #        r = bbs[:,3]
+    #        h = bbs[:,4]
+    #        w = bbs[:,5]
+    #        classFeat = bbs[:,6:]
+    #        numClassFeat = classFeat.size(1)
+    #        cos_r = torch.cos(r)
+    #        sin_r = torch.sin(r)
+    #        tlX = -w*cos_r + -h*sin_r +x
+    #        tlY =  w*sin_r + -h*cos_r +y
+    #        trX =  w*cos_r + -h*sin_r +x
+    #        trY = -w*sin_r + -h*cos_r +y
+    #        brX =  w*cos_r + h*sin_r +x
+    #        brY = -w*sin_r + h*cos_r +y
+    #        blX = -w*cos_r + h*sin_r +x
+    #        blY =  w*sin_r + h*cos_r +y
+
+    #        raise NotImplementedError('yep')
+
+
+    #    num_feats = 30+numClassFeat*2
+    #    if self.useCurvedBBs:
+    #        num_feats+=9
+    #        if not self.shape_feats_normal:
+    #            num_feats-=1
+    #    features = torch.FloatTensor(len(bbs),len(bbs), num_feats)
+    #    features[:,:,0] = tlX1-tlX2
+    #    features[:,:,1] = trX1-trX2
+    #    features[:,:,2] = brX1-brX2
+    #    features[:,:,3] = blX1-blX2
+    #    features[:,:,4] = x1-x2
+    #    features[:,:,5] = w1
+    #    features[:,:,6] = w2
+    #    features[:,:,7] = tlY1-tlY2
+    #    features[:,:,8] = trY1-trY2
+    #    features[:,:,9] = brY1-brY2
+    #    features[:,:,10] = blY1-blY2
+    #    features[:,:,11] = y1-y2
+    #    features[:,:,12] = h1
+    #    features[:,:,13] = h2
+    #    features[:,:,14] = torch.sqrt((tlY1-tlY2)**2 + (tlX1-tlX2)**2)
+    #    features[:,:,15] = torch.sqrt((trY1-trY2)**2 + (trX1-trX2)**2)
+    #    features[:,:,16] = torch.sqrt((brY1-brY2)**2 + (brX1-brX2)**2)
+    #    features[:,:,17] = torch.sqrt((blY1-blY2)**2 + (blX1-blX2)**2)
+    #    features[:,:,18] = torch.sqrt((y1-y2)**2 + (x1-x2)**2)
+    #    features[:,:,19] = x1/imageWidth
+    #    features[:,:,20] = y1/imageHeight
+    #    features[:,:,21] = x2/imageWidth
+    #    features[:,:,22] = y2/imageHeight
+    #    #features[:,:,23] = 1 if (index1,index2) in line_of_sight else 0
+    #    if self.useCurvedBBs:
+    #        features[:,:,23] = line_counts
+    #    else:
+    #        features[:,:,23].zero_()
+    #        for index1,index2 in line_of_sight:
+    #            features[index1,index2,23]=1
+    #            features[index2,index1,23]=1
+    #    features[:,:,24] = conf1
+    #    features[:,:,25] = conf2
+    #    features[:,:,26] = sin_r1
+    #    features[:,:,27] = sin_r2
+    #    features[:,:,28] = cos_r1
+    #    features[:,:,29] = cos_r2
+    #    features[:,:,30:30+numClassFeat] = classFeat1
+    #    features[:,:,30+numClassFeat:30+2*numClassFeat] = classFeat2
+    #    if self.useCurvedBBs:
+    #        features[:,:,30+2*numClassFeat] = sin_r_left1
+    #        features[:,:,31+2*numClassFeat] = sin_r_left2
+    #        features[:,:,32+2*numClassFeat] = cos_r_left1
+    #        features[:,:,33+2*numClassFeat] = cos_r_left2
+    #        features[:,:,34+2*numClassFeat] = sin_r_right1
+    #        features[:,:,35+2*numClassFeat] = sin_r_right2
+    #        features[:,:,36+2*numClassFeat] = cos_r_right1
+    #        features[:,:,37+2*numClassFeat] = cos_r_right2
+    #        if self.shape_feats_normal:
+    #            features[:,:,38+2*numClassFeat] = read_order_diff
+
+
+    #    #normalize distance features
+    #    features[:,:,0:7]/=self.normalizeHorz
+    #    features[:,:,7:14]/=self.normalizeVert
+    #    features[:,:,14:19]/=(self.normalizeVert+self.normalizeHorz)/2
+    #    features = features.view(len(bbs)**2,num_feats) #flatten
+    #    #t#time = timeit.default_timer()-tic#t#
+    #    #t#print('   candidates feats: {}'.format(time))#t#
+    #    #t#self.opt_cand.append(time)
+    #    #t#if len(self.opt_cand)>30:#t#
+    #    #t#    print('   candidates feats running mean: {}'.format(np.mean(self.opt_cand)))#t#
+    #    #t#    self.opt_cand = self.opt_cand[1:]#t#
+    #    #t#tic=timeit.default_timer()#t#
+    #    if merge_only:
+    #        rel_pred = self.merge_prop_nn(features.to(device))
+    #        #features=features.to(device)
+    #        #rel_pred = self.merge_prop_nn(features)
+    #        ##HARD CODED RULES FOR EARLY TRAINING
+    #        #avg_h = features[:,12:14].mean()
+    #        #avg_w = features[:,5:6].mean()
+    #        ##could_merge = ((y1-y2).abs()<4*avg_h).logical_and((x1-x2).abs()<10*avg_w)
+    #        ##could_merge = could_merge.view(-1)[:,None]
+    #        #could_merge = (features[:,11].abs()<4*avg_h).logical_and((features[:,4]).abs()<10*avg_w)[:,None]
+    #        #features=features.cpu()
+    #        #full_rel_pred = rel_pred
+    #        #minV=rel_pred.min()
+    #        #rel_pred=torch.where(could_merge,rel_pred,minV)
+    #        #could_merge=could_merge.cpu()
+    #    else:
+    #        rel_pred = self.rel_prop_nn(features.to(device))
+    #    rel_pred2d = rel_pred.view(len(bbs),len(bbs)) #unflatten
+    #    actual_rels = [(i,j) for i in range(len(bbs)) for j in range(i+1,len(bbs))]
+    #    rels_ordered = [ ((rel_pred2d[rel[0],rel[1]].item()+rel_pred2d[rel[1],rel[0]].item())/2,rel) for rel in actual_rels ]
+    #    rels = [(i,j) for i in range(len(bbs)) for j in range(len(bbs))]
+
+    #    rels_ordered.sort(key=lambda x: x[0], reverse=True)
+
+    #    keep = math.ceil(self.percent_rel_to_keep*len(rels_ordered))
+    #    if merge_only:
+    #        keep = min(keep,self.max_merge_rel_to_keep)
+    #    else:
+    #        keep = min(keep,self.max_rel_to_keep)
+    #    #print('keeping {} of {}'.format(keep,len(rels_ordered)))
+    #    keep_rels = [r[1] for r in rels_ordered[:keep]]
+    #    if keep<len(rels_ordered):
+    #        implicit_threshold = rels_ordered[keep][0]
+    #    else:
+    #        implicit_threshold = rels_ordered[-1][0]-0.1 #We're taking everything
+
+    #    #t#print('   candidates net and thresh: {}'.format(timeit.default_timer()-tic))#t#
+    #    return keep_rels, (rel_pred, rels, implicit_threshold)
 
 
 
     def selectFeatureNNEdges(self,bbs,imageHeight,imageWidth,image,device,merge_only=False):
         if len(bbs)<2:
             return [], None
-        #t##t#tic=timeit.default_timer()#t##t#
+        tic=timeit.default_timer()#t#
         
         if self.useCurvedBBs:
             #0: tlXDiff
@@ -2063,17 +2758,20 @@ class PairingGroupingGraph(BaseModel):
             if merge_only:
                 line_counts=0
             else:
-                #t#tic2=timeit.default_timer()#t#
+                tic2=timeit.default_timer()#t#
                 line_counts = self.betweenPixels(bbs,image)
-                #t#print('     candidates betweenPixels: {}'.format(timeit.default_timer()-tic2))#t#
+                time=timeit.default_timer()-tic2#t#
+                self.opt_history['candidates betweenPixels{}'.format(' m1st' if merge_only else '')].append(time) #t#
             numClassFeat = bbs[0].getCls().shape[0]
             
             #conf, x,y,r,h,w,tl, tr, br, bl = torch.FloatTensor([bb.getFeatureInfo() for bb in bbs]).permute(1,0)
             #conf, x,y,r,h,w,tlx,tly,trx,try,brx,bry,blx,bly,r_left,r_rightA,classFeats = bb.getFeatureInfo()
 
-            #t#tic2=timeit.default_timer()#t#
+            tic2=timeit.default_timer()#t#
             allFeats = torch.FloatTensor([bb.getFeatureInfo() for bb in bbs])
-            #t#print('     candidates gather allFeats: {}'.format(timeit.default_timer()-tic2))#t#
+            time=timeit.default_timer()-tic2#t#
+            self.opt_history['candidates getFeatureInfo{}'.format(' m1st' if merge_only else '')].append(time) #t#
+            tic2=timeit.default_timer()#t#
             num_bb = allFeats.size(0)
             conf1 = allFeats[:,None,0].expand(-1,num_bb)
             conf2 = allFeats[None,:,0].expand(num_bb,-1)
@@ -2103,8 +2801,8 @@ class PairingGroupingGraph(BaseModel):
             blX2 = allFeats[None,:,12].expand(num_bb,-1)
             blY1 = allFeats[:,None,13].expand(-1,num_bb)
             blY2 = allFeats[None,:,13].expand(num_bb,-1)
-            classFeat1 = allFeats[:,None,17:].expand(-1,num_bb,-1)
-            classFeat2 = allFeats[None,:,17:].expand(num_bb,-1,-1)
+            classFeat1 = allFeats[:,None,18:].expand(-1,num_bb,-1)
+            classFeat2 = allFeats[None,:,18:].expand(num_bb,-1,-1)
             sin_r = torch.sin(allFeats[:,3])
             cos_r = torch.cos(allFeats[:,3])
             cos_r1 = cos_r[:,None].expand(-1,cos_r.size(0))
@@ -2123,6 +2821,12 @@ class PairingGroupingGraph(BaseModel):
             cos_r_right2 = cos_r_right[None,:].expand(cos_r_right.size(0),-1)
             sin_r_right1 = sin_r_right[:,None].expand(-1,sin_r_right.size(0))
             sin_r_right2 = sin_r_right[None,:].expand(sin_r_right.size(0),-1)
+            ro1 = allFeats[:,None,17].expand(-1,num_bb)
+            ro2 = allFeats[None,:,17].expand(num_bb,-1)
+            read_order_diff=ro1-ro2
+
+            time=timeit.default_timer()-tic2#t#
+            self.opt_history['candidates expand features{}'.format(' m1st' if merge_only else '')].append(time) #t#
 
         else:
             #features: tlXDiff,trXDiff,brXDiff,blXDiff,tlYDiff,trYDiff,brYDiff,blYDiff, centerXDiff, centerYDiff, absX, absY, h1, w1, h2, w2, classpred1, classpred2, line of sight (binary)
@@ -2181,10 +2885,10 @@ class PairingGroupingGraph(BaseModel):
             blX = -w*cos_r + h*sin_r +x
             blY =  w*sin_r + h*cos_r +y
 
-            #t##t#tic=timeit.default_timer()#t##t#
+            #t#tic=timeit.default_timer()#t#
             line_of_sight = self.selectLineOfSightEdges(bbs,imageHeight,imageWidth,return_all=True)
             #t#print('   candidates line-of-sight: {}'.format(timeit.default_timer()-tic))#t#
-            #t##t#tic=timeit.default_timer()#t##t#
+            #t#tic=timeit.default_timer()#t#
             conf1 = conf[:,None].expand(-1,conf.size(0))
             conf2 = conf[None,:].expand(conf.size(0),-1)
             x1 = x[:,None].expand(-1,x.size(0))
@@ -2220,9 +2924,12 @@ class PairingGroupingGraph(BaseModel):
             blY1 = blY[:,None].expand(-1,blY.size(0))
             blY2 = blY[None,:].expand(blY.size(0),-1)
 
+        tic2 = timeit.default_timer()#t#
         num_feats = 30+numClassFeat*2
         if self.useCurvedBBs:
-            num_feats+=8
+            num_feats+=9
+            if not self.shape_feats_normal:
+                num_feats-=1
         features = torch.FloatTensor(len(bbs),len(bbs), num_feats)
         features[:,:,0] = tlX1-tlX2
         features[:,:,1] = trX1-trX2
@@ -2272,6 +2979,8 @@ class PairingGroupingGraph(BaseModel):
             features[:,:,35+2*numClassFeat] = sin_r_right2
             features[:,:,36+2*numClassFeat] = cos_r_right1
             features[:,:,37+2*numClassFeat] = cos_r_right2
+            if self.shape_feats_normal:
+                features[:,:,38+2*numClassFeat] = read_order_diff
 
 
         #normalize distance features
@@ -2279,13 +2988,16 @@ class PairingGroupingGraph(BaseModel):
         features[:,:,7:14]/=self.normalizeVert
         features[:,:,14:19]/=(self.normalizeVert+self.normalizeHorz)/2
         features = features.view(len(bbs)**2,num_feats) #flatten
+
+        time=timeit.default_timer()-tic2#t#
+        self.opt_history['candidates place features{}'.format(' m1st' if merge_only else '')].append(time) #t#
         #t#time = timeit.default_timer()-tic#t#
         #t#print('   candidates feats: {}'.format(time))#t#
         #t#self.opt_cand.append(time)
         #t#if len(self.opt_cand)>30:#t#
         #t#    print('   candidates feats running mean: {}'.format(np.mean(self.opt_cand)))#t#
         #t#    self.opt_cand = self.opt_cand[1:]#t#
-        #t##t#tic=timeit.default_timer()#t##t#
+        tic=timeit.default_timer()#t#
         if merge_only:
             rel_pred = self.merge_prop_nn(features.to(device))
             #features=features.to(device)
@@ -2303,12 +3015,36 @@ class PairingGroupingGraph(BaseModel):
             #could_merge=could_merge.cpu()
         else:
             rel_pred = self.rel_prop_nn(features.to(device))
+
+        time=timeit.default_timer()-tic#t#
+        self.opt_history['candidates net{}'.format(' m1st' if merge_only else '')].append(time) #t#
+        tic=timeit.default_timer()#t#
+
         rel_pred2d = rel_pred.view(len(bbs),len(bbs)) #unflatten
-        actual_rels = [(i,j) for i in range(len(bbs)) for j in range(i+1,len(bbs))]
-        rels_ordered = [ ((rel_pred2d[rel[0],rel[1]].item()+rel_pred2d[rel[1],rel[0]].item())/2,rel) for rel in actual_rels ]
-        rels = [(i,j) for i in range(len(bbs)) for j in range(len(bbs))]
+        rel_pred2d_comb = (torch.triu(rel_pred2d,diagonal=1)+torch.tril(rel_pred2d,diagonal=-1).permute(1,0))/2
+        rel_coords=torch.triu_indices(len(bbs),len(bbs),offset=1)
+        rel_pred = rel_pred2d_comb[rel_coords.tolist()]
+        #I need to convert to tuples so that later "(x,y) in rels" works
+        rel_coords = [(i,j) for i,j in rel_coords.permute(1,0).tolist()]#rel_coords.permute(1,0).tolist()
+        #rel_coords = [(i.item(),j.item()) for i,j in rel_coords.permute(1,0)]
+        rels_ordered = list(zip(rel_pred.cpu().tolist(),rel_coords))
+
+        #DDDD
+        #actual_rels = [(i,j) for i in range(len(bbs)) for j in range(i+1,len(bbs))]
+        #rels_ordered_D = [ ((rel_pred2d[rel[0],rel[1]].item()+rel_pred2d[rel[1],rel[0]].item())/2,rel) for rel in actual_rels ]
+        #for (score,rel),(scoreD,relD) in zip(rels_ordered,rels_ordered_D):
+        #    assert(abs(score-scoreD)<0.00001 and rel==relD)
+        #DDDD
+
+        time=timeit.default_timer()-tic#t#
+        self.opt_history['candidates edge lists{}'.format(' m1st' if merge_only else '')].append(time) #t#
+        tic=timeit.default_timer()#t#
 
         rels_ordered.sort(key=lambda x: x[0], reverse=True)
+
+        time=timeit.default_timer()-tic#t#
+        self.opt_history['candidates sort{}'.format(' m1st' if merge_only else '')].append(time) #t#
+        tic=timeit.default_timer()#t#
 
         keep = math.ceil(self.percent_rel_to_keep*len(rels_ordered))
         if merge_only:
@@ -2322,8 +3058,11 @@ class PairingGroupingGraph(BaseModel):
         else:
             implicit_threshold = rels_ordered[-1][0]-0.1 #We're taking everything
 
+        time=timeit.default_timer()-tic#t#
+        self.opt_history['candidates final bookkeeping{}'.format(' m1st' if merge_only else '')].append(time) #t#
+
         #t#print('   candidates net and thresh: {}'.format(timeit.default_timer()-tic))#t#
-        return keep_rels, (rel_pred, rels, implicit_threshold)
+        return keep_rels, (rel_pred,rel_coords, implicit_threshold)
 
 
     def betweenPixels(self,bbs,image):
@@ -2335,7 +3074,7 @@ class PairingGroupingGraph(BaseModel):
         values = torch.FloatTensor(len(bbs),len(bbs)).zero_()
         for i,bb1 in enumerate(bbs[:-1]):
             for j,bb2 in zip(range(i+1,len(bbs)),bbs[i+1:]):
-                #t##t#tic=timeit.default_timer()#t##t#
+                #t#tic=timeit.default_timer()#t#
                 x1,y1 = bb1.getCenterPoint()
                 x2,y2 = bb2.getCenterPoint()
 
@@ -2344,10 +3083,10 @@ class PairingGroupingGraph(BaseModel):
                 y1 = min(image.size(2)-1,max(0,y1))
                 y2 = min(image.size(2)-1,max(0,y2))
                 #t#TIME_getCenter.append(timeit.default_timer()-tic)#t#
-                #t##t#tic=timeit.default_timer()#t##t#
+                #t#tic=timeit.default_timer()#t#
                 rr,cc = draw.line(int(round(y1)),int(round(x1)),int(round(y2)),int(round(x2)))
                 #t#TIME_draw_line.append(timeit.default_timer()-tic)#t#
-                #t##t#tic=timeit.default_timer()#t##t#
+                #t#tic=timeit.default_timer()#t#
                 v = image[0,:,rr,cc].mean()#.cpu()
                 #t#TIME_sum_pixels.append(timeit.default_timer()-tic)#t#
                 values[i,j] = v
