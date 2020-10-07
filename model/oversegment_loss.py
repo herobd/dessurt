@@ -260,7 +260,7 @@ class MultiScaleOversegmentLoss (nn.Module):
                     loss,
                     (loss_L.item()+loss_T.item()+loss_R.item()+loss_B.item())/4,
                     loss_conf.item(),
-                    loss_cls.item(),
+                    loss_cls.item() if loss_cls!=0 else 0,
                     loss_r.item(),
                     recall,
                     precision,
@@ -274,9 +274,9 @@ class MultiScaleOversegmentLoss (nn.Module):
             else:
                 return (
                     loss,
-                    (loss_L.item()+loss_T.item()+loss_R.item()+loss_B.item())/4,
+                    (loss_L.item()+loss_T.item()+loss_R.item()+loss_B.item())/4 if loss_L !=0 else 0,
                     loss_conf.item(),
-                    loss_cls.item(),
+                    loss_cls.item() if loss_cls!=0 else 0,
                     loss_r.item(),
                     None,None,None,None,None,None,None,None
                     )
