@@ -38,6 +38,11 @@ def line(img,p1,p2,color,thickness=1):
             img[rr,cc]=color
         assert(thickness<4)
 
+def rectangle(img,c1,c2,color,thickness=1):
+    line(img,c1,(c2[0],c1[1]),color,thickness)
+    line(img,(c2[0],c1[1]),c2,color,thickness)
+    line(img,c2,(c1[0],c2[1]),color,thickness)
+    line(img,(c1[0],c2[1]),c1,color,thickness)
 
 def imread(path,color=True):
     return io.imread(path,not color)
@@ -49,7 +54,7 @@ def imshow(name,img):
     return io.imshow(img)
 
 def show(): #replaces cv2.waitKey()
-    return io.imshow(img)
+    return io.show()
 
 def resize(img,dim,fx=None,fy=None): #remove ",interpolation = cv2.INTER_CUBIC"
     hasColor = len(img.shape)==3
