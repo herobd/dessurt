@@ -780,6 +780,57 @@ class TextLine:
             if self.all_conf is not None:
                 self.conf = np.mean(self.all_conf)
         return self.conf.item()
+    
+    def getGrid(self,height,renorm_matrixu):
+        if self.point_pairs is None:
+            self.compute()
+
+	output_grid_size=height#?
+	t = ((np.arange(self.output_grid_size) + 0.5) / float(self.output_grid_size))[:,None].astype(np.float32)
+        t = np.repeat(t,axis=1, repeats=self.output_grid_size)
+        t = Variable(torch.from_numpy(t), requires_grad=False).cuda()
+        s = t.t()
+
+        t = t[:,:,None]
+        s = s[:,:,None]
+
+        interpolations = torch.cat([
+            (1-t)*s,
+            (1-t)*(1-s),
+            t*s,
+            t*(1-s),
+        ], dim=-1)
+       
+ 
+	a_pt = torch.Tensor(
+            [
+                [0, 1,1],
+                [0,-1,1]
+            ]
+        ).cuda()
+        a_pt = a_pt.transpose(1,0)
+        a_pt = a_pt.expand(a_pt.size(0), a_pt.size(1))
+
+        grid_line = []
+        for i in range(len(self.point_pairs)-1):
+	    w_0 = next_windows[i]
+            w_1 = next_windows[i+1]
+
+            pts_0 = w_0.mm(a_pt)
+            pts_1 = w_1.mm(a_pt)
+            xy_positions.append(pts_0)
+
+            #probably can skip to pts_
+            pts = torch.cat([pts_0, pts_1], dim=2)
+
+            grid_pts = expanded_renorm_matrix.bmm(pts)
+
+            grid = interpolations[None,:,:,None,:] * grid_pts[:,None,None,:,:]
+            grid = grid.sum(dim=-1)[...,:2]
+
+            grid_line.append(grid)
+        grid_line = torch.cat(grid_line, dim=0)
+        return grid_line
 
 
 
@@ -853,3 +904,7 @@ def doIntersect(p1,q1,p2,q2):
   
     # If none of the cases 
     return False
+
+##################################
+
+
