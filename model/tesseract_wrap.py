@@ -3,7 +3,10 @@ from PIL import Image
 import numpy as np
 from torch import nn
 from torch import functional as F
-import pytesseract
+try:
+    import pytesseract
+except:
+    pass
 
 #from .pretrained_gen import Print
 

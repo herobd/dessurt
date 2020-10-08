@@ -48,6 +48,10 @@ def imread(path,color=True):
     return io.imread(path,not color)
 
 def imwrite(path,img):
+    minV = img.min()
+    maxV = img.max()
+    if maxV>1 and minV>=0:
+        img=img.astype(np.uint8)
     return io.imsave(path,img,plugin='pil')
 
 def imshow(name,img):
