@@ -128,12 +128,13 @@ def FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startInd
 
     if 'bbs' in out:
         outputBBs = out['bbs']
-        maxConf = outputBBs[:,:,0].max().item()
-        threshConf = max(maxConf*THRESH,0.5)
         #threshConf = maxConf*THRESH
         if axis_aligned_prediction:
             threshed_outputBBs = []
             for b in range(batchSize):
+                maxConf = outputBBs[b,:,0].max().item()
+                threshConf = maxConf*THRESH#max(maxConf*THRESH,0.5)
+                print('b:{}, maxConf: {}, meanConf: {}, thresh: {}'.format(b,maxConf,outputBBs[b,:,0].mean().item(),threshConf))
                 threshed_outputBBs.append(outputBBs[b,outputBBs[b,:,0]>threshConf].cpu())
             outputBBs = threshed_outputBBs
 
@@ -263,8 +264,9 @@ def FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startInd
 
                 #np.save(saveFile,rescaled_outputBBs_xyrs)
                 image = (1-((1+np.transpose(data[b][:,:,:],(1,2,0)))/2.0)).copy()
+                
                 if image.shape[2]==1:
-                    image = img_f.cvtColor(image,cv2.COLOR_GRAY2RGB)
+                    image = img_f.gray2rgb(image)
                 #if name=='text_start_gt':
 
                 if not pretty:
@@ -306,7 +308,8 @@ def FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startInd
                     #circle aligned predictions
                     conf = bbs[j,0]
                     if outDir is not None:
-                        shade = 0.0+(conf-threshConf)/(maxConf-threshConf)
+                        shade = conf#0.0+(conf-threshConf)/(maxConf-threshConf)
+                        assert(shade>=0 and shade<=1)
                         #print(shade)
                         #if name=='text_start_gt' or name=='field_end_gt':
                         #    img_f.bb(bbImage[:,:,1],p1,p2,shade,2)
@@ -359,7 +362,7 @@ def FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startInd
                 #for j in range(metricsOut.shape[1]):
                 #    saveName+='_m:{0:.3f}'.format(metricsOut[i,j])
                 saveName+='.png'
-                io.imsave(os.path.join(outDir,saveName),image)
+                img_f.imwrite(os.path.join(outDir,saveName),image)
                 print('saved: '+os.path.join(outDir,saveName))
             if 'points' in out:
                 for name, out in outputPoints.items():
@@ -403,7 +406,7 @@ def FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startInd
                     #for j in range(metricsOut.shape[1]):
                     #    saveName+='_m:{0:.3f}'.format(metricsOut[i,j])
                     saveName+='.png'
-                    io.imsave(os.path.join(outDir,saveName),image)
+                    img_f.imwrite(os.path.join(outDir,saveName),image)
 
             if 'pixels' in out:
                 image = (1-((1+np.transpose(data[b][:,:,:],(1,2,0)))/2.0)).copy()
@@ -411,7 +414,7 @@ def FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startInd
                     for ch in range(outputPixels.shape[1]):
                         image[:,:,ch] = 1-outputPixels[b,ch,:,:]
                     saveName = '{:06}_pixels.png'.format(startIndex+b,name)
-                    io.imsave(os.path.join(outDir,saveName),image)
+                    img_f.imwrite(os.path.join(outDir,saveName),image)
             #print('finished writing {}'.format(startIndex+b))
         
     #return metricsOut
