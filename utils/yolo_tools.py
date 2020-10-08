@@ -460,6 +460,8 @@ def getWidthWRT(inter,line):
         for shape in inter:
             if type(shape) is shapely.geometry.linestring.LineString:
                 points += list(shape.coords)
+            elif type(shape) is shapely.geometry.point.Point:
+                points.append(list(shape.coords)[0])
             else:
                 points += list(shape.exterior.coords)
         points = np.array(points)
@@ -584,15 +586,15 @@ def classPolyIOU(rboxes,bbs):
     angle_compatible = angle_compatible.abs()<math.pi/3
     iou *= angle_compatible
 
-    
-    gt_cls_ind = torch.argmax(rboxes[:,13:],dim=1)
-    pr_allClss = torch.FloatTensor([bb.getCls() for bb in bbs])
-    #pr_allClss = torch.stack([bb.getCls() for bb in bbs],dim=0)
-    pr_cls_int = torch.argmax(pr_allClss,dim=1)
-    gt_cls_ind = gt_cls_ind[:,None].expand(rboxes.size(0), len(bbs))
-    pr_cls_int = pr_cls_int[None,:].expand(rboxes.size(0), len(bbs))
-    class_compatible = gt_cls_ind==pr_cls_int
-    iou *= class_compatible
+    if len(bbs)>0:
+        gt_cls_ind = torch.argmax(rboxes[:,13:],dim=1)
+        pr_allClss = torch.FloatTensor([bb.getCls() for bb in bbs])
+        #pr_allClss = torch.stack([bb.getCls() for bb in bbs],dim=0)
+        pr_cls_int = torch.argmax(pr_allClss,dim=1)
+        gt_cls_ind = gt_cls_ind[:,None].expand(rboxes.size(0), len(bbs))
+        pr_cls_int = pr_cls_int[None,:].expand(rboxes.size(0), len(bbs))
+        class_compatible = gt_cls_ind==pr_cls_int
+        iou *= class_compatible
 
     for i,j in torch.nonzero(iou>0.001):
         gt_poly = Polygon([[gt_tlX[i].item(),gt_tlY[i].item()],[gt_trX[i].item(),gt_trY[i].item()],[gt_brX[i].item(),gt_brY[i].item()],[gt_blX[i].item(),gt_blY[i].item()]])
@@ -899,7 +901,7 @@ def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeC
 
         #add all the preds that didn't have a hit
         hasHit,_ = validHits.max(dim=0) #which preds have hits
-        predConf=torch.FloatTensor([p.getConf().item() for p in pred])
+        predConf=torch.FloatTensor([p.getConf() for p in pred])
         predClasses=torch.FloatTensor([p.getCls() for p in pred])
         predClasses_index = torch.argmax(predClasses,dim=1)
         #targetClasses_index_ex = targetClasses_index[:,None].expand(targetClasses_index.size(0),predClasses_index.size(0))
@@ -1011,7 +1013,7 @@ def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeC
 def getTargIndexForPreds_iou(target,pred,iou_thresh,numClasses,beforeCls=0,hard_thresh=True,fixed=True):
     return getTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,allIOU,hard_thresh,fixed)
 def getTargIndexForPreds_dist(target,pred,iou_thresh,numClasses,beforeCls=0,hard_thresh=True,fixed=True):
-    raise NotImplemented('Checking if preds with no intersection not implemented for dist')
+    raise NotImplementedError('Checking if preds with no intersection not implemented for dist')
     return getTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,allBoxDistNeg,hard_thresh,fixed)
 
 def getTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,getLoc, hard_thresh,fixed):

@@ -172,6 +172,7 @@ class BaseTrainer:
                 self.swa_model = self.swa_model.to(self.gpu)
             self.swa_start = config['trainer']['swa_start'] if 'swa_start' in config['trainer'] else config['trainer']['weight_averaging_start']
             self.swa_c_iters = config['trainer']['swa_c_iters'] if 'swa_c_iters' in config['trainer'] else config['trainer']['weight_averaging_c_iters']
+        self.iteration=999999999999999
         if resume:
             self._resume_checkpoint(resume)
 

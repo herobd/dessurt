@@ -375,6 +375,23 @@ class CropBoxTransform(object):
     def __call__(self, sample,cropPoint=None):
         org_img = sample['img']
         bb_gt = sample['bb_gt']
+
+        ##DEBUG##
+        #for i in range(bb_gt.shape[1]):
+        #    tttx = (bb_gt[0,i,0]+bb_gt[0,i,2])/2
+        #    ttty = (bb_gt[0,i,1]+bb_gt[0,i,3])/2
+        #    bbbx = (bb_gt[0,i,4]+bb_gt[0,i,6])/2
+        #    bbby = (bb_gt[0,i,5]+bb_gt[0,i,7])/2
+        #    lllx = (bb_gt[0,i,0]+bb_gt[0,i,6])/2
+        #    llly = (bb_gt[0,i,1]+bb_gt[0,i,7])/2
+        #    rrrx = (bb_gt[0,i,4]+bb_gt[0,i,2])/2
+        #    rrry = (bb_gt[0,i,5]+bb_gt[0,i,3])/2
+        #    hhh = math.sqrt((tttx-bbbx)**2 + (ttty-bbby)**2)
+        #    www = math.sqrt((lllx-rrrx)**2 + (llly-rrry)**2)
+        #    #print('before {}: {} = {}, {}'.format(i,hhh/www,hhh,www))
+        #    assert(hhh/www<5)
+        ##DEBUG##
+
         aux_str = 'bb_auxs'
         if 'bb_ids' in sample:
             aux_str = 'bb_ids'
@@ -565,6 +582,7 @@ class CropBoxTransform(object):
             #if 'start' in name:
             #    for j in range(min(10,gt.size(1))):
             #        ##print('a {},{}   {},{}'.format(gt[:,j,0],gt[:,j,1],gt[:,j,2],gt[:,j,3]))
+
 
         return ({
             "img": org_img,
