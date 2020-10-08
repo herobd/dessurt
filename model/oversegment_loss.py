@@ -698,6 +698,9 @@ def build_oversegmented_targets_multiscale(
                         s_t=s_b=s_len
                         s_l=s_r=s_perp
                         if gr<0 or gr>np.pi:
+                            if math.isinf(s_len):
+                                print('ERROR, s_len is inf')
+                                import pdb;pdb.set_trace()
                             c_t = g_bx-s_t*g_by
                             c_b = g_tx-s_b*g_ty
                             if math.isinf(s_perp):
@@ -1183,7 +1186,7 @@ def build_oversegmented_targets_multiscale(
                     gt_area_covered, pred_area_covered = bbox_coverage_axis_rot((gx,gy,gr,gh,gw), pred_right_label_boxes)
                     gt_area_covered_all, pred_area_covered_all = bbox_coverage_axis_rot((gx,gy,gr,gh,gw), pred_right_label_boxes_all)
                     #print(pred_area_covered_all)
-                    assert(len(pred_area_covered)==0 or max(pred_area_covered)<=1)
+                    assert(pred_area_covered is None or len(pred_area_covered)==0 or max(pred_area_covered)<=1)
                     if gt_area_covered is not None:
                         #covered_gt_area += gt_area_covered
                         #covered_gt_area_all += gt_area_covered_all
@@ -1194,8 +1197,10 @@ def build_oversegmented_targets_multiscale(
                         #    recall+=1
                         #if gt_area_covered_all>0.5:
                         #    recall_all+=1
-                        on_pred_areaB[level][class_selector] = torch.max(on_pred_areaB[level][class_selector],torch.FloatTensor(pred_area_covered))
-                        on_pred_areaB_all[level][all_selector] = torch.max(on_pred_areaB_all[level][all_selector],torch.FloatTensor(pred_area_covered_all))
+                        if pred_area_covered is not None:
+                            on_pred_areaB[level][class_selector] = torch.max(on_pred_areaB[level][class_selector],torch.FloatTensor(pred_area_covered))
+                        if pred_area_covered_all is not None:
+                            on_pred_areaB_all[level][all_selector] = torch.max(on_pred_areaB_all[level][all_selector],torch.FloatTensor(pred_area_covered_all))
                     else:
                         nGT-=1
                     #pred_label = torch.argmax(pred_cls[b, best_n, gj, gi])

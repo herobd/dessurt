@@ -330,7 +330,7 @@ class BoxDetectDataset(torch.utils.data.Dataset):
         img = img.astype(np.float32)
         img = torch.from_numpy(img)
         img = 1.0 - img / 128.0 #ideally the median value would be 0
-        #img = 1.0 - img / 255.0 #this way ink is on, page is off
+        
         if pixel_gt is not None:
             pixel_gt = pixel_gt.transpose([2,0,1])[None,...]
             pixel_gt = torch.from_numpy(pixel_gt)
@@ -341,7 +341,6 @@ class BoxDetectDataset(torch.utils.data.Dataset):
             for name in line_gts:
                 line_gts[name] = None if line_gts[name] is None or line_gts[name].shape[1] == 0 else torch.from_numpy(line_gts[name])
         
-        #import pdb; pdb.set_trace()
         #bbs = None if bbs.shape[1] == 0 else torch.from_numpy(bbs)
         bbs = convertBBs(bbs,self.rotate,numClasses)
         if len(numNeighbors)>0:
@@ -622,7 +621,6 @@ class BoxDetectDataset(torch.utils.data.Dataset):
                     np.linalg.norm(point_deltas[:,:,6:8],2,2)/avg_heights
                     )**2
                 #print normed_difference
-                #import pdb; pdb.set_trace()
                 assert(not np.isnan(normed_difference).any())
 
                 groups = normed_difference.argmin(1) #this should list the mean (index) for each element of all

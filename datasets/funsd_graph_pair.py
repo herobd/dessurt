@@ -119,23 +119,45 @@ class FUNSDGraphPair(GraphPairDataset):
             trans=[]
             for j,boxinfo in enumerate(boxes):
                 lX,tY,rX,bY = boxinfo['box']
-                bbs[:,j,0]=lX*s
-                bbs[:,j,1]=tY*s
-                bbs[:,j,2]=rX*s
-                bbs[:,j,3]=tY*s
-                bbs[:,j,4]=rX*s
-                bbs[:,j,5]=bY*s
-                bbs[:,j,6]=lX*s
-                bbs[:,j,7]=bY*s
-                #we add these for conveince to crop BBs within window
-                bbs[:,j,8]=s*lX
-                bbs[:,j,9]=s*(tY+bY)/2.0
-                bbs[:,j,10]=s*rX
-                bbs[:,j,11]=s*(tY+bY)/2.0
-                bbs[:,j,12]=s*(lX+rX)/2.0
-                bbs[:,j,13]=s*tY
-                bbs[:,j,14]=s*(rX+lX)/2.0
-                bbs[:,j,15]=s*bY
+                h=bY-tY
+                w=rX-lX
+                if h/w>5 and self.rotate: #flip labeling, since FUNSD doesn't label verticle text correctly
+                    #I don't know if it needs rotated clockwise or countercw, so I just say countercw
+                    bbs[:,j,0]=lX*s
+                    bbs[:,j,1]=bY*s
+                    bbs[:,j,2]=lX*s
+                    bbs[:,j,3]=tY*s
+                    bbs[:,j,4]=rX*s
+                    bbs[:,j,5]=tY*s
+                    bbs[:,j,6]=rX*s
+                    bbs[:,j,7]=bY*s
+                    #we add these for conveince to crop BBs within window
+                    bbs[:,j,8]=s*(lX+rX)/2.0
+                    bbs[:,j,9]=s*bY
+                    bbs[:,j,10]=s*(lX+rX)/2.0
+                    bbs[:,j,11]=s*tY
+                    bbs[:,j,12]=s*lX
+                    bbs[:,j,13]=s*(tY+bY)/2.0
+                    bbs[:,j,14]=s*rX
+                    bbs[:,j,15]=s*(tY+bY)/2.0
+                else:
+                    bbs[:,j,0]=lX*s
+                    bbs[:,j,1]=tY*s
+                    bbs[:,j,2]=rX*s
+                    bbs[:,j,3]=tY*s
+                    bbs[:,j,4]=rX*s
+                    bbs[:,j,5]=bY*s
+                    bbs[:,j,6]=lX*s
+                    bbs[:,j,7]=bY*s
+                    #we add these for conveince to crop BBs within window
+                    bbs[:,j,8]=s*lX
+                    bbs[:,j,9]=s*(tY+bY)/2.0
+                    bbs[:,j,10]=s*rX
+                    bbs[:,j,11]=s*(tY+bY)/2.0
+                    bbs[:,j,12]=s*(lX+rX)/2.0
+                    bbs[:,j,13]=s*tY
+                    bbs[:,j,14]=s*(rX+lX)/2.0
+                    bbs[:,j,15]=s*bY
                 
                 bbs[:,j,16:]=0
                 if boxinfo['label']=='header':
