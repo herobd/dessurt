@@ -98,10 +98,15 @@ def convertBBs(bbs,rotate,numClasses):
     height = np.abs(h)    #this is half height
     width = d/2.0 #and half width
 
-    topX = (tlX+trX)/2.0
-    topY = (tlY+trY)/2.0
-    botX = (blX+brX)/2.0
-    botY = (blY+brY)/2.0
+
+    #topX = (tlX+trX)/2.0
+    #topY = (tlY+trY)/2.0
+    #botX = (blX+brX)/2.0
+    #botY = (blY+brY)/2.0
+    topX = cX-np.sin(rot)*height
+    botX = cX+np.sin(rot)*height
+    topY = cY-np.cos(rot)*height
+    botY = cY+np.cos(rot)*height
     leftX = lX
     leftY = lY
     rightX = rX
@@ -447,6 +452,11 @@ def getBBWithPoints(useBBs,s,useBlankClass=False,usePairedClass=False, useAllCla
         blX = bb['poly_points'][3][0]
         blY = bb['poly_points'][3][1]
 
+        ##DEBUG
+        h = math.sqrt(((tlX+trX)/2 - (blX+brX)/2)**2 + ((tlY+trY)/2 - (blY+brY)/2)**2)
+        w = math.sqrt(((tlX+blX)/2 - (brX+trX)/2)**2 + ((tlY+blY)/2 - (trY+brY)/2)**2)
+        assert(h/w<5 or min(h,w)<1)
+        ##DEBUG
             
 
         bbs[:,j,0]=tlX*s

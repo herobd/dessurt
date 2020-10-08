@@ -15,19 +15,32 @@ def xyrwh_TextLine(bb):
 
 class TextLine:
     #two constructors. One takes vector, other two TextLines and merges them
-    def __init__(self,pred_bb_info,other=None):
-        if other is None:
+    def __init__(self,pred_bb_info=None,other=None,clone=None):
+        if clone is not None:
+            self.all_conf = list(clone.all_conf) if clone.all_conf is not None else None
+            self.all_cls = list(clone.all_cls) if clone.all_cls is not None else None
+            self.all_primitive_rects = list(clone.all_primitive_rects)
+            self.all_angles = list(clone.all_angles)
+
+            self.cls=clone.cls
+            self.conf = clone.conf
+            self.median_angle = clone.median_angle
+            self.height = clone.height
+            self.width = clone.width
+            self.std_r = clone.std_r
+            self.r_left = clone.r_left
+            self.r_right = clone.r_right
+
+            self.poly_points = clone.poly_points.copy() if clone.poly_points is not None else None
+            self.center_point = clone.center_point
+            self.point_pairs = list(clone.point_pairs) if clone.point_pairs is not None else None
+        elif other is None:
 
             pred_bb_info = pred_bb_info.cpu().detach()
             self.all_conf = [pred_bb_info[0].item()]
             self.all_cls = [pred_bb_info[6:].numpy()]
-            self.cls=None
-            self.conf=None
             #assert(self.all_cls[0].shape[0]==4)
 
-            self.median_angle = None
-            self.poly_points=None
-            self.point_pairs=None
 
             if pred_bb_info[2]>pred_bb_info[4]: #I think this only occured after changing things on a trained model...
                 tmp = pred_bb_info[2]
@@ -37,10 +50,10 @@ class TextLine:
                 tmp = pred_bb_info[1]
                 pred_bb_info[1]=pred_bb_info[3]
                 pred_bb_info[3]=tmp
-            if abs(pred_bb_info[2]-pred_bb_info[4])<0.001: #detector sometimes predicts flat BBs
+            if abs(pred_bb_info[2]-pred_bb_info[4])<1: #detector sometimes predicts flat BBs
                 pred_bb_info[2]-=1
                 pred_bb_info[4]+=1
-            if abs(pred_bb_info[1]-pred_bb_info[3])<0.001:
+            if abs(pred_bb_info[1]-pred_bb_info[3])<1:
                 pred_bb_info[1]-=1
                 pred_bb_info[3]+=1
 
@@ -49,6 +62,50 @@ class TextLine:
             assert(self.all_primitive_rects[0][1,1]!=self.all_primitive_rects[0][2,1])
             
             self.all_angles = [pred_bb_info[5].item()]
+
+            #to skip a call to compute(), we'll solve this as it's one rectangle
+            self.cls=self.all_cls[0]
+            self.conf=np.array(self.all_conf[0])
+            self.median_angle =  self.all_angles[0]
+
+            if self.median_angle>=-math.pi/4 and self.median_angle<=math.pi/4:
+                #horz=True
+                #readright=True
+                top_points = [self.all_primitive_rects[0][0],self.all_primitive_rects[0][1]]
+                bot_points = [self.all_primitive_rects[0][2],self.all_primitive_rects[0][3]]
+                self.height = self.all_primitive_rects[0][3][1]-self.all_primitive_rects[0][0][1]
+                self.width = self.all_primitive_rects[0][1][0]-self.all_primitive_rects[0][0][0]
+            elif self.median_angle>=-math.pi*3/4 and self.median_angle<=-math.pi/4:
+                #horz=False
+                #readup=False
+                top_points = [self.all_primitive_rects[0][1],self.all_primitive_rects[0][2]]
+                bot_points = [self.all_primitive_rects[0][0],self.all_primitive_rects[0][3]]
+                self.width = self.all_primitive_rects[0][3][1]-self.all_primitive_rects[0][0][1]
+                self.height = self.all_primitive_rects[0][1][0]-self.all_primitive_rects[0][0][0]
+            elif self.median_angle>=math.pi/4 and self.median_angle<=math.pi*3/4:
+                #horz=False
+                #readup=True
+                top_points = [self.all_primitive_rects[0][3],self.all_primitive_rects[0][0]]
+                bot_points = [self.all_primitive_rects[0][2],self.all_primitive_rects[0][1]]
+                self.width = self.all_primitive_rects[0][3][1]-self.all_primitive_rects[0][0][1]
+                self.height = self.all_primitive_rects[0][1][0]-self.all_primitive_rects[0][0][0]
+            else:
+                #horz=True
+                #readright=False
+                top_points = [self.all_primitive_rects[0][2],self.all_primitive_rects[0][3]]
+                bot_points = [self.all_primitive_rects[0][1],self.all_primitive_rects[0][0]]
+                self.height = self.all_primitive_rects[0][3][1]-self.all_primitive_rects[0][0][1]
+                self.width = self.all_primitive_rects[0][1][0]-self.all_primitive_rects[0][0][0]
+            
+            self.poly_points = np.array( top_points+bot_points )
+
+            self.center_point = self.poly_points.mean(axis=0)
+            self.point_pairs=list(zip(top_points,bot_points))
+                #assert(type(self.cls) is np.ndarray)
+            self.std_r = 0
+            self.r_left = self.median_angle
+            self.r_right = self.median_angle
+            
         else:
             if pred_bb_info.all_conf is not None and other.all_conf is not None:
                 self.all_conf =  pred_bb_info.all_conf+other.all_conf
@@ -127,6 +184,7 @@ class TextLine:
         #At a high level, this extracts the top border of the polygon created by unioning all rects
         for rect in primitive_rects_top:
             #print('top_points: {}'.format(top_points))
+            #print(' adding {} {}'.format(rect[0], rect[1]))
             if last_point_top[0]>rect[1][0]: #the prior rectangle extendes beyond this one
                 #find the first point beyon rect (may not be last)
                 first_i=-2 #"first" and "second" are relative to traversing top_points in reverse
@@ -140,12 +198,13 @@ class TextLine:
                         second_i-=1
                         #print('second {}: {}'.format(second_i,top_points[second_i]))
                     inter_first=[rect[1][0],top_points[first_i][1]]
+                    second_i = len(top_points)+second_i
                     if top_points[second_i][1]<=rect[0][1]:
                         inter_second=[top_points[second_i][0],rect[0][1]]
+                        top_points = top_points[:second_i+1]+[inter_second,rect[1],inter_first]+top_points[first_i:]
                     else:
                         inter_second=[rect[0][0],top_points[second_i][1]]
-                    second_i = len(top_points)+second_i
-                    top_points = top_points[:second_i+1]+[inter_second,rect[1],inter_first]+top_points[first_i:]
+                        top_points = top_points[:second_i+1]+[inter_second,rect[0],rect[1],inter_first]+top_points[first_i:]
                 #if rect[0][1]<last_point_top[1]:
                 #    #we need to step back all toppoints until we reach where rect[0][0] is
                 #    #anyplace rect is above, we need to redo the points
@@ -168,10 +227,12 @@ class TextLine:
                         second_i-=1
                     if top_points[second_i][1]<=rect[0][1]:
                         inter_second=[top_points[second_i][0],rect[0][1]]
+                        second_i = len(top_points)+second_i
+                        top_points = top_points[:second_i+1]+[inter_second]
                     else:
                         inter_second=[rect[0][0],top_points[second_i][1]]
-                    second_i = len(top_points)+second_i
-                    top_points = top_points[:second_i+1]+[inter_second]
+                        second_i = len(top_points)+second_i
+                        top_points = top_points[:second_i+1]+[inter_second,rect[0]]
                 #elif rect[0][1]<last_point_top[1]: #if the rect/line im adding is above
                 #    if top_points[-2][0]>rect[0][0]: #if prior line was clipped, we need to work with the intersection point top_points[-2]
                 #        if top_points[-3][1]>rect[0][1]:
@@ -231,38 +292,46 @@ class TextLine:
         bot_points=[]#[primitive_rects_bot[0][3]]
         last_point_bot=primitive_rects_bot[0][3]
         for rect in primitive_rects_bot:
+            #print('bot_points: {}'.format(bot_points))
+            #print(' adding {} {}'.format(rect[3], rect[2]))
+            #if abs(rect[3][0]-35)<1 and abs(rect[3][1]-386)<1:
+            #    import pdb;pdb.set_trace()
             if last_point_bot[0]>rect[2][0]: #the prior rectangle extendes beyond this one
                 #find the first point beyon rect (may not be last)
                 first_i=-2 #"first" and "second" are relative to traversing bot_points in reverse
-                while bot_points[first_i][0]>rect[1][0]:
+                while bot_points[first_i][0]>rect[2][0]:
                     first_i-=1
                 first_i+=1 #move to beyond
                 #while first_i>-len(bot_points): there is only one strech because we process boxes in order (only steps up, going backward)
-                if bot_points[first_i][1]<rect[0][1]:
+                if bot_points[first_i][1]<rect[3][1]:
                     second_i = first_i-1
-                    while bot_points[second_i][1]>rect[0][1] and bot_points[second_i][0]>rect[0][0]:
+                    while bot_points[second_i][1]<rect[3][1] and bot_points[second_i][0]>rect[3][0]:
                         second_i-=1
                         #print('second {}: {}'.format(second_i,bot_points[second_i]))
-                    inter_first=[rect[1][0],bot_points[first_i][1]]
-                    if bot_points[second_i][1]>=rect[0][1]:
-                        inter_second=[bot_points[second_i][0],rect[0][1]]
-                    else:
-                        inter_second=[rect[0][0],bot_points[second_i][1]]
+                    inter_first=[rect[2][0],bot_points[first_i][1]]
                     second_i = len(bot_points)+second_i
-                    bot_points = bot_points[:second_i+1]+[inter_second,rect[1],inter_first]+bot_points[first_i:]
+                    if bot_points[second_i][1]>=rect[3][1]:
+                        inter_second=[bot_points[second_i][0],rect[3][1]]
+                        bot_points = bot_points[:second_i+1]+[inter_second,rect[2],inter_first]+bot_points[first_i:]
+                    else:
+                        inter_second=[rect[3][0],bot_points[second_i][1]]
+                        bot_points = bot_points[:second_i+1]+[inter_second,rect[3],rect[2],inter_first]+bot_points[first_i:]
             else:
                 if rect[3][0]>=last_point_bot[0]:
                     bot_points.append(rect[3])
                 else:
+                    #walk backwards past all previous points this new line subsumes
                     second_i = -1
-                    while bot_points[second_i][1]<rect[0][1] and bot_points[second_i][0]>rect[0][0]:
+                    while bot_points[second_i][1]<rect[3][1] and bot_points[second_i][0]>rect[3][0]:
                         second_i-=1
-                    if bot_points[second_i][1]>=rect[0][1]:
-                        inter_second=[bot_points[second_i][0],rect[0][1]]
+                    if bot_points[second_i][1]>=rect[3][1]:
+                        inter_second=[bot_points[second_i][0],rect[3][1]]
+                        second_i = len(bot_points)+second_i
+                        bot_points = bot_points[:second_i+1]+[inter_second]
                     else:
-                        inter_second=[rect[0][0],bot_points[second_i][1]]
-                    second_i = len(bot_points)+second_i
-                    bot_points = bot_points[:second_i+1]+[inter_second]
+                        inter_second=[rect[3][0],bot_points[second_i][1]]
+                        second_i = len(bot_points)+second_i
+                        bot_points = bot_points[:second_i+1]+[inter_second,rect[3]]
                 #elif rect[3][1]>last_point_bot[1]:
                 #    if bot_points[-2][0]>rect[3][0]: #if prior line was clipped, we need to work with the intersection point bot_points[-2]
                 #        if bot_points[-3][1]<rect[3][1]:
@@ -342,7 +411,16 @@ class TextLine:
         bot_total_distance=0
         for i in range(len(bot_points)-1):
             bot_total_distance += math.sqrt((bot_points[i][0]-bot_points[i+1][0])**2 + (bot_points[i][1]-bot_points[i+1][1])**2)
+        
+        #DEBUG#
+        self._top_points=list(top_points)
+        self._bot_points=list(bot_points)
+        if not horz:
+            self._top_points = [(y,x) for x,y in self._top_points]
+            self._bot_points = [(y,x) for x,y in self._bot_points]
+        #DEBUG#
 
+    
         #step size is average "height"
         top_points_np=np.array(top_points)
         bot_points_np=np.array(bot_points)
@@ -613,7 +691,7 @@ class TextLine:
 
 
             t = b/(sign_y*math.sqrt(1/(1+slope**2))-slope*sign_x*math.sqrt(1/(1+(1/slope**2))))
-            return t
+            return t.item()
         
     def polyYs(self):
         if self.poly_points is None:
@@ -701,7 +779,7 @@ class TextLine:
         if self.conf is None:
             if self.all_conf is not None:
                 self.conf = np.mean(self.all_conf)
-        return self.conf
+        return self.conf.item()
 
 
 
