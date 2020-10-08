@@ -12,6 +12,7 @@ from model.binary_pair_real import BinaryPairReal
 #from model.roi_align import ROIAlign as RoIAlign
 from torchvision.ops import RoIAlign
 from model.cnn_lstm import CRNN, SmallCRNN
+from model.tesseract_wrap import TesseractWrap
 from model.word2vec_adapter import Word2VecAdapter, Word2VecAdapterShallow, BPEmbAdapter
 from model.hand_code_emb import HandCodeEmb
 from skimage import draw
@@ -537,6 +538,8 @@ class PairingGroupingGraph(BaseModel):
                 self.idx_to_char = {}
                 for k,v in char_set['idx_to_char'].items():
                     self.idx_to_char[int(k)] = v
+            elif 'esseract' in config['text_rec']['model']:
+                self.text_rec = TesseractWrap(config['text_rec']['input_height'])
             else:
                 raise NotImplementedError('Unknown ATR model: {}'.format(config['text_rec']['model']))
             
@@ -2820,8 +2823,8 @@ class PairingGroupingGraph(BaseModel):
             self.text_rec.eval()
             #build batch
             max_w=0
-            for b in range(batch_size):
-                grid = bbs.getGrid()
+            for bb in range(bbs):
+                grid = bb.getGrid()
                 max_w = max(max_x,grid.size(1))
                 girds.append(grids)
 
@@ -2839,7 +2842,10 @@ class PairingGroupingGraph(BaseModel):
 
                 with torch.no_grad():
                     resBatch = self.text_rec(batch_lines).cpu().detach().numpy().transpose(1,0,2)
-                batch_strings, decoded_raw_hw = decode_handwriting(resBatch, self.idx_to_char)
+                if type(resBatch) is list:
+                    batch_strings = resBatch
+                else:
+                    batch_strings, decoded_raw_hw = decode_handwriting(resBatch, self.idx_to_char)
                 ##debug
                 out_im = batch_lines.cpu().numpy().transpose([0,2,3,1])
                 out_im = 256*(2-out_im)/2
@@ -2940,7 +2946,10 @@ class PairingGroupingGraph(BaseModel):
                 with torch.no_grad():
                     self.text_rec.eval()
                     resBatch = self.text_rec(lines).cpu().detach().numpy().transpose(1,0,2)
-                batch_strings, decoded_raw_hw = decode_handwriting(resBatch, self.idx_to_char)
+                if type(resBatch) is list:
+                    batch_strings = resBatch
+                else:
+                    batch_strings, decoded_raw_hw = decode_handwriting(resBatch, self.idx_to_char)
                 ###debug
                 #for i in range(num):
                 #    img_f.imwrite('out2/line{}-{}.png'.format(i+index,batch_strings[i]),imm[i])

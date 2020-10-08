@@ -698,6 +698,9 @@ def build_oversegmented_targets_multiscale(
                         s_t=s_b=s_len
                         s_l=s_r=s_perp
                         if gr<0 or gr>np.pi:
+                            if math.isinf(s_len):
+                                print('ERROR, s_len is inf')
+                                import pdb;pdb.set_trace()
                             c_t = g_bx-s_t*g_by
                             c_b = g_tx-s_b*g_ty
                             if math.isinf(s_perp):
