@@ -32,3 +32,7 @@ def detect_alignment_loss_points(predictions, target,label_sizes,alpha_alignment
 #    return xyrs_loss(prediction,target)
 #def lf_end_loss(end_pred,path_xyxy,end_point):
     #    return end_pred_loss(end_pred,path_xyxy,end_point)
+
+def CTCLoss(input,target,input_len,target_len):
+    ret = F.ctc_loss(input,target,input_len,target_len)
+    return torch.where(torch.isinf(ret), torch.zeros_like(ret), ret)

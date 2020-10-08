@@ -544,7 +544,8 @@ class PairingGroupingGraph(BaseModel):
                 for k,v in char_set['idx_to_char'].items():
                     self.idx_to_char[int(k)] = v
             elif 'esseract' in config['text_rec']['model']:
-                self.text_rec = TesseractWrap(config['text_rec']['input_height'])
+                self.text_rec = TesseractWrap(config['text_rec'])
+                self.hw_input_height = config['text_rec']['height']
             else:
                 raise NotImplementedError('Unknown ATR model: {}'.format(config['text_rec']['model']))
             
@@ -710,7 +711,7 @@ class PairingGroupingGraph(BaseModel):
         if self.text_rec is not None:
             if useGTBBs and gtTrans is not None: # and len(gtTrans)==useBBs.size[0]:
                 transcriptions = gtTrans
-            else:
+            elif not self.merge_first: #skip if oversegmented, for speed
                 transcriptions = self.getTranscriptions(useBBs,image)
                 if gtTrans is not None:
                     if self.include_bb_conf:
@@ -718,12 +719,14 @@ class PairingGroupingGraph(BaseModel):
                     else:
                         justBBs = useBBs
                     transcriptions=correctTrans(transcriptions,justBBs,gtTrans,gtBBs)
+            else:
+                transcriptions = None
         else:
             transcriptions=None
 
 
         if len(useBBs):#useBBs.size(0)>1:
-            if self.text_rec is not None:
+            if transcriptions is not None:
                 embeddings = self.embedding_model(transcriptions)
                 if self.add_noise_to_word_embeddings:
                     embeddings += torch.randn_like(embeddings).to(embeddings.device)*self.add_noise_to_word_embeddings*embeddings.mean()
@@ -768,6 +771,7 @@ class PairingGroupingGraph(BaseModel):
                         useBBs,bbTrans=self.mergeAndGroup(
                                 self.mergeThresh[0],None,None,
                                 edgeIndexes,edgeOuts,groups,None,None,None,useBBs,bbTrans,image,dont_merge=False,merge_only=True)
+                        #This mergeAndGroup performs first ATR
                         time = timeit.default_timer()-tic2#t#
                         self.opt_history['m1st mergeAndGroup'].append(time)#t#
                         groups=[[i] for i in range(len(useBBs))]
@@ -1132,7 +1136,10 @@ class PairingGroupingGraph(BaseModel):
                     
 
             if self.text_rec is not None and len(newBBs)>0:
-                doTransIndexes = [idx for idx in mergedTo is idx in bbs]
+                if merge_only :
+                    doTransIndexes = [idx for idx in bbs] #everything, since we skip recognition for speed
+                else:
+                    doTransIndexes = [idx for idx in mergedTo if idx in bbs]
                 doBBs = [bbs[idx] for idx in doTransIndexes]
                 newTrans = self.getTranscriptions(doBBs,image)
                 for i,idx in enumerate(doTransIndexes):
@@ -3393,9 +3400,10 @@ class PairingGroupingGraph(BaseModel):
             assert(image.size(0)==1) #single imag
             self.text_rec.eval()
             #build batch
+            renorm_matrix = transformation_utils.compute_renorm_matrix(image)
             max_w=0
             for bb in range(bbs):
-                grid = bb.getGrid()
+                grid = bb.getGrid(self.hw_input_height,renorm_matrix)
                 max_w = max(max_x,grid.size(1))
                 girds.append(grids)
 
@@ -3410,7 +3418,14 @@ class PairingGroupingGraph(BaseModel):
                 end=min((b+1)*self.atr_batch_size,len(grids))
                 b_grids = torch.stack(grids[start:end],dim=0).to(image.device)
                 batch_lines = F.grid_sample(image.expand(b_grids.size(0),-1,-1,-1),b_grids)
-
+    
+                ##DEBUG
+                d_lines = (1-batch_lines)/2
+                for i in range(batch_lines.size(0)):
+                    img_f.imshow('hwr {}'.format(i),d_lines[i,0])
+                img_f.show()
+                ##DEBUG
+                
                 with torch.no_grad():
                     resBatch = self.text_rec(batch_lines).cpu().detach().numpy().transpose(1,0,2)
                 if type(resBatch) is list:
@@ -3418,11 +3433,11 @@ class PairingGroupingGraph(BaseModel):
                 else:
                     batch_strings, decoded_raw_hw = decode_handwriting(resBatch, self.idx_to_char)
                 ##debug
-                out_im = batch_lines.cpu().numpy().transpose([0,2,3,1])
-                out_im = 256*(2-out_im)/2
-                for i in range(batch_lines.size(0)):
-                    img_f.imwrite('out2/line{}-{}.png'.format(i+index,batch_strings[i]),out_im[i])
-                    print('DEBUG saved hwr image: out2/line{}-{}.png'.format(i+start,batch_strings[i]))
+                #out_im = batch_lines.cpu().numpy().transpose([0,2,3,1])
+                #out_im = 256*(2-out_im)/2
+                #for i in range(batch_lines.size(0)):
+                #    img_f.imwrite('out2/line{}-{}.png'.format(i+index,batch_strings[i]),out_im[i])
+                #    print('DEBUG saved hwr image: out2/line{}-{}.png'.format(i+start,batch_strings[i]))
                 ##
                 output_strings += batch_strings
 
