@@ -50,8 +50,8 @@ def imread(path,color=True):
 def imwrite(path,img):
     minV = img.min()
     maxV = img.max()
-    if not(minV==0 and (maxV==1 or maxV==255)):
-        print('warning, unnormized image: {} {}-{}'.format(path,minV,maxV))
+    if maxV>1 and minV>=0:
+        img=img.astype(np.uint8)
     return io.imsave(path,img,plugin='pil')
 
 def imshow(name,img):
