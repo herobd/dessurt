@@ -48,7 +48,11 @@ def imread(path,color=True):
     return io.imread(path,not color)
 
 def imwrite(path,img):
-    return io.imsave(path,img)
+    minV = img.min()
+    maxV = img.max()
+    if not(minV==0 and (maxV==1 or maxV==255)):
+        print('warning, unnormized image: {} {}-{}'.format(path,minV,maxV))
+    return io.imsave(path,img,plugin='pil')
 
 def imshow(name,img):
     return io.imshow(img)
@@ -61,10 +65,10 @@ def resize(img,dim,fx=None,fy=None): #remove ",interpolation = cv2.INTER_CUBIC"
     if dim[0]==0:
         downsize = fx<1 and fy<1
         
-        return transform.rescale(img,(fy,fx),3,multichannel=hasColor,anti_aliasing=downsize)
+        return transform.rescale(img,(fy,fx),3,multichannel=hasColor,anti_aliasing=downsize,preserve_range=True)
     else:
         downsize = dim[0]<img.shape[0] and dim[1]<img.shape[1]
-        return transform.resize(img,dim,3,multichannel=hasColor,anti_aliasing=downsize)
+        return transform.resize(img,dim,3,multichannel=hasColor,anti_aliasing=downsize,preserve_range=True)
 
 def otsuThreshold(img):
     #if len(img.shape)==3 and img.shape[2]==1:
