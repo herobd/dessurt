@@ -85,6 +85,7 @@ def main(config, resume):
 
     print("Begin training")
     update_status(name,'started',supercomputer)
+    #warnings.filterwarnings("error")
     trainer.train()
 
 
@@ -105,7 +106,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    warnings.filterwarnings("once")
+    #warnings.filterwarnings("once")
 
     config = None
     if args.config is not None:

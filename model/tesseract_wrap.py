@@ -2,7 +2,10 @@ from base import BaseModel
 from PIL import Image
 from torch import nn
 from torch import functional as F
-import pytesseract
+try:
+    import pytesseract
+except:
+    pass
 
 #from .pretrained_gen import Print
 
