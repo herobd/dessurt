@@ -512,6 +512,7 @@ class PairingGroupingGraph(BaseModel):
         if 'text_rec' in config:
             self.padATRy=3
             self.padATRx=10
+            self.atr_batch_size = config['text_rec']['batch_size']
             if 'CRNN' in config['text_rec']['model']:
                 self.hw_channels = config['text_rec']['num_channels'] if 'num_channels' in config['text_rec'] else 1
                 norm = config['text_rec']['norm'] if 'norm' in config['text_rec'] else 'batch'
@@ -521,7 +522,6 @@ class PairingGroupingGraph(BaseModel):
                 else:
                     self.text_rec = CRNN(config['text_rec']['num_char'],self.hw_channels,norm=norm,use_softmax=use_softmax)
                     
-                self.atr_batch_size = config['text_rec']['batch_size']
                 self.pad_text_height = config['text_rec']['pad_text_height'] if 'pad_text_height' in config['text_rec'] else False
                 print('WARNING, is text_rec set to frozen?')
                 self.text_rec.eval()
@@ -594,7 +594,7 @@ class PairingGroupingGraph(BaseModel):
             print('Unfroze detector')
         
 
-    def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=300, debug=False,old_nn=False,gtTrans=None,dont_merge=False):
+    def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=300, debug=False,old_nn=False,gtTrans=None,merge_first_only=False):
         #t##t#tic=timeit.default_timer()#t#
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
         bbPredictions, offsetPredictions, _,_,_,_ = self.detector(image)
@@ -764,8 +764,20 @@ class PairingGroupingGraph(BaseModel):
                         #perform predicted merges
                         #t#tic2=timeit.default_timer()#t#
                         useBBs,bbTrans=self.mergeAndGroup(
-                                self.mergeThresh[0],None,None,
-                                edgeIndexes,edgeOuts,groups,None,None,None,useBBs,bbTrans,image,dont_merge=False,merge_only=True)
+                                self.mergeThresh[0],
+                                None,
+                                None,
+                                edgeIndexes,
+                                edgeOuts,
+                                groups,
+                                None,
+                                None,
+                                None,
+                                useBBs,
+                                bbTrans,
+                                image,
+                                skip_rec=merge_first_only,
+                                merge_only=True)
                         #This mergeAndGroup performs first ATR
                         #t#time = timeit.default_timer()-tic2#t#
                         #t#self.opt_history['m1st mergeAndGroup'].append(time)#t#
@@ -773,7 +785,7 @@ class PairingGroupingGraph(BaseModel):
                         #print('merge first reduced graph by {} nodes ({}->{}). max edge pred:{}, mean:{}'.format(startBBs-len(useBBs),startBBs,len(useBBs),torch.sigmoid(edgeOuts.max()),torch.sigmoid(edgeOuts.mean())))
                     #t#time = timeit.default_timer()-tic#t#
                     #t#self.opt_history['m1st Full'].append(time)#t#
-                    if dont_merge:
+                    if merge_first_only:
                         return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, None, merge_prop_scores, None
 
                 else:
@@ -837,8 +849,7 @@ class PairingGroupingGraph(BaseModel):
                             uniFeats,
                             useBBs,
                             bbTrans,
-                            image,
-                            dont_merge)
+                            image)
 
                     if self.reintroduce_visual_features:
                         graph,last_node_visual_feats,last_edge_visual_feats = self.appendVisualFeatures(
@@ -883,8 +894,8 @@ class PairingGroupingGraph(BaseModel):
                         None,#edgeFeats.detach(),
                         None,#uniFeats.detach() if uniFeats is not None else None,
                         useBBs,
-                        bbTrans,image,
-                        dont_merge)
+                        bbTrans,
+                        image)
                 #print('!D! after  edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(graph[2].size(),useBBs.size(),graph[0].size(),len(edgeIndexes)))
                 final=(useBBs if self.useCurvedBBs else useBBs.cpu().detach(),groups,edgeIndexes,bbTrans)
                 #print('all iters GCN')
@@ -1087,7 +1098,7 @@ class PairingGroupingGraph(BaseModel):
         #resBatch = self.text_rec(lines)
 
     #Use the graph network's predictions to merge oversegmented detections and group nodes into a single node
-    def mergeAndGroupCurved(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,oldBBTrans,image,dont_merge=False,merge_only=False):
+    def mergeAndGroupCurved(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,oldBBTrans,image,skip_rec=False,merge_only=False):
         assert(len(oldBBs)==0 or type(oldBBs[0]) is TextLine)
         oldNumGroups=len(oldGroups)
         #changedNodeIds=set()
@@ -1095,8 +1106,10 @@ class PairingGroupingGraph(BaseModel):
             bbs={i:TextLine(clone=v) for i,v in enumerate(oldBBs)}
         else:
             bbs={i:v for i,v in enumerate(oldBBs)}
-        if self.text_rec is not None:
+        if self.text_rec is not None and oldBBTrans is not None:
             bbTrans={i:v for i,v  in enumerate(oldBBTrans)}
+        else:
+            bbTrans={}
         oldToNewBBIndexes={i:i for i in range(len(oldBBs))}
         #newBBs_line={}
         newBBIdCounter=0
@@ -1109,7 +1122,7 @@ class PairingGroupingGraph(BaseModel):
         else:
             mergePreds = torch.sigmoid(edgePredictions[:,-1,0]).cpu().detach()
         ##Prevent all nodes from merging during first iterations (bad init):
-        if not dont_merge:
+        if True: #not dont_merge:
             mergedTo=set()
             #check for merges, where we will combine two BBs into one
             for i,(n0,n1) in enumerate(oldEdgeIndexes):
@@ -1133,7 +1146,8 @@ class PairingGroupingGraph(BaseModel):
                             #merge two merged bbs
                             oldToNewBBIndexes = {k:(v if v!=newId1 else newId0) for k,v in oldToNewBBIndexes.items()}
                             del bbs[newId1]
-                            if self.text_rec is not None:
+                            #if self.text_rec is not None and not skip_rec:
+                            if oldBBTrans is not None:
                                 del bbTrans[newId1]
                             mergedTo.add(newId0)
 
@@ -1141,7 +1155,7 @@ class PairingGroupingGraph(BaseModel):
             oldBBIdToNew = oldToNewBBIndexes
                     
 
-            if self.text_rec is not None and len(newBBs)>0:
+            if self.text_rec is not None and len(bbs)>0 and not skip_rec:
                 if merge_only :
                     doTransIndexes = [idx for idx in bbs] #everything, since we skip recognition for speed
                 else:
@@ -1155,7 +1169,7 @@ class PairingGroupingGraph(BaseModel):
                 newBBTrans=[] if self.text_rec is not None else None
                 for bbId,bb in bbs.items():
                     newBBs.append(bb)
-                    if self.text_rec is not None:
+                    if self.text_rec is not None and not skip_rec:
                         newBBTrans.append(bbTrans[bbId])
                 return newBBs, newBBTrans
 
@@ -1358,9 +1372,9 @@ class PairingGroupingGraph(BaseModel):
 
         return newBBs, newGraph, newGroups, edges, newBBTrans if self.text_rec is not None else None,  oldToNewNodeIds_unchanged
 
-    def mergeAndGroup(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,dont_merge=False,merge_only=False):
+    def mergeAndGroup(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,skip_rec=False,merge_only=False):
         if self.useCurvedBBs:
-            return self.mergeAndGroupCurved(mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,dont_merge,merge_only)
+            return self.mergeAndGroupCurved(mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,skip_rec,merge_only)
         changedNodeIds=set()
         newBBs={}
         #newBBs_line={}
@@ -3423,13 +3437,14 @@ class PairingGroupingGraph(BaseModel):
             self.text_rec.eval()
             #build batch
             max_w=0
-            for bb in range(bbs):
+            grids=[]
+            for bb in bbs:
                 grid = bb.getGrid(self.hw_input_height,image.device)
-                max_w = max(max_x,grid.size(1))
-                girds.append(grids)
+                max_w = max(max_w,grid.size(1))
+                grids.append(grid)
 
             #batch the grids together padding to same length
-            to_pad = [g.size(1)-max_w for g in grids]
+            to_pad = [max_w-g.size(1) for g in grids]
             grids = [F.pad(g,(0,p,0,0)) for g,p in zip(grids,to_pad)]
 
             output_strings=[]

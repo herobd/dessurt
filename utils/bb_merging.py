@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import math
+from utils.util import pointDistance
 
 def xyrwh_TextLine(bb):
     assert(False and "untested")
@@ -790,23 +791,23 @@ class TextLine:
             avg_h = (pointDistance(*self.point_pairs[i]) + pointDistance(*self.point_pairs[i+1]))/2
             avg_w = (pointDistance(self.point_pairs[i][0],self.point_pairs[i+1][0]) + pointDistance(self.point_pairs[i][1],self.point_pairs[i+1][1]))/2
             ratio = height/avg_h
-            out_width = ratio*avg_w
+            out_width = round(ratio*avg_w)
             t = ((np.arange(height) + 0.5) / float(height))[:,None].astype(np.float32)
             t = np.repeat(t,axis=1, repeats=out_width)
             t = torch.from_numpy(t)
             s = ((np.arange(out_width) + 0.5) / float(out_width))[:,None].astype(np.float32)
             s = np.repeat(s,axis=1, repeats=height)
-            s = torch.from_numpy(s)
+            s = torch.from_numpy(s).t()
             
             t=t.to(device)
             s=s.to(device)
             #construct interpolation for the 4 points of the polygon to each pixel of output grid
-            interpolations = torch.cat([
+            interpolations = torch.stack([
                 (1-t)*(1-s), #tl
                 (1-t)*s, #bl
                 t*(1-s), #tr
                 t*s, #br
-            ], dim=-1)
+            ], dim=2)
             points = torch.FloatTensor([*self.point_pairs[i],*self.point_pairs[i+1]]).to(device)
             grid = interpolations[:,:,:,None]*points[None,None,:,:] #add dimensions to allow broacast along xy and row, col dims
             grid=grid.sum(dim=2) #sum four points
