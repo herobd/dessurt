@@ -781,55 +781,37 @@ class TextLine:
                 self.conf = np.mean(self.all_conf)
         return self.conf.item()
     
-    def getGrid(self,height,renorm_matrixu):
+    def getGrid(self,height,device):
         if self.point_pairs is None:
             self.compute()
 
-        output_grid_size=height#?
-        t = ((np.arange(self.output_grid_size) + 0.5) / float(self.output_grid_size))[:,None].astype(np.float32)
-        t = np.repeat(t,axis=1, repeats=self.output_grid_size)
-        t = Variable(torch.from_numpy(t), requires_grad=False).cuda()
-        s = t.t()
-
-        t = t[:,:,None]
-        s = s[:,:,None]
-
-        interpolations = torch.cat([
-            (1-t)*s,
-            (1-t)*(1-s),
-            t*s,
-            t*(1-s),
-        ], dim=-1)
-
-
-        a_pt = torch.Tensor(
-            [
-                [0, 1,1],
-                [0,-1,1]
-            ]
-        ).cuda()
-        a_pt = a_pt.transpose(1,0)
-        a_pt = a_pt.expand(a_pt.size(0), a_pt.size(1))
-
         grid_line = []
         for i in range(len(self.point_pairs)-1):
-            w_0 = next_windows[i]
-            w_1 = next_windows[i+1]
-
-            pts_0 = w_0.mm(a_pt)
-            pts_1 = w_1.mm(a_pt)
-            xy_positions.append(pts_0)
-
-            #probably can skip to pts_
-            pts = torch.cat([pts_0, pts_1], dim=2)
-
-            grid_pts = expanded_renorm_matrix.bmm(pts)
-
-            grid = interpolations[None,:,:,None,:] * grid_pts[:,None,None,:,:]
-            grid = grid.sum(dim=-1)[...,:2]
-
+            avg_h = (pointDistance(*self.point_pairs[i]) + pointDistance(*self.point_pairs[i+1]))/2
+            avg_w = (pointDistance(self.point_pairs[i][0],self.point_pairs[i+1][0]) + pointDistance(self.point_pairs[i][1],self.point_pairs[i+1][1]))/2
+            ratio = height/avg_h
+            out_width = ratio*avg_w
+            t = ((np.arange(height) + 0.5) / float(height))[:,None].astype(np.float32)
+            t = np.repeat(t,axis=1, repeats=out_width)
+            t = torch.from_numpy(t)
+            s = ((np.arange(out_width) + 0.5) / float(out_width))[:,None].astype(np.float32)
+            s = np.repeat(s,axis=1, repeats=height)
+            s = torch.from_numpy(s)
+            
+            t=t.to(device)
+            s=s.to(device)
+            #construct interpolation for the 4 points of the polygon to each pixel of output grid
+            interpolations = torch.cat([
+                (1-t)*(1-s), #tl
+                (1-t)*s, #bl
+                t*(1-s), #tr
+                t*s, #br
+            ], dim=-1)
+            points = torch.FloatTensor([*self.point_pairs[i],*self.point_pairs[i+1]]).to(device)
+            grid = interpolations[:,:,:,None]*points[None,None,:,:] #add dimensions to allow broacast along xy and row, col dims
+            grid=grid.sum(dim=2) #sum four points
             grid_line.append(grid)
-        grid_line = torch.cat(grid_line, dim=0)
+        grid_line = torch.cat(grid_line, dim=1)
         return grid_line
 
 

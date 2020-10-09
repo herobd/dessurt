@@ -1,5 +1,5 @@
 {
-    "name": "FUNSDLines_detect_augRFh_oversegMultScl",
+    "name": "FUNSDLines_detect_augRFh_oversegMultScl_resnetShlwPure",
     "cuda": true,
     "gpu": 0,
     "super_computer":false,
@@ -9,7 +9,7 @@
         "data_set_name": "FUNSDBoxDetect",
         "data_dir": "../data/FUNSD",
         "split_to_lines": true,
-        "batch_size": 4,
+        "batch_size": 6,
         "shuffle": true,
         "num_workers": 0,
         "crop_to_page":false,
@@ -31,8 +31,7 @@
         "color":false,
         "rescale_range": [1,1],
         "rotation": false,
-        "crop_params": null,
-        "batch_size": 8
+        "crop_params": null
     },
 
     
@@ -57,10 +56,10 @@
     "metrics": [],
     "trainer": {
         "class": "BoxDetectTrainer",
-        "iterations": 100000,
+        "iterations": 400000,
         "save_dir": "saved/",
         "val_step": 10000,
-        "save_step": 20000,
+        "save_step": 10000,
         "save_step_minor": 500,
         "log_step": 100,
         "verbosity": 1,
@@ -79,12 +78,11 @@
         "number_of_pixel_types": 0,
         "norm_type": "group_norm",
         "dropout": true,
-        "down_layers_cfg": [["k5-32", "M", 
-                                64, 64,  "M", 
-                                128, "d2-128", 128, 128,  "M", 
-                                128, "d2-128", 128, 128, 
-                                "M",256,"d2-256",256,"d4-256", 256],
-                                ["M",256,"d2-256", 256]],
+        "down_layers_cfg": [["$7-64",
+                                "D128",  "R128",
+                                "D256", "R256",
+                                "D256", "R256", "R256"],
+                                ["D512","R512"]],
         "up_layers_cfg":[]
     }
 }
