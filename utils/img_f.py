@@ -108,3 +108,23 @@ def warpAffine(img,M,shape=None):
         M = np.concatenate((M,np.array([[0.0,0.0,1.0]])),axis=0)
     T = transform.AffineTransform(M)
     return transform.warp(img,T,output_shape=shape)
+
+def remap(img,map_x,map_y,interpolation=2,borderValue=None):
+    return transform.warp(img,np.stack((map_y,map_x),axis=0),order=interpolation)
+
+ROTATE_90_COUNTERCLOCKWISE=1
+ROTATE_90_CLOCKWISE=3
+ROTATE_180=2
+def rotate(img,num_rot,degress=None):
+    if num_rot is not None:
+        return np.rot90(img,num_rot,axes=(0,1))
+    else:
+        raise NotImplementedError()
+
+if __name__ == "__main__":
+    import sys
+    input_image = sys.argv[1]
+    img = imread(input_image)
+    img = rotate(img,ROTATE_90_COUNTERCLOCKWISE)
+    imshow('warped', img)
+    show()
