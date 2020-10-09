@@ -138,7 +138,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
     else:
         targetSize=0
 
-    toRet=log
+    toRet={}#log
     if allEdgePred is not None:
         for gIter,(edgePred, relIndexes, bbPred, outputBoxes, predGroups, edgePredTypes) in enumerate(zip(allEdgePred,allEdgeIndexes,allNodePred,allOutputBoxes,allPredGroups,allEdgePredTypes)):
 
@@ -216,12 +216,11 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
 
              }
     for key,value in log.items():
-        if key.startswith('final'):
-            print('\t{}: {}'.format(key,value))
-            if type(value) is np.ndarray:
-                retData['!'+key]={i:[value[i]] for i in range(value.shape[0])}
-            else:
-                retData['!'+key]=[value]
+        #if key.startswith('final'):
+        if type(value) is np.ndarray:
+            retData[key]={i:[value[i]] for i in range(value.shape[0])}
+        else:
+            retData[key]=[value]
     #if rel_ap is not None: #none ap if no relationships
     #    retData['rel_AP']=rel_ap
     #    retData['no_targs']=0
