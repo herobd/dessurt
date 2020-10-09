@@ -3423,10 +3423,9 @@ class PairingGroupingGraph(BaseModel):
             assert(image.size(0)==1) #single imag
             self.text_rec.eval()
             #build batch
-            renorm_matrix = transformation_utils.compute_renorm_matrix(image)
             max_w=0
             for bb in range(bbs):
-                grid = bb.getGrid(self.hw_input_height,renorm_matrix)
+                grid = bb.getGrid(self.hw_input_height,image.device)
                 max_w = max(max_x,grid.size(1))
                 girds.append(grids)
 
@@ -3439,7 +3438,7 @@ class PairingGroupingGraph(BaseModel):
             for b in range(num_batch):
                 start=b*self.atr_batch_size
                 end=min((b+1)*self.atr_batch_size,len(grids))
-                b_grids = torch.stack(grids[start:end],dim=0).to(image.device)
+                b_grids = torch.stack(grids[start:end],dim=0)#.to(image.device)
                 batch_lines = F.grid_sample(image.expand(b_grids.size(0),-1,-1,-1),b_grids)
     
                 ##DEBUG
