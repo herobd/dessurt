@@ -785,8 +785,8 @@ class TextLine:
         if self.point_pairs is None:
             self.compute()
 
-	output_grid_size=height#?
-	t = ((np.arange(self.output_grid_size) + 0.5) / float(self.output_grid_size))[:,None].astype(np.float32)
+        output_grid_size=height#?
+        t = ((np.arange(self.output_grid_size) + 0.5) / float(self.output_grid_size))[:,None].astype(np.float32)
         t = np.repeat(t,axis=1, repeats=self.output_grid_size)
         t = Variable(torch.from_numpy(t), requires_grad=False).cuda()
         s = t.t()
@@ -800,9 +800,9 @@ class TextLine:
             t*s,
             t*(1-s),
         ], dim=-1)
-       
- 
-	a_pt = torch.Tensor(
+
+
+        a_pt = torch.Tensor(
             [
                 [0, 1,1],
                 [0,-1,1]
@@ -813,7 +813,7 @@ class TextLine:
 
         grid_line = []
         for i in range(len(self.point_pairs)-1):
-	    w_0 = next_windows[i]
+            w_0 = next_windows[i]
             w_1 = next_windows[i+1]
 
             pts_0 = w_0.mm(a_pt)
