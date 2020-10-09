@@ -878,8 +878,10 @@ class PairingGroupingGraph(BaseModel):
                         self.groupThresh[-1],
                         edgeIndexes,
                         edgeOuts.detach(),
-                        groups,nodeFeats.detach(),
-                        edgeFeats.detach(),uniFeats.detach() if uniFeats is not None else None,
+                        groups,
+                        nodeFeats.detach(),
+                        edgeFeats.detach(),
+                        uniFeats.detach() if uniFeats is not None else None,
                         useBBs,
                         bbTrans,image,
                         dont_merge)
@@ -1087,6 +1089,7 @@ class PairingGroupingGraph(BaseModel):
     #Use the graph network's predictions to merge oversegmented detections and group nodes into a single node
     def mergeAndGroupCurved(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,oldBBTrans,image,dont_merge=False,merge_only=False):
         assert(len(oldBBs)==0 or type(oldBBs[0]) is TextLine)
+        assert(oldNodeFeats is None or oldGroups is None or oldNodeFeats.size(0)==len(oldGroups))
         #changedNodeIds=set()
         if self.useCurvedBBs:
             bbs={i:TextLine(clone=v) for i,v in enumerate(oldBBs)}
