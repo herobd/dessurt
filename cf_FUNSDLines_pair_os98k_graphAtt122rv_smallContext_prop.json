@@ -1,5 +1,5 @@
 {
-    "name": "FUNSDLines_pair_osLighter80k_graphAtt122rv_smallContext_prop",
+    "name": "FUNSDLines_pair_os98k_graphAtt122rv_smallContext_prop",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -97,7 +97,7 @@
     },
     "arch": "PairingGroupingGraph", 
     "model": {
-        "detector_checkpoint": "saved/FUNSDLines_detect_augRFh_oversegMultScl_lighter/checkpoint-iteration80000.pth",
+        "detector_checkpoint": "saved/FUNSDLines_detect_augRFh_oversegMultScl/checkpoint-iteration98042.pth",
         "conf_thresh": 0.7,
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
@@ -121,7 +121,7 @@
         "merge_featurizer_start_h": 5,
         "merge_featurizer_start_w": 5,
         "merge_featurizer_conv": ["sep256","sep128","sep128",100],
-        "init_merge_thresh": 0.72,
+        "init_merge_thresh": 0.8,
 
         "expand_rel_context": 20,
         "featurizer_start_h": 16,

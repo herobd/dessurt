@@ -16,16 +16,16 @@ If upgrading cuda, remove the old version first either with apt-get or uninstall
 `conda install $`
 * `ipython`
 * `pytorch torchvision -c pytorch` or what ever the command is on pytorch.org given cuda version, etc
-* `opencv`
 * `scikit-image`
+No `opencv` any more
 
 `pytorch-geometric`: https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html
 
-`conda install gensim`
+`pip install gensim` conda installing this is weird 
 
 `pip install bpemb`
 
-`pip install edgit distance`
+`pip install editdistance`
 
 
 for cvxpy (optimization), you must have python 3.7 or later:
