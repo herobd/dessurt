@@ -95,7 +95,7 @@ class GraphPairTrainer(BaseTrainer):
 
         self.use_gt_trans = config['trainer']['use_gt_trans'] if 'use_gt_trans' in config['trainer'] else False
 
-        self.start_merge_iter = config['trainer']['start_merge_iter'] if 'start_merge_iter' in config['trainer'] else 100
+        self.merge_first_only_until = config['trainer']['merge_first_only_until'] if 'merge_first_only_until' in config['trainer'] else 100
         self.init_merge_rule = config['trainer']['init_merge_rule'] if 'init_merge_rule' in config['trainer'] else None
 
         self.num_node_error_class = 0
@@ -1362,7 +1362,7 @@ class GraphPairTrainer(BaseTrainer):
             else:
                 targetBoxes_changed=targetBoxes
 
-            #if self.iteration>=self.start_merge_iter:
+            #if self.iteration>=self.merge_first_only_until:
             #    with profiler.profile(profile_memory=True, record_shapes=True) as prof:
             #        allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred,merge_prop_scores, final = self.model(
             #                            image,
@@ -1373,7 +1373,7 @@ class GraphPairTrainer(BaseTrainer):
             #                            otherThreshIntur=threshIntur, 
             #                            hard_detect_limit=self.train_hard_detect_limit,
             #                            gtTrans = gtTrans,
-            #                            dont_merge = self.iteration<self.start_merge_iter)
+            #                            dont_merge = self.iteration<self.merge_first_only_until)
             #        print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
             #else:
             allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred,merge_prop_scores, final = self.model(
@@ -1385,7 +1385,7 @@ class GraphPairTrainer(BaseTrainer):
                                 otherThreshIntur=threshIntur, 
                                 hard_detect_limit=self.train_hard_detect_limit,
                                 gtTrans = gtTrans,
-                                dont_merge = self.iteration<self.start_merge_iter)
+                                merge_first_only = self.iteration<self.merge_first_only_until)
             #TODO
             #predPairingShouldBeTrue,predPairingShouldBeFalse, eRecall,ePrec,fullPrec,ap,proposedInfo = self.prealignedEdgePred(adj,relPred,relIndexes,rel_prop_pred)
             #if bbPred is not None:
@@ -1414,7 +1414,7 @@ class GraphPairTrainer(BaseTrainer):
                     otherThreshIntur=threshIntur, 
                     hard_detect_limit=self.train_hard_detect_limit,
                     gtTrans = gtTrans,
-                    dont_merge = self.iteration<self.start_merge_iter)
+                    merge_first_only = self.iteration<self.merge_first_only_until)
             #gtPairing,predPairing = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred)
         #t#print('time run model: {}'.format(timeit.default_timer()-tic))#t#
         #t#tic=timeit.default_timer()#t#
