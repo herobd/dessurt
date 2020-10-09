@@ -177,10 +177,10 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                 x1,y1 = groupCenters[g1]
                 x2,y2 = groupCenters[g2]
                 if (predTypes is not None and
-                    (predTypes[0][i]=='TN' or predTypes[0][i]=='UN') and
+                    (predTypes[0][i]=='TN' or predTypes[0][i]=='UN') and (len(predTypes)==1 or (
                      (predTypes[1][i]=='TN' or predTypes[1][i]=='UN') and
                      (predTypes[3][i]=='TN' or predTypes[3][i]=='UN') and
-                     (predTypes[2][i]=='TN' or predTypes[2][i]=='UN') ):
+                     (predTypes[2][i]=='TN' or predTypes[2][i]=='UN') )) ):
                     lineColor = (0,0,edgePred[i,-1,0].item()) #BLUE
                     img_f.line(image,(x1,y1),(x2,y2),lineColor,1)
                 else:
@@ -214,6 +214,10 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                         tX=cX+offsetX
                         tY=cY+offsetY
                         image[tY:tY+s,tX:tX+s]=boxColors[i]
+                    #error
+                    if len(boxColors)==5:
+                        image[cY-3,cX-2:cX+4]=boxColors[4]
+                        image[cY-2:cY+4,cX-3]=boxColors[4]
         else:
             lineColor = (0,0.8,0)
             for i,x1,y1,x2,y2 in edgesToDraw:

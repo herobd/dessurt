@@ -746,11 +746,6 @@ class PairingGroupingGraph(BaseModel):
                     #_,edgeIndexes, edgeFeatures,_ = graph
                     #t#time = timeit.default_timer()-tic#t#
                     #t#self.opt_history['m1st createGraph'].append(time)#t#
-                    #if graph is not None:
-                    #    edgeOuts = self.mergepred(graph[2]) #classifier on edge features
-                    #    edgeOuts = edgeOuts[:,None,:]
-                    #else:
-                    #    edgeOuts = None
                     if edgeOuts is not None:
                         edgeOuts = self.mergepred(edgeOuts)
                         edgeOuts = edgeOuts[:,None,:] #introduce repition dim (to match graph network)
@@ -878,8 +873,16 @@ class PairingGroupingGraph(BaseModel):
                 ##Final state of the graph
                 #print('!D! F before edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(edgeFeats.size(),useBBs.size(),nodeFeats.size(),len(edgeIndexes)))
                 useBBs,graph,groups,edgeIndexes,bbTrans,same_node_map=self.mergeAndGroup(
-                        self.mergeThresh[-1],self.keepEdgeThresh[-1],self.groupThresh[-1],
-                        edgeIndexes,edgeOuts.detach(),groups,nodeFeats.detach(),edgeFeats.detach(),uniFeats.detach() if uniFeats is not None else None,useBBs,bbTrans,image,dont_merge)
+                        self.mergeThresh[-1],
+                        self.keepEdgeThresh[-1],
+                        self.groupThresh[-1],
+                        edgeIndexes,
+                        edgeOuts.detach(),
+                        groups,nodeFeats.detach(),
+                        edgeFeats.detach(),uniFeats.detach() if uniFeats is not None else None,
+                        useBBs,
+                        bbTrans,image,
+                        dont_merge)
                 #print('!D! after  edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(graph[2].size(),useBBs.size(),graph[0].size(),len(edgeIndexes)))
                 final=(useBBs if self.useCurvedBBs else useBBs.cpu().detach(),groups,edgeIndexes,bbTrans)
                 #print('all iters GCN')
@@ -1184,8 +1187,9 @@ class PairingGroupingGraph(BaseModel):
             #Prune and adjust the edges (to groups)
             groupEdges=[]
 
-            #D_numOldEdges=len(oldEdgeIndexes)
-            #D_numOldAboveThresh=(edgePreds>keepEdgeThresh).sum()
+            D_numOldEdges=len(oldEdgeIndexes)
+            D_numOldAboveThresh=(edgePreds>keepEdgeThresh).sum()
+            prunedOldEdgeIndexes=[]
             for i,(n0,n1) in enumerate(oldEdgeIndexes):
                 if edgePreds[i]>keepEdgeThresh:
                     if n0 in oldGroupToNew:
@@ -1199,15 +1203,18 @@ class PairingGroupingGraph(BaseModel):
                         groupEdges.append((groupPreds[i].item(),n0,n1))
                     #else:
                     #    It disapears
+                    prunedOldEdgeIndexes.append((n0,n1))
 
-            #print('!D! original edges:{}, above thresh:{}, kept edges:{}'.format(D_numOldEdges,D_numOldAboveThresh,len(edgeFeats)))
+            #print('!D! original edges:{}, above thresh:{}, kept edges:{}'.format(D_numOldEdges,D_numOldAboveThresh,len(groupEdges)))
              
         else:
             #skipping merging
             groupEdges=[]
+            prunedOldEdgeIndexes=[]
             for i,(n0,n1) in enumerate(oldEdgeIndexes):
                 if edgePreds[i]>keepEdgeThresh:
                     groupEdges.append((groupPreds[i].item(),n0,n1))
+                    prunedOldEdgeIndexes.append((n0,n1))
             #oldEdgeIndexes=None
 
 
@@ -1286,10 +1293,11 @@ class PairingGroupingGraph(BaseModel):
         #first change all node ids to their new ones
         D_newToOld = {v:k for k,v in oldToNewNodeIds_unchanged.items()}
         newEdges_map=defaultdict(list)
-        for i,(n0,n1)  in  enumerate(oldEdgeIndexes):
+        for i,(n0,n1)  in  enumerate(prunedOldEdgeIndexes):
             new_n0 = oldToNewIds_all[n0]
             new_n1 = oldToNewIds_all[n1]
-            newEdges_map[(min(new_n0,new_n1),max(new_n0,new_n1))].append(i)
+            if new_n0 != new_n1:
+                newEdges_map[(min(new_n0,new_n1),max(new_n0,new_n1))].append(i)
 
             #D#
             if new_n0 in D_newToOld and new_n1 in D_newToOld:
@@ -1331,7 +1339,7 @@ class PairingGroupingGraph(BaseModel):
                 o0 = newToOld[n0]
                 o1 = newToOld[n1]
                 assert( (min(o0,o1),max(o0,o1)) in oldEdgeIndexes )
-
+        #print('!D! final edges: {}'.format(len(edges)))
         ##D###
 
         return newBBs, newGraph, newGroups, edges, newBBTrans if self.text_rec is not None else None,  oldToNewNodeIds_unchanged
