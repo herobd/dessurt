@@ -568,6 +568,7 @@ class GraphPairTrainer(BaseTrainer):
             predsGTEdge = []
             predsGTNoEdge = []
             truePosEdge=falsePosEdge=trueNegEdge=falseNegEdge=0
+            saveEdgePred={}
             if not merge_only:
                 predsRel = edgePred[...,1] 
                 predsOverSeg = edgePred[...,2] 
@@ -661,15 +662,24 @@ class GraphPairTrainer(BaseTrainer):
                     predsGTEdge.append(predsEdge[i])
                     if torch.sigmoid(predsEdge[i])>thresh_edge:
                         truePosEdge+=1
+                        saveEdgePred[i]='TP'
                     else:
                         falseNegEdge+=1
+                        saveEdgePred[i]='FN'
                 elif not wasError:
                     shouldBeEdge[(n0,n1)]=False
                     predsGTNoEdge.append(predsEdge[i])
                     if torch.sigmoid(predsEdge[i])>thresh_edge:
                         falsePosEdge+=1
+                        saveEdgePred[i]='FP'
                     else:
                         trueNegEdge+=1
+                        saveEdgePred[i]='TN'
+                else:
+                    if torch.sigmoid(predsEdge[i])>thresh_edge:
+                        saveEdgePred[i]='UP'
+                    else:
+                        saveEdgePred[i]='UN'
 
 
                 if not merge_only:
@@ -830,7 +840,7 @@ class GraphPairTrainer(BaseTrainer):
                     'precMergeFirst' : precEdge, 
                     'FmMergeFirst' : 2*(precEdge*recallEdge)/(recallEdge+precEdge) if recallEdge+precEdge>0 else 0
                     }
-                predTypes=None
+                predTypes=[saveEdgePred]
             else:
                 recallRel = truePosRel/(truePosRel+falseNegRel) if truePosRel+falseNegRel>0 else 1
                 precRel = truePosRel/(truePosRel+falsePosRel) if truePosRel+falsePosRel>0 else 1
@@ -860,7 +870,7 @@ class GraphPairTrainer(BaseTrainer):
                     'precError' : precError,
                     'FmError' : 2*(precError*recallError)/(recallError+precError) if recallError+precError>0 else 0,
                     }
-                predTypes = [saveRelPred,saveOverSegPred,saveGroupPred,saveErrorPred]
+                predTypes = [saveEdgePred,saveRelPred,saveOverSegPred,saveGroupPred,saveErrorPred]
 
             #t#print('\tsimplerAlign everything else: {}'.format(timeit.default_timer()-tic))#t#
 
@@ -1708,7 +1718,7 @@ class GraphPairTrainer(BaseTrainer):
                 draw_graph(finalOutputBoxes,self.model.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,image,None,targetBoxes,self.model,path,bbTrans=finalBBTrans,useTextLines=self.model.useCurvedBBs)
                 #print('saved {}'.format(path))
             finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = final
-            print('DEBUG final num node:{}, num edges: {}'.format(len(finalOutputBoxes) if finalOutputBoxes is not None else 0,len(finalEdgeIndexes) if finalEdgeIndexes is not None else 0))
+            #print('DEBUG final num node:{}, num edges: {}'.format(len(finalOutputBoxes) if finalOutputBoxes is not None else 0,len(finalEdgeIndexes) if finalEdgeIndexes is not None else 0))
         ###
         
         #log['rel_prec']= fullPrec

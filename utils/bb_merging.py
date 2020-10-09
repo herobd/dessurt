@@ -785,7 +785,6 @@ class TextLine:
         if self.point_pairs is None:
             self.compute()
 
-
         grid_line = []
         for i in range(len(self.point_pairs)-1):
             avg_h = (pointDistance(*self.point_pairs[i]) + pointDistance(*self.point_pairs[i+1]))/2
