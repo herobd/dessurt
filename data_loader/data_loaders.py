@@ -20,6 +20,7 @@ from datasets.forms_lf import FormsLF
 from datasets import random_messages
 from datasets import random_diffusion
 from datasets import random_maxpairs
+from datasets import formlines_atr_dataset
 #from torchvision import datasets, transforms
 from base import BaseDataLoader
 
@@ -112,6 +113,8 @@ def getDataLoader(config,split):
             return withCollate(funsd_graph_pair.FUNSDGraphPair,funsd_graph_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='FormsFeaturePair':
             return withCollate(FormsFeaturePair,forms_feature_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='FormlinesATRDataset':
+            return withCollate(formlines_atr_dataset.FormlinesATRDataset,formlines_atr_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='FormsPair':
             return basic(FormsPair,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='FormsLF':
