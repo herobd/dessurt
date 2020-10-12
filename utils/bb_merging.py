@@ -809,6 +809,8 @@ class TextLine:
                 t*s, #br
             ], dim=2)
             points = torch.FloatTensor([*self.point_pairs[i],*self.point_pairs[i+1]]).to(device)
+            #points=points[:,::-1] #flip x,y positions as torch.grid_sample() expects y,x
+            points = points.flip(dims=[1])
             grid = interpolations[:,:,:,None]*points[None,None,:,:] #add dimensions to allow broacast along xy and row, col dims
             grid=grid.sum(dim=2) #sum four points
             grid_line.append(grid)
