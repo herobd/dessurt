@@ -504,7 +504,7 @@ class GraphPairTrainer(BaseTrainer):
                 prec=1
                 ap=1
                 recall=1
-                targIndex = -torch.ones(outputBoxes.size(0)).int()
+                targIndex = -torch.ones(len(outputBoxes)).int()
             else:
                 recall=0
                 ap=0
