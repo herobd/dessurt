@@ -204,11 +204,15 @@ class PairingGroupingGraph(BaseModel):
         else:
             for level_sc in self.detector.scale:
                 assert(level_sc[0]==level_sc[1])
-        if useBeginningOfLast:
+        if 'detect_save_scale' in config:
+            detect_save_scale = config['detect_save_scale']
+        elif useBeginningOfLast:
             detect_save_scale = self.detector.scale[0]
         else:
             detect_save_scale = self.detector.save_scale
-        if self.use2ndFeatures:
+        if 'detect_save2_scale' in config:
+            detect_save2_scale = config['detect_save2_scale']
+        elif self.use2ndFeatures:
             detect_save2_scale = self.detector.save2_scale
 
         if self.useShapeFeats:
@@ -2854,7 +2858,7 @@ class PairingGroupingGraph(BaseModel):
                 #t#tic2=timeit.default_timer()#t#
                 line_counts = self.betweenPixels(bbs,image)
                 #t#time=timeit.default_timer()-tic2#t#
-                self.opt_history['candidates betweenPixels{}'.format(' m1st' if merge_only else '')].append(time) 
+                #t#self.opt_history['candidates betweenPixels{}'.format(' m1st' if merge_only else '')].append(time) #t#
             numClassFeat = bbs[0].getCls().shape[0]
             
             #conf, x,y,r,h,w,tl, tr, br, bl = torch.FloatTensor([bb.getFeatureInfo() for bb in bbs]).permute(1,0)
@@ -2863,7 +2867,7 @@ class PairingGroupingGraph(BaseModel):
             #t#tic2=timeit.default_timer()#t#
             allFeats = torch.FloatTensor([bb.getFeatureInfo() for bb in bbs])
             #t#time=timeit.default_timer()-tic2#t#
-            self.opt_history['candidates getFeatureInfo{}'.format(' m1st' if merge_only else '')].append(time) 
+            #t#self.opt_history['candidates getFeatureInfo{}'.format(' m1st' if merge_only else '')].append(time) #t#
             #t#tic2=timeit.default_timer()#t#
             num_bb = allFeats.size(0)
             conf1 = allFeats[:,None,0].expand(-1,num_bb)
@@ -2919,7 +2923,7 @@ class PairingGroupingGraph(BaseModel):
             read_order_diff=ro1-ro2
 
             #t#time=timeit.default_timer()-tic2#t#
-            self.opt_history['candidates expand features{}'.format(' m1st' if merge_only else '')].append(time) 
+            #t#self.opt_history['candidates expand features{}'.format(' m1st' if merge_only else '')].append(time) #t#
 
         else:
             #features: tlXDiff,trXDiff,brXDiff,blXDiff,tlYDiff,trYDiff,brYDiff,blYDiff, centerXDiff, centerYDiff, absX, absY, h1, w1, h2, w2, classpred1, classpred2, line of sight (binary)
@@ -3083,7 +3087,7 @@ class PairingGroupingGraph(BaseModel):
         features = features.view(len(bbs)**2,num_feats) #flatten
 
         #t#time=timeit.default_timer()-tic2#t#
-        self.opt_history['candidates place features{}'.format(' m1st' if merge_only else '')].append(time) 
+        #t#self.opt_history['candidates place features{}'.format(' m1st' if merge_only else '')].append(time) #t#
         #t###time = timeit.default_timer()-tic#t#
         #t###print('   candidates feats: {}'.format(time))#t#
         ##self.opt_cand.append(time)
@@ -3110,7 +3114,7 @@ class PairingGroupingGraph(BaseModel):
             rel_pred = self.rel_prop_nn(features.to(device))
 
         #t#time=timeit.default_timer()-tic#t#
-        self.opt_history['candidates net{}'.format(' m1st' if merge_only else '')].append(time) 
+        #t#self.opt_history['candidates net{}'.format(' m1st' if merge_only else '')].append(time) #t#
         #t#tic=timeit.default_timer()#t#
 
         rel_pred2d = rel_pred.view(len(bbs),len(bbs)) #unflatten
@@ -3130,13 +3134,13 @@ class PairingGroupingGraph(BaseModel):
         #DDDD
 
         #t#time=timeit.default_timer()-tic#t#
-        self.opt_history['candidates edge lists{}'.format(' m1st' if merge_only else '')].append(time) 
+        #t#self.opt_history['candidates edge lists{}'.format(' m1st' if merge_only else '')].append(time) #t#
         #t#tic=timeit.default_timer()#t#
 
         rels_ordered.sort(key=lambda x: x[0], reverse=True)
 
         #t#time=timeit.default_timer()-tic#t#
-        self.opt_history['candidates sort{}'.format(' m1st' if merge_only else '')].append(time) 
+        #t#self.opt_history['candidates sort{}'.format(' m1st' if merge_only else '')].append(time) #t#
         #t#tic=timeit.default_timer()#t#
 
         keep = math.ceil(self.percent_rel_to_keep*len(rels_ordered))
@@ -3152,7 +3156,7 @@ class PairingGroupingGraph(BaseModel):
             implicit_threshold = rels_ordered[-1][0]-0.1 #We're taking everything
 
         #t#time=timeit.default_timer()-tic#t#
-        self.opt_history['candidates final bookkeeping{}'.format(' m1st' if merge_only else '')].append(time) 
+        #t#self.opt_history['candidates final bookkeeping{}'.format(' m1st' if merge_only else '')].append(time) #t#
 
         #t###print('   candidates net and thresh: {}'.format(timeit.default_timer()-tic))#t#
         return keep_rels, (rel_pred,rel_coords, implicit_threshold)
