@@ -81,7 +81,7 @@
         "mergeAndGroup": true,
         "train_hard_detect_limit": 2000,
 
-        "start_merge_iter": 50,
+        "merge_first_only_until": 50,
         "init_merge_rule": "adjacent",
 
         "unfreeze_detector": 100,
