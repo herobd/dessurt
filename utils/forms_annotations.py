@@ -78,6 +78,9 @@ def convertBBs(bbs,rotate,numClasses):
     rY = (trY+brY)/2.0
     d=np.sqrt((lX-rX)**2 + (lY-rY)**2)
 
+    if (d==0).any():
+        print('ERROR: zero length bb {}'.format(bbs[0,d==0]))
+
     hl = ((tlX-lX)*-(rY-lY) + (tlY-lY)*(rX-lX))/d #projection of half-left edge onto transpose horz run
     hr = ((brX-rX)*-(lY-rY) + (brY-rY)*(lX-rX))/d #projection of half-right edge onto transpose horz run
     h = (hl+hr)/2.0
