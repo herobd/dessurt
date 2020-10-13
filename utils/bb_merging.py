@@ -714,7 +714,7 @@ class TextLine:
         return self.point_pairs
 
 
-    def getGrid(self,height):
+    def getGrid2(self,height):
         if self.point_pairs is None:
             self.compute()
 
