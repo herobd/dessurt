@@ -121,6 +121,9 @@ def rotate(img,num_rot,degress=None):
     else:
         raise NotImplementedError()
 
+def getAffineTransform(src,dst):
+    return transform.estimate_transform('affine',src,dst).params
+
 if __name__ == "__main__":
     import sys
     input_image = sys.argv[1]
