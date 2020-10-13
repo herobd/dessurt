@@ -1000,7 +1000,7 @@ class PairingGroupingGraph(BaseModel):
                 need_new_ids=list(need_new_ids)
                 need_new_ids=list(need_new_ids)
                 allMasks=self.makeAllMasks(image_height,image_width,bbs)
-                node_visual_feats[need_new_ids] = self.computeNodeVisualFeatures(features,features2,image_height,image_width,bbs,need_groups,need_text_emb,allMasks,merge_only,debug_image)
+                node_visual_feats[need_new_ids] = self.computeNodeVisualFeatures(features,features2,image_height,image_width,bbs,need_groups,torch.stack(need_text_emb,dim=0),allMasks,merge_only,debug_image)
 
         new_to_old_ids = {v:k for k,v in same_node_map.items()}
         edge_visual_feats = torch.FloatTensor(len(edge_indexes),prev_edge_visual_feats.size(1)).to(edge_features.device)
