@@ -3505,15 +3505,15 @@ class PairingGroupingGraph(BaseModel):
                 start=b*self.atr_batch_size
                 end=min((b+1)*self.atr_batch_size,len(grids))
                 b_grids = torch.stack(grids[start:end],dim=0)#.to(image.device)
-                b_grids[:,:,:,1]/=image.size(3) #normalize x
-                b_grids[:,:,:,0]/=image.size(2) #normalize y
+                b_grids[:,:,:,1]=2*b_grids[:,:,:,1]/image.size(2) -1 #normalize y
+                b_grids[:,:,:,0]=2*b_grids[:,:,:,0]/image.size(3) -1 #normalize x
                 batch_lines = F.grid_sample(image.expand(b_grids.size(0),-1,-1,-1),b_grids)
     
                 ##DEBUG
-                d_lines = (1-batch_lines)/2
-                for i in range(batch_lines.size(0)):
-                    img_f.imshow('hwr {}'.format(i),(255*(1-d_lines[i,0])/2).cpu().numpy())
-                img_f.show()
+                #d_lines = (1-batch_lines)/2
+                #for i in range(batch_lines.size(0)):
+                #    img_f.imshow('hwr {}'.format(i),(255*(1-d_lines[i,0])/2).cpu().numpy())
+                #img_f.show()
                 ##DEBUG
                 
                 with torch.no_grad():
