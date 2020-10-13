@@ -820,6 +820,12 @@ class PairingGroupingGraph(BaseModel):
                                     #t#times.pop(0)#t#
                         return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, None, merge_prop_scores, None
 
+                    if bbTrans is not None:
+                        embeddings = self.embedding_model(bbTrans)
+                        if self.add_noise_to_word_embeddings:
+                            embeddings += torch.randn_like(embeddings).to(embeddings.device)*self.add_noise_to_word_embeddings*embeddings.mean()
+                    else:
+                        embeddings=None
                 else:
                     merge_prop_scores=None
                     allOutputBoxes=[]
