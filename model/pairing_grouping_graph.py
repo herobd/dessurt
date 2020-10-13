@@ -2015,6 +2015,11 @@ class PairingGroupingGraph(BaseModel):
                 padY = self.expandedMergeContextY
             else:
                 padX=padY=  self.expandedRelContext
+
+            D_ys = min_Y<max_Y
+            if not D_ys.all():
+                print(min_Y[D_ys])
+                print(max_Y[D_ys])
             assert((min_X<max_X).all())
             assert((min_Y<max_Y).all())
             max_X = torch.max(torch.min(max_X+padX,torch.IntTensor([imageWidth-1])),torch.IntTensor([1]))
