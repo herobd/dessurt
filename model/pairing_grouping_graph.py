@@ -3521,9 +3521,11 @@ class PairingGroupingGraph(BaseModel):
                 #    img_f.imshow('hwr {}'.format(i),(255*(1-d_lines[i,0])/2).cpu().numpy())
                 #img_f.show()
                 ##DEBUG
-                
-                with torch.no_grad():
-                    resBatch = self.text_rec(batch_lines)
+                if batch_lines.size(3)>0:
+                    with torch.no_grad():
+                        resBatch = self.text_rec(batch_lines)
+                else:
+                    resBatch = ['']*batch_lines.size(0)
                 if type(resBatch) is list:
                     batch_strings = resBatch
                 else:

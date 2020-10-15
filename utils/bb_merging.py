@@ -795,7 +795,9 @@ class TextLine:
             avg_h = (pointDistance(*self.point_pairs[i]) + pointDistance(*self.point_pairs[i+1]))/2
             avg_w = (pointDistance(self.point_pairs[i][0],self.point_pairs[i+1][0]) + pointDistance(self.point_pairs[i][1],self.point_pairs[i+1][1]))/2
             ratio = height/avg_h
-            out_width = round(ratio*avg_w)
+            out_width = min(round(ratio*avg_w),5*height)
+            #assert(out_width<5*height)
+
             t = ((np.arange(height) + 0.5) / float(height))[:,None].astype(np.float32)
             t = np.repeat(t,axis=1, repeats=out_width)
             t = torch.from_numpy(t)

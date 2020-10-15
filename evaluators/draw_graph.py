@@ -98,21 +98,21 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                     else:
                         gtNN = 0
                     pred_nn = predNN[j].item()
-                    color = min(abs(pred_nn-gtNN),1)#*0.5
-                    img_f.putText(image,'{:.2}/{}'.format(pred_nn,gtNN),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(color,0,0),2,cv2.LINE_AA)
+                    color2 = min(abs(pred_nn-gtNN),1)#*0.5
+                    img_f.putText(image,'{:.2}/{}'.format(pred_nn,gtNN),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(color2,0,0),2,cv2.LINE_AA)
                 if bbTrans is not None:
-                    to_write_text.append('{}'.format(j),(x,y),color)
+                    to_write_text.append(('{}'.format(j),(x,y),(round(color[0]*255),round(color[1]*255),round(color[2]*255))))
                     #img_f.putText(image,'{}'.format(j),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,color,2,cv2.LINE_AA)
                     transOut.write('{}: {}\n'.format(j,bbTrans[j]))
         if bbTrans is not None:
             transOut.close()
             if len(to_write_text)>0:
-                pil_image = Image.fromarray(image)
+                pil_image = Image.fromarray((image*255).astype(np.uint8))
                 pil_draw = ImageDraw.Draw(pil_image)
-                font = ImageFont.truetype("times-ro.ttf", 9)
+                font = ImageFont.truetype("UbuntuMono-R.ttf", 9)
                 for text,loc,color in to_write_text:
                     pil_draw.text(loc,text,color,font=font)
-                image = numpy.array(pil_image)
+                image = np.array(pil_image).astype(np.float32)/255
 
 
         #Draw pred groups (based on bb pred)
