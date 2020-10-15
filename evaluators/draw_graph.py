@@ -215,7 +215,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                         tY=cY+offsetY
                         image[tY:tY+s,tX:tX+s]=boxColors[i]
                     #error
-                    if len(boxColors)==5:
+                    if len(boxColors)==5 and cY-3>=0 and cY+4<image.shape[0] and cX-3>=0 and cX+4<image.shape[1]:
                         image[cY-3,cX-2:cX+4]=boxColors[4]
                         image[cY-2:cY+4,cX-3]=boxColors[4]
         else:
