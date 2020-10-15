@@ -1169,7 +1169,7 @@ def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_ta
         val,targIndex = torch.max(allIOUs,dim=0)
         targIndex[val==0]=-1 #These don't have a match
     else:
-        targIndex=torch.IntArray(0)
+        targIndex=torch.IntTensor(0)
 
 
     return targIndex
