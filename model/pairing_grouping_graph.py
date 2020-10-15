@@ -820,6 +820,12 @@ class PairingGroupingGraph(BaseModel):
                                     #t#times.pop(0)#t#
                         return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, None, merge_prop_scores, None
 
+                    if bbTrans is not None:
+                        embeddings = self.embedding_model(bbTrans)
+                        if self.add_noise_to_word_embeddings:
+                            embeddings += torch.randn_like(embeddings).to(embeddings.device)*self.add_noise_to_word_embeddings*embeddings.mean()
+                    else:
+                        embeddings=None
                 else:
                     merge_prop_scores=None
                     allOutputBoxes=[]
@@ -994,7 +1000,7 @@ class PairingGroupingGraph(BaseModel):
                 need_new_ids=list(need_new_ids)
                 need_new_ids=list(need_new_ids)
                 allMasks=self.makeAllMasks(image_height,image_width,bbs)
-                node_visual_feats[need_new_ids] = self.computeNodeVisualFeatures(features,features2,image_height,image_width,bbs,need_groups,need_text_emb,allMasks,merge_only,debug_image)
+                node_visual_feats[need_new_ids] = self.computeNodeVisualFeatures(features,features2,image_height,image_width,bbs,need_groups,torch.stack(need_text_emb,dim=0),allMasks,merge_only,debug_image)
 
         new_to_old_ids = {v:k for k,v in same_node_map.items()}
         edge_visual_feats = torch.FloatTensor(len(edge_indexes),prev_edge_visual_feats.size(1)).to(edge_features.device)
@@ -1132,6 +1138,7 @@ class PairingGroupingGraph(BaseModel):
     #Use the graph network's predictions to merge oversegmented detections and group nodes into a single node
     def mergeAndGroupCurved(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,oldBBTrans,image,skip_rec=False,merge_only=False):
         assert(len(oldBBs)==0 or type(oldBBs[0]) is TextLine)
+        assert(oldNodeFeats is None or oldGroups is None or oldNodeFeats.size(0)==len(oldGroups))
         oldNumGroups=len(oldGroups)
         #changedNodeIds=set()
         if self.useCurvedBBs:
@@ -2063,6 +2070,11 @@ class PairingGroupingGraph(BaseModel):
                 padY = self.expandedMergeContextY
             else:
                 padX=padY=  self.expandedRelContext
+
+            D_ys = min_Y<max_Y
+            if not D_ys.all():
+                print(min_Y[D_ys])
+                print(max_Y[D_ys])
             assert((min_X<max_X).all())
             assert((min_Y<max_Y).all())
             max_X = torch.max(torch.min(max_X+padX,torch.IntTensor([imageWidth-1])),torch.IntTensor([1]))
@@ -3505,15 +3517,15 @@ class PairingGroupingGraph(BaseModel):
                 start=b*self.atr_batch_size
                 end=min((b+1)*self.atr_batch_size,len(grids))
                 b_grids = torch.stack(grids[start:end],dim=0)#.to(image.device)
-                b_grids[:,:,:,1]/=image.size(3) #normalize x
-                b_grids[:,:,:,0]/=image.size(2) #normalize y
+                b_grids[:,:,:,1]=2*b_grids[:,:,:,1]/image.size(2) -1 #normalize y
+                b_grids[:,:,:,0]=2*b_grids[:,:,:,0]/image.size(3) -1 #normalize x
                 batch_lines = F.grid_sample(image.expand(b_grids.size(0),-1,-1,-1),b_grids)
     
                 ##DEBUG
-                d_lines = (1-batch_lines)/2
-                for i in range(batch_lines.size(0)):
-                    img_f.imshow('hwr {}'.format(i),(255*(1-d_lines[i,0])/2).cpu().numpy())
-                img_f.show()
+                #d_lines = (1-batch_lines)/2
+                #for i in range(batch_lines.size(0)):
+                #    img_f.imshow('hwr {}'.format(i),(255*(1-d_lines[i,0])/2).cpu().numpy())
+                #img_f.show()
                 ##DEBUG
                 
                 with torch.no_grad():

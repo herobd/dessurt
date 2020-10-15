@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import math
 from utils.util import pointDistance
+from utils import img_f
 
 def xyrwh_TextLine(bb):
     assert(False and "untested")
@@ -736,13 +737,16 @@ class TextLine:
             scale = height/hAvg
             width = round(wAvg*scale)
 
-            T = cv.getPerspectiveTransform([[0,0],[width-1,0],[width-1,height-1],[0,height-1]],[tl,tr,br,bl])
+            T = img_f.getAffineTransform(np.array([[0,0],[width-1,0],[width-1,height-1],[0,height-1]]),np.array([tl,tr,br,bl]))
+            #T = torch.from_numpy(T[0:2]) #affine so we don;t actually need third
+            T = torch.from_numpy(T)
 
             ys = torch.arange(height).view(height,1,1).expand(height,width,1)
             xs = torch.arange(width).view(1,width,1).expand(height,width,1)
-            orig_points = torch.cat([xs,ys],dim=2)
+            orig_points = torch.cat([xs,ys,torch.ones_like(xs)],dim=0)
 
-            new_points = T.mm(orig_points)
+            new_points = T.float().mm(orig_points.float().view(3,height*width))
+            new_points = new_points.view(3,height,width).permute(1,2,0)[...,:2]
             chunks.append(new_points)
 
         return torch.cat(chunks,dim=1)
@@ -811,14 +815,14 @@ class TextLine:
             s=s.to(device)
             #construct interpolation for the 4 points of the polygon to each pixel of output grid
             interpolations = torch.stack([
-                (1-t)*(1-s), #tl
-                (1-t)*s, #bl
-                t*(1-s), #tr
-                t*s, #br
+                (1-t)*(1-s), #tl*
+                t*(1-s), #bl
+                (1-t)*s, #tr
+                t*s, #br*
             ], dim=2)
             points = torch.FloatTensor([*self.point_pairs[i],*self.point_pairs[i+1]]).to(device)
             #points=points[:,::-1] #flip x,y positions as torch.grid_sample() expects y,x
-            points = points.flip(dims=[1])
+            #points = points.flip(dims=[1])
             grid = interpolations[:,:,:,None]*points[None,None,:,:] #add dimensions to allow broacast along xy and row, col dims
             grid=grid.sum(dim=2) #sum four points
             grid_line.append(grid)

@@ -425,9 +425,13 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                 for i in range(len(metrics)):
                     print(metrics[i].__name__ + ': '+str(val_metrics_sum[i]))
                 for typ in val_comb_metrics:
-                    print('{} overall mean: {}, std {}'.format(typ,np.mean(val_comb_metrics[typ],axis=0), np.std(val_comb_metrics[typ],axis=0)))
-                    for name, typeLists in val_metrics_list[typ].items():
-                        print('{} {} mean: {}, std {}'.format(typ,name,np.mean(typeLists,axis=0),np.std(typeLists,axis=0)))
+                    try:
+                        print('{} overall mean: {}, std {}'.format(typ,np.mean(val_comb_metrics[typ],axis=0), np.std(val_comb_metrics[typ],axis=0)))
+                        for name, typeLists in val_metrics_list[typ].items():
+                            print('{} {} mean: {}, std {}'.format(typ,name,np.mean(typeLists,axis=0),np.std(typeLists,axis=0)))
+                    except e:
+                        print('ERROR on {}: {}'.format(typ,e))
+                        print('{}'.format(val_comb_metrics[typ]))
 
             if 'save_nns' in config:
                 pickle.dump(nns,open(config['save_nns'],'wb'))
