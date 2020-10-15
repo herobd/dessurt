@@ -125,7 +125,7 @@
         "merge_featurizer_start_w": 1,
         "merge_featurizer_conv": [],
         "merge_pred_net": ["FC256","FC128","FC128","FC128"],
-        "init_merge_thresh": 0.72,
+        "init_merge_thresh": 0.83,
 
         "expand_rel_context": 20,
         "featurizer_start_h": 16,
