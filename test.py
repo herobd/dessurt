@@ -2,6 +2,7 @@ from model.oversegment_loss import build_oversegmented_targets_multiscale
 from model.overseg_box_detector import build_box_predictions
 from utils.bb_merging import TextLine
 import torch
+import torch.nn.functional as F
 import utils.img_f as img_f
 import numpy as np
 import math,random
@@ -124,7 +125,39 @@ gt_boxes = build_box_predictions(ys,scale,ys[0].device,numAnchors,numBBParams,nu
 assert((gt_boxes[0,gt_boxes[0,:,0]>0.5,2] < gt_boxes[0,gt_boxes[0,:,0]>0.5,4]).all())
 #print('gt: {}'.format(gt_boxes[0,gt_boxes[0,:,0]>0.5]))
 
-img = np.zeros([H,W,3])
+img =np.zeros([H,W,3]).astype(np.uint8)
+#draw pattern on img
+x=W//2
+y=H//2
+length=1
+cur_l=1
+colors=[(100,0,0),(100,100,0),(0,100,0),(0,100,100),(0,0,100),(100,0,100)]
+color_idx=0
+dir_x=1
+dir_y=0
+while x<W and y<H and x>=0 and y>=0:
+    img[y,x]=colors[color_idx]
+    x+=dir_x
+    y+=dir_y
+    cur_l-=1
+    if cur_l<=0:
+        length+=1
+        cur_l=length
+        color_idx=(color_idx+1)%len(colors)
+        old_dir_x=dir_x
+        if dir_x==1 or dir_x==-1:
+            dir_x=0
+        elif dir_y==1:
+            dir_x=-1
+        else:
+            dir_x=1
+        if dir_y==1 or dir_y==-1:
+            dir_y=0
+        elif old_dir_x==1:
+            dir_y=1
+        else:
+            dir_y=-1
+##
 for t in targs:
     corners = calcCorners(*t[0:5])
     #img_f.polylines(img,np.array([[t[5],t[10]],[t[7],t[10]],[t[7],t[12]],[t[5],t[12]]],np.int32).reshape((-1,1,2)),True,(0,255,0),3)
@@ -166,6 +199,31 @@ for p in first_textline._bot_points:
 print('final poly: {}'.format(first_textline.polyPoints()))
 
 img_f.imshow('x',img)
+
+t_img = torch.from_numpy(img).permute(2,0,1)
+grid1 = first_textline.getGrid(100,t_img.device) 
+#grid2 = first_textline.getGrid2(32) 
+print(grid1)
+print('{}\t{}'.format(grid1[0,0],grid1[0,-1]))
+print('{}\t{}'.format(grid1[-1,0],grid1[-1,-1]))
+
+grid1[...,1] = 2*grid1[...,1]/t_img.size(1) -1
+grid1[...,0] = 2*grid1[...,0]/t_img.size(2) -1
+
+#grid2[...,1]/=t_img.size(1)
+#grid2[...,0]/=t_img.size(2)
+
+#print('----')
+#print(grid2)
+
+#sampled=F.grid_sample(t_img[None,...].expand(2,-1,-1,-1).float(),torch.stack((grid1,grid2),dim=0))
+sampled=F.grid_sample(t_img[None,...].float(),grid1[None,...])
+sampled=sampled.permute(0,2,3,1).numpy().astype(np.uint8)
+img_f.show()
+img_f.imshow('grid1',sampled[0])
+#img_f.show()
+#img_f.imshow('grid2',sampled[1])
+
 img_f.show()
 
 
