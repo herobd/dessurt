@@ -68,6 +68,10 @@ class TextLine:
             self.cls=self.all_cls[0]
             self.conf=np.array(self.all_conf[0])
             self.median_angle =  self.all_angles[0]
+            if self.median_angle > math.pi:
+                self.median_angle -= 2*math.pi
+            elif self.median_angle < -math.pi:
+                self.median_angle += 2*math.pi
 
             if self.median_angle>=-math.pi/4 and self.median_angle<=math.pi/4:
                 #horz=True
@@ -144,6 +148,10 @@ class TextLine:
     def compute(self):
 
         self.median_angle = np.median(self.all_angles)
+        if self.median_angle > math.pi:
+            self.median_angle -= 2*math.pi
+        elif self.median_angle < -math.pi:
+            self.median_angle += 2*math.pi
 
         if self.median_angle>=-math.pi/4 and self.median_angle<=math.pi/4:
             horz=True
@@ -674,18 +682,18 @@ class TextLine:
             #y = +/- sqrt(1/(1+slope**2)) * t
             #The +/- must be determined using the actual slope
 
-            if angle<math.pi/2 and angle>0:
+            if angle<math.pi/2 and angle>=0:
                 sign_x=1
                 sign_y=1
-            elif angle>math.pi/2 and angle<math.pi:
+            elif angle>math.pi/2: # and angle<=math.pi:
                 sign_x=1
-                sign_y=-1
-            elif angle>-math.pi and angle<-math.pi/2:
-                sign_x=-1
                 sign_y=-1
             elif angle>-math.pi/2 and angle<0:
                 sign_x=-1
                 sign_y=1
+            elif angle<-math.pi/2:
+                sign_x=-1
+                sign_y=-1
             else:
                 assert(False)
 
