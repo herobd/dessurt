@@ -3508,8 +3508,9 @@ class PairingGroupingGraph(BaseModel):
                 grids.append(grid)
 
             #batch the grids together padding to same length
-            #to_pad = [max_w-g.size(1) for g in grids]
-            #grids = [F.pad(g,(0,0,0,p)) for g,p in zip(grids,to_pad)]
+            if self.atr_batch_size>1:
+                to_pad = [max_w-g.size(1) for g in grids]
+                grids = [F.pad(g,(0,0,0,p)) for g,p in zip(grids,to_pad)]
 
 
             output_strings=[]
