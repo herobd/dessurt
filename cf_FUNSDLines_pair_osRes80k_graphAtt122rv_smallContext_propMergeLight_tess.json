@@ -4,7 +4,7 @@
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
-    "super_computer":false,
+    "super_computer":true,
     "data_loader": {
         "data_set_name": "FUNSDGraphPair",
         "data_dir": "../data/FUNSD",
@@ -192,7 +192,7 @@
             "height": 20,
             "embedding": "BP",
             "num_feats": 128,
-            "batch_size": 100
+            "batch_size": 1
         }
 
 
