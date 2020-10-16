@@ -511,6 +511,7 @@ class PairingGroupingGraph(BaseModel):
             #num_classes = config['num_class']
             num_bb_feat = self.numBBTypes + (1 if self.detector.predNumNeighbors else 0) #config['graph_config']['bb_out']
             prop_feats = 30+2*num_bb_feat
+            self.no_betweenPixels = not config['use_betweenPixels'] if 'use_betweenPixels' in config else False
             if self.useCurvedBBs:
                 prop_feats += 8
                 if self.shape_feats_normal:
@@ -2865,7 +2866,7 @@ class PairingGroupingGraph(BaseModel):
             #26-n: classpred1
             #n+1-m: classpred2
 
-            if merge_only:
+            if merge_only or self.no_betweenPixels:
                 line_counts=0
             else:
                 #t#tic2=timeit.default_timer()#t#
