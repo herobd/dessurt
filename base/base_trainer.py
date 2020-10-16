@@ -9,6 +9,7 @@ import time
 from utils.util import ensure_dir
 from collections import defaultdict
 from model import *
+from torch.optim.swa_utils import AveragedModel
 #from ..model import PairingGraph
 
 class BaseTrainer:
@@ -167,11 +168,12 @@ class BaseTrainer:
                   indent=4, sort_keys=False)
         self.swa = config['trainer']['swa'] if 'swa' in config['trainer'] else (config['trainer']['weight_averaging'] if 'weight_averaging' in config['trainer'] else False)
         if self.swa:
-            self.swa_model = type(self.model)(config['model'])
-            if config['cuda']:
-                self.swa_model = self.swa_model.to(self.gpu)
+            self.swa_model = AveragedModel(self.model)#type(self.model)(config['model'])
+            #if config['cuda']:
+            #    self.swa_model = self.swa_model.to(self.gpu)
             self.swa_start = config['trainer']['swa_start'] if 'swa_start' in config['trainer'] else config['trainer']['weight_averaging_start']
             self.swa_c_iters = config['trainer']['swa_c_iters'] if 'swa_c_iters' in config['trainer'] else config['trainer']['weight_averaging_c_iters']
+            assert(self.val_step>=self.swa_c_iters) #otherwise we'll start evaluating more than the (swa)model is updated
         self.iteration=999999999999999
         if resume:
             self._resume_checkpoint(resume)
@@ -212,9 +214,10 @@ class BaseTrainer:
 
             #Stochastic Weight Averaging    https://github.com/timgaripov/swa/blob/master/train.py
             if self.swa and self.iteration>=self.swa_start and (self.iterations-self.swa_start)%self.swa_c_iters==0:
-                swa_n = (self.iterations-self.swa_start)//self.swa_c_iters
-                moving_average(self.swa_model, self.model, 1.0 / (swa_n + 1))
+                #swa_n = (self.iterations-self.swa_start)//self.swa_c_iters
+                #moving_average(self.swa_model, self.model, 1.0 / (swa_n + 1))
                 #swa_n += 1
+                self.swa_model.update_parameters(self.model)
 
 
             for key, value in result.items():
@@ -256,14 +259,6 @@ class BaseTrainer:
 
             #VALIDATION
             if self.iteration%self.val_step==0:
-                val_result = self._valid_epoch()
-                for key, value in val_result.items():
-                    if 'metrics' in key:
-                        for i, metric in enumerate(self.metrics):
-                            log['val_' + metric.__name__] = val_result[key][i]
-                    else:
-                        log[key] = value
-                        #sumLog['avg_'+key] += value
                 if self.swa and self.iteration>=self.swa_start:
                     temp_model = self.model
                     self.model = self.swa_model
@@ -275,6 +270,15 @@ class BaseTrainer:
                                 log['swa_val_' + metric.__name__] = val_result[key][i]
                         else:
                             log['swa_'+key] = value
+                else:
+                    val_result = self._valid_epoch()
+                    for key, value in val_result.items():
+                        if 'metrics' in key:
+                            for i, metric in enumerate(self.metrics):
+                                log['val_' + metric.__name__] = val_result[key][i]
+                        else:
+                            log[key] = value
+                            #sumLog['avg_'+key] += value
 
                 if self.train_logger is not None:
                     if self.iteration%self.log_step!=0:
@@ -400,16 +404,6 @@ class BaseTrainer:
         self.monitor_best = checkpoint['monitor_best']
         #print(checkpoint['state_dict'].keys())
         if ('save_mode' not in self.config or self.config['save_mode']=='state_dict') and 'state_dict' in checkpoint:
-            ##DEBUG
-            if 'edgeFeaturizerConv.0.0.weight' in checkpoint['state_dict']:
-                keys = list(checkpoint['state_dict'].keys())
-                for key in keys:
-                    if 'edge' in key:
-                        newKey = key.replace('edge','rel')
-                        checkpoint['state_dict'][newKey] = checkpoint['state_dict'][key]
-                        del checkpoint['state_dict'][key]
-            ##DEBUG
-
             self.model.load_state_dict(checkpoint['state_dict'])
             if self.swa:
                 self.swa_model.load_state_dict(checkpoint['swa_state_dict'])
