@@ -109,9 +109,18 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
             if len(to_write_text)>0:
                 pil_image = Image.fromarray((image*255).astype(np.uint8))
                 pil_draw = ImageDraw.Draw(pil_image)
-                font = ImageFont.truetype("UbuntuMono-R.ttf", 9)
-                for text,loc,color in to_write_text:
-                    pil_draw.text(loc,text,color,font=font)
+                try:
+                    font = ImageFont.truetype("UbuntuMono-R.ttf", 9)
+                    for text,loc,color in to_write_text:
+                        pil_draw.text(loc,text,color,font=font)
+                except OSError:
+                    try:
+                        font = ImageFont.truetype("google-roboto", 9)
+                        for text,loc,color in to_write_text:
+                            pil_draw.text(loc,text,color,font=font)
+                    except OSError:
+                        pass
+
                 image = np.array(pil_image).astype(np.float32)/255
 
 
