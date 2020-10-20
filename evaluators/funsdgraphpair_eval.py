@@ -47,8 +47,8 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
     batchSize = data.shape[0]
     assert(batchSize==1)
     targetBoxes = instance['bb_gt']
-    adjacency = instance['adj']
-    adjacency = list(adjacency)
+    #adjacency = instance['adj']
+    #adjacency = list(adjacency)
     imageName = instance['imgName']
     scale = instance['scale']
     target_num_neighbors = instance['num_neighbors']
@@ -199,7 +199,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
                     #for j in range(metricsOut.shape[1]):
                 #    saveName+='_m:{0:.3f}'.format(metricsOut[i,j])
                 path = os.path.join(outDir,saveName+'.png')
-                draw_graph(outputBoxes,trainer.model.used_threshConf,bbPred.cpu().detach() if bbPred is not None else None,torch.sigmoid(edgePred).cpu().detach(),relIndexes,predGroups,data,edgePredTypes,targetBoxes,trainer.model,path,useTextLines=trainer.model.useCurvedBBs)
+                draw_graph(outputBoxes,trainer.model.used_threshConf,bbPred.cpu().detach() if bbPred is not None else None,torch.sigmoid(edgePred).cpu().detach(),relIndexes,predGroups,data,edgePredTypes,targetBoxes,trainer.model,path,useTextLines=trainer.model.useCurvedBBs,targetGroups=instance['gt_groups'],targetPairs=instance['gt_groups_adj'])
                 #io.imsave(os.path.join(outDir,saveName),image)
                 #print('saved: '+os.path.join(outDir,saveName))
 
@@ -215,7 +215,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
     if outDir is not None:
         path = os.path.join(outDir,'{}_final.png'.format(imageName))
         finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = out['final']
-        draw_graph(finalOutputBoxes,trainer.model.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,data,None,targetBoxes,trainer.model,path,bbTrans=finalBBTrans,useTextLines=trainer.model.useCurvedBBs)
+        draw_graph(finalOutputBoxes,trainer.model.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,data,None,targetBoxes,trainer.model,path,bbTrans=finalBBTrans,useTextLines=trainer.model.useCurvedBBs,targetGroups=instance['gt_groups'],targetPairs=instance['gt_groups_adj'])
 
     for key in losses.keys():
         losses[key] = losses[key].item()
