@@ -15,6 +15,22 @@ def xyrwh_TextLine(bb):
     y2 = x -L*math.sin(theta_final)
     return TextLine(torch.FloatTensor([bb[0],x1,y1,x2,y2,r,*bb[6:]]))
 
+def check_point_angles(points):
+    if len(points)==4:
+        d01 = pointDistance(points[0],points[1])
+        d12 = pointDistance(points[1],points[2])
+        d23 = pointDistance(points[2],points[3])
+        d03 = pointDistance(points[3],points[0])
+        d13 = pointDistance(points[3],points[1])#diagonal
+        d02 = pointDistance(points[0],points[2])#diagonal
+
+        a0 = math.acos((d01**2 + d03**2 - d13**2)/(2*d01*d03))
+        a1 = math.acos((d01**2 + d12**2 - d02**2)/(2*d01*d12))
+        a2 = math.acos((d12**2 + d23**2 - d13**2)/(2*d12*d23))
+        a3 = math.acos((d23**2 + d03**2 - d02**2)/(2*d23*d03))
+        assert( (a0>0 and a1>0 and a2>0 and a3>0) or 
+                (a0<0 and a1<0 and a2<0 and a3<0) )
+
 class TextLine:
     #two constructors. One takes vector, other two TextLines and merges them
     def __init__(self,pred_bb_info=None,other=None,clone=None):
@@ -104,6 +120,8 @@ class TextLine:
                 self.width = self.all_primitive_rects[0][1][0]-self.all_primitive_rects[0][0][0]
             
             self.poly_points = np.array( top_points+bot_points )
+
+            check_point_angles(self.poly_points)
 
             self.center_point = self.poly_points.mean(axis=0)
             self.point_pairs=list(zip(top_points,bot_points))
@@ -635,6 +653,7 @@ class TextLine:
         bot_points=list(bot_points)
         bot_points.reverse()
         self.poly_points = np.array( top_points+bot_points )
+        check_point_angles(self.poly_points)
 
         self.center_point = self.poly_points.mean(axis=0)
             #assert(type(self.cls) is np.ndarray)
