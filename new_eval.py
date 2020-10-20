@@ -144,20 +144,21 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
     #valid_data_loader = data_loader.split_validation()
 
     if checkpoint is not None:
-        if 'state_dict' in checkpoint:
+        if 'swa_state_dict' in checkpoint:
             model = eval(config['arch'])(config['model'])
             if 'style' in config['model'] and 'lookup' in config['model']['style']:
                 model.style_extractor.add_authors(data_loader.dataset.authors) ##HERE
-            ##DEBUG
-            if 'edgeFeaturizerConv.0.0.weight' in checkpoint['state_dict']:
-                keys = list(checkpoint['state_dict'].keys())
-                for key in keys:
-                    if 'edge' in key:
-                        newKey = key.replace('edge','rel')
-                        checkpoint['state_dict'][newKey] = checkpoint['state_dict'][key]
-                        del checkpoint['state_dict'][key]
-            ##DEBUG
+            #just strip off the 'module.' tag. I DON'T KNOW IF THIS WILL WORK PROPERLY WITH BATCHNORM
+            new_state_dict = {key[7:]:value for key,value in checkpoint['state_dict'] if key.startswith('module.')}
+            model.load_state_dict(new_state_dict)
+            print('Successfully loaded SWA model')
+        elif 'state_dict' in checkpoint:
+            model = eval(config['arch'])(config['model'])
+            if 'style' in config['model'] and 'lookup' in config['model']['style']:
+                model.style_extractor.add_authors(data_loader.dataset.authors) ##HERE
             model.load_state_dict(checkpoint['state_dict'])
+        elif 'swa_model' in checkpoint:
+            model = checkpoint['swa_model']
         else:
             model = checkpoint['model']
     else:

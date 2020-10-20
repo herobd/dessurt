@@ -57,7 +57,11 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
 
     trackAtt = config['showAtt'] if 'showAtt' in config else False
     if trackAtt:
-        trainer.model.pairer.trackAtt=True
+        if model.pairer is None:
+            for gn in mode.graphnets:
+                gn.trackAtt=True
+        else:
+            trainer.model.pairer.trackAtt=True
     if 'repetitions' in config:
         trainer.model.pairer.repetitions=config['repetitions']
     pretty = config['pretty'] if 'pretty' in config else False
@@ -124,7 +128,11 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         losses, log, out = trainer.newRun(instance,False,get=toEval)
 
     if trackAtt:
-        attList = model.pairer.attn
+        if model.pairer is None:
+            #liist of graph nets, get all the attention!
+            allAttList = [gn.attn for gn in model.graphnets]
+        else:
+            attList = model.pairer.attn
     #relPredFull = relPred
     allEdgePred = out['allEdgePred']
     allEdgeIndexes = out['allEdgeIndexes']
@@ -144,7 +152,8 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
 
 
 
-            if trackAtt:
+            if trackAtt and (not model.merge_first or gIter>0):
+                attList = allAttList[gIter-1 if model.merge_first else gIter]
                 data = data.numpy()
                 imageO = (1-((1+np.transpose(data[b][:,:,:],(1,2,0)))/2.0))
                 bbs = outputBoxes.numpy()
@@ -152,10 +161,10 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
                     image = imageO.copy()
                     if image.shape[2]==1:
                         image = img_f.cvtColor(image,cv2.COLOR_GRAY2RGB)
-                    for i in range(len(relCand)):
+                    for i in range(len(relIndexes)):
                         
-                        ind1 = relCand[i][0]
-                        ind2 = relCand[i][1]
+                        ind1 = relIndexes[i][0]
+                        ind2 = relIndexes[i][1]
                         x1 = int(round(bbs[ind1,1]))
                         y1 = int(round(bbs[ind1,2]))
                         x2 = int(round(bbs[ind2,1]))
@@ -176,7 +185,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
                         img_f.line(image,(x2,y2),(xh,yh),color2,1)
                     #img_f.imshow('attention',image)
                     #img_f.waitKey()
-                    saveName='{}_gI{}_att{}.png'.format(imageName,gIter,attL)
+                    saveName='{}_Att_gI:{}_L:{}.png'.format(imageName,gIter,attL)
                     io.imsave(os.path.join(outDir,saveName),image)
 
 
