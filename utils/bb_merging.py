@@ -17,19 +17,13 @@ def xyrwh_TextLine(bb):
 
 def check_point_angles(points):
     if len(points)==4:
-        d01 = pointDistance(points[0],points[1])
-        d12 = pointDistance(points[1],points[2])
-        d23 = pointDistance(points[2],points[3])
-        d03 = pointDistance(points[3],points[0])
-        d13 = pointDistance(points[3],points[1])#diagonal
-        d02 = pointDistance(points[0],points[2])#diagonal
+        z0 = (points[3][0]-points[0][0])*(points[1][1]-points[0][1]) - (points[3][1]-points[0][1])*(points[1][0]-points[0][0])
+        z1 = (points[0][0]-points[1][0])*(points[2][1]-points[1][1]) - (points[0][1]-points[1][1])*(points[2][0]-points[1][0])
+        z2 = (points[1][0]-points[2][0])*(points[3][1]-points[2][1]) - (points[1][1]-points[2][1])*(points[3][0]-points[2][0])
+        z3 = (points[2][0]-points[3][0])*(points[0][1]-points[3][1]) - (points[2][1]-points[3][1])*(points[0][0]-points[3][0])
 
-        a0 = math.acos((d01**2 + d03**2 - d13**2)/(2*d01*d03))
-        a1 = math.acos((d01**2 + d12**2 - d02**2)/(2*d01*d12))
-        a2 = math.acos((d12**2 + d23**2 - d13**2)/(2*d12*d23))
-        a3 = math.acos((d23**2 + d03**2 - d02**2)/(2*d23*d03))
-        assert( (a0>0 and a1>0 and a2>0 and a3>0) or 
-                (a0<0 and a1<0 and a2<0 and a3<0) )
+        assert( (z0>=0 and z1>=0 and z2>=0 and z3>=0) or 
+                (z0<0 and z1<0 and z2<0 and z3<0) )
 
 class TextLine:
     #two constructors. One takes vector, other two TextLines and merges them
@@ -94,7 +88,7 @@ class TextLine:
                 #horz=True
                 #readright=True
                 top_points = [self.all_primitive_rects[0][0],self.all_primitive_rects[0][1]]
-                bot_points = [self.all_primitive_rects[0][2],self.all_primitive_rects[0][3]]
+                bot_points = [self.all_primitive_rects[0][3],self.all_primitive_rects[0][2]]
                 self.height = self.all_primitive_rects[0][3][1]-self.all_primitive_rects[0][0][1]
                 self.width = self.all_primitive_rects[0][1][0]-self.all_primitive_rects[0][0][0]
             elif self.median_angle>=-math.pi*3/4 and self.median_angle<=-math.pi/4:
@@ -119,7 +113,7 @@ class TextLine:
                 self.height = self.all_primitive_rects[0][3][1]-self.all_primitive_rects[0][0][1]
                 self.width = self.all_primitive_rects[0][1][0]-self.all_primitive_rects[0][0][0]
             
-            self.poly_points = np.array( top_points+bot_points )
+            self.poly_points = np.array( top_points+bot_points[::-1] )
 
             check_point_angles(self.poly_points)
 
