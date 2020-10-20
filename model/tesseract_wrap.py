@@ -30,7 +30,12 @@ class TesseractWrap(nn.Module):
         toRet=[]
         for b in range(input.shape[0]):
             image = Image.fromarray(input[b])
-            text = pytesseract.image_to_string(image,config=self.custom_oem_psm_config)
+            try:
+                text = pytesseract.image_to_string(image,config=self.custom_oem_psm_config)
+            except pytesseract.pytesseract.TesseractError:
+                #Assume local installation of tesseract
+                self.custom_oem_psm_config += r' --tessdata-dir "$HOME/local/share/tessdata"'
+                text = pytesseract.image_to_string(image,config=self.custom_oem_psm_config)
             toRet.append(text[:-2]) #not sure what they are, but there are a couple extrac chars
         return toRet
 
