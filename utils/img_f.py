@@ -6,36 +6,82 @@ import numpy as np
 
 #These are all based on the OpenCV functions, to make the conversion to scikit image easier (also should make future changes easier as well)
 
-def line(img,p1,p2,color,thickness=1):
+def line(img,p1,p2,color,thickness=1,draw='set'):
     y1 = max(0,min(img.shape[0]-1,p1[1]))
     y2 = max(0,min(img.shape[0]-1,p2[1]))
     x1 = max(0,min(img.shape[1]-1,p1[0]))
     x2 = max(0,min(img.shape[1]-1,p2[0]))
     rr,cc = skimage.draw.line(y1,x1,y2,x2)
-    img[rr,cc]=color
+
+    if draw=='set':
+        img[rr,cc]=color
+    elif draw=='add':
+        img[rr,cc]+=color
+    elif draw=='mult':
+        img[rr,cc]*=color
     if thickness>1:
         if x1<img.shape[1]-2 and y1<img.shape[0]-2 and x2<img.shape[1]-2 and y2<img.shape[0]-2:
             rr,cc = skimage.draw.line(y1+1,x1+1,y2+1,x2+1)
-            img[rr,cc]=color
+            if draw=='set':
+                img[rr,cc]=color
+            elif draw=='add':
+                img[rr,cc]+=color
+            elif draw=='mult':
+                img[rr,cc]*=color
         if x1<img.shape[1]-2 and x2<img.shape[1]-2:
             rr,cc = skimage.draw.line(y1,x1+1,y2,x2+1)
-            img[rr,cc]=color
+            if draw=='set':
+                img[rr,cc]=color
+            elif draw=='add':
+                img[rr,cc]+=color
+            elif draw=='mult':
+                img[rr,cc]*=color
         if y1<img.shape[0]-2 and y2<img.shape[0]-2:
             rr,cc = skimage.draw.line(y1+1,x1,y2+1,x2)
-            img[rr,cc]=color
+            if draw=='set':
+                img[rr,cc]=color
+            elif draw=='add':
+                img[rr,cc]+=color
+            elif draw=='mult':
+                img[rr,cc]*=color
     if thickness>2:
         rr,cc = skimage.draw.line(y1-1,x1-1,y2-1,x2-1)
-        img[rr,cc]=color
+        if draw=='set':
+            img[rr,cc]=color
+        elif draw=='add':
+            img[rr,cc]+=color
+        elif draw=='mult':
+            img[rr,cc]*=color
         rr,cc = skimage.draw.line(y1,x1-1,y2,x2-1)
-        img[rr,cc]=color
+        if draw=='set':
+            img[rr,cc]=color
+        elif draw=='add':
+            img[rr,cc]+=color
+        elif draw=='mult':
+            img[rr,cc]*=color
         rr,cc = skimage.draw.line(y1-1,x1,y2-1,x2)
-        img[rr,cc]=color
+        if draw=='set':
+            img[rr,cc]=color
+        elif draw=='add':
+            img[rr,cc]+=color
+        elif draw=='mult':
+            img[rr,cc]*=color
         if y1<img.shape[0]-2 and y2<img.shape[0]-2:
             rr,cc = skimage.draw.line(y1+1,x1-1,y2+1,x2-1)
-            img[rr,cc]=color
+            if draw=='set':
+                img[rr,cc]=color
+            elif draw=='add':
+                img[rr,cc]+=color
+            elif draw=='mult':
+                img[rr,cc]*=color
         if x1<img.shape[1]-2 and x2<img.shape[1]-2:
             rr,cc = skimage.draw.line(y1-1,x1+1,y2-1,x2+1)
-            img[rr,cc]=color
+            if draw=='set':
+                img[rr,cc]=color
+            elif draw=='add':
+                img[rr,cc]+=color
+            elif draw=='mult':
+                img[rr,cc]*=color
         assert(thickness<4)
 
 def rectangle(img,c1,c2,color,thickness=1):
