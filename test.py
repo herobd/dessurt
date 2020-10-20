@@ -1,3 +1,13 @@
+from utils.bb_merging import check_point_angles
+
+
+points1=[[0,1],[1,1],[1,0],[0,0]]
+points2=[[0,1],[1,0],[1,1],[0,0]]
+check_point_angles(points1)
+check_point_angles(points2)
+
+crash()
+
 from model.oversegment_loss import build_oversegmented_targets_multiscale
 from model.overseg_box_detector import build_box_predictions
 from utils.bb_merging import TextLine
