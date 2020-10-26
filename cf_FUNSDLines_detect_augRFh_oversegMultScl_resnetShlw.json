@@ -1,5 +1,5 @@
 {
-    "name": "FUNSDLines_detect_augRFh_oversegMultScl_resnet",
+    "name": "FUNSDLines_detect_augRFh_oversegMultScl_resnetShlw",
     "cuda": true,
     "gpu": 0,
     "super_computer":true,
@@ -30,7 +30,7 @@
         "shuffle": false,
         "color":false,
         "rescale_range": [1,1],
-        "rotation": true,
+        "rotation": false,
         "crop_params": null
     },
 
@@ -56,7 +56,7 @@
     "metrics": [],
     "trainer": {
         "class": "BoxDetectTrainer",
-        "iterations": 100000,
+        "iterations": 400000,
         "save_dir": "saved/",
         "val_step": 10000,
         "save_step": 20000,
@@ -79,9 +79,9 @@
         "norm_type": "group_norm",
         "dropout": true,
         "down_layers_cfg": [["$7-64r", "M",  "C1-128",
-                                "R128",  "R128", "R128", "R128",
-                                "D256", "R256", "R256", "R256",
-                                "D256", "R256", "R256", "R256"],
+                                "R128",  "R128",
+                                "D256", "R256",
+                                "D256", "R256", "R256"],
                                 ["D512","R512"]],
         "up_layers_cfg":[]
     }

@@ -28,7 +28,7 @@ def plotRect(img,color,xyrhw,lineWidth=1):
     img_f.line(img,br,bl,color,lineWidth)
     img_f.line(img,bl,tl,color,lineWidth)
 
-def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,image,predTypes,targetBoxes,model,path,verbosity=2,bbTrans=None,useTextLines=False):
+def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,image,predTypes,targetBoxes,model,path,verbosity=2,bbTrans=None,useTextLines=False,targetGroups=None,targetPairs=None):
     #for graphIteration,(outputBoxes,nodePred,edgePred,edgeIndexes,predGroups) in zip(allOutputBoxes,allNodePred,allEdgePred,allEdgeIndexes,allPredGroups):
         if bbTrans is not None:
             transPath = path[:-3]+'txt'
@@ -39,13 +39,39 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
         b=0
         image = (1-((1+np.transpose(image[b][:,:,:],(1,2,0)))/2.0))
         if image.shape[2]==1:
-            image = img_f.gray2rgb(image*255)/255
+            image = img_f.gray2rgb(image)
+            #image = img_f.gray2rgb(image*255)/255
         #if name=='text_start_gt':
 
         if verbosity>1 and targetBoxes is not None:
             #Draw GT bbs
             for j in range(targetBoxes.size(1)):
                 plotRect(image,(1,0.5,0),targetBoxes[0,j,0:5])
+        if verbosity>1 and targetGroups is not None:
+            color=(0.99,0,0.3)
+            lineWidth=1
+            groupCenters=[]
+            for group in targetGroups:
+                xs=[]
+                ys=[]
+                for bbId in group:
+                    corners = getCorners(targetBoxes[0,bbId,0:5])
+                    xs+=[c[0] for c in corners]
+                    ys+=[c[1] for c in corners]
+                maxX = max(xs)+1
+                minX = min(xs)-1
+                maxY = max(ys)+1
+                minY = min(ys)-1
+                if len(group)>1:
+                    img_f.line(image,(minX,minY),(maxX,minY),color,lineWidth)
+                    img_f.line(image,(maxX,maxY),(maxX,minY),color,lineWidth)
+                    img_f.line(image,(minX,maxY),(maxX,maxY),color,lineWidth)
+                    img_f.line(image,(minX,minY),(minX,maxY),color,lineWidth)
+                groupCenters.append((round((minX+maxX)/2),round((minY+maxY)/2)))
+
+            #now to pairs
+            for pair in targetPairs:
+                img_f.line(image,groupCenters[pair[0]],groupCenters[pair[1]],(1,0,0.1),3,draw='mult')
 
         to_write_text=[]
         if verbosity>1 and outputBoxes is not None:
@@ -98,21 +124,30 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                     else:
                         gtNN = 0
                     pred_nn = predNN[j].item()
-                    color = min(abs(pred_nn-gtNN),1)#*0.5
-                    img_f.putText(image,'{:.2}/{}'.format(pred_nn,gtNN),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(color,0,0),2,cv2.LINE_AA)
+                    color2 = min(abs(pred_nn-gtNN),1)#*0.5
+                    img_f.putText(image,'{:.2}/{}'.format(pred_nn,gtNN),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(color2,0,0),2,cv2.LINE_AA)
                 if bbTrans is not None:
-                    to_write_text.append('{}'.format(j),(x,y),color)
+                    to_write_text.append(('{}'.format(j),(x,y),(round(color[0]*255),round(color[1]*255),round(color[2]*255))))
                     #img_f.putText(image,'{}'.format(j),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,color,2,cv2.LINE_AA)
                     transOut.write('{}: {}\n'.format(j,bbTrans[j]))
         if bbTrans is not None:
             transOut.close()
             if len(to_write_text)>0:
-                pil_image = Image.fromarray(image)
+                pil_image = Image.fromarray((image*255).astype(np.uint8))
                 pil_draw = ImageDraw.Draw(pil_image)
-                font = ImageFont.truetype("times-ro.ttf", 9)
-                for text,loc,color in to_write_text:
-                    pil_draw.text(loc,text,color,font=font)
-                image = numpy.array(pil_image)
+                try:
+                    font = ImageFont.truetype("UbuntuMono-R.ttf", 9)
+                    for text,loc,color in to_write_text:
+                        pil_draw.text(loc,text,color,font=font)
+                except OSError:
+                    try:
+                        font = ImageFont.truetype("google-roboto", 9)
+                        for text,loc,color in to_write_text:
+                            pil_draw.text(loc,text,color,font=font)
+                    except OSError:
+                        pass
+
+                image = np.array(pil_image).astype(np.float32)/255
 
 
         #Draw pred groups (based on bb pred)
@@ -215,7 +250,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                         tY=cY+offsetY
                         image[tY:tY+s,tX:tX+s]=boxColors[i]
                     #error
-                    if len(boxColors)==5:
+                    if len(boxColors)==5 and cY-3>=0 and cY+4<image.shape[0] and cX-3>=0 and cX+4<image.shape[1]:
                         image[cY-3,cX-2:cX+4]=boxColors[4]
                         image[cY-2:cY+4,cX-3]=boxColors[4]
         else:
