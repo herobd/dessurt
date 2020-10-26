@@ -10,6 +10,11 @@ from utils.group_pairing import getGTGroup, pure, purity
 from datasets.testforms_graph_pair import display
 import random, os
 
+from model.oversegment_loss import build_oversegmented_targets_multiscale
+from model.overseg_box_detector import build_box_predictions
+
+import torch.autograd.profiler as profile
+
 class GraphPairTrainer(BaseTrainer):
     """
     Trainer class
