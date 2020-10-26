@@ -1258,19 +1258,23 @@ class GraphPairTrainer(BaseTrainer):
             else:
                 target_for_b = torch.empty(0)
             if self.model.useCurvedBBs:
-                ap_5, prec_5, recall_5 =AP_textLines(target_for_b,outputBoxes,0.5,numClasses)
+                ap_5, prec_5, recall_5, allPrec, allRecall =AP_textLines(target_for_b,outputBoxes,0.5,numClasses)
             elif self.model.rotation:
-                ap_5, prec_5, recall_5 =AP_dist(target_for_b,outputBoxes,0.9,numClasses)
+                ap_5, prec_5, recall_5, allPrec, allRecall =AP_dist(target_for_b,outputBoxes,0.9,numClasses)
             else:
-                ap_5, prec_5, recall_5 =AP_iou(target_for_b,outputBoxes,0.5,numClasses)
+                ap_5, prec_5, recall_5, allPrec, allRecall =AP_iou(target_for_b,outputBoxes,0.5,numClasses)
             prec_5 = np.array(prec_5)
             recall_5 = np.array(recall_5)
             log['bb_AP']=ap_5
             log['bb_prec']=prec_5
             log['bb_recall']=recall_5
-            Fm=2*(prec_5*recall_5)/(prec_5+recall_5)
-            Fm[np.isnan(Fm)]=0
-            log['bb_Fm_avg']=Fm.mean()
+            #Fm=2*(prec_5*recall_5)/(prec_5+recall_5)
+            #Fm[np.isnan(Fm)]=0
+            #log['bb_Fm_avg']=Fm.mean()
+            log['bb_allPrec']=allPrec
+            log['bb_allRecall']=allRecall
+            log['bb_allFm']= 2*allPrec*allRecall/(allPrec+allRecall) if allPrec+allRecall>0 else 0
+
 
         if 'nn_acc' in get:
             if self.model.predNN and bbPred is not None:
@@ -1695,19 +1699,19 @@ class GraphPairTrainer(BaseTrainer):
                     else:
                         target_for_b = torch.empty(0)
                     if self.model.useCurvedBBs:
-                        ap_5, prec_5, recall_5 =AP_textLines(target_for_b,outputBoxes,0.5,numClasses)
+                        ap_5, prec_5, recall_5, allPrec, allRecall =AP_textLines(target_for_b,outputBoxes,0.5,numClasses)
                     elif self.model.rotation:
                         ap_5, prec_5, recall_5 =AP_dist(target_for_b,outputBoxes,0.9,numClasses, beforeCls=beforeCls)
                     else:
-                        ap_5, prec_5, recall_5 =AP_iou(target_for_b,outputBoxes,0.5,numClasses, beforeCls=beforeCls)
+                        ap_5, prec_5, recall_5, allPrec, allRecall =AP_iou(target_for_b,outputBoxes,0.5,numClasses, beforeCls=beforeCls)
                     prec_5 = np.array(prec_5)
                     recall_5 = np.array(recall_5)
                     log['bb_AP_{}'.format(graphIteration)]=ap_5
                     log['bb_prec_{}'.format(graphIteration)]=prec_5
                     log['bb_recall_{}'.format(graphIteration)]=recall_5
-                    Fm=2*(prec_5*recall_5)/(prec_5+recall_5)
-                    Fm[np.isnan(Fm)]=0
-                    log['bb_Fm_avg_{}'.format(graphIteration)]=Fm.mean()
+                    log['bb_allPrec_{}'.format(graphIteration)]=allPrec
+                    log['bb_allRecall_{}'.format(graphIteration)]=allRecall
+                    log['bb_allFm_{}'.format(graphIteration)]= 2*allPrec*allRecall/(allPrec+allRecall) if allPrec+allRecall>0 else 0
 
         #t#print('time run all_losses: {}'.format(timeit.default_timer()-tic))#t#
         #t#tic=timeit.default_timer()#t#
@@ -1823,20 +1827,19 @@ class GraphPairTrainer(BaseTrainer):
         else:
             target_for_b = torch.empty(0)
         if self.model.useCurvedBBs:
-            ap_5, prec_5, recall_5 =AP_textLines(target_for_b,outputBoxes,0.5,numClasses)
+            ap_5, prec_5, recall_5, allPrec, allRecall =AP_textLines(target_for_b,outputBoxes,0.5,numClasses)
         elif self.model.rotation:
-            ap_5, prec_5, recall_5 =AP_dist(target_for_b,outputBoxes,0.9,numClasses, beforeCls=beforeCls)
+            ap_5, prec_5, recall_5, allPrec, allRecall =AP_dist(target_for_b,outputBoxes,0.9,numClasses, beforeCls=beforeCls)
         else:
-            ap_5, prec_5, recall_5 =AP_iou(target_for_b,outputBoxes,0.5,numClasses, beforeCls=beforeCls)
+            ap_5, prec_5, recall_5, allPrec, allRecall =AP_iou(target_for_b,outputBoxes,0.5,numClasses, beforeCls=beforeCls)
         prec_5 = np.array(prec_5)
         recall_5 = np.array(recall_5)
         log['final_bb_AP']=ap_5
         log['final_bb_prec']=prec_5
         log['final_bb_recall']=recall_5
-        Fm = np.where(prec_5+recall_5==0,0,2*(prec_5*recall_5)/(prec_5+recall_5))
-        #Fm=2*(prec_5*recall_5)/(prec_5+recall_5)
-        #Fm[np.isnan(Fm)]=0
-        log['final_bb_Fm_avg']=Fm.mean()
+        log['final_bb_allPrec']=allPrec
+        log['final_bb_allRecall']=allRecall
+        log['final_bb_allFm']= 2*allPrec*allRecall/(allPrec+allRecall) if allPrec+allRecall>0 else 0
 
         predGroupsT={}
         if predGroups is not None:
