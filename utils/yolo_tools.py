@@ -710,15 +710,17 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClas
                     precisions.append(1.0)
                     class_ap.append(1.0)
                 recalls.append(1.0)
+        allPrec=0
+        allRecall=1
         if getClassAP:
             return ap/numClasses, precisions, recalls, class_ap
         else:
-            return ap/numClasses, precisions, recalls
+            return ap/numClasses, precisions, recalls, allPrec,allRecall
     else:
         if getClassAP:
             return 1.0, [1.0]*numClasses, [1.0]*numClasses, [1.0]*numClasses #we didn't for all classes :)
         else:
-            return 1.0, [1.0]*numClasses, [1.0]*numClasses
+            return 1.0, [1.0]*numClasses, [1.0]*numClasses, 1.0, 1.0
 
     allScores=[]
     classScores=[[] for i in range(numClasses)]
@@ -890,15 +892,17 @@ def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeC
                     precisions.append(1.0)
                     class_ap.append(1.0)
                 recalls.append(1.0)
+        allPrec=0
+        allRecall=1
         if getClassAP:
             return ap/numClasses, precisions, recalls, class_ap
         else:
-            return ap/numClasses, precisions, recalls
+            return ap/numClasses, precisions, recalls, allPrec, allRecall
     else:
         if getClassAP:
             return 1.0, [1.0]*numClasses, [1.0]*numClasses, [1.0]*numClasses #we didn't for all classes :)
         else:
-            return 1.0, [1.0]*numClasses, [1.0]*numClasses
+            return 1.0, [1.0]*numClasses, [1.0]*numClasses, 1.0, 1.0
 
     allScores=[]
     classScores=[[] for i in range(numClasses)]
@@ -1023,8 +1027,9 @@ def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeC
                 precisions.append(1)
                 recalls.append(1)
     
-    allPrec = totalTruPos/totalPred
-    allRecall = totalTruPos/totalGT
+        
+    allPrec = totalTruPos/totalPred if totalPred>0 else 1
+    allRecall = totalTruPos/totalGT if totalGT>0 else 1
     if getClassAP:
         classAPs=[computeAP(scores) for scores in classScores]
         #for i in range(len(classAPs)):
