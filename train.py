@@ -14,6 +14,10 @@ from logger import Logger
 import requests, socket
 import warnings
 
+import torch.distributed as dist
+import torch.multiprocessing as mp
+from torch.nn.parallel import DistributedDataParallel
+
 def update_status(name,message,supercomputer):
     if supercomputer:
         return
@@ -40,17 +44,30 @@ def set_procname(newname):
         buff.value = newname                 #Null terminated string as it should be
         libc.prctl(15, byref(buff), 0, 0, 0) #Refer to "#define" of "/usr/include/linux/prctl.h" for the misterious value 16 & arg[3..5] are zero as the man page says.
 
-def main(config, resume):
-    set_procname(config['name'])
+def main_wraper(rank,config,resume,world_size):
+    if 'gpus' not in config:
+        config['gpu']=rank
+    else:
+        config['gpu']=config['gpus'][rank]
+    with torch.cuda.device(config['gpu']):
+        main(rank,config,resume,world_size)
+
+def main(rank,config, resume,world_size=None):
+    if rank is not None: #multiprocessing
+        dist.init_process_group("gloo", rank=rank, world_size=world_size)
+
     #np.random.seed(1234) I don't have a way of restarting the DataLoader at the same place, so this makes it totaly random
     train_logger = Logger()
 
     split = config['split'] if 'split' in config else 'train'
-    data_loader, valid_data_loader = getDataLoader(config,split)
+    data_loader, valid_data_loader = getDataLoader(config,split,rank,world_size)
     #valid_data_loader = data_loader.split_validation()
 
     model = eval(config['arch'])(config['model'])
     model.summary()
+    if rank is not None:
+        model = DistributedDataParallel(model)
+
     if type(config['loss'])==dict:
         loss={}#[eval(l) for l in config['loss']]
         for name,l in config['loss'].items():
@@ -77,11 +94,15 @@ def main(config, resume):
 
     name=config['name']
     supercomputer = config['super_computer'] if 'super_computer' in config else False
-    def handleSIGINT(sig, frame):
-        trainer.save()
-        update_status(name,'stopped!',supercomputer)
-        sys.exit(0)
-    signal.signal(signal.SIGINT, handleSIGINT)
+
+    if rank is not None and rank!=0:
+        trainer.side_process=True #this tells the trainer not to log or validate on this thread
+    else:
+        def handleSIGINT(sig, frame):
+            trainer.save()
+            update_status(name,'stopped!',supercomputer)
+            sys.exit(0)
+        signal.signal(signal.SIGINT, handleSIGINT)
 
     print("Begin training")
     update_status(name,'started',supercomputer)
@@ -140,13 +161,23 @@ if __name__ == '__main__':
     if args.gpu is not None:
         config['gpu']=args.gpu
         print('override gpu to '+str(config['gpu']))
+    set_procname(config['name'])
 
-    try: 
-        if config['cuda']:
+    try:
+        if 'multiprocess' in config:
+            assert(config['cuda'])
+            num_gpu_processes=config['multiprocess']
+            os.environ['MASTER_ADDR'] = '127.0.0.1'
+            os.environ['MASTER_PORT'] = '8888'
+            mp.spawn(main_wraper,
+                    args=(config,args.resume,num_gpu_processes),
+                    nprocs=num_gpu_processes,
+                    join=True)
+        elif config['cuda']:
             with torch.cuda.device(config['gpu']):
-                main(config, args.resume)
+                main(None,config, args.resume)
         else:
-            main(config, args.resume)
+            main(None,config, args.resume)
     except Exception as er:
 
         #urllib.request.urlopen(url

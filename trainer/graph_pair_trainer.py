@@ -10,12 +10,6 @@ from utils.group_pairing import getGTGroup, pure, purity
 from datasets.testforms_graph_pair import display
 import random, os
 
-from model.oversegment_loss import build_oversegmented_targets_multiscale
-from model.overseg_box_detector import build_box_predictions
-
-import torch.autograd.profiler as profiler
-
-
 class GraphPairTrainer(BaseTrainer):
     """
     Trainer class
@@ -35,22 +29,22 @@ class GraphPairTrainer(BaseTrainer):
         self.lossWeights = config['loss_weights'] if 'loss_weights' in config else {"box": 1, "rel":1}
         if 'box' in self.loss:
             self.loss['box'] = self.loss['box'](**self.loss_params['box'], 
-                    num_classes=model.numBBTypes, 
-                    rotation=model.rotation, 
-                    scale=model.scale,
-                    anchors=model.anchors)
+                    num_classes=self.model_ref.numBBTypes, 
+                    rotation=self.model_ref.rotation, 
+                    scale=self.model_ref.scale,
+                    anchors=self.model_ref.anchors)
         elif 'overseg' in self.loss:
             self.loss['overseg'] = self.loss['overseg'](**self.loss_params['overseg'],
-                    num_classes=model.numBBTypes,
-                    rotation=model.rotation,
-                    scale=model.scale,
-                    anchors=model.anchors)
+                    num_classes=self.model_ref.numBBTypes,
+                    rotation=self.model_ref.rotation,
+                    scale=self.model_ref.scale,
+                    anchors=self.model_ref.anchors)
         self.batch_size = data_loader.batch_size
         self.data_loader = data_loader
         self.data_loader_iter = iter(data_loader)
         #for i in range(self.start_iteration,
         self.valid_data_loader = valid_data_loader
-        self.valid = True if self.valid_data_loader is not None else False
+        #self.valid = True if self.valid_data_loader is not None else False
         #self.log_step = int(np.sqrt(self.batch_size))
         #lr schedule from "Attention is all you need"
         #base_lr=config['optimizer']['lr']
@@ -66,9 +60,9 @@ class GraphPairTrainer(BaseTrainer):
         self.thresh_conf = config['trainer']['thresh_conf'] if 'thresh_conf' in config['trainer'] else 0.92
         self.thresh_intersect = config['trainer']['thresh_intersect'] if 'thresh_intersect' in config['trainer'] else 0.4
         self.thresh_rel = config['trainer']['thresh_rel'] if 'thresh_rel' in config['trainer'] else 0.5
-        self.thresh_edge = self.model.keepEdgeThresh
-        self.thresh_overSeg = self.model.mergeThresh
-        self.thresh_group = self.model.groupThresh
+        self.thresh_edge = self.model_ref.keepEdgeThresh
+        self.thresh_overSeg = self.model_ref.mergeThresh
+        self.thresh_group = self.model_ref.groupThresh
         self.thresh_rel = [self.thresh_rel]*len(self.thresh_group)
         self.thresh_error = config['trainer']['thresh_error'] if 'thresh_error' in config['trainer'] else [0.5]*len(self.thresh_group)
 
@@ -183,7 +177,7 @@ class GraphPairTrainer(BaseTrainer):
         except StopIteration:
             self.data_loader_iter = iter(self.data_loader)
             thisInstance = self.data_loader_iter.next()
-        if not self.model.detector.predNumNeighbors:
+        if not self.model_ref.detector.predNumNeighbors:
             thisInstance['num_neighbors']=None
         ##toc=timeit.default_timer()
         #t#print('time train data: {}'.format(timeit.default_timer()-tic))#t#
@@ -285,7 +279,7 @@ class GraphPairTrainer(BaseTrainer):
 
         with torch.no_grad():
             for batch_idx, instance in enumerate(self.valid_data_loader):
-                if not self.model.detector.predNumNeighbors:
+                if not self.model_ref.detector.predNumNeighbors:
                     instance['num_neighbors']=None
                 if not self.logged:
                     print('iter:{} valid batch: {}/{}'.format(self.iteration,batch_idx,len(self.valid_data_loader)), end='\r')
@@ -348,12 +342,12 @@ class GraphPairTrainer(BaseTrainer):
         #should this be the same as AP_?
         numClasses = 2
 
-        if self.model.rotation:
+        if self.model_ref.rotation:
             targIndex, fullHit = getTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
         else:
             targIndex, fullHit = getTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,hard_thresh=False,fixed=self.fixedAlign)
         #else:
-        #    if self.model.rotation:
+        #    if self.model_ref.rotation:
         #        targIndex, predsWithNoIntersection = getTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses)
         #    else:
         #        targIndex, predsWithNoIntersection = getTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses)
@@ -544,9 +538,9 @@ class GraphPairTrainer(BaseTrainer):
                 #what I want:
                 # alignment from pred to target (-1 if none), each GT has only one pred
                 # targIndex = alginment from pred to target (-1 if none) based on IO_clippedU thresh, not class
-                if self.model.useCurvedBBs:
+                if self.model_ref.useCurvedBBs:
                     targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,0.4,numClasses,True)
-                elif self.model.rotation:
+                elif self.model_ref.rotation:
                     assert(False and 'untested')
                     targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
                 else:
@@ -1056,7 +1050,7 @@ class GraphPairTrainer(BaseTrainer):
 
     #old
     def run(self,instance,useGT,threshIntur=None,get=[]):
-        numClasses = self.model.numBBTypes
+        numClasses = self.model_ref.numBBTypes
         if 'no_blanks' in self.config['validation'] and not self.config['data_loader']['no_blanks']:
             numClasses-=1
         image, targetBoxes, adj, target_num_neighbors = self._to_tensor(instance)
@@ -1067,17 +1061,17 @@ class GraphPairTrainer(BaseTrainer):
             #gtPairing,predPairing = self.prealignedEdgePred(adj,relPred)
             predPairingShouldBeTrue,predPairingShouldBeFalse, eRecall,ePrec,fullPrec,ap,proposedInfo = self.prealignedEdgePred(adj,relPred,relIndexes,rel_prop_pred)
             if bbPred is not None:
-                if self.model.predNN or self.model.predClass:
+                if self.model_ref.predNN or self.model_ref.predClass:
                     if target_num_neighbors is not None:
                         alignedNN_use = target_num_neighbors[0]
                     bbPredNN_use = bbPred[:,:,0]
                     start=1
                 else:
                     start=0
-                if self.model.predClass:
+                if self.model_ref.predClass:
                     if targetBoxes is not None:
-                        alignedClass_use =  targetBoxes[0,:,13:13+self.model.numBBTypes]
-                    bbPredClass_use = bbPred[:,:,start:start+self.model.numBBTypes]
+                        alignedClass_use =  targetBoxes[0,:,13:13+self.model_ref.numBBTypes]
+                    bbPredClass_use = bbPred[:,:,start:start+self.model_ref.numBBTypes]
             else:
                 bbPredNN_use=None
                 bbPredClass_use=None
@@ -1093,7 +1087,7 @@ class GraphPairTrainer(BaseTrainer):
                     #first, remove unmatched predicitons that didn't overlap (weren't close) to any targets
                     #toKeep = 1-((bbNoIntersections==1) * (bbAlignment==-1))
                 #remove predictions that overlapped with GT, but not enough
-                if self.model.predNN:
+                if self.model_ref.predNN:
                     start=1
                     toKeep = 1-((bbFullHit==0) * (bbAlignment!=-1)) #toKeep = not (incomplete_overlap and did_overlap)
                     if toKeep.any():
@@ -1111,14 +1105,14 @@ class GraphPairTrainer(BaseTrainer):
                         alignedNN_use=None
                 else:
                     start=0
-                if self.model.predClass:
+                if self.model_ref.predClass:
                     #We really don't care about the class of non-overlapping instances
                     if targetBoxes is not None:
                         toKeep = bbFullHit==1
                         if toKeep.any():
-                            bbPredClass_use = bbPred[toKeep][:,:,start:start+self.model.numBBTypes]
+                            bbPredClass_use = bbPred[toKeep][:,:,start:start+self.model_ref.numBBTypes]
                             bbAlignment_use = bbAlignment[toKeep]
-                            alignedClass_use =  targetBoxes[0][bbAlignment_use.long()][:,13:13+self.model.numBBTypes] #There should be no -1 indexes in hereS
+                            alignedClass_use =  targetBoxes[0][bbAlignment_use.long()][:,13:13+self.model_ref.numBBTypes] #There should be no -1 indexes in hereS
                         else:
                             alignedClass_use = None
                             bbPredClass_use = None
@@ -1190,7 +1184,7 @@ class GraphPairTrainer(BaseTrainer):
 
 
 
-        if not self.model.detector_frozen:
+        if not self.model_ref.detector_frozen:
             if targetBoxes is not None:
                 targSize = targetBoxes.size(1)
             else:
@@ -1212,7 +1206,7 @@ class GraphPairTrainer(BaseTrainer):
         #    loss = relLoss
 
 
-        if self.model.predNN and bbPredNN_use is not None and bbPredNN_use.size(0)>0:
+        if self.model_ref.predNN and bbPredNN_use is not None and bbPredNN_use.size(0)>0:
             alignedNN_use = alignedNN_use[:,None] #introduce "time" dimension to broadcast
             nn_loss_final = self.loss['nnFinal'](bbPredNN_use,alignedNN_use)
             losses['nnFinalLoss']=nn_loss_final
@@ -1226,7 +1220,7 @@ class GraphPairTrainer(BaseTrainer):
         #else:
             #nn_loss_final=0
 
-        if self.model.predClass and bbPredClass_use is not None and bbPredClass_use.size(0)>0:
+        if self.model_ref.predClass and bbPredClass_use is not None and bbPredClass_use.size(0)>0:
             alignedClass_use = alignedClass_use[:,None] #introduce "time" dimension to broadcast
             class_loss_final = self.loss['classFinal'](bbPredClass_use,alignedClass_use)
             losses['classFinalLoss'] = class_loss_final
@@ -1243,23 +1237,23 @@ class GraphPairTrainer(BaseTrainer):
                 }
         if ap is not None:
             log['rel_AP']=ap
-        if not self.model.detector_frozen:
+        if not self.model_ref.detector_frozen:
             if 'nnFinalLoss' in losses:
                 log['nn loss improvement (neg is good)'] = losses['nnFinalLoss'].item()-nn_loss
             if 'classFinalLoss' in losses:
                 log['class loss improvement (neg is good)'] = losses['classFinalLoss'].item()-class_loss
 
         if 'bb_stats' in get:
-            if self.model.detector.predNumNeighbors:
+            if self.model_ref.detector.predNumNeighbors:
                 outputBoxes=torch.cat((outputBoxes[:,0:6],outputBoxes[:,7:]),dim=1) #throw away NN pred
             if targetBoxes is not None:
                 targetBoxes = targetBoxes.cpu()
                 target_for_b = targetBoxes[0]
             else:
                 target_for_b = torch.empty(0)
-            if self.model.useCurvedBBs:
+            if self.model_ref.useCurvedBBs:
                 ap_5, prec_5, recall_5, allPrec, allRecall =AP_textLines(target_for_b,outputBoxes,0.5,numClasses)
-            elif self.model.rotation:
+            elif self.model_ref.rotation:
                 ap_5, prec_5, recall_5, allPrec, allRecall =AP_dist(target_for_b,outputBoxes,0.9,numClasses)
             else:
                 ap_5, prec_5, recall_5, allPrec, allRecall =AP_iou(target_for_b,outputBoxes,0.5,numClasses)
@@ -1277,7 +1271,7 @@ class GraphPairTrainer(BaseTrainer):
 
 
         if 'nn_acc' in get:
-            if self.model.predNN and bbPred is not None:
+            if self.model_ref.predNN and bbPred is not None:
                 predNN_p=bbPred[:,-1,0]
                 diffs=torch.abs(predNN_p-target_num_neighbors[0][bbAlignment].float())
                 nn_acc = (diffs<0.5).float().mean().item()
@@ -1328,15 +1322,15 @@ class GraphPairTrainer(BaseTrainer):
             gtTrans = None
         #t#tic=timeit.default_timer()#t#
         if useGT and targetBoxes is not None:
-            if self.model.useCurvedBBs:
+            if self.model_ref.useCurvedBBs:
                 #build targets of GT to pass as detections
                 ph_boxes = [torch.zeros(1,1,1,1,1)]*3
                 ph_cls = [torch.zeros(1,1,1,1,1)]*3
                 ph_conf = [torch.zeros(1,1,1,1)]*3
-                scale = self.model.detector.scale
-                numAnchors = self.model.detector.numAnchors
-                numBBParams = self.model.detector.numBBParams
-                numBBParams = self.model.detector.numBBParams
+                scale = self.model_ref.detector.scale
+                numAnchors = self.model_ref.detector.numAnchors
+                numBBParams = self.model_ref.detector.numBBParams
+                numBBParams = self.model_ref.detector.numBBParams
                 numBBTypes = numClasses
                 grid_sizesH=[image.size(2)//s[0] for s in scale]
                 grid_sizesW=[image.size(3)//s[0] for s in scale]
@@ -1393,17 +1387,17 @@ class GraphPairTrainer(BaseTrainer):
             #TODO
             #predPairingShouldBeTrue,predPairingShouldBeFalse, eRecall,ePrec,fullPrec,ap,proposedInfo = self.prealignedEdgePred(adj,relPred,relIndexes,rel_prop_pred)
             #if bbPred is not None:
-            #    if self.model.predNN or self.model.predClass:
+            #    if self.model_ref.predNN or self.model_ref.predClass:
             #        if target_num_neighbors is not None:
             #            alignedNN_use = target_num_neighbors[0]
             #        bbPredNN_use = bbPred[:,:,0]
             #        start=1
             #    else:
             #        start=0
-            #    if self.model.predClass:
+            #    if self.model_ref.predClass:
             #        if targetBoxes is not None:
-            #            alignedClass_use =  targetBoxes[0,:,13:13+self.model.numBBTypes]
-            #        bbPredClass_use = bbPred[:,:,start:start+self.model.numBBTypes]
+            #            alignedClass_use =  targetBoxes[0,:,13:13+self.model_ref.numBBTypes]
+            #        bbPredClass_use = bbPred[:,:,start:start+self.model_ref.numBBTypes]
             #else:
             #    bbPredNN_use=None
             #    bbPredClass_use=None
@@ -1441,23 +1435,23 @@ class GraphPairTrainer(BaseTrainer):
                         edgePred,
                         edgeIndexes,
                         predGroups, 
-                        rel_prop_pred if (graphIteration==0 and not self.model.merge_first) or (graphIteration==1 and self.model.merge_first) else (merge_prop_scores if graphIteration==0 and self.model.merge_first else None),
+                        rel_prop_pred if (graphIteration==0 and not self.model_ref.merge_first) or (graphIteration==1 and self.model_ref.merge_first) else (merge_prop_scores if graphIteration==0 and self.model_ref.merge_first else None),
                         self.thresh_edge[graphIteration],
                         self.thresh_rel[graphIteration],
                         self.thresh_overSeg[graphIteration],
                         self.thresh_group[graphIteration],
                         self.thresh_error[graphIteration],
-                        merge_only= graphIteration==0 and self.model.merge_first
+                        merge_only= graphIteration==0 and self.model_ref.merge_first
                         )
                 #t#print('time run g{} newAlignEdgePred: {}'.format(graphIteration,timeit.default_timer()-tic2))#t#
                 allEdgePredTypes.append(edgePredTypes)
-                if graphIteration==0 and self.model.merge_first:
+                if graphIteration==0 and self.model_ref.merge_first:
                     mergeProposedInfo=proposedInfoI
-                elif (graphIteration==0 and not self.model.merge_first) or (graphIteration==1 and self.model.merge_first):
+                elif (graphIteration==0 and not self.model_ref.merge_first) or (graphIteration==1 and self.model_ref.merge_first):
                     proposedInfo=proposedInfoI
 
-                assert(not self.model.predNN)
-                if self.model.predClass and nodePred is not None:
+                assert(not self.model_ref.predNN)
+                if self.model_ref.predClass and nodePred is not None:
                     node_pred_use_index=[]
                     node_gt_use_class_indexes=[]
                     node_pred_use_index_sp=[]
@@ -1512,7 +1506,7 @@ class GraphPairTrainer(BaseTrainer):
                     node_pred_use_index += node_pred_use_index_sp
 
                     if len(node_pred_use_index)>0:
-                        nodePredClass_use = nodePred[node_pred_use_index][:,:,self.model.nodeIdxClass:self.model.nodeIdxClassEnd]
+                        nodePredClass_use = nodePred[node_pred_use_index][:,:,self.model_ref.nodeIdxClass:self.model_ref.nodeIdxClassEnd]
                         alignedClass_use = targetBoxes[0][node_gt_use_class_indexes,13:13+len(self.classMap)]
                         if self.num_node_error_class>0:
                             alignedClass_use = torch.cat((alignedClass_use,torch.FloatTensor(alignedClass_use.size(0),self.num_bb_error_class).zero_().to(alignedClass_use.device)),dim=1)
@@ -1524,7 +1518,7 @@ class GraphPairTrainer(BaseTrainer):
                         alignedClass_use = None
 
                     if len(node_conf_use_index)>0:
-                        nodePredConf_use = nodePred[node_conf_use_index][:,:,self.model.nodeIdxConf]
+                        nodePredConf_use = nodePred[node_conf_use_index][:,:,self.model_ref.nodeIdxConf]
                         nodeGTConf_use = torch.FloatTensor(node_conf_gt).to(nodePred.device)
                 else:
                     nodePredClass_use = None
@@ -1593,7 +1587,7 @@ class GraphPairTrainer(BaseTrainer):
 
                 
                 #Fine tuning detector. Should only happed once
-                if not self.model.detector_frozen and graphIteration==0:
+                if not self.model_ref.detector_frozen and graphIteration==0:
                     if targetBoxes is not None:
                         targSize = targetBoxes.size(1)
                     else:
@@ -1632,7 +1626,7 @@ class GraphPairTrainer(BaseTrainer):
                 #    loss = relLoss
 
 
-                if self.model.predNN and nodePredNN_use is not None and nodePredNN_use.size(0)>0:
+                if self.model_ref.predNN and nodePredNN_use is not None and nodePredNN_use.size(0)>0:
                     alignedNN_use = alignedNN_use[:,None] #introduce "time" dimension to broadcast
                     nn_loss_final = self.loss['nnFinal'](nodePredNN_use,alignedNN_use)
                     losses['nnFinalLoss']+=nn_loss_final
@@ -1646,7 +1640,7 @@ class GraphPairTrainer(BaseTrainer):
                 #else:
                     #nn_loss_final=0
 
-                if self.model.predClass and nodePredClass_use is not None and nodePredClass_use.size(0)>0:
+                if self.model_ref.predClass and nodePredClass_use is not None and nodePredClass_use.size(0)>0:
                     alignedClass_use = alignedClass_use[:,None] #introduce "time" dimension to broadcast
                     class_loss_final = self.loss['classFinal'](nodePredClass_use,alignedClass_use)
                     losses['classFinalLoss'] += class_loss_final
@@ -1670,7 +1664,7 @@ class GraphPairTrainer(BaseTrainer):
                     
                     draw_graph(
                             outputBoxes,
-                            self.model.used_threshConf,
+                            self.model_ref.used_threshConf,
                             torch.sigmoid(nodePred).cpu().detach() if nodePred is not None else None,
                             torch.sigmoid(edgePred).cpu().detach(),
                             edgeIndexes,
@@ -1680,14 +1674,14 @@ class GraphPairTrainer(BaseTrainer):
                             targetBoxes,
                             self.model,
                             path,
-                            useTextLines=self.model.useCurvedBBs,
+                            useTextLines=self.model_ref.useCurvedBBs,
                             targetGroups=instance['gt_groups'],
                             targetPairs=instance['gt_groups_adj'])
                     print('saved {}'.format(path))
 
                 if 'bb_stats' in get:
 
-                    if self.model.detector.predNumNeighbors:
+                    if self.model_ref.detector.predNumNeighbors:
                         beforeCls=1
                         #outputBoxesM=torch.cat((outputBoxes[:,0:6],outputBoxes[:,7:]),dim=1) #throw away NN pred
                     else:
@@ -1698,9 +1692,9 @@ class GraphPairTrainer(BaseTrainer):
                         target_for_b = targetBoxes[0].cpu()
                     else:
                         target_for_b = torch.empty(0)
-                    if self.model.useCurvedBBs:
+                    if self.model_ref.useCurvedBBs:
                         ap_5, prec_5, recall_5, allPrec, allRecall =AP_textLines(target_for_b,outputBoxes,0.5,numClasses)
-                    elif self.model.rotation:
+                    elif self.model_ref.rotation:
                         ap_5, prec_5, recall_5 =AP_dist(target_for_b,outputBoxes,0.9,numClasses, beforeCls=beforeCls)
                     else:
                         ap_5, prec_5, recall_5, allPrec, allRecall =AP_iou(target_for_b,outputBoxes,0.5,numClasses, beforeCls=beforeCls)
@@ -1721,7 +1715,7 @@ class GraphPairTrainer(BaseTrainer):
             if self.save_images_every>0 and self.iteration%self.save_images_every==0:
                 path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b','final'))#instance['name'],graphIteration))
                 finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = final
-                draw_graph(finalOutputBoxes,self.model.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,image,None,targetBoxes,self.model,path,bbTrans=finalBBTrans,useTextLines=self.model.useCurvedBBs,targetGroups=instance['gt_groups'],targetPairs=instance['gt_groups_adj'])
+                draw_graph(finalOutputBoxes,self.model_ref.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,image,None,targetBoxes,self.model,path,bbTrans=finalBBTrans,useTextLines=self.model_ref.useCurvedBBs,targetGroups=instance['gt_groups'],targetPairs=instance['gt_groups_adj'])
                 #print('saved {}'.format(path))
             finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = final
             #print('DEBUG final num node:{}, num edges: {}'.format(len(finalOutputBoxes) if finalOutputBoxes is not None else 0,len(finalEdgeIndexes) if finalEdgeIndexes is not None else 0))
@@ -1731,7 +1725,7 @@ class GraphPairTrainer(BaseTrainer):
         #log['rel_recall']= eRecall
         #log['rel_Fm']= 2*(fullPrec*eRecall)/(eRecall+fullPrec) if eRecall+fullPrec>0 else 0
 
-        if not self.model.detector_frozen:
+        if not self.model_ref.detector_frozen:
             if 'nnFinalLoss' in losses:
                 log['nn loss improvement (neg is good)'] = losses['nnFinalLoss'].item()-nn_loss
             if 'classFinalLoss' in losses:
@@ -1739,7 +1733,7 @@ class GraphPairTrainer(BaseTrainer):
 
 
         if 'nn_acc' in get:
-            if self.model.predNN and bbPred is not None:
+            if self.model_ref.predNN and bbPred is not None:
                 predNN_p=bbPred[:,-1,0]
                 diffs=torch.abs(predNN_p-target_num_neighbors[0][bbAlignment].float())
                 nn_acc = (diffs<0.5).float().mean().item()
@@ -1804,9 +1798,9 @@ class GraphPairTrainer(BaseTrainer):
         numClasses = len(self.data_loader.dataset.classMap)
         if targetBoxes is not None:
             targetBoxes = targetBoxes.cpu()
-            if self.model.useCurvedBBs:
+            if self.model_ref.useCurvedBBs:
                 targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,0.5,numClasses,False)
-            elif self.model.rotation:
+            elif self.model_ref.rotation:
                 raise NotImplementedError('newGetTargIndexForPreds_ should be modified to reflect the behavoir or newGetTargIndexForPreds_textLines')
                 targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
             else:
@@ -1815,7 +1809,7 @@ class GraphPairTrainer(BaseTrainer):
         elif outputBoxes is not None:
             targIndex=torch.LongTensor(len(outputBoxes)).fill_(-1)
 
-        if self.model.detector.predNumNeighbors:
+        if self.model_ref.detector.predNumNeighbors:
             beforeCls=1
             #outputBoxesM=torch.cat((outputBoxes[:,0:6],outputBoxes[:,7:]),dim=1) #throw away NN pred
         else:
@@ -1826,9 +1820,9 @@ class GraphPairTrainer(BaseTrainer):
             target_for_b = targetBoxes[0].cpu()
         else:
             target_for_b = torch.empty(0)
-        if self.model.useCurvedBBs:
+        if self.model_ref.useCurvedBBs:
             ap_5, prec_5, recall_5, allPrec, allRecall =AP_textLines(target_for_b,outputBoxes,0.5,numClasses)
-        elif self.model.rotation:
+        elif self.model_ref.rotation:
             ap_5, prec_5, recall_5, allPrec, allRecall =AP_dist(target_for_b,outputBoxes,0.9,numClasses, beforeCls=beforeCls)
         else:
             ap_5, prec_5, recall_5, allPrec, allRecall =AP_iou(target_for_b,outputBoxes,0.5,numClasses, beforeCls=beforeCls)
