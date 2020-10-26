@@ -2,14 +2,14 @@
     "name": "FUNSDLines_detect_augRFh_oversegMultScl_resnet",
     "cuda": true,
     "gpu": 0,
-    "super_computer":false,
+    "super_computer":true,
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
         "data_set_name": "FUNSDBoxDetect",
         "data_dir": "../data/FUNSD",
         "split_to_lines": true,
-        "batch_size": 4,
+        "batch_size": 8,
         "shuffle": true,
         "num_workers": 0,
         "crop_to_page":false,
@@ -30,7 +30,8 @@
         "shuffle": false,
         "color":false,
         "rescale_range": [1,1],
-        "rotation": false
+        "rotation": true,
+        "crop_params": null
     },
 
     
@@ -55,7 +56,7 @@
     "metrics": [],
     "trainer": {
         "class": "BoxDetectTrainer",
-        "iterations": 400000,
+        "iterations": 100000,
         "save_dir": "saved/",
         "val_step": 10000,
         "save_step": 20000,

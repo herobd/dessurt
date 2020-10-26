@@ -11,7 +11,7 @@ import numpy as np
 logging.basicConfig(level=logging.INFO, format='')
 
 
-def graph(log,plot=True,prefix=None):
+def graph(log,plot=True,substring=None):
     graphs=defaultdict(lambda:{'iters':[], 'values':[]})
     for index, entry in log.entries.items():
         iteration = entry['iteration']
@@ -39,8 +39,8 @@ def graph(log,plot=True,prefix=None):
         for metric, data in graphs.items():
             if metric in skip:
                 continue
-            if (prefix is None and (metric[:3]=='avg' or metric[:3]=='val')) or (prefix is not None and metric[:len(prefix)]==prefix):
-                #print('{} == {}? {}'.format(metric[:len(prefix)],prefix,metric[:len(prefix)]==prefix))
+            if (substring is None and (metric[:3]=='avg' or metric[:3]=='val')) or (substring is not None and substring in metric):
+                #print('{} == {}? {}'.format(metric[:len(substring)],substring,metric[:len(substring)]==substring))
                 plt.figure(i)
                 i+=1
                 plt.plot(data['iters'], data['values'], '.-')
@@ -68,7 +68,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--plot', default=1, type=int,
                         help='plot (default: True)')
     parser.add_argument('-o', '--only', default=None, type=str,
-                        help='only stats with this prefix (default: None)')
+                        help='only stats with all these substrings (default: None)')
     parser.add_argument('-e', '--extract', default=None, type=str,
                         help='instead of ploting, save a new file with only the log (default: None)')
     parser.add_argument('-C', '--printconfig', default=False, type=bool,

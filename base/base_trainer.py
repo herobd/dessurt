@@ -22,7 +22,13 @@ class BaseTrainer:
     def __init__(self, model, loss, metrics, resume, config, train_logger=None):
         self.config = config
         self.logger = logging.getLogger(self.__class__.__name__)
+        #if type(model) is tuple:
+        #    self.model,self.model_ref
         self.model = model
+        if 'multiprocess' in config:
+            self.model_ref = model._modules['module']
+        else:
+            self.model_ref = model
         self.loss = loss
         self.metrics = metrics
         self.name = config['name']
@@ -178,6 +184,7 @@ class BaseTrainer:
             self.swa_c_iters = config['trainer']['swa_c_iters'] if 'swa_c_iters' in config['trainer'] else config['trainer']['weight_averaging_c_iters']
             assert(self.val_step>=self.swa_c_iters) #otherwise we'll start evaluating more than the (swa)model is updated
         self.iteration=999999999999999
+        self.side_process=False
         if resume:
             self._resume_checkpoint(resume)
 
@@ -221,6 +228,9 @@ class BaseTrainer:
                 #moving_average(self.swa_model, self.model, 1.0 / (swa_n + 1))
                 #swa_n += 1
                 self.swa_model.update_parameters(self.model)
+
+            if self.side_process:
+                continue #when multithreading, current log, and validation, is only collected on master
 
 
             for key, value in result.items():
