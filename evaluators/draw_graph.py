@@ -28,7 +28,7 @@ def plotRect(img,color,xyrhw,lineWidth=1):
     img_f.line(img,br,bl,color,lineWidth)
     img_f.line(img,bl,tl,color,lineWidth)
 
-def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,image,predTypes,targetBoxes,model,path,verbosity=2,bbTrans=None,useTextLines=False):
+def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,image,predTypes,targetBoxes,model,path,verbosity=2,bbTrans=None,useTextLines=False,targetGroups=None,targetPairs=None):
     #for graphIteration,(outputBoxes,nodePred,edgePred,edgeIndexes,predGroups) in zip(allOutputBoxes,allNodePred,allEdgePred,allEdgeIndexes,allPredGroups):
         if bbTrans is not None:
             transPath = path[:-3]+'txt'
@@ -39,13 +39,39 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
         b=0
         image = (1-((1+np.transpose(image[b][:,:,:],(1,2,0)))/2.0))
         if image.shape[2]==1:
-            image = img_f.gray2rgb(image*255)/255
+            image = img_f.gray2rgb(image)
+            #image = img_f.gray2rgb(image*255)/255
         #if name=='text_start_gt':
 
         if verbosity>1 and targetBoxes is not None:
             #Draw GT bbs
             for j in range(targetBoxes.size(1)):
                 plotRect(image,(1,0.5,0),targetBoxes[0,j,0:5])
+        if verbosity>1 and targetGroups is not None:
+            color=(0.99,0,0.3)
+            lineWidth=1
+            groupCenters=[]
+            for group in targetGroups:
+                xs=[]
+                ys=[]
+                for bbId in group:
+                    corners = getCorners(targetBoxes[0,bbId,0:5])
+                    xs+=[c[0] for c in corners]
+                    ys+=[c[1] for c in corners]
+                maxX = max(xs)+1
+                minX = min(xs)-1
+                maxY = max(ys)+1
+                minY = min(ys)-1
+                if len(group)>1:
+                    img_f.line(image,(minX,minY),(maxX,minY),color,lineWidth)
+                    img_f.line(image,(maxX,maxY),(maxX,minY),color,lineWidth)
+                    img_f.line(image,(minX,maxY),(maxX,maxY),color,lineWidth)
+                    img_f.line(image,(minX,minY),(minX,maxY),color,lineWidth)
+                groupCenters.append((round((minX+maxX)/2),round((minY+maxY)/2)))
+
+            #now to pairs
+            for pair in targetPairs:
+                img_f.line(image,groupCenters[pair[0]],groupCenters[pair[1]],(1,0,0.1),3,draw='mult')
 
         to_write_text=[]
         if verbosity>1 and outputBoxes is not None:
