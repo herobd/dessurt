@@ -9,7 +9,10 @@ import time
 from utils.util import ensure_dir
 from collections import defaultdict
 from model import *
-from torch.optim.swa_utils import AveragedModel
+try:
+    from torch.optim.swa_utils import AveragedModel
+except ModuleNotFoundError:
+    pass
 #from ..model import PairingGraph
 
 class BaseTrainer:
