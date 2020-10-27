@@ -1435,8 +1435,12 @@ class PairingGroupingGraph(BaseModel):
         if not merge_only:
             edgePreds = torch.sigmoid(edgePredictions[:,-1,0]).cpu().detach()
             #relPreds = torch.sigmoid(edgePredictions[:,-1,1]).cpu().detach()
-            mergePreds = torch.sigmoid(edgePredictions[:,-1,2]).cpu().detach()
-            groupPreds = torch.sigmoid(edgePredictions[:,-1,3]).cpu().detach()
+            if not self.legacy:
+                mergePreds = torch.sigmoid(edgePredictions[:,-1,2]).cpu().detach()
+                groupPreds = torch.sigmoid(edgePredictions[:,-1,3]).cpu().detach()
+            else:
+                mergePreds = torch.sigmoid(edgePredictions[:,-1,1]).cpu().detach()
+                groupPreds = torch.sigmoid(edgePredictions[:,-1,2]).cpu().detach()
         else:
             mergePreds = torch.sigmoid(edgePredictions[:,-1,0]).cpu().detach()
         ##Prevent all nodes from merging during first iterations (bad init):
