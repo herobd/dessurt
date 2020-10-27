@@ -1943,7 +1943,7 @@ class PairingGroupingGraph(BaseModel):
 
             return bbAndRel_features, (adjacencyMatrix,numOfNeighbors), numBB, numRel, relIndexes, rel_prop_scores
 
-    
+    def makeAllMasks(self,imageHeight,imageWidth,bbs,merge_only=False):
         if not self.useCurvedBBs:
             #get corners from bb predictions
             x = bbs[:,0]
