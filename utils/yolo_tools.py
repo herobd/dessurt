@@ -305,7 +305,57 @@ def allIOU(boxes1,boxes2, boxes1XYWH=[0,1,4,3],x1y1x2y2=False):
     iou = inter_area / (b1_area + b2_area - inter_area + 1e-16)
     return iou
 
-def allIOU_andClip(boxesT,boxesP, boxesPXYWH=[0,1,4,3]):
+def allIO_clipU(boxesT,boxesP, boxesPXYWH=[0,1,4,3]):
+    bP_x1, bP_x2 = boxesP[:,boxesPXYWH[0]]-boxesP[:,boxesPXYWH[2]], boxesP[:,boxesPXYWH[0]]+boxesP[:,boxesPXYWH[2]]
+    bP_y1, bP_y2 = boxesP[:,boxesPXYWH[1]]-boxesP[:,boxesPXYWH[3]], boxesP[:,boxesPXYWH[1]]+boxesP[:,boxesPXYWH[3]]
+    bT_x1, bT_x2 = boxesT[:,0]-boxesT[:,4], boxesT[:,0]+boxesT[:,4]
+    bT_y1, bT_y2 = boxesT[:,1]-boxesT[:,3], boxesT[:,1]+boxesT[:,3]
+
+    #expand to make two dimensional, allowing every instance of boxesP
+    #to be compared with every intsance of boxesT
+    bT_x1 = bT_x1[:,None].expand(boxesT.size(0), boxesP.size(0))
+    bT_y1 = bT_y1[:,None].expand(boxesT.size(0), boxesP.size(0))
+    bT_x2 = bT_x2[:,None].expand(boxesT.size(0), boxesP.size(0))
+    bT_y2 = bT_y2[:,None].expand(boxesT.size(0), boxesP.size(0))
+    bP_x1 = bP_x1[None,:].expand(boxesT.size(0), boxesP.size(0))
+    bP_y1 = bP_y1[None,:].expand(boxesT.size(0), boxesP.size(0))
+    bP_x2 = bP_x2[None,:].expand(boxesT.size(0), boxesP.size(0))
+    bP_y2 = bP_y2[None,:].expand(boxesT.size(0), boxesP.size(0))
+
+    inter_rect_x1 = torch.max(bP_x1, bT_x1)
+    inter_rect_x2 = torch.min(bP_x2, bT_x2)
+    inter_rect_y1 = torch.max(bP_y1, bT_y1)
+    inter_rect_y2 = torch.min(bP_y2, bT_y2)
+
+    inter_area = torch.clamp(inter_rect_x2 - inter_rect_x1 + 1, min=0) * torch.clamp(
+            inter_rect_y2 - inter_rect_y1 + 1, min=0 )
+
+    bP_area = (bP_x2 - bP_x1 + 1) * (bP_y2 - bP_y1 + 1)
+    #clip target region by pred region
+    bT_clippedArea = (inter_rect_x2 - inter_rect_x1 + 1) * (bT_y2 - bT_y1 + 1)
+
+    #iou = inter_area / (bP_area + bT_area - inter_area + 1e-16)
+    io_clipped_u = inter_area / (bP_area + bT_clippedArea - inter_area + 1e-16)
+
+    #gt_r = rboxes[:,None,2].expand(rboxes.size(0), len(bbs))
+    #pr_allRs = pr_allRs[None,:].expand(rboxes.size(0), len(bbs))
+    #angle_compatible = torch.abs(gt_r-pr_allRs)
+    #angle_compatible[angle_compatible>math.pi]-=math.pi
+    #angle_compatible[angle_compatible>math.pi]-=math.pi
+    #angle_compatible = angle_compatible.abs()<math.pi/3
+    #iou *= angle_compatible
+
+    #
+    #gt_cls_ind = torch.argmax(rboxes[:,13:],dim=1)
+    #pr_allClss = torch.FloatTensor([bb.getCls() for bb in bbs])
+    ##pr_allClss = torch.stack([bb.getCls() for bb in bbs],dim=0)
+    #pr_cls_int = torch.argmax(pr_allClss,dim=1)
+    #gt_cls_ind = gt_cls_ind[:,None].expand(rboxes.size(0), len(bbs))
+    #pr_cls_int = pr_cls_int[None,:].expand(rboxes.size(0), len(bbs))
+    #class_compatible = gt_cls_ind==pr_cls_int
+    #iou *= class_compatible
+    return io_clipped_u
+def classIOU(boxesT,boxesP, num_classes, boxesPXYWH=[0,1,4,3]):
     bP_x1, bP_x2 = boxesP[:,boxesPXYWH[0]]-boxesP[:,boxesPXYWH[2]], boxesP[:,boxesPXYWH[0]]+boxesP[:,boxesPXYWH[2]]
     bP_y1, bP_y2 = boxesP[:,boxesPXYWH[1]]-boxesP[:,boxesPXYWH[3]], boxesP[:,boxesPXYWH[1]]+boxesP[:,boxesPXYWH[3]]
     bT_x1, bT_x2 = boxesT[:,0]-boxesT[:,4], boxesT[:,0]+boxesT[:,4]
@@ -332,31 +382,17 @@ def allIOU_andClip(boxesT,boxesP, boxesPXYWH=[0,1,4,3]):
 
     bP_area = (bP_x2 - bP_x1 + 1) * (bP_y2 - bP_y1 + 1)
     bT_area = (bT_x2 - bT_x1 + 1) * (bT_y2 - bT_y1 + 1)
-    #clip target region by pred region
-    #bT_clippedArea = (torch.min(bT_x2,bP_x2) - torch.max(bT_x1,bP_x1) + 1) * (bT_y2 - bT_y1 + 1)
-    bT_clippedArea = (inter_rect_x2 - inter_rect_x1 + 1) * (bT_y2 - bT_y1 + 1)
 
     iou = inter_area / (bP_area + bT_area - inter_area + 1e-16)
-    io_clipped_u = inter_area / (bP_area + bT_clippedArea - inter_area + 1e-16)
-
-    #gt_r = rboxes[:,None,2].expand(rboxes.size(0), len(bbs))
-    #pr_allRs = pr_allRs[None,:].expand(rboxes.size(0), len(bbs))
-    #angle_compatible = torch.abs(gt_r-pr_allRs)
-    #angle_compatible[angle_compatible>math.pi]-=math.pi
-    #angle_compatible[angle_compatible>math.pi]-=math.pi
-    #angle_compatible = angle_compatible.abs()<math.pi/3
-    #iou *= angle_compatible
 
     #
-    #gt_cls_ind = torch.argmax(rboxes[:,13:],dim=1)
-    #pr_allClss = torch.FloatTensor([bb.getCls() for bb in bbs])
-    ##pr_allClss = torch.stack([bb.getCls() for bb in bbs],dim=0)
-    #pr_cls_int = torch.argmax(pr_allClss,dim=1)
-    #gt_cls_ind = gt_cls_ind[:,None].expand(rboxes.size(0), len(bbs))
-    #pr_cls_int = pr_cls_int[None,:].expand(rboxes.size(0), len(bbs))
-    #class_compatible = gt_cls_ind==pr_cls_int
-    #iou *= class_compatible
-    return iou, io_clipped_u
+    gt_cls_ind = torch.argmax(boxesT[:,-num_classes:],dim=1)
+    pr_cls_ind = torch.argmax(boxesP[:,-num_classes:],dim=1)
+    gt_cls_ind = gt_cls_ind[:,None].expand(boxesT.size(0), boxesP.size(0))
+    pr_cls_ind = pr_cls_ind[None,:].expand(boxesT.size(0), boxesP.size(0))
+    class_compatible = gt_cls_ind==pr_cls_ind
+    iou *= class_compatible
+    return iou
 
 
 def allPolyIO_clipU(rboxes,bbs):
@@ -776,6 +812,9 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClas
 
     if ignoreClasses:
         numClasses=1
+    totalTruPos=0
+    totalPred=0
+    totalGT=0
     #by class
     #import pdb; pdb.set_trace()
     for cls in range(numClasses):
@@ -1027,7 +1066,6 @@ def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeC
                 precisions.append(1)
                 recalls.append(1)
     
-        
     allPrec = totalTruPos/totalPred if totalPred>0 else 1
     allRecall = totalTruPos/totalGT if totalGT>0 else 1
     if getClassAP:
@@ -1107,67 +1145,41 @@ def getTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,getLoc, har
         hits,_ = hits.max(dim=0) #since we always take max pred
         return targIndex, hits
 
-def newGetTargIndexForPreds_iou(target,pred,iou_thresh,numClasses,beforeCls=0,hard_thresh=True,fixed=True):
-    return newGetTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,allIOU_andClip,hard_thresh,fixed)
 
 #This also returns which pred BBs are oversegmentations of targets (horizontall)
-def newGetTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,getLoc, hard_thresh,fixed):
+def newGetTargIndexForPreds_iou(target,pred,iou_thresh,numClasses,train_targs):
     if pred is None: 
-        return None, None, None
-    targIndex = torch.LongTensor((pred.size(0)))
-    targIndex[:] = -1
-    #mAP=0.0
-    aps=[]
-    precisions=[]
-    recalls=[]
+        return None
 
     if len(target.size())<=1:
-        return None, None, None
+        return None
 
-    #by class
-    #import pdb; pdb.set_trace()
-    #first get all IOUs, then process by class
-    allIOUs, allIO_clippedU = getLoc(target[:,0:],pred[:,1:]) #clippedUnion, target is clipped horizontally to match pred
-    #This isn't going to work of dist as 0 is perfect
-    maxIOUsForPred,_ = allIOUs.max(dim=0)
-    predsWithNoIntersection=maxIOUsForPred==0
+    #first get all IOUs. These are already filtered with angle and class
+    #allIOUs, allIO_clippedU = allPolyIOU_andClip(target,pred,class_sensitive=not train_targs) #clippedUnion, target is clipped horizontally to match pred. This filters for class matching
+
+    if train_targs:
+        allIOUs = allIO_clipU(target,pred)
+    else:
+        allIOUs = classIOU(target,pred,numClasses)
 
     hits = allIOUs>iou_thresh
-    overSeg_thresh = iou_thresh*1.05
-    overSegmented= (allIO_clippedU>overSeg_thresh) & ~hits
-    if hard_thresh:
-        allIOUs *= hits.float()
+    #overSeg_thresh = iou_thresh*1.05
+    #overSegmented= (allIO_clippedU>overSeg_thresh)
+    allIOUs *= hits.float()
+    #allIO_clippedU *= overSegmented
 
-
-    for cls in range(numClasses):
-        scores=[]
-        clsTargInd = target[:,cls+13]==1
-        notClsTargInd = target[:,cls+13]!=1
-        if len(pred.size())>1 and pred.size(0)>0:
-            #print(pred.size())
-            #clsPredInd = torch.argmax(pred[:,beforeCls+6:],dim=1)==cls
-            clsPredInd = torch.argmax(pred[:,-numClasses:],dim=1)==cls
-        else:
-            clsPredInd = torch.empty(0,dtype=torch.uint8)
-        if  clsPredInd.any():
-            if notClsTargInd.any() and fixed:
-                notClsTargIndX = notClsTargInd[:,None].expand(allIOUs.size())
-                clsPredIndX = clsPredInd[None,:].expand(allIOUs.size())
-                allIOUs[notClsTargIndX*clsPredIndX]=0 #set IOU for instances that are from different class than predicted to 0 (different class so no intersection)
-                #allIOUs[notClsTargInd][:,clsPredInd]=0 this doesn't work for some reason
-            val,targIndexes = torch.max(allIOUs[:,clsPredInd],dim=0)
-            #targIndexes has the target indexes for the predictions of cls
-
-            #assign -1 index to places that don't really have a match
-            targIndexes[val==0] = -1
-            targIndex[clsPredInd] =  targIndexes
-
-    if hard_thresh:
-        return targIndex, predsWithNoIntersection
+    #if train_targs:
+    #    val,targIndex = torch.max(allIO_clippedU,dim=0)
+    #else:
+    if allIOUs.size(0)>0 and allIOUs.size(1)>0:
+        val,targIndex = torch.max(allIOUs,dim=0)
+        targIndex[val==0]=-1 #These don't have a match
     else:
-        hits,_ = hits.max(dim=0) #since we always take max pred
-        overSegmented,_ = overSegmented.max(dim=0)
-        return targIndex, hits, overSegmented
+        targIndex=torch.IntTensor(0)
+
+
+    return targIndex
+    allIOUs, allIO_clippedU = getLoc(target[:,0:],pred[:,1:]) #clippedUnion, target is clipped horizontally to match pred
 
 #This also returns which pred BBs are oversegmentations of targets (horizontall)
 def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_targs):

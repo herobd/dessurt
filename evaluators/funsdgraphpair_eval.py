@@ -203,12 +203,13 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
                 #io.imsave(os.path.join(outDir,saveName),image)
                 #print('saved: '+os.path.join(outDir,saveName))
 
-            if model.detector.predNumNeighbors and not useDetections:
-                predNN_d = outputBoxes[:,6]
-                diffs=torch.abs(predNN_d-target_num_neighbors[0][bbAlignment].float())
-                nn_acc_d = (diffs<0.5).sum().item()
-                nn_acc_d /= predNN.size(0)
-                toRet['{}: nn_acc_detector'.format(gIter)] = nn_acc_d
+            #what is bbAlignment?
+            #if model.detector.predNumNeighbors and not useDetections:
+            #    predNN_d = outputBoxes[:,6]
+            #    diffs=torch.abs(predNN_d-target_num_neighbors[0][bbAlignment].float())
+            #    nn_acc_d = (diffs<0.5).sum().item()
+            #    nn_acc_d /= predNN.size(0)
+            #    toRet['{}: nn_acc_detector'.format(gIter)] = nn_acc_d
 
         #print('\n{} ap:{}\tnumMissedByDetect:{}\tmissedByHuer:{}'.format(imageName,rel_ap,numMissedByDetect,numMissedByHeur))
 

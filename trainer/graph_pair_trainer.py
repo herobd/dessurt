@@ -170,7 +170,7 @@ class GraphPairTrainer(BaseTrainer):
             The metrics in log must have the key 'metrics'.
         """
         if self.unfreeze_detector is not None and iteration>=self.unfreeze_detector:
-            self.model.unfreeze()
+            self.model_ref.unfreeze()
         self.model.train()
         #self.model.eval()
         #print("WARNING EVAL")
@@ -546,11 +546,10 @@ class GraphPairTrainer(BaseTrainer):
                 if self.model_ref.useCurvedBBs:
                     targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,0.4,numClasses,True)
                 elif self.model_ref.rotation:
-                    assert(False and 'untested')
+                    assert(False and 'untested and should be changed to reflect new newGetTargIndexForPreds_s')
                     targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
                 else:
-                    raise NotImplementedError('newGetTargIndexForPreds_ should be changed to reflect the behavoir or newGetTargIndexForPreds_textLines')
-                    targIndex, fullHit, overSegmented = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,hard_thresh=False,fixed=self.fixedAlign)
+                    targIndex = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,True)
                 targIndex = targIndex.numpy()
             else:
                 #targIndex=torch.LongTensor(len(outputBoxes)).fill_(-1)
@@ -569,10 +568,18 @@ class GraphPairTrainer(BaseTrainer):
             truePosEdge=falsePosEdge=trueNegEdge=falseNegEdge=0
             saveEdgePred={}
             if not merge_only:
-                predsRel = edgePred[...,1] 
-                predsOverSeg = edgePred[...,2] 
-                predsGroup = edgePred[...,3] 
-                predsError = edgePred[...,4] 
+                if not self.model.legacy:
+                    predsRel = edgePred[...,1] 
+                    predsOverSeg = edgePred[...,2] 
+                    predsGroup = edgePred[...,3] 
+                    predsError = edgePred[...,4] 
+                else:
+                    predsRel = predsEdge
+                    predsOverSeg = edgePred[...,1] 
+                    predsGroup = edgePred[...,2] 
+                    predsError = edgePred[...,3]
+                    predsEdge,_ = torch.max(torch.stack((predsRel,predsOverSeg,predsGroup),dim=0),dim=0)
+
                 predsGTRel = []
                 predsGTNoRel = []
                 predsGTOverSeg = []
@@ -1671,7 +1678,7 @@ class GraphPairTrainer(BaseTrainer):
                             outputBoxes,
                             self.model_ref.used_threshConf,
                             torch.sigmoid(nodePred).cpu().detach() if nodePred is not None else None,
-                            torch.sigmoid(edgePred).cpu().detach(),
+                            torch.sigmoid(edgePred).cpu().detach() if edgePred is not None else None,
                             edgeIndexes,
                             predGroups,
                             image,
@@ -1806,11 +1813,10 @@ class GraphPairTrainer(BaseTrainer):
             if self.model_ref.useCurvedBBs:
                 targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,0.5,numClasses,False)
             elif self.model_ref.rotation:
-                raise NotImplementedError('newGetTargIndexForPreds_ should be modified to reflect the behavoir or newGetTargIndexForPreds_textLines')
+                raise NotImplementedError('newGetTargIndexForPreds_dist should be modified to reflect the behavoir or newGetTargIndexForPreds_textLines')
                 targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
             else:
-                raise NotImplementedError('newGetTargIndexForPreds_ should be modified to reflect the behavoir or newGetTargIndexForPreds_textLines')
-                targIndex, fullHit, overSegmented = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,hard_thresh=False,fixed=self.fixedAlign)
+                targIndex = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.5,numClasses,False)
         elif outputBoxes is not None:
             targIndex=torch.LongTensor(len(outputBoxes)).fill_(-1)
 
