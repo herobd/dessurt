@@ -171,7 +171,7 @@ class GraphPairTrainer(BaseTrainer):
             The metrics in log must have the key 'metrics'.
         """
         if self.unfreeze_detector is not None and iteration>=self.unfreeze_detector:
-            self.model.unfreeze()
+            self.model_ref.unfreeze()
         self.model.train()
         #self.model.eval()
         #print("WARNING EVAL")
@@ -1668,7 +1668,7 @@ class GraphPairTrainer(BaseTrainer):
                             outputBoxes,
                             self.model_ref.used_threshConf,
                             torch.sigmoid(nodePred).cpu().detach() if nodePred is not None else None,
-                            torch.sigmoid(edgePred).cpu().detach(),
+                            torch.sigmoid(edgePred).cpu().detach() if edgePred is not None else None,
                             edgeIndexes,
                             predGroups,
                             image,
