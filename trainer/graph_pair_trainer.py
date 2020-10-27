@@ -546,11 +546,10 @@ class GraphPairTrainer(BaseTrainer):
                 if self.model_ref.useCurvedBBs:
                     targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,0.4,numClasses,True)
                 elif self.model_ref.rotation:
-                    assert(False and 'untested')
+                    assert(False and 'untested and should be changed to reflect new newGetTargIndexForPreds_s')
                     targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
                 else:
-                    raise NotImplementedError('newGetTargIndexForPreds_ should be changed to reflect the behavoir or newGetTargIndexForPreds_textLines')
-                    targIndex, fullHit, overSegmented = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,hard_thresh=False,fixed=self.fixedAlign)
+                    targIndex = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,True)
                 targIndex = targIndex.numpy()
             else:
                 #targIndex=torch.LongTensor(len(outputBoxes)).fill_(-1)
@@ -1806,11 +1805,10 @@ class GraphPairTrainer(BaseTrainer):
             if self.model_ref.useCurvedBBs:
                 targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,0.5,numClasses,False)
             elif self.model_ref.rotation:
-                raise NotImplementedError('newGetTargIndexForPreds_ should be modified to reflect the behavoir or newGetTargIndexForPreds_textLines')
+                raise NotImplementedError('newGetTargIndexForPreds_dist should be modified to reflect the behavoir or newGetTargIndexForPreds_textLines')
                 targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
             else:
-                raise NotImplementedError('newGetTargIndexForPreds_ should be modified to reflect the behavoir or newGetTargIndexForPreds_textLines')
-                targIndex, fullHit, overSegmented = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,hard_thresh=False,fixed=self.fixedAlign)
+                targIndex = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.5,numClasses,False)
         elif outputBoxes is not None:
             targIndex=torch.LongTensor(len(outputBoxes)).fill_(-1)
 
