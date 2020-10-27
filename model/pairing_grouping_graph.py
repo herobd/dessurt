@@ -628,6 +628,7 @@ class PairingGroupingGraph(BaseModel):
         
 
     def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=300, debug=False,old_nn=False,gtTrans=None,merge_first_only=False):
+        assert(image.size(0)==1) #implementation designed for batch size of 1. Should work to do data parallelism, since each copy of the model will get a batch size of 1
         #t###tic=timeit.default_timer()#t#
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
         bbPredictions, offsetPredictions, _,_,_,_ = self.detector(image)

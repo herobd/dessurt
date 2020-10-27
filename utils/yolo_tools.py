@@ -710,18 +710,23 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClas
                     precisions.append(1.0)
                     class_ap.append(1.0)
                 recalls.append(1.0)
+        allPrec=0
+        allRecall=1
         if getClassAP:
             return ap/numClasses, precisions, recalls, class_ap
         else:
-            return ap/numClasses, precisions, recalls
+            return ap/numClasses, precisions, recalls, allPrec,allRecall
     else:
         if getClassAP:
             return 1.0, [1.0]*numClasses, [1.0]*numClasses, [1.0]*numClasses #we didn't for all classes :)
         else:
-            return 1.0, [1.0]*numClasses, [1.0]*numClasses
+            return 1.0, [1.0]*numClasses, [1.0]*numClasses, 1.0, 1.0
 
     allScores=[]
     classScores=[[] for i in range(numClasses)]
+    allTruPos=0
+    allPred=0
+    allGT=0
     if pred is not None and len(pred.size())>1 and pred.size(0)>0:
         #This is an alternate metric that computes AP of all classes together
         #Your only a hit if you have the same class
@@ -816,24 +821,32 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClas
             if precisions[-1]>1:
                 import pdb;pdb.set_trace()
             recalls.append( truePos/clsTarg.size(0) )
-        elif ignoreClasses:
-            #no pred
-            #aps.append(0)
-            precisions.append(0)
-            recalls.append(0)
-        elif clsPredInd.any() or clsTargInd.any():
-            #aps.append(0)
-            if clsPredInd.any():
-                recalls.append(1)
-                precisions.append(0)
-            else:
+            totalTruPos+=truePos
+            totalPred+=max(clsPred.size(0),truePos)
+            totalGT+=clsTarg.size(0)
+        else:
+            totalPred+=clsPredInd.size(0)
+            totalGT+=clsTargInd.size(0)
+            if ignoreClasses:
+                #no pred
+                #aps.append(0)
                 precisions.append(0)
                 recalls.append(0)
-        else:
-            #aps.append(1)
-            precisions.append(1)
-            recalls.append(1)
+            elif clsPredInd.any() or clsTargInd.any():
+                #aps.append(0)
+                if clsPredInd.any():
+                    recalls.append(1)
+                    precisions.append(0)
+                else:
+                    precisions.append(0)
+                    recalls.append(0)
+            else:
+                #aps.append(1)
+                precisions.append(1)
+                recalls.append(1)
     
+    allPrec = totalTruPos/totalPred
+    allRecall = totalTruPos/totalGT
     if getClassAP:
         classAPs=[computeAP(scores) for scores in classScores]
         #for i in range(len(classAPs)):
@@ -841,7 +854,7 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClas
         #        classAPs[i]=1
         return computeAP(allScores), precisions, recalls, classAPs
     else:
-        return computeAP(allScores), precisions, recalls
+        return computeAP(allScores), precisions, recalls, allPrec, allRecall
 
 def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeCls=0,getClassAP=False):
     #mAP=0.0
@@ -879,15 +892,17 @@ def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeC
                     precisions.append(1.0)
                     class_ap.append(1.0)
                 recalls.append(1.0)
+        allPrec=0
+        allRecall=1
         if getClassAP:
             return ap/numClasses, precisions, recalls, class_ap
         else:
-            return ap/numClasses, precisions, recalls
+            return ap/numClasses, precisions, recalls, allPrec, allRecall
     else:
         if getClassAP:
             return 1.0, [1.0]*numClasses, [1.0]*numClasses, [1.0]*numClasses #we didn't for all classes :)
         else:
-            return 1.0, [1.0]*numClasses, [1.0]*numClasses
+            return 1.0, [1.0]*numClasses, [1.0]*numClasses, 1.0, 1.0
 
     allScores=[]
     classScores=[[] for i in range(numClasses)]
@@ -937,6 +952,10 @@ def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeC
 
     if ignoreClasses:
         numClasses=1
+    
+    totalTruPos=0
+    totalPred=0
+    totalGT=0
     #by class
     #import pdb; pdb.set_trace()
     for cls in range(numClasses):
@@ -983,24 +1002,34 @@ def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeC
             if precisions[-1]>1:
                 import pdb;pdb.set_trace()
             recalls.append( truePos/clsTarg.size(0) )
-        elif ignoreClasses:
-            #no pred
-            #aps.append(0)
-            precisions.append(0)
-            recalls.append(0)
-        elif clsPredInd.any() or clsTargInd.any():
-            #aps.append(0)
-            if clsPredInd.any():
-                recalls.append(1)
-                precisions.append(0)
-            else:
+
+            totalTruPos += truePos
+            totalPred += max(clsPredConf.size(0),truePos)
+            totalGT += clsTarg.size(0)
+        else:
+            totalPred+=clsPredInd.size(0)
+            totalGT+=clsTargInd.size(0)
+            if ignoreClasses:
+                #no pred
+                #aps.append(0)
                 precisions.append(0)
                 recalls.append(0)
-        else:
-            #aps.append(1)
-            precisions.append(1)
-            recalls.append(1)
+            elif clsPredInd.any() or clsTargInd.any():
+                #aps.append(0)
+                if clsPredInd.any():
+                    recalls.append(1)
+                    precisions.append(0)
+                else:
+                    precisions.append(0)
+                    recalls.append(0)
+            else:
+                #aps.append(1)
+                precisions.append(1)
+                recalls.append(1)
     
+        
+    allPrec = totalTruPos/totalPred if totalPred>0 else 1
+    allRecall = totalTruPos/totalGT if totalGT>0 else 1
     if getClassAP:
         classAPs=[computeAP(scores) for scores in classScores]
         #for i in range(len(classAPs)):
@@ -1008,7 +1037,7 @@ def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeC
         #        classAPs[i]=1
         return computeAP(allScores), precisions, recalls, classAPs
     else:
-        return computeAP(allScores), precisions, recalls
+        return computeAP(allScores), precisions, recalls, allPrec,allRecall
 
 def getTargIndexForPreds_iou(target,pred,iou_thresh,numClasses,beforeCls=0,hard_thresh=True,fixed=True):
     return getTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,allIOU,hard_thresh,fixed)
