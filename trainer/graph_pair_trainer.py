@@ -568,10 +568,18 @@ class GraphPairTrainer(BaseTrainer):
             truePosEdge=falsePosEdge=trueNegEdge=falseNegEdge=0
             saveEdgePred={}
             if not merge_only:
-                predsRel = edgePred[...,1] 
-                predsOverSeg = edgePred[...,2] 
-                predsGroup = edgePred[...,3] 
-                predsError = edgePred[...,4] 
+                if not self.model.legacy:
+                    predsRel = edgePred[...,1] 
+                    predsOverSeg = edgePred[...,2] 
+                    predsGroup = edgePred[...,3] 
+                    predsError = edgePred[...,4] 
+                else:
+                    predsRel = predsEdge
+                    predsOverSeg = edgePred[...,1] 
+                    predsGroup = edgePred[...,2] 
+                    predsError = edgePred[...,3]
+                    predsEdge,_ = torch.max(torch.stack((predsRel,predsOverSeg,predsGroup),dim=0),dim=0)
+
                 predsGTRel = []
                 predsGTNoRel = []
                 predsGTOverSeg = []

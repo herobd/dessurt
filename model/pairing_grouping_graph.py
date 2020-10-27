@@ -103,6 +103,7 @@ class PairingGroupingGraph(BaseModel):
     def __init__(self, config):
         super(PairingGroupingGraph, self).__init__(config)
         self.useCurvedBBs=False
+        self.legacy= 'legacy' in config and config['legacy']
 
         if 'detector_checkpoint' in config:
             if os.path.exists(config['detector_checkpoint']):
@@ -517,6 +518,8 @@ class PairingGroupingGraph(BaseModel):
             #num_classes = config['num_class']
             num_bb_feat = self.numBBTypes + (1 if self.detector.predNumNeighbors else 0) #config['graph_config']['bb_out']
             prop_feats = 30+2*num_bb_feat
+            if self.legacy:
+                prop_feats = 26+2*num_bb_feat
             self.no_betweenPixels = not config['use_betweenPixels'] if 'use_betweenPixels' in config else False
             if self.useCurvedBBs:
                 prop_feats += 8
@@ -3094,7 +3097,10 @@ class PairingGroupingGraph(BaseModel):
             blY2 = blY[None,:].expand(blY.size(0),-1)
 
         #t#tic2 = timeit.default_timer()#t#
-        num_feats = 30+numClassFeat*2
+        if not self.legacy:
+            num_feats = 30+numClassFeat*2
+        else:
+            num_feats = 26+numClassFeat*2
         if self.useCurvedBBs:
             num_feats+=9
             if not self.shape_feats_normal:
@@ -3133,12 +3139,16 @@ class PairingGroupingGraph(BaseModel):
                 features[index2,index1,23]=1
         features[:,:,24] = conf1
         features[:,:,25] = conf2
-        features[:,:,26] = sin_r1
-        features[:,:,27] = sin_r2
-        features[:,:,28] = cos_r1
-        features[:,:,29] = cos_r2
-        features[:,:,30:30+numClassFeat] = classFeat1
-        features[:,:,30+numClassFeat:30+2*numClassFeat] = classFeat2
+        if not self.legacy:
+            features[:,:,26] = sin_r1
+            features[:,:,27] = sin_r2
+            features[:,:,28] = cos_r1
+            features[:,:,29] = cos_r2
+            features[:,:,30:30+numClassFeat] = classFeat1
+            features[:,:,30+numClassFeat:30+2*numClassFeat] = classFeat2
+        else:
+            features[:,:,26:26+numClassFeat] = classFeat1
+            features[:,:,26+numClassFeat:] = classFeat2
         if self.useCurvedBBs:
             features[:,:,30+2*numClassFeat] = sin_r_left1
             features[:,:,31+2*numClassFeat] = sin_r_left2
