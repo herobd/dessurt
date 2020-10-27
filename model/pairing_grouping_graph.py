@@ -49,6 +49,12 @@ def combineShapeFeats(feats):
     bl=feats[-1,12:14]
     easy2_feats=feats[:,14:].mean(dim=0)
     return torch.cat((easy_feats,tl,tr,br,bl,easy2_feats),dim=0)
+def combineShapeFeatsTensor(feats):
+    feats = torch.stack(feats,dim=0)
+    return feats.mean(dim=0)
+def groupRect(corners):
+    corners=np.array(corners)
+    return corners[:,0].min(), corners[:,1].min(), corners[:,2].max(), corners[:,3].max()
 def correctTrans(pred,predBB,gt,gtBB):
     thresh=100
     #x0,y0,r0,h0,w0 = bb0[locIdx:classIdx]
@@ -184,10 +190,10 @@ class PairingGroupingGraph(BaseModel):
         self.poolBB2_h=self.poolBB_h
         self.poolBB2_w=self.poolBB_w
 
-        self.merge_pool_h = self.merge_pool2_h = config['merge_featurizer_start_h']
-        self.merge_pool_w = self.merge_pool2_w = config['merge_featurizer_start_w']
+        self.merge_pool_h = self.merge_pool2_h = config['merge_featurizer_start_h'] if 'merge_featurizer_start_h' in config else None
+        self.merge_pool_w = self.merge_pool2_w = config['merge_featurizer_start_w'] if 'merge_featurizer_start_w' in config else None
 
-        self.reintroduce_visual_features = config['reintroduce_visual_features']
+        self.reintroduce_visual_features = config['reintroduce_visual_features'] if 'reintroduce_visual_features' in config else False
 
 
         if 'use_rel_shape_feats' in config:
@@ -1936,7 +1942,33 @@ class PairingGroupingGraph(BaseModel):
 
             return bbAndRel_features, (adjacencyMatrix,numOfNeighbors), numBB, numRel, relIndexes, rel_prop_scores
 
-    def makeAllMasks(self,imageHeight,imageWidth,bbs,merge_only=False):
+    
+        if not self.useCurvedBBs:
+            #get corners from bb predictions
+            x = bbs[:,0]
+            y = bbs[:,1]
+            r = bbs[:,2]
+            h = bbs[:,3]
+            w = bbs[:,4]
+            cos_r = torch.cos(r)
+            sin_r = torch.sin(r)
+            tlX = -w*cos_r + -h*sin_r +x
+            tlY =  w*sin_r + -h*cos_r +y
+            trX =  w*cos_r + -h*sin_r +x
+            trY = -w*sin_r + -h*cos_r +y
+            brX =  w*cos_r + h*sin_r +x
+            brY = -w*sin_r + h*cos_r +y
+            blX = -w*cos_r + h*sin_r +x
+            blY =  w*sin_r + h*cos_r +y
+
+            tlX = tlX.cpu()
+            tlY = tlY.cpu()
+            trX = trX.cpu()
+            trY = trY.cpu()
+            blX = blX.cpu()
+            blY = blY.cpu()
+            brX = brX.cpu()
+            brY = brY.cpu()
         #build all-mask image, may want to move this up and use for relationship proposals
         if self.expandedRelContext is not None:
             allMasks = torch.zeros(imageHeight,imageWidth)
@@ -2013,60 +2045,31 @@ class PairingGroupingGraph(BaseModel):
         if self.useShapeFeats!='only':
             #get axis aligned rectangle from corners
             rois = torch.zeros((len(edges),5)) #(batchIndex,x1,y1,x2,y2) as expected by ROI Align
+            groups_index1 = [ [bbs[b] for b in groups[c[0]]] for c in edges ]
+            groups_index2 = [ [bbs[b] for b in groups[c[1]]] for c in edges ]
             if self.useCurvedBBs:
 
-                bbs_index1 = [bbs[c[0]] for c in edges]
-                bbs_index2 = [bbs[c[1]] for c in edges]
-                min_X1,min_Y1,max_X1,max_Y1 = torch.IntTensor([bb.boundingRect() for bb in bbs_index1]).permute(1,0)
-                min_X2,min_Y2,max_X2,max_Y2 = torch.IntTensor([bb.boundingRect() for bb in bbs_index2]).permute(1,0)
+                min_X1,min_Y1,max_X1,max_Y1 = torch.IntTensor([groupRect([bb.boundingRect() for bb in group]) for group in groups_index1]).permute(1,0)
+                min_X2,min_Y2,max_X2,max_Y2 = torch.IntTensor([groupRect([bb.boundingRect() for bb in group]) for group in groups_index2]).permute(1,0)
                 min_X = torch.min(min_X1,min_X2)
                 min_Y = torch.min(min_Y1,min_Y2)
                 max_X = torch.max(max_X1,max_X2)
                 max_Y = torch.max(max_Y1,max_Y2)
 
 
-                groups_index1 = [ [bbs[b] for b in groups[c[0]]] for c in edges ]
-                groups_index2 = [ [bbs[b] for b in groups[c[1]]] for c in edges ]
 
 
             else:
-                assert(all([len(g)==1 for g in groups])) #not implemented for groups
-                bbs_index1 = bbs[[c[0] for c in edges]]
-                bbs_index2 = bbs[[c[1] for c in edges]]
+                assert(not self.rotation)
+                groupIs_index1 = [ [b for b in groups[c[0]]] for c in edges ]
+                groupIs_index2 = [ [b for b in groups[c[1]]] for c in edges ]
 
-                tlX_index1 = tlX[[c[0] for c in edges]]
-                tlX_index2 = tlX[[c[1] for c in edges]]
-                trX_index1 = trX[[c[0] for c in edges]]
-                trX_index2 = trX[[c[1] for c in edges]]
-                blX_index1 = blX[[c[0] for c in edges]]
-                blX_index2 = blX[[c[1] for c in edges]]
-                brX_index1 = brX[[c[0] for c in edges]]
-                brX_index2 = brX[[c[1] for c in edges]]
-                tlY_index1 = tlY[[c[0] for c in edges]]
-                tlY_index2 = tlY[[c[1] for c in edges]]
-                trY_index1 = trY[[c[0] for c in edges]]
-                trY_index2 = trY[[c[1] for c in edges]]
-                blY_index1 = blY[[c[0] for c in edges]]
-                blY_index2 = blY[[c[1] for c in edges]]
-                brY_index1 = brY[[c[0] for c in edges]]
-                brY_index2 = brY[[c[1] for c in edges]]
-                max_X,_ = torch.max(torch.stack([tlX_index1,tlX_index2,
-                                            trX_index1,trX_index2,
-                                            blX_index1,blX_index2,
-                                            brX_index1,brX_index2],dim=0), dim=0 )
-                min_X,_ = torch.min(torch.stack([tlX_index1,tlX_index2,
-                                            trX_index1,trX_index2,
-                                            blX_index1,blX_index2,
-                                            brX_index1,brX_index2],dim=0), dim=0 )
-
-                max_Y,_ = torch.max(torch.stack([tlY_index1,tlY_index2,
-                                            trY_index1,trY_index2,
-                                            blY_index1,blY_index2,
-                                            brY_index1,brY_index2],dim=0), dim=0 )
-                min_Y,_ = torch.min(torch.stack([tlY_index1,tlY_index2,
-                                            trY_index1,trY_index2,
-                                            blY_index1,blY_index2,
-                                            brY_index1,brY_index2],dim=0), dim=0 )
+                min_X1,min_Y1,max_X1,max_Y1 = torch.IntTensor([groupRect([[tlX[b],tlY[b],brX[b],brY[b]] for b in group]) for group in groupIs_index1]).permute(1,0)
+                min_X2,min_Y2,max_X2,max_Y2 = torch.IntTensor([groupRect([[tlX[b],tlY[b],brX[b],brY[b]] for b in group]) for group in groupIs_index2]).permute(1,0)
+                min_X = torch.min(min_X1,min_X2)
+                min_Y = torch.min(min_Y1,min_Y2)
+                max_X = torch.max(max_X1,max_X2)
+                max_Y = torch.max(max_Y1,max_Y2)
             if merge_only:
                 padX = self.expandedMergeContextX
                 padY = self.expandedMergeContextY
@@ -2079,10 +2082,10 @@ class PairingGroupingGraph(BaseModel):
                 print(max_Y[D_ys])
             assert((min_X<max_X).all())
             assert((min_Y<max_Y).all())
-            max_X = torch.max(torch.min(max_X+padX,torch.IntTensor([imageWidth-1])),torch.IntTensor([1]))
-            min_X = torch.max(torch.min(min_X-padX,torch.IntTensor([imageWidth-2])),torch.IntTensor([0]))
-            max_Y = torch.max(torch.min(max_Y+padY,torch.IntTensor([imageHeight-1])),torch.IntTensor([1]))
-            min_Y = torch.max(torch.min(min_Y-padY,torch.IntTensor([imageHeight-2])),torch.IntTensor([0]))
+            max_X = torch.max(torch.min((max_X+padX).float(),torch.FloatTensor([imageWidth-1])),torch.FloatTensor([1]))
+            min_X = torch.max(torch.min((min_X-padX).float(),torch.FloatTensor([imageWidth-2])),torch.FloatTensor([0]))
+            max_Y = torch.max(torch.min((max_Y+padY).float(),torch.FloatTensor([imageHeight-1])),torch.FloatTensor([1]))
+            min_Y = torch.max(torch.min((min_Y-padY).float(),torch.FloatTensor([imageHeight-2])),torch.FloatTensor([0]))
             #min_X = torch.max(min_X-padX,torch.IntTensor([0]))
             #max_Y = torch.min(max_Y+padY,torch.IntTensor([imageHeight-1]))
             #min_Y = torch.max(min_Y-padY,torch.IntTensor([0]))
@@ -2109,6 +2112,7 @@ class PairingGroupingGraph(BaseModel):
                     #print('crop {}: ({},{}), ({},{})'.format(i,minX.item(),maxX.item(),minY.item(),maxY.item()))
                     #print(bbs[index1])
                     #print(bbs[index2])
+                    assert(False)#wrong, not drawing group
                     crop = debug_image[0,:,int(minY):int(maxY),int(minX):int(maxX)+1].cpu()
                     crop = (2-crop)/2
                     if crop.size(0)==1:
@@ -2202,23 +2206,23 @@ class PairingGroupingGraph(BaseModel):
                 w_m = pool2_w/feature_w
                 h_m = pool2_h/feature_h
 
-                if not self.useCurvedBBs:
-                    tlX1 = (tlX_index1-b_rois[:,1])*w_m
-                    trX1 = (trX_index1-b_rois[:,1])*w_m
-                    brX1 = (brX_index1-b_rois[:,1])*w_m
-                    blX1 = (blX_index1-b_rois[:,1])*w_m
-                    tlY1 = (tlY_index1-b_rois[:,2])*h_m
-                    trY1 = (trY_index1-b_rois[:,2])*h_m
-                    brY1 = (brY_index1-b_rois[:,2])*h_m
-                    blY1 = (blY_index1-b_rois[:,2])*h_m
-                    tlX2 = (tlX_index2-b_rois[:,1])*w_m
-                    trX2 = (trX_index2-b_rois[:,1])*w_m
-                    brX2 = (brX_index2-b_rois[:,1])*w_m
-                    blX2 = (blX_index2-b_rois[:,1])*w_m
-                    tlY2 = (tlY_index2-b_rois[:,2])*h_m
-                    trY2 = (trY_index2-b_rois[:,2])*h_m
-                    brY2 = (brY_index2-b_rois[:,2])*h_m
-                    blY2 = (blY_index2-b_rois[:,2])*h_m
+                #if not self.useCurvedBBs:
+                #    tlX1 = (tlX_index1-b_rois[:,1])*w_m
+                #    trX1 = (trX_index1-b_rois[:,1])*w_m
+                #    brX1 = (brX_index1-b_rois[:,1])*w_m
+                #    blX1 = (blX_index1-b_rois[:,1])*w_m
+                #    tlY1 = (tlY_index1-b_rois[:,2])*h_m
+                #    trY1 = (trY_index1-b_rois[:,2])*h_m
+                #    brY1 = (brY_index1-b_rois[:,2])*h_m
+                #    blY1 = (blY_index1-b_rois[:,2])*h_m
+                #    tlX2 = (tlX_index2-b_rois[:,1])*w_m
+                #    trX2 = (trX_index2-b_rois[:,1])*w_m
+                #    brX2 = (brX_index2-b_rois[:,1])*w_m
+                #    blX2 = (blX_index2-b_rois[:,1])*w_m
+                #    tlY2 = (tlY_index2-b_rois[:,2])*h_m
+                #    trY2 = (trY_index2-b_rois[:,2])*h_m
+                #    brY2 = (brY_index2-b_rois[:,2])*h_m
+                #    blY2 = (blY_index2-b_rois[:,2])*h_m
 
             if not merge_only or self.merge_use_mask:
                 #t#tic2=timeit.default_timer()#t#
@@ -2255,21 +2259,32 @@ class PairingGroupingGraph(BaseModel):
                                             [pool2_h,pool2_w])
                                     masks[i,1,rr,cc]=1
                         else:
-                            rr, cc = draw.polygon(
-                                        [round(tlY1[i].item()),round(trY1[i].item()),
-                                        round(brY1[i].item()),round(blY1[i].item())],
-                                        [round(tlX1[i].item()),round(trX1[i].item()),
-                                        round(brX1[i].item()),round(blX1[i].item())], 
-                                        [pool2_h,pool2_w])
-                            masks[i,0,rr,cc]=1
+                            #TODO groups
+                            for bb_id in groups[index1]:
+                                rr, cc = draw.polygon(
+                                            [round((tlY[bb_id].item()-b_rois[i,2].item())*h_m[i].item()),
+                                             round((trY[bb_id].item()-b_rois[i,2].item())*h_m[i].item()),
+                                             round((brY[bb_id].item()-b_rois[i,2].item())*h_m[i].item()),
+                                             round((blY[bb_id].item()-b_rois[i,2].item())*h_m[i].item())],
+                                            [round((tlX[bb_id].item()-b_rois[i,1].item())*w_m[i].item()),
+                                             round((trX[bb_id].item()-b_rois[i,1].item())*w_m[i].item()),
+                                             round((brX[bb_id].item()-b_rois[i,1].item())*w_m[i].item()),
+                                             round((blX[bb_id].item()-b_rois[i,1].item())*w_m[i].item())], 
+                                            [pool2_h,pool2_w])
+                                masks[i,0,rr,cc]=1
 
-                            rr, cc = draw.polygon(
-                                        [round(tlY2[i].item()),round(trY2[i].item()),
-                                        round(brY2[i].item()),round(blY2[i].item())],
-                                        [round(tlX2[i].item()),round(trX2[i].item()),
-                                        round(brX2[i].item()),round(blX2[i].item())], 
-                                        [pool2_h,pool2_w])
-                            masks[i,1,rr,cc]=1
+                            for bb_id in groups[index2]:
+                                rr, cc = draw.polygon(
+                                            [round((tlY[bb_id].item()-b_rois[i,2].item())*h_m[i].item()),
+                                             round((trY[bb_id].item()-b_rois[i,2].item())*h_m[i].item()),
+                                             round((brY[bb_id].item()-b_rois[i,2].item())*h_m[i].item()),
+                                             round((blY[bb_id].item()-b_rois[i,2].item())*h_m[i].item())],
+                                            [round((tlX[bb_id].item()-b_rois[i,1].item())*w_m[i].item()),
+                                             round((trX[bb_id].item()-b_rois[i,1].item())*w_m[i].item()),
+                                             round((brX[bb_id].item()-b_rois[i,1].item())*w_m[i].item()),
+                                             round((blX[bb_id].item()-b_rois[i,1].item())*w_m[i].item())], 
+                                            [pool2_h,pool2_w])
+                                masks[i,1,rr,cc]=1
 
                         if self.expandedRelContext is not None:
                             cropArea = allMasks[round(b_rois[i,2].item()):round(b_rois[i,4].item())+1,round(b_rois[i,1].item()):round(b_rois[i,3].item())+1]
@@ -2337,19 +2352,22 @@ class PairingGroupingGraph(BaseModel):
                     else:
                         ixs=[4,6,2,8,8+self.numBBTypes,5,7,3,8+self.numBBTypes,8+self.numBBTypes+self.numBBTypes,0,1]
                     
-                    shapeFeats[:,ixs[0]] = 2*b_bbs_index1[:,3]/self.normalizeVert #bb preds half height/width
-                    shapeFeats[:,ixs[1]] = 2*b_bbs_index1[:,4]/self.normalizeHorz
-                    shapeFeats[:,ixs[2]] = b_bbs_index1[:,2]/math.pi
-                    shapeFeats[:,ixs[3]:ixs[4]] = b_bbs_index1[:,extraPred+5:]# torch.sigmoid(b_bbs_index1[:,extraPred+5:])
+                    allFeats1 = torch.stack([combineShapeFeatsTensor([bb for bb in group]) for group in b_groups_index1],dim=0)
+                    allFeats2 = torch.stack([combineShapeFeatsTensor([bb for bb in group]) for group in b_groups_index2],dim=0)
+                    shapeFeats[:,ixs[0]] = 2*allFeats1[:,3]/self.normalizeVert #bb preds half height/width
+                    shapeFeats[:,ixs[1]] = 2*allFeats1[:,4]/self.normalizeHorz
+                    shapeFeats[:,ixs[2]] = allFeats1[:,2]/math.pi
+                    shapeFeats[:,ixs[3]:ixs[4]] = allFeats1[:,extraPred+5:]# torch.sigmoid(allFeats1[:,extraPred+5:])
 
-                    shapeFeats[:,ixs[5]] = 2*b_bbs_index2[:,3]/self.normalizeVert
-                    shapeFeats[:,ixs[6]] = 2*b_bbs_index2[:,4]/self.normalizeHorz
-                    shapeFeats[:,ixs[7]] = b_bbs_index2[:,2]/math.pi
-                    shapeFeats[:,ixs[8]:ixs[9]] = b_bbs_index2[:,extraPred+5:]#torch.sigmoid(b_bbs_index2[:,extraPred+5:])
+                    shapeFeats[:,ixs[5]] = 2*allFeats2[:,3]/self.normalizeVert
+                    shapeFeats[:,ixs[6]] = 2*allFeats2[:,4]/self.normalizeHorz
+                    shapeFeats[:,ixs[7]] = allFeats2[:,2]/math.pi
+                    shapeFeats[:,ixs[8]:ixs[9]] = allFeats2[:,extraPred+5:]#torch.sigmoid(allFeats2[:,extraPred+5:])
 
-                    shapeFeats[:,ixs[10]] = (b_bbs_index1[:,0]-b_bbs_index2[:,0])/self.normalizeHorz
-                    shapeFeats[:,ixs[11]] = (b_bbs_index1[:,1]-b_bbs_index2[:,1])/self.normalizeVert
+                    shapeFeats[:,ixs[10]] = (allFeats1[:,0]-allFeats2[:,0])/self.normalizeHorz
+                    shapeFeats[:,ixs[11]] = (allFeats1[:,1]-allFeats2[:,1])/self.normalizeVert
                     if self.useShapeFeats!='old':
+                        raise NotImplementedError('havent added group stuff')
                         startCorners = 8+self.numBBTypes+self.numBBTypes
                         shapeFeats[:,startCorners +0] = torch.sqrt( (tlX_index1-tlX_index2)**2 + (tlY_index1-tlY_index2)**2 )/self.normalizeDist
                         shapeFeats[:,startCorners +1] = torch.sqrt( (trX_index1-trX_index2)**2 + (trY_index1-trY_index2)**2 )/self.normalizeDist
@@ -2359,22 +2377,22 @@ class PairingGroupingGraph(BaseModel):
                     else:
                         startNN = 8+self.numBBTypes+self.numBBTypes
                     if self.detector.predNumNeighbors:
-                        shapeFeats[:,startNN +0] = b_bbs_index1[:,5]
-                        shapeFeats[:,startNN +1] = b_bbs_index2[:,5]
+                        shapeFeats[:,startNN +0] = allFeats1[:,5]
+                        shapeFeats[:,startNN +1] = allFeats2[:,5]
                         startPos=startNN+2
                     else:
                         startPos=startNN
                     if self.usePositionFeature:
                         if self.usePositionFeature=='absolute':
-                            shapeFeats[:,startPos +0] = (b_bbs_index1[:,0]-imageWidth/2)/(5*self.normalizeHorz)
-                            shapeFeats[:,startPos +1] = (b_bbs_index1[:,1]-imageHeight/2)/(10*self.normalizeVert)
-                            shapeFeats[:,startPos +2] = (b_bbs_index2[:,0]-imageWidth/2)/(5*self.normalizeHorz)
-                            shapeFeats[:,startPos +3] = (b_bbs_index2[:,1]-imageHeight/2)/(10*self.normalizeVert)
+                            shapeFeats[:,startPos +0] = (allFeats1[:,0]-imageWidth/2)/(5*self.normalizeHorz)
+                            shapeFeats[:,startPos +1] = (allFeats1[:,1]-imageHeight/2)/(10*self.normalizeVert)
+                            shapeFeats[:,startPos +2] = (allFeats2[:,0]-imageWidth/2)/(5*self.normalizeHorz)
+                            shapeFeats[:,startPos +3] = (allFeats2[:,1]-imageHeight/2)/(10*self.normalizeVert)
                         else:
-                            shapeFeats[:,startPos +0] = (b_bbs_index1[:,0]-imageWidth/2)/(imageWidth/2)
-                            shapeFeats[:,startPos +1] = (b_bbs_index1[:,1]-imageHeight/2)/(imageHeight/2)
-                            shapeFeats[:,startPos +2] = (b_bbs_index2[:,0]-imageWidth/2)/(imageWidth/2)
-                            shapeFeats[:,startPos +3] = (b_bbs_index2[:,1]-imageHeight/2)/(imageHeight/2)
+                            shapeFeats[:,startPos +0] = (allFeats1[:,0]-imageWidth/2)/(imageWidth/2)
+                            shapeFeats[:,startPos +1] = (allFeats1[:,1]-imageHeight/2)/(imageHeight/2)
+                            shapeFeats[:,startPos +2] = (allFeats2[:,0]-imageWidth/2)/(imageWidth/2)
+                            shapeFeats[:,startPos +3] = (allFeats2[:,1]-imageHeight/2)/(imageHeight/2)
 
             #t#self.opt_history['computeEdge    iter loc feats{}'.format(' m1st' if merge_only else '')].append(timeit.default_timer()-tic2) #t#
             ###DEBUG
@@ -2447,11 +2465,11 @@ class PairingGroupingGraph(BaseModel):
                         minAndMaxXY([bbs[b].boundingRect() for b in group])
                         for group in groups]).permute(1,0)
             else:
-                assert(all([len(g)==1 for g in groups])) #not implemented for groups
-                min_Y,_ = torch.min(torch.stack([tlY,trY,blY,brY],dim=0),dim=0)
-                max_Y,_ = torch.max(torch.stack([tlY,trY,blY,brY],dim=0),dim=0) 
-                min_X,_ = torch.min(torch.stack([tlX,trX,blX,brX],dim=0),dim=0) 
-                max_X,_ = torch.max(torch.stack([tlX,trX,blX,brX],dim=0),dim=0) 
+                assert(not self.rotation)
+                min_X,min_Y,max_X,max_Y = torch.IntTensor([
+                        groupRect([[tlX[b],tlY[b],brX[b],brY[b]] for b in group]) 
+                        for group in groups]).permute(1,0)
+
             if self.expandedBBContext is not None:
                 #max_X = torch.min(max_X+self.expandedBBContext,torch.IntTensor([imageWidth-1]))
                 #min_X = torch.max(min_X-self.expandedBBContext,torch.IntTensor([0]))
@@ -2494,19 +2512,20 @@ class PairingGroupingGraph(BaseModel):
 
 
                 else:
-                    node_shapeFeats[:,0]= (bbs[:,2]+math.pi)/(2*math.pi)
-                    node_shapeFeats[:,1]=bbs[:,3]/self.normalizeVert
-                    node_shapeFeats[:,2]=bbs[:,4]/self.normalizeHorz
+                    allFeats = torch.stack([combineShapeFeatsTensor([bb for bb in group]) for group in b_groups],dim=0)
+                    node_shapeFeats[:,0]= (allFeats[:,2]+math.pi)/(2*math.pi)
+                    node_shapeFeats[:,1]=allFeats[:,3]/self.normalizeVert
+                    node_shapeFeats[:,2]=allFeats[:,4]/self.normalizeHorz
                     if self.detector.predNumNeighbors:
-                        node_shapeFeats[:,3]=bbs[:,5]
-                    node_shapeFeats[:,3+extraPred:self.numBBTypes+3+extraPred]=torch.sigmoid(bbs[:,5+extraPred:self.numBBTypes+5+extraPred])
+                        node_shapeFeats[:,3]=allFeats[:,5]
+                    node_shapeFeats[:,3+extraPred:self.numBBTypes+3+extraPred]=torch.sigmoid(allFeats[:,5+extraPred:self.numBBTypes+5+extraPred])
                     if self.usePositionFeature:
                         if self.usePositionFeature=='absolute':
-                            node_shapeFeats[:,self.numBBTypes+3+extraPred] = (bbs[:,0]-imageWidth/2)/(5*self.normalizeHorz)
-                            node_shapeFeats[:,self.numBBTypes+4+extraPred] = (bbs[:,1]-imageHeight/2)/(10*self.normalizeVert)
+                            node_shapeFeats[:,self.numBBTypes+3+extraPred] = (allFeats[:,0]-imageWidth/2)/(5*self.normalizeHorz)
+                            node_shapeFeats[:,self.numBBTypes+4+extraPred] = (allFeats[:,1]-imageHeight/2)/(10*self.normalizeVert)
                         else:
-                            node_shapeFeats[:,self.numBBTypes+3+extraPred] = (bbs[:,0]-imageWidth/2)/(imageWidth/2)
-                            node_shapeFeats[:,self.numBBTypes+4+extraPred] = (bbs[:,1]-imageHeight/2)/(imageHeight/2)
+                            node_shapeFeats[:,self.numBBTypes+3+extraPred] = (allFeats[:,0]-imageWidth/2)/(imageWidth/2)
+                            node_shapeFeats[:,self.numBBTypes+4+extraPred] = (allFeats[:,1]-imageHeight/2)/(imageHeight/2)
             if self.useShapeFeats != "only" and self.expandedBBContext:
                 #Add detected BB masks
                 #warp to roi space
@@ -2515,15 +2534,6 @@ class PairingGroupingGraph(BaseModel):
                 w_m = self.poolBB2_w/feature_w
                 h_m = self.poolBB2_h/feature_h
 
-                if not self.useCurvedBBs:
-                    tlX1 = (tlX-rois[:,1])*w_m
-                    trX1 = (trX-rois[:,1])*w_m
-                    brX1 = (brX-rois[:,1])*w_m
-                    blX1 = (blX-rois[:,1])*w_m
-                    tlY1 = (tlY-rois[:,2])*h_m
-                    trY1 = (trY-rois[:,2])*h_m
-                    brY1 = (brY-rois[:,2])*h_m
-                    blY1 = (blY-rois[:,2])*h_m
 
                 for i in range(len(groups)):
                     if self.useCurvedBBs:
@@ -2533,8 +2543,18 @@ class PairingGroupingGraph(BaseModel):
                                     (bbs[bb_id].polyXs()-rois[i,1].item())*w_m[i].item(), 
                                     [self.poolBB2_h,self.poolBB2_w])
                     else:
-                        rr, cc = draw.polygon([round(tlY1[bb_id].item()),round(trY1[bb_id].item()),round(brY1[bb_id].item()),round(blY1[bb_id].item())],[round(tlX1[bb_id].item()),round(trX1[bb_id].item()),round(brX1[bb_id].item()),round(blX1[bb_id].item())], (self.poolBB2_h,self.poolBB2_w))
-                        masks[i,0,rr,cc]=1
+                        for bb_id in groups[index1]:
+                            rr, cc = draw.polygon(
+                                        [round((tlY[bb_id].item()-b_rois[i,2].item())*h_m[i].item()),
+                                         round((trY[bb_id].item()-b_rois[i,2].item())*h_m[i].item()),
+                                         round((brY[bb_id].item()-b_rois[i,2].item())*h_m[i].item()),
+                                         round((blY[bb_id].item()-b_rois[i,2].item())*h_m[i].item())],
+                                        [round((tlX[bb_id].item()-b_rois[i,1].item())*w_m[i].item()),
+                                         round((trX[bb_id].item()-b_rois[i,1].item())*w_m[i].item()),
+                                         round((brX[bb_id].item()-b_rois[i,1].item())*w_m[i].item()),
+                                         round((blX[bb_id].item()-b_rois[i,1].item())*w_m[i].item())], 
+                                        [pool2_h,pool2_w])
+                    masks[i,0,rr,cc]=1
                     if self.expandedBBContext is not None:
                         cropArea = allMasks[round(rois[i,2].item()):round(rois[i,4].item())+1,round(rois[i,1].item()):round(rois[i,3].item())+1]
                         masks[i,1] = F.interpolate(cropArea[None,None,...], size=(self.poolBB2_h,self.poolBB2_w), mode='bilinear',align_corners=False)[0,0]
