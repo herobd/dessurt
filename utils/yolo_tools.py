@@ -1066,7 +1066,6 @@ def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeC
                 precisions.append(1)
                 recalls.append(1)
     
-        
     allPrec = totalTruPos/totalPred if totalPred>0 else 1
     allRecall = totalTruPos/totalGT if totalGT>0 else 1
     if getClassAP:
