@@ -2369,6 +2369,9 @@ class PairingGroupingGraph(BaseModel):
                     
                     allFeats1 = torch.stack([combineShapeFeatsTensor([bb for bb in group]) for group in b_groups_index1],dim=0)
                     allFeats2 = torch.stack([combineShapeFeatsTensor([bb for bb in group]) for group in b_groups_index2],dim=0)
+                    if self.include_bb_conf:
+                        allFeats1 = allFeats1[:,1:] #discard conf
+                        allFeats2 = allFeats2[:,1:] #discard conf
                     shapeFeats[:,ixs[0]] = 2*allFeats1[:,3]/self.normalizeVert #bb preds half height/width
                     shapeFeats[:,ixs[1]] = 2*allFeats1[:,4]/self.normalizeHorz
                     shapeFeats[:,ixs[2]] = allFeats1[:,2]/math.pi
@@ -2551,6 +2554,8 @@ class PairingGroupingGraph(BaseModel):
 
                 else:
                     allFeats = torch.stack([combineShapeFeatsTensor([bbs[bb_id] for bb_id in group]) for group in groups],dim=0)
+                    if self.include_bb_conf:
+                        allFeats=allFeats[:,1:]
                     node_shapeFeats[:,0]= (allFeats[:,2]+math.pi)/(2*math.pi)
                     node_shapeFeats[:,1]=allFeats[:,3]/self.normalizeVert
                     node_shapeFeats[:,2]=allFeats[:,4]/self.normalizeHorz
