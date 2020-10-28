@@ -768,6 +768,7 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClas
         #Your only a hit if you have the same class
         allIOUs = getLoc(target[:,0:],pred[:,1:])
         allHits = allIOUs>iou_thresh
+
         #evalute hits to see if they're valid (matching class)
         targetClasses_index = torch.argmax(target[:,13:13+numClasses],dim=1)
         predClasses = pred[:,beforeCls+6:beforeCls+6+numClasses]
@@ -1139,7 +1140,6 @@ def getTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,getLoc, har
         #if targIndex[i]>=0:
     #         assert(torch.argmax(pred[i,-numClasses:],dim=0) == torch.argmax(target[targIndex[i],-numClasses:],dim=0))
             
-    #import pdb;pdb.set_trace()
     if hard_thresh:
         return targIndex, predsWithNoIntersection
     else:
@@ -1162,7 +1162,6 @@ def newGetTargIndexForPreds_iou(target,pred,iou_thresh,numClasses,train_targs):
         allIOUs = allIO_clipU(target,pred)
     else:
         allIOUs = classIOU(target,pred,numClasses)
-
     hits = allIOUs>iou_thresh
     #overSeg_thresh = iou_thresh*1.05
     #overSegmented= (allIO_clippedU>overSeg_thresh)
