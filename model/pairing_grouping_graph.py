@@ -1103,11 +1103,12 @@ class PairingGroupingGraph(BaseModel):
         else:
             if self.include_bb_conf:
                 locIdx=1
-                classIdx=6 if self.legacy else -self.numBBTypes
+                classIdx=6 #if self.legacy else -self.numBBTypes
                 conf = (bb0[0:1]+bb1[0:1])/2
             else:
                 locIdx=0
                 classIdx=5
+                #classIdx includes num neighbor pred
             x0,y0,r0,h0,w0 = bb0[locIdx:classIdx]
             x1,y1,r1,h1,w1 = bb1[locIdx:classIdx]
             minX = min(x0-w0,x1-w1)
@@ -1838,7 +1839,7 @@ class PairingGroupingGraph(BaseModel):
             rel_prop_scores = None
         elif self.relationshipProposal == 'feature_nn':
             candidates, rel_prop_scores = self.selectFeatureNNEdges(bbs,imageHeight,imageWidth,image,features.device,merge_only=merge_only)
-            if not self.useCurvedBBs:
+            if self.legacy:
                 bbs=bbs[:,1:] #discard confidence, we kept it so the proposer could see them
         #t#self.opt_history['candidates per bb'].append((timeit.default_timer()-tic)/len(bbs))#t#
         #t#self.opt_history['candidates /bb^2'].append((timeit.default_timer()-tic)/(len(bbs)**2))#t#
@@ -2840,10 +2841,7 @@ class PairingGroupingGraph(BaseModel):
             r = bbs[:,3]
             h = bbs[:,4]
             w = bbs[:,5]
-            if self.detector.predNumNeighbors and not self.legacy:
-                classFeat = bbs[:,7:]
-            else:
-                classFeat = bbs[:,6:]
+            classFeat = bbs[:,6:] #this is meant to capture num neighbor pred
             numClassFeat = classFeat.size(1)
             cos_r = torch.cos(r)
             sin_r = torch.sin(r)
