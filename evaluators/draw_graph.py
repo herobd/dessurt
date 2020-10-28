@@ -87,7 +87,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                         assert(len(bbs[j].all_primitive_rects)==1)
                 else:
                     conf = bbs[j,0]
-                    maxIndex =np.argmax(bbs[j,5+model.nodeIdxClass:5+model.nodeIdxClassEnd])
+                    maxIndex =np.argmax(bbs[j,-model.numBBTypes:])
                 shade = conf#(conf-bb_thresh)/(1-bb_thresh)
                 #print(shade)
                 #if name=='text_start_gt' or name=='field_end_gt':
