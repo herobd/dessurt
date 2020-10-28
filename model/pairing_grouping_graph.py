@@ -2372,15 +2372,16 @@ class PairingGroupingGraph(BaseModel):
                     if self.include_bb_conf:
                         allFeats1 = allFeats1[:,1:] #discard conf
                         allFeats2 = allFeats2[:,1:] #discard conf
+
                     shapeFeats[:,ixs[0]] = 2*allFeats1[:,3]/self.normalizeVert #bb preds half height/width
                     shapeFeats[:,ixs[1]] = 2*allFeats1[:,4]/self.normalizeHorz
                     shapeFeats[:,ixs[2]] = allFeats1[:,2]/math.pi
-                    shapeFeats[:,ixs[3]:ixs[4]] = allFeats1[:,extraPred+5:]# torch.sigmoid(allFeats1[:,extraPred+5:])
+                    shapeFeats[:,ixs[3]:ixs[4]] = allFeats1[:,-self.numBBTypes:]# torch.sigmoid(allFeats1[:,extraPred+5:])
 
                     shapeFeats[:,ixs[5]] = 2*allFeats2[:,3]/self.normalizeVert
                     shapeFeats[:,ixs[6]] = 2*allFeats2[:,4]/self.normalizeHorz
                     shapeFeats[:,ixs[7]] = allFeats2[:,2]/math.pi
-                    shapeFeats[:,ixs[8]:ixs[9]] = allFeats2[:,extraPred+5:]#torch.sigmoid(allFeats2[:,extraPred+5:])
+                    shapeFeats[:,ixs[8]:ixs[9]] = allFeats2[:,-self.numBBTypes:]#torch.sigmoid(allFeats2[:,extraPred+5:])
 
                     shapeFeats[:,ixs[10]] = (allFeats1[:,0]-allFeats2[:,0])/self.normalizeHorz
                     shapeFeats[:,ixs[11]] = (allFeats1[:,1]-allFeats2[:,1])/self.normalizeVert
@@ -2560,11 +2561,11 @@ class PairingGroupingGraph(BaseModel):
                     node_shapeFeats[:,1]=allFeats[:,3]/self.normalizeVert
                     node_shapeFeats[:,2]=allFeats[:,4]/self.normalizeHorz
                     if self.detector.predNumNeighbors:
-                        node_shapeFeats[:,3]=allFeats[:,5]
+                        node_shapeFeats[:,3]=allFeats[:,-(1+self.numBBTypes)]
                         extraPred=1
                     else:
                         extraPred=0
-                    node_shapeFeats[:,3+extraPred:self.numBBTypes+3+extraPred]=torch.sigmoid(allFeats[:,5+extraPred:self.numBBTypes+5+extraPred])
+                    node_shapeFeats[:,3+extraPred:self.numBBTypes+3+extraPred]=torch.sigmoid(allFeats[:,-self.numBBTypes:])
                     if self.usePositionFeature:
                         if self.usePositionFeature=='absolute':
                             node_shapeFeats[:,self.numBBTypes+3+extraPred] = (allFeats[:,0]-imageWidth/2)/(5*self.normalizeHorz)
