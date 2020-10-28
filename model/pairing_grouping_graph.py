@@ -1052,8 +1052,6 @@ class PairingGroupingGraph(BaseModel):
     def updateBBs(self,bbs,groups,nodeOuts):
         if self.useCurvedBBs:
             nodeConfPred = torch.sigmoid(nodeOuts[:,-1,self.nodeIdxConf]).cpu().detach()
-            startIndex = 5+self.nodeIdxClass
-            endIndex = 5+self.nodeIdxClassEnd
             nodeClassPred = torch.sigmoid(nodeOuts[:,-1,self.nodeIdxClass:self.nodeIdxClassEnd].detach()).cpu().detach()
             for i,group in enumerate(groups):
                 for bbId in group:
@@ -1078,14 +1076,12 @@ class PairingGroupingGraph(BaseModel):
                 raise NotImplementedError('Have not implemented num neighbor pred for new graph method')
                 
             if self.predClass:
-                startIndex = 5+self.nodeIdxClass
-                endIndex = 5+self.nodeIdxClassEnd
                 #if not useGTBBs:
                 nodeClassPred = torch.sigmoid(nodeOuts[:,-1,self.nodeIdxClass:self.nodeIdxClassEnd].detach()).cpu()
                 bbClasPred = torch.FloatTensor(bbs.size(0),self.nodeIdxClassEnd-self.nodeIdxClass)
                 for i,group in enumerate(groups):
                     bbClasPred[group] = nodeClassPred[i].detach()
-                bbs[:,startIndex:endIndex] = bbClasPred
+                bbs[:,-self.numBBTypes:] = bbClasPred
         return bbs
 
     #This merges two bounding box predictions, assuming they were oversegmented
