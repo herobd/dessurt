@@ -568,7 +568,7 @@ class GraphPairTrainer(BaseTrainer):
             truePosEdge=falsePosEdge=trueNegEdge=falseNegEdge=0
             saveEdgePred={}
             if not merge_only:
-                if not self.model.legacy:
+                if not self.model_ref.legacy:
                     predsRel = edgePred[...,1] 
                     predsOverSeg = edgePred[...,2] 
                     predsGroup = edgePred[...,3] 
