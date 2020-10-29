@@ -54,7 +54,14 @@ def main_wraper(rank,config,resume,world_size):
 
 def main(rank,config, resume,world_size=None):
     if rank is not None: #multiprocessing
-        dist.init_process_group("gloo", rank=rank, world_size=world_size)
+        if 'distributed' in config:
+            dist.init_process_group(
+                            "nccl",
+                            init_method='file:///fslhome/brianld/job_comm/{}'.format(config['name']),
+                            rank=rank,
+                            world_size=world_size)
+        else:
+            dist.init_process_group("gloo", rank=rank, world_size=world_size)
 
     #np.random.seed(1234) I don't have a way of restarting the DataLoader at the same place, so this makes it totaly random
     train_logger = Logger()
@@ -122,6 +129,10 @@ if __name__ == '__main__':
                         help='path to checkpoint that may or may not exist (default: None)')
     parser.add_argument('-g', '--gpu', default=None, type=int,
                         help='gpu to use (overrides config) (default: None)')
+    parser.add_argument('-R', '--rank', default=None, type=int,
+                        help='Set rank for process in distributed training')
+    parser.add_argument('-W', '--worldsize', default=None, type=int,
+                        help='Set worldsize (num tasks) in distributed training')
     #parser.add_argument('-m', '--merged', default=False, action='store_const', const=True,
     #                    help='Use combine train and valid sets.')
 
@@ -164,7 +175,11 @@ if __name__ == '__main__':
     set_procname(config['name'])
 
     try:
-        if 'multiprocess' in config:
+        if args.rank is not None:
+            config['distributed']=True
+            with torch.cuda.device(config['gpu']):
+                main(args.rank,config, args.resume, args.worldsize)
+        elif 'multiprocess' in config:
             assert(config['cuda'])
             num_gpu_processes=config['multiprocess']
             os.environ['MASTER_ADDR'] = '127.0.0.1'
