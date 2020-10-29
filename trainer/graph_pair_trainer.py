@@ -534,7 +534,7 @@ class GraphPairTrainer(BaseTrainer):
 
             #decide which predicted boxes belong to which target boxes
             #should this be the same as AP_?
-            numClasses = self.model.numBBTypes
+            numClasses = self.model_ref.numBBTypes
 
             #t#tic=timeit.default_timer()#t#
             

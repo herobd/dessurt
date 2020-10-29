@@ -2102,12 +2102,18 @@ class PairingGroupingGraph(BaseModel):
             else:
                 padX=padY=  self.expandedRelContext
 
+            D_xs = min_X<max_X
             D_ys = min_Y<max_Y
+            if not D_xs.all():
+                print('bad x')
+                print(min_X[D_xs])
+                print(max_X[D_xs])
             if not D_ys.all():
+                print('bad y')
                 print(min_Y[D_ys])
                 print(max_Y[D_ys])
-            assert((min_X<max_X).all())
-            assert((min_Y<max_Y).all())
+            assert((D_xs).all())
+            assert((D_ys).all())
             max_X = torch.max(torch.min((max_X+padX).float(),torch.FloatTensor([imageWidth-1])),torch.FloatTensor([1]))
             min_X = torch.max(torch.min((min_X-padX).float(),torch.FloatTensor([imageWidth-2])),torch.FloatTensor([0]))
             max_Y = torch.max(torch.min((max_Y+padY).float(),torch.FloatTensor([imageHeight-1])),torch.FloatTensor([1]))
