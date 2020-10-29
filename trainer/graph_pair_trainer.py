@@ -1884,6 +1884,7 @@ class GraphPairTrainer(BaseTrainer):
         for hit in gtGroupHit:
             if not hit:
                 groupCompleteness.append(0)
+        
 
         log['final_groupCompleteness']=np.mean(groupCompleteness)
         log['final_groupPurity']=np.mean([v for k,v in groupPurity.items()])
