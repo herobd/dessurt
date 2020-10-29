@@ -355,7 +355,7 @@ def allIO_clipU(boxesT,boxesP, boxesPXYWH=[0,1,4,3]):
     #class_compatible = gt_cls_ind==pr_cls_int
     #iou *= class_compatible
     return io_clipped_u
-def classIOU(boxesT,boxesP, num_classes, boxesPXYWH=[0,1,4,3]):
+def classIOU(boxesT,boxesP, num_classes, boxesPXYWH=[1,2,5,4]):
     bP_x1, bP_x2 = boxesP[:,boxesPXYWH[0]]-boxesP[:,boxesPXYWH[2]], boxesP[:,boxesPXYWH[0]]+boxesP[:,boxesPXYWH[2]]
     bP_y1, bP_y2 = boxesP[:,boxesPXYWH[1]]-boxesP[:,boxesPXYWH[3]], boxesP[:,boxesPXYWH[1]]+boxesP[:,boxesPXYWH[3]]
     bT_x1, bT_x2 = boxesT[:,0]-boxesT[:,4], boxesT[:,0]+boxesT[:,4]
@@ -392,6 +392,7 @@ def classIOU(boxesT,boxesP, num_classes, boxesPXYWH=[0,1,4,3]):
     pr_cls_ind = pr_cls_ind[None,:].expand(boxesT.size(0), boxesP.size(0))
     class_compatible = gt_cls_ind==pr_cls_ind
     iou *= class_compatible
+    #target[0] pred[8]?
     return iou
 
 
