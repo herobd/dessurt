@@ -214,7 +214,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         #print('\n{} ap:{}\tnumMissedByDetect:{}\tmissedByHuer:{}'.format(imageName,rel_ap,numMissedByDetect,numMissedByHeur))
 
     if outDir is not None:
-        path = os.path.join(outDir,'{}_final_relFm:{}_r+p:{}+{}_bbFm:{}_r+p:{}+{}.png'.format(imageName,log['final_rel_Fm'],log['final_rel_recall'],log['final_rel_prec'],log['final_bb_allFm'],log['final_bb_allRecall'],log['final_bb_allPrec']))
+        path = os.path.join(outDir,'{}_final_relFm:{:.2}_r+p:{:.2}+{:.2}_bbFm:{:.2}_r+p:{:.2}+{:.2}.png'.format(imageName,log['final_rel_Fm'],log['final_rel_recall'],log['final_rel_prec'],log['final_bb_allFm'],log['final_bb_allRecall'],log['final_bb_allPrec']))
         finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = out['final']
         draw_graph(finalOutputBoxes,trainer.model.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,data,None,targetBoxes,trainer.model,path,bbTrans=finalBBTrans,useTextLines=trainer.model.useCurvedBBs,targetGroups=instance['gt_groups'],targetPairs=instance['gt_groups_adj'])
 
