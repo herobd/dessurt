@@ -355,7 +355,7 @@ def allIO_clipU(boxesT,boxesP, boxesPXYWH=[0,1,4,3]):
     #class_compatible = gt_cls_ind==pr_cls_int
     #iou *= class_compatible
     return io_clipped_u
-def classIOU(boxesT,boxesP, num_classes, boxesPXYWH=[1,2,5,4]):
+def classIOU(boxesT,boxesP, num_classes, boxesPXYWH=[0,1,4,3]):
     bP_x1, bP_x2 = boxesP[:,boxesPXYWH[0]]-boxesP[:,boxesPXYWH[2]], boxesP[:,boxesPXYWH[0]]+boxesP[:,boxesPXYWH[2]]
     bP_y1, bP_y2 = boxesP[:,boxesPXYWH[1]]-boxesP[:,boxesPXYWH[3]], boxesP[:,boxesPXYWH[1]]+boxesP[:,boxesPXYWH[3]]
     bT_x1, bT_x2 = boxesT[:,0]-boxesT[:,4], boxesT[:,0]+boxesT[:,4]
@@ -1157,11 +1157,11 @@ def newGetTargIndexForPreds_iou(target,pred,iou_thresh,numClasses,train_targs):
 
     #first get all IOUs. These are already filtered with angle and class
     #allIOUs, allIO_clippedU = allPolyIOU_andClip(target,pred,class_sensitive=not train_targs) #clippedUnion, target is clipped horizontally to match pred. This filters for class matching
-
+    assert(pred.size(1)>=numClasses+6) #might have num neighbors
     if train_targs:
-        allIOUs = allIO_clipU(target,pred)
+        allIOUs = allIO_clipU(target,pred[:,1:])
     else:
-        allIOUs = classIOU(target,pred,numClasses)
+        allIOUs = classIOU(target,pred[:,1:],numClasses)
     hits = allIOUs>iou_thresh
     #overSeg_thresh = iou_thresh*1.05
     #overSegmented= (allIO_clippedU>overSeg_thresh)
