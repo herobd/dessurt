@@ -1511,6 +1511,8 @@ class GraphPairTrainer(BaseTrainer):
                         elif misses==0 or hits/misses>0.5:
                             node_conf_use_index.append(i)
                             node_conf_gt.append(1)
+                        #if 0 in predGroup:
+                            #import pdb;pdb.set_trace()
 
                     node_pred_use_index += node_pred_use_index_sp
 
