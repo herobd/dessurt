@@ -431,6 +431,7 @@ def classIOU(boxesT,boxesP, num_classes, boxesPXYWH=[0,1,4,3]):
     pr_cls_ind = pr_cls_ind[None,:].expand(boxesT.size(0), boxesP.size(0))
     class_compatible = gt_cls_ind==pr_cls_ind
     iou *= class_compatible
+    #target[0] pred[8]?
     return iou
 
 
@@ -807,6 +808,7 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClas
         #Your only a hit if you have the same class
         allIOUs = getLoc(target[:,0:],pred[:,1:])
         allHits = allIOUs>iou_thresh
+
         #evalute hits to see if they're valid (matching class)
         targetClasses_index = torch.argmax(target[:,13:13+numClasses],dim=1)
         predClasses = pred[:,beforeCls+6:beforeCls+6+numClasses]
@@ -1177,7 +1179,6 @@ def getTargIndexForPreds(target,pred,iou_thresh,numClasses,beforeCls,getLoc, har
         #if targIndex[i]>=0:
     #         assert(torch.argmax(pred[i,-numClasses:],dim=0) == torch.argmax(target[targIndex[i],-numClasses:],dim=0))
             
-    #import pdb;pdb.set_trace()
     if hard_thresh:
         return targIndex, predsWithNoIntersection
     else:
@@ -1195,12 +1196,11 @@ def newGetTargIndexForPreds_iou(target,pred,iou_thresh,numClasses,train_targs):
 
     #first get all IOUs. These are already filtered with angle and class
     #allIOUs, allIO_clippedU = allPolyIOU_andClip(target,pred,class_sensitive=not train_targs) #clippedUnion, target is clipped horizontally to match pred. This filters for class matching
-
+    assert(pred.size(1)>=numClasses+6) #might have num neighbors
     if train_targs:
-        allIOUs = allIO_clipU(target,pred)
+        allIOUs = allIO_clipU(target,pred[:,1:])
     else:
-        allIOUs = classIOU(target,pred,numClasses)
-
+        allIOUs = classIOU(target,pred[:,1:],numClasses)
     hits = allIOUs>iou_thresh
     #overSeg_thresh = iou_thresh*1.05
     #overSegmented= (allIO_clippedU>overSeg_thresh)

@@ -78,7 +78,11 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
             addTo=config
             printM='added config['
             for i in range(len(add)-2):
-                addTo = addTo[add[i]]
+                try:
+                    index = int(add[i])
+                except ValueError:
+                    index = add[i]
+                addTo = addTo[index]
                 printM+=add[i]+']['
             value = add[-1]
             if value=="":
