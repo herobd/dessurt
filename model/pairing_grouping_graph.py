@@ -670,25 +670,26 @@ class PairingGroupingGraph(BaseModel):
         #print('THresh: {}'.format(self.used_threshConf))
         ###
 
-        if self.rotation:
-            #TODO make this actually check for overseg...
-            threshed_bbPredictions = []
-            #for b in range(batchSize):
-            threshed_bbPredictions.append(bbPredictions[0,bbPredictions[0,:,0]>self.used_threshConf].cpu())
-            bbPredictions = threshed_bbPredictions
-            #assert(False) #pretty sure this is untested...
-            #bbPredictions = non_max_sup_dist(bbPredictions.cpu(),self.used_threshConf,2.5,hard_detect_limit)
-        else:
-            bbPredictions = non_max_sup_iou(bbPredictions.cpu(),self.used_threshConf,0.4,hard_detect_limit)
-        #I'm assuming batch size of one
-        assert(len(bbPredictions)==1)
-        bbPredictions=bbPredictions[0]
-        if self.no_grad_feats:
-            bbPredictions=bbPredictions.detach()
         #t###print('   process boxes: {}'.format(timeit.default_timer()-tic))#t#
         #bbPredictions should be switched for GT for training? Then we can easily use BCE loss. 
         #Otherwise we have to to alignment first
         if not useGTBBs:
+            if self.useCurvedBBs:
+                #TODO make this actually check for overseg...
+                threshed_bbPredictions = []
+                #for b in range(batchSize): assumes batch size of 1
+                threshed_bbPredictions.append(bbPredictions[0,bbPredictions[0,:,0]>self.used_threshConf].cpu())
+                bbPredictions = threshed_bbPredictions
+                #assert(False) #pretty sure this is untested...
+                #bbPredictions = non_max_sup_dist(bbPredictions.cpu(),self.used_threshConf,2.5,hard_detect_limit)
+            else:
+                bbPredictions = non_max_sup_iou(bbPredictions.cpu(),self.used_threshConf,0.4,hard_detect_limit)
+            #I'm assuming batch size of one
+            assert(len(bbPredictions)==1)
+            bbPredictions=bbPredictions[0]
+            if self.no_grad_feats:
+                bbPredictions=bbPredictions.detach()
+
             if bbPredictions.size(0)==0:
                 return [bbPredictions], offsetPredictions, None, None, None, None, None, None, (None,None,None,None)
             if self.include_bb_conf or self.useCurvedBBs: 
