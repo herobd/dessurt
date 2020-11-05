@@ -534,7 +534,7 @@ class GraphPairTrainer(BaseTrainer):
 
             #decide which predicted boxes belong to which target boxes
             #should this be the same as AP_?
-            numClasses = 2
+            numClasses = self.model_ref.numBBTypes
 
             #t#tic=timeit.default_timer()#t#
             
@@ -568,7 +568,7 @@ class GraphPairTrainer(BaseTrainer):
             truePosEdge=falsePosEdge=trueNegEdge=falseNegEdge=0
             saveEdgePred={}
             if not merge_only:
-                if not self.model.legacy:
+                if not self.model_ref.legacy:
                     predsRel = edgePred[...,1] 
                     predsOverSeg = edgePred[...,2] 
                     predsGroup = edgePred[...,3] 
@@ -1147,8 +1147,6 @@ class GraphPairTrainer(BaseTrainer):
         else:
             numEdgePred = lenTrue = lenFalse = 0
         numBoxPred = outputBoxes.size(0)
-        #if iteration>25:
-        #    import pdb;pdb.set_trace()
         #if len(predPairing.size())>0 and predPairing.size(0)>0:
         #    relLoss = self.loss['rel'](predPairing,gtPairing)
         #else:
@@ -1201,7 +1199,6 @@ class GraphPairTrainer(BaseTrainer):
                 targSize = targetBoxes.size(1)
             else:
                 targSize =0 
-            #import pdb;pdb.set_trace()
 
             if 'box' in self.loss:
                 boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
@@ -1514,6 +1511,8 @@ class GraphPairTrainer(BaseTrainer):
                         elif misses==0 or hits/misses>0.5:
                             node_conf_use_index.append(i)
                             node_conf_gt.append(1)
+                        #if 0 in predGroup:
+                            #import pdb;pdb.set_trace()
 
                     node_pred_use_index += node_pred_use_index_sp
 
@@ -1604,7 +1603,6 @@ class GraphPairTrainer(BaseTrainer):
                         targSize = targetBoxes.size(1)
                     else:
                         targSize =0 
-                    #import pdb;pdb.set_trace()
 
                     tic2=timeit.default_timer()
                     if 'box' in self.loss:
@@ -1768,7 +1766,6 @@ class GraphPairTrainer(BaseTrainer):
         if final is not None:
             finalLog = self.final_eval(targetBoxes.cpu() if targetBoxes is not None else None,gtGroups,gt_groups_adj,*final)
             log.update(finalLog)
-        #import pdb;pdb.set_trace()
 
         got={}#outputBoxes, outputOffsets, relPred, relIndexes, bbPred, rel_prop_pred
         for name in get:
@@ -1846,6 +1843,7 @@ class GraphPairTrainer(BaseTrainer):
         log['final_bb_allRecall']=allRecall
         log['final_bb_allFm']= 2*allPrec*allRecall/(allPrec+allRecall) if allPrec+allRecall>0 else 0
 
+
         predGroupsT={}
         if predGroups is not None:
             for node in range(len(predGroups)):
@@ -1888,6 +1886,7 @@ class GraphPairTrainer(BaseTrainer):
         for hit in gtGroupHit:
             if not hit:
                 groupCompleteness.append(0)
+        
 
         log['final_groupCompleteness']=np.mean(groupCompleteness)
         log['final_groupPurity']=np.mean([v for k,v in groupPurity.items()])
