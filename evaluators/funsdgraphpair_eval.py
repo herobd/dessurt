@@ -193,9 +193,9 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
 
             if outDir is not None:
                 if gIter==0 and trainer.model.merge_first:
-                    saveName = '{}_gI{}_mergeFirst_recall:{:.2f}_prec:{:.2f}_Fm:{:.2f}'.format(imageName,gIter,log['recallMergeFirst_0'],log['precMergeFirst_0'],log['FmMergeFirst_0'])
+                    saveName = '{}_gI{}_mergeFirst_recall:{:.2f}_prec:{:.2f}_Fm:{:.2f}'.format(imageName,gIter,float(log['recallMergeFirst_0']),float(log['precMergeFirst_0']),float(log['FmMergeFirst_0']))
                 else:
-                    saveName = '{}_gI{}_Fms_edge:{:.2f}_rel:{:.2f}_merge:{:.2f}_group:{:.2f}'.format(imageName,gIter,log['FmEdge_{}'.format(gIter)],log['FmRel_{}'.format(gIter)],log['FmOverSeg_{}'.format(gIter)],log['FmGroup_{}'.format(gIter)])
+                    saveName = '{}_gI{}_Fms_edge:{:.2f}_rel:{:.2f}_merge:{:.2f}_group:{:.2f}'.format(imageName,gIter,float(log['FmEdge_{}'.format(gIter)]),float(log['FmRel_{}'.format(gIter)]),float(log['FmOverSeg_{}'.format(gIter)]),float(log['FmGroup_{}'.format(gIter)]))
                     #for j in range(metricsOut.shape[1]):
                 #    saveName+='_m:{0:.3f}'.format(metricsOut[i,j])
                 path = os.path.join(outDir,saveName+'.png')
@@ -214,7 +214,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         #print('\n{} ap:{}\tnumMissedByDetect:{}\tmissedByHuer:{}'.format(imageName,rel_ap,numMissedByDetect,numMissedByHeur))
 
     if outDir is not None:
-        path = os.path.join(outDir,'{}_final_relFm:{:.2}_r+p:{:.2}+{:.2}_bbFm:{:.2}_r+p:{:.2}+{:.2}.png'.format(imageName,log['final_rel_Fm'],log['final_rel_recall'],log['final_rel_prec'],log['final_bb_allFm'],log['final_bb_allRecall'],log['final_bb_allPrec']))
+        path = os.path.join(outDir,'{}_final_relFm:{:.2}_r+p:{:.2}+{:.2}_bbFm:{:.2}_r+p:{:.2}+{:.2}.png'.format(imageName,float(log['final_rel_Fm']),float(log['final_rel_recall']),float(log['final_rel_prec']),float(log['final_bb_allFm']),float(log['final_bb_allRecall']),float(log['final_bb_allPrec'])))
         finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = out['final']
         draw_graph(finalOutputBoxes,trainer.model.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,data,None,targetBoxes,trainer.model,path,bbTrans=finalBBTrans,useTextLines=trainer.model.useCurvedBBs,targetGroups=instance['gt_groups'],targetPairs=instance['gt_groups_adj'])
 
