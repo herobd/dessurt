@@ -168,6 +168,35 @@ def non_max_sup_keep_overlap_iou(pred_boxes,thresh_conf, thresh_loc, hard_limit=
     print('times_bridge_second mean:{}, total:{}'.format(np.mean(times_bridge_second),np.sum(times_bridge_second)))
 
     return to_return
+
+def non_max_sup_overseg(pred_boxes,thresh_iou=0.3,thresh_height_diff=0.2):
+    ious = allIO_clipU(pred_boxes[:,1:],pred_boxes[:,1:],x1y1x2y2=True) #discard conf channel for iou
+    heights = pred_boxes[:,4]-pred_boxes[:,2]
+    heights1 = heights[None,:].expand(pred_boxes.size(0),pred_boxes.size(0))
+    heights2 = heights[:,None].expand(pred_boxes.size(0),pred_boxes.size(0))
+    diff_h = torch.abs(heights1-heights2)>thresh_height_diff*torch.min(heights1,heights2)
+    ious = ious>thresh_iou
+    in_conflict = torch.logical_and(diff_h,ious) #symetric
+    # conf1>conf2... tensorize
+    in_conflict = torch.triu(in_conflict,1) #not symetric
+    to_remove = set()
+    
+    for a,b in torch.nonzero(in_conflict):
+        if a not in to_remove and b not in to_remove:
+            a_conf = pred_boxes[a,0]
+            b_conf = pred_boxes[b,0]
+            if a_conf>b_conf:
+                to_remove.add(b.item())
+            else:
+                to_remove.add(a.item())
+    keep = set(range(pred_boxes.size(0)))
+    keep = keep-to_remove
+    #import pdb;pdb.set_trace()
+
+    #assert(len(keep) < pred_boxes.size(0))
+
+    return pred_boxes[list(keep)]
+
 #this is intended for the oversegmentation detector, where we care less about horizontal overlap (since these should be merged later on, and more about verticle overlap, since these should not be merged but discarded
 def verticle_bias_intersection(query_box, candidate_boxes):
     q_x1, q_x2 = query_box[0]-query_box[4], query_box[0]+query_box[4]
@@ -305,11 +334,21 @@ def allIOU(boxes1,boxes2, boxes1XYWH=[0,1,4,3],x1y1x2y2=False):
     iou = inter_area / (b1_area + b2_area - inter_area + 1e-16)
     return iou
 
-def allIO_clipU(boxesT,boxesP, boxesPXYWH=[0,1,4,3]):
-    bP_x1, bP_x2 = boxesP[:,boxesPXYWH[0]]-boxesP[:,boxesPXYWH[2]], boxesP[:,boxesPXYWH[0]]+boxesP[:,boxesPXYWH[2]]
-    bP_y1, bP_y2 = boxesP[:,boxesPXYWH[1]]-boxesP[:,boxesPXYWH[3]], boxesP[:,boxesPXYWH[1]]+boxesP[:,boxesPXYWH[3]]
-    bT_x1, bT_x2 = boxesT[:,0]-boxesT[:,4], boxesT[:,0]+boxesT[:,4]
-    bT_y1, bT_y2 = boxesT[:,1]-boxesT[:,3], boxesT[:,1]+boxesT[:,3]
+def allIO_clipU(boxesT,boxesP, boxesPXYWH=[0,1,4,3],x1y1x2y2=False):
+    if x1y1x2y2:
+        bT_x1=boxesT[:,0]
+        bT_y1=boxesT[:,1]
+        bT_x2=boxesT[:,2]
+        bT_y2=boxesT[:,3]
+        bP_x1=boxesP[:,0]
+        bP_y1=boxesP[:,1]
+        bP_x2=boxesP[:,2]
+        bP_y2=boxesP[:,3]
+    else:
+        bP_x1, bP_x2 = boxesP[:,boxesPXYWH[0]]-boxesP[:,boxesPXYWH[2]], boxesP[:,boxesPXYWH[0]]+boxesP[:,boxesPXYWH[2]]
+        bP_y1, bP_y2 = boxesP[:,boxesPXYWH[1]]-boxesP[:,boxesPXYWH[3]], boxesP[:,boxesPXYWH[1]]+boxesP[:,boxesPXYWH[3]]
+        bT_x1, bT_x2 = boxesT[:,0]-boxesT[:,4], boxesT[:,0]+boxesT[:,4]
+        bT_y1, bT_y2 = boxesT[:,1]-boxesT[:,3], boxesT[:,1]+boxesT[:,3]
 
     #expand to make two dimensional, allowing every instance of boxesP
     #to be compared with every intsance of boxesT

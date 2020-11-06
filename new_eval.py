@@ -96,7 +96,8 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                     try:
                         value = float(value)
                     except ValueError:
-                        pass
+                        if value == 'None':
+                            value=None
             addTo[add[-2]] = value
             printM+=add[-2]+']={}'.format(value)
             print(printM)
