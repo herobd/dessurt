@@ -17,7 +17,7 @@ from model.word2vec_adapter import Word2VecAdapter, Word2VecAdapterShallow, BPEm
 from model.hand_code_emb import HandCodeEmb
 from skimage import draw
 from model.net_builder import make_layers, getGroupSize
-from utils.yolo_tools import non_max_sup_iou, non_max_sup_dist
+from utils.yolo_tools import non_max_sup_iou, non_max_sup_dist, non_max_sup_overseg
 from utils.util import decode_handwriting
 from utils.bb_merging import TextLine, xyrwh_TextLine
 #from utils.string_utils import correctTrans
@@ -125,7 +125,9 @@ class PairingGroupingGraph(BaseModel):
         else:
             detector_config = config['detector_config']
             self.detector = eval(detector_config['arch'])(detector_config)
+
         self.useCurvedBBs = 'OverSeg' in checkpoint['config']['arch']
+        self.use_overseg_non_max_sup = config['overseg_non_max_sup'] if 'overseg_non_max_sup' in config else False
         useBeginningOfLast = config['use_beg_det_feats'] if 'use_beg_det_feats' in config else False
         useFeatsLayer = config['use_detect_layer_feats'] if 'use_detect_layer_feats' in config else -1
         useFeatsScale = config['use_detect_scale_feats'] if 'use_detect_scale_feats' in config else -2
@@ -676,12 +678,10 @@ class PairingGroupingGraph(BaseModel):
         if not useGTBBs:
             if self.useCurvedBBs:
                 #TODO make this actually check for overseg...
-                threshed_bbPredictions = []
-                #for b in range(batchSize): assumes batch size of 1
-                threshed_bbPredictions.append(bbPredictions[0,bbPredictions[0,:,0]>self.used_threshConf].cpu())
+                threshed_bbPredictions = [bbPredictions[0,bbPredictions[0,:,0]>self.used_threshConf].cpu())]
+                if self.use_overseg_non_max_sup:
+                    threshed_outputBBs[0] = non_max_sup_overseg(threshed_outputBBs[0])
                 bbPredictions = threshed_bbPredictions
-                #assert(False) #pretty sure this is untested...
-                #bbPredictions = non_max_sup_dist(bbPredictions.cpu(),self.used_threshConf,2.5,hard_detect_limit)
             else:
                 bbPredictions = non_max_sup_iou(bbPredictions.cpu(),self.used_threshConf,0.4,hard_detect_limit)
             #I'm assuming batch size of one

@@ -169,7 +169,7 @@ def non_max_sup_keep_overlap_iou(pred_boxes,thresh_conf, thresh_loc, hard_limit=
 
     return to_return
 
-def non_max_sup_overseg(pred_boxes,thresh_iou=0.3,thresh_height_diff=0.1):
+def non_max_sup_overseg(pred_boxes,thresh_iou=0.3,thresh_height_diff=0.2):
     ious = allIO_clipU(pred_boxes[:,1:],pred_boxes[:,1:],x1y1x2y2=True) #discard conf channel for iou
     heights = pred_boxes[:,4]-pred_boxes[:,2]
     heights1 = heights[None,:].expand(pred_boxes.size(0),pred_boxes.size(0))
@@ -191,7 +191,7 @@ def non_max_sup_overseg(pred_boxes,thresh_iou=0.3,thresh_height_diff=0.1):
                 to_remove.add(a.item())
     keep = set(range(pred_boxes.size(0)))
     keep = keep-to_remove
-    import pdb;pdb.set_trace()
+    #import pdb;pdb.set_trace()
 
     #assert(len(keep) < pred_boxes.size(0))
 
