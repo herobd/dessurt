@@ -733,7 +733,7 @@ class PairingGroupingGraph(BaseModel):
                         useBBs = torch.cat((useBBs,classes),dim=1)
             if self.include_bb_conf:
                 if self.useCurvedBBs:
-                    useBBs[:,0]+=torch.rand(useBBs.size(0))*0.45 - 0.2
+                    useBBs[:,0]+=torch.rand(useBBs.size(0)).to(useBBs.device)*0.45 - 0.2
                 else:
                     #fake some confifence values
                     conf = torch.rand(useBBs.size(0),1)*0.33 +0.66
@@ -2107,12 +2107,12 @@ class PairingGroupingGraph(BaseModel):
             D_ys = min_Y<max_Y
             if not D_xs.all():
                 print('bad x')
-                print(min_X[D_xs])
-                print(max_X[D_xs])
+                print(min_X[~D_xs])
+                print(max_X[~D_xs])
             if not D_ys.all():
                 print('bad y')
-                print(min_Y[D_ys])
-                print(max_Y[D_ys])
+                print(min_Y[~D_ys])
+                print(max_Y[~D_ys])
             assert((D_xs).all())
             assert((D_ys).all())
             max_X = torch.max(torch.min((max_X+padX).float(),torch.FloatTensor([imageWidth-1])),torch.FloatTensor([1]))

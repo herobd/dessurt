@@ -11,6 +11,7 @@ from collections import defaultdict
 from model import *
 from torch.optim.swa_utils import AveragedModel
 #from ..model import PairingGraph
+from torch.nn.parallel import DistributedDataParallel
 
 class BaseTrainer:
     """
@@ -22,10 +23,8 @@ class BaseTrainer:
         #if type(model) is tuple:
         #    self.model,self.model_ref
         self.model = model
-        if 'multiprocess' in config:
-            self.model_ref = model._modules['module']
-        else:
-            self.model_ref = model
+        self.model_ref = model
+
         self.loss = loss
         self.metrics = metrics
         self.name = config['name']
@@ -45,6 +44,10 @@ class BaseTrainer:
             self.model = self.model.to(self.gpu)
         else:
             self.gpu=None
+        if 'multiprocess' in config or 'distributed' in config:
+            self.model = DistributedDataParallel(
+                    self.model,
+                    find_unused_parameters=True)
 
         self.train_logger = train_logger
         if config['optimizer_type']!="none":

@@ -54,7 +54,9 @@ def main_wraper(rank,config,resume,world_size):
 
 def main(rank,config, resume,world_size=None):
     if rank is not None: #multiprocessing
+        #print('Process {} can see these GPUs:'.format(rank,os.environ['CUDA_VISIBLE_DEVICES']))
         if 'distributed' in config:
+            os.environ['CUDA_VISIBLE_DEVICES']='0'
             dist.init_process_group(
                             "nccl",
                             init_method='file:///fslhome/brianld/job_comm/{}'.format(config['name']),
@@ -72,8 +74,6 @@ def main(rank,config, resume,world_size=None):
 
     model = eval(config['arch'])(config['model'])
     model.summary()
-    if rank is not None:
-        model = DistributedDataParallel(model)
 
     if type(config['loss'])==dict:
         loss={}#[eval(l) for l in config['loss']]
