@@ -678,9 +678,9 @@ class PairingGroupingGraph(BaseModel):
         if not useGTBBs:
             if self.useCurvedBBs:
                 #TODO make this actually check for overseg...
-                threshed_bbPredictions = [bbPredictions[0,bbPredictions[0,:,0]>self.used_threshConf].cpu())]
+                threshed_bbPredictions = [bbPredictions[0,bbPredictions[0,:,0]>self.used_threshConf].cpu()]
                 if self.use_overseg_non_max_sup:
-                    threshed_outputBBs[0] = non_max_sup_overseg(threshed_outputBBs[0])
+                    threshed_bbPredictions[0] = non_max_sup_overseg(threshed_bbPredictions[0])
                 bbPredictions = threshed_bbPredictions
             else:
                 bbPredictions = non_max_sup_iou(bbPredictions.cpu(),self.used_threshConf,0.4,hard_detect_limit)
