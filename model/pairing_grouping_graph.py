@@ -330,7 +330,8 @@ class PairingGroupingGraph(BaseModel):
             if last_ch_relC+self.numShapeFeats!=graph_in_channels:
                 new_layer = [last_ch_relC,'k1-{}'.format(graph_in_channels-self.numShapeFeats)]
                 print('WARNING: featurizer_conv did not line up with graph_in_channels, adding layer k1-{}'.format(graph_in_channels-self.numShapeFeats))
-                new_layer, last_ch_relC = make_layers(new_layer,norm=feat_norm,dropout=True) 
+                #new_layer = last_ch_relC,'C3-{}'.format(graph_in_channels-self.numShapeFeats)]
+                #new_layer, last_ch_relC = make_layers(new_layer,norm=feat_norm,dropout=True) 
                 layers+=new_layer
         layers.append( nn.AvgPool2d((fsizeY,fsizeX)) )
         self.relFeaturizerConv = nn.Sequential(*layers)
@@ -364,13 +365,12 @@ class PairingGroupingGraph(BaseModel):
             self.mergeFeaturizerConv = nn.Sequential(*layers)
             if 'merge_pred_net' in config:
                 merge_pred_desc = config['merge_pred_net']#TODO
-                merge_pred_desc = [last_ch_relC+self.numShapeFeats-3,'ReLU']+merge_pred_desc+['FCnR1']
+                merge_pred_desc = [last_ch_relC+self.numShapeFeats-3]+merge_pred_desc+['FCnR1']
                 layers, last_ch = make_layers(merge_pred_desc,norm=feat_norm,dropout=True)
                 self.mergepred  = nn.Sequential(*layers)
             else:
                 #merge_pred_desc = ['FC{}'.format(last_ch_relC+self.numShapeFeats)]
                 self.mergepred = nn.Sequential(
-                        nn.ReLU(True),
                         nn.Linear(last_ch_relC+self.numShapeFeats,last_ch_relC+self.numShapeFeats),
                         nn.ReLU(True),
                         nn.Linear(last_ch_relC+self.numShapeFeats,1)
@@ -440,7 +440,10 @@ class PairingGroupingGraph(BaseModel):
                     else:
                         featurizer_conv = [detectorSavedFeatSize+bbMasks_bb] + featurizer
                     if featurizer_fc is None:
-                         featurizer_conv += ['C3-{}'.format(convOut)]
+                        if self.reintroduce_visual_features=='map':
+                            featurizer_conv += [convOut]
+                        else:
+                            featurizer_conv += ['C3-{}'.format(convOut)]
                     else:
                          featurizer_conv += [convOut]
                     convlayers, _  = make_layers(featurizer_conv,norm=feat_norm,dropout=True)
@@ -497,6 +500,18 @@ class PairingGroupingGraph(BaseModel):
                 self.groupThresh.append(graphconfig['group_thresh'] if 'group_thresh' in graphconfig else 0.6)
                 self.keepEdgeThresh.append(graphconfig['keep_edge_thresh'] if 'keep_edge_thresh' in graphconfig else 0.4)
             self.pairer = None
+
+            if self.reintroduce_visual_features=='map':
+                self.reintroduce_node_visual_maps = nn.ModuleList()
+                self.reintroduce_edge_visual_maps = nn.ModuleList()
+                self.reintroduce_node_visual_maps.append(nn.Linear(graph_in_channels,graph_in_channels))
+                self.reintroduce_edge_visual_maps.append(nn.Linear(graph_in_channels,graph_in_channels))
+                for i in range(len(self.graphnets)-1):
+                    self.reintroduce_node_visual_maps.append(nn.Linear(graph_in_channels*2,graph_in_channels))
+                    self.reintroduce_edge_visual_maps.append(nn.Linear(graph_in_channels*2,graph_in_channels))
+            else:
+                self.reintroduce_node_visual_maps = None
+                self.reintroduce_edge_visual_maps = None
             
             if 'group_node_method' not in config or config['group_node_method']=='mean':
                 self.groupNodeFunc = lambda l: torch.stack(l,dim=0).mean(dim=0)
@@ -778,6 +793,7 @@ class PairingGroupingGraph(BaseModel):
 
                 groups=[[i] for i in range(len(useBBs))]
                 bbTrans = transcriptions
+
                 if self.merge_first:
                     #t#tic=timeit.default_timer()#t#
                     #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
@@ -848,6 +864,8 @@ class PairingGroupingGraph(BaseModel):
                     allGroups=[]
                     allEdgeIndexes=[]
 
+
+
                 #t#tic=timeit.default_timer()#t#
                 #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
                 graph,edgeIndexes,rel_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,image=image)
@@ -905,6 +923,7 @@ class PairingGroupingGraph(BaseModel):
 
                     if self.reintroduce_visual_features:
                         graph,last_node_visual_feats,last_edge_visual_feats = self.appendVisualFeatures(
+                                gIter if self.merge_first else gIter+1,
                                 useBBs,
                                 graph,
                                 groups,
@@ -978,6 +997,7 @@ class PairingGroupingGraph(BaseModel):
     #This ROIAligns features and creates mask images for each edge and node, and runs the embedding convnet and [appends?] these features to the graph... This is only neccesary if a node has been updated...
     #perhaps we need a saved visual feature. If the node/edge is updated, it is recomputed. It is appended  to the graphs current features at each call of a GCN
     def appendVisualFeatures(self,
+            giter,
             bbs,
             graph,
             groups,
@@ -1042,12 +1062,25 @@ class PairingGroupingGraph(BaseModel):
 
         #for now, we'll just sum the features.
         #new_graph = (torch.cat((node_features,node_visual_feats),dim=1),edge_indexes,torch.cat((edge_features,edge_visual_feats),dim=1),universal_features)
-        if edge_features.size(1)==0:
-            new_graph = (node_features+node_visual_feats,_edge_indexes,edge_visual_feats,universal_features)
-        elif edge_features.size(0)==edge_visual_feats.size(0)*2:
-            new_graph = (node_features+node_visual_feats,_edge_indexes,edge_features+edge_visual_feats.repeat(2,1),universal_features)
+        if self.reintroduce_visual_features=='map':
+            node_features = self.reintroduce_node_visual_maps[giter](torch.cat((node_features,node_visual_feats),dim=1))
+            if edge_features.size(1)==0:
+                edge_features = edge_visual_feats
+            elif edge_features.size(0)==edge_visual_feats.size(0)*2:
+                edge_features = self.reintroduce_edge_visual_maps[giter](torch.cat((edge_features,edge_visual_feats.repeat(2,1)),dim=1))
+
+            else:
+                edge_features = self.reintroduce_edge_visual_maps[giter](torch.cat((edge_features,edge_visual_feats),dim=1))
         else:
-            new_graph = (node_features+node_visual_feats,_edge_indexes,edge_features+edge_visual_feats,universal_features)
+            node_features += node_visual_feats
+            if edge_features.size(1)==0:
+                edge_features = edge_visual_feats
+            elif edge_features.size(0)==edge_visual_feats.size(0)*2:
+                edge_features = edge_features+edge_visual_feats.repeat(2,1)
+            else:
+                edge_features = edge_features+edge_visual_feats
+
+        new_graph = (node_features,_edge_indexes,edge_features,universal_features)
         #edge features get repeated for bidirectional graph
         return new_graph, node_visual_feats, edge_visual_feats
 
@@ -1862,19 +1895,21 @@ class PairingGroupingGraph(BaseModel):
         else:
             allMasks=None
         groups=[[i] for i in range(len(bbs))]
-        relFeats = self.computeEdgeVisualFeatures(features,features2,imageHeight,imageWidth,bbs,groups,candidates,allMasks,flip,merge_only,debug_image)
+        rel_features = self.computeEdgeVisualFeatures(features,features2,imageHeight,imageWidth,bbs,groups,candidates,allMasks,flip,merge_only,debug_image)
 
         #if self.useShapeFeats=='sp
         #print('rel features built')
         #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
         #print('------rel------')
         if merge_only:
-            return relFeats, candidates, rel_prop_scores #we won't build the graph
+            return rel_features, candidates, rel_prop_scores #we won't build the graph
+        rel_features = self.reintroduce_edge_visual_maps[0](rel_features) #this is an extra linear layer to prep the features for the graph (which expects non-activated values)
     
         #compute features for the bounding boxes by themselves
         #This will be replaced with/appended to some type of word embedding
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
         bb_features = self.computeNodeVisualFeatures(features,features2,imageHeight,imageWidth,bbs,groups,text_emb,allMasks,merge_only,debug_image)
+        bb_features = self.reintroduce_node_visual_maps[0](bb_features) #this is an extra linear layer to prep the features for the graph (which expects non-activated values)
         #rint('node features built')
         #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
         #print('------node------')
@@ -1893,11 +1928,11 @@ class PairingGroupingGraph(BaseModel):
         numRel = len(candidates)
         if self.useMetaGraph:
             nodeFeatures= bb_features
-            edgeFeatures= relFeats
+            edgeFeatures= rel_features
 
             edges=candidates
             edges += [(y,x) for x,y in edges] #add backward edges for undirected graph
-            edgeIndexes = torch.LongTensor(edges).t().to(relFeats.device)
+            edgeIndexes = torch.LongTensor(edges).t().to(rel_features.device)
             #now we need to also replicate the edgeFeatures
             edgeFeatures = edgeFeatures.repeat(2,1)
 
