@@ -120,6 +120,7 @@
         "use_2nd_detect_feats_size": 64,
         "use_fixed_masks": true,
         "no_grad_feats": true,
+        "feat_norm": "group_norm",
 
         "merge_first": true,
         "merge_use_mask": false,
@@ -141,11 +142,11 @@
         "expand_bb_context": 20,
         "featurizer_bb_start_h": 10,
         "featurizer_bb_start_w": 10,
-        "bb_featurizer_conv": ["sep64","M","sep128","sep128",250],
+        "bb_featurizer_conv": ["sep64","M","sep128","sep128"],
 
 
         "fix_bi_dir": true,
-        "reintroduce_visual_features": true,
+        "reintroduce_visual_features": "map",
         "graph_config": [
         {
             "arch": "MetaGraphNet",
