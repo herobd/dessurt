@@ -127,7 +127,9 @@ class PairingGroupingGraph(BaseModel):
             self.detector = eval(detector_config['arch'])(detector_config)
 
         self.useCurvedBBs = 'OverSeg' in checkpoint['config']['arch']
+        self.text_line_smoothness = config['text_line_smoothness'] if 'text_line_smoothness' in config else 'original' #200
         self.use_overseg_non_max_sup = config['overseg_non_max_sup'] if 'overseg_non_max_sup' in config else False
+
         useBeginningOfLast = config['use_beg_det_feats'] if 'use_beg_det_feats' in config else False
         useFeatsLayer = config['use_detect_layer_feats'] if 'use_detect_layer_feats' in config else -1
         useFeatsScale = config['use_detect_scale_feats'] if 'use_detect_scale_feats' in config else -2
@@ -744,7 +746,7 @@ class PairingGroupingGraph(BaseModel):
         #    useBBs = xyrwhToCurved(useBBs)
         #el
         if self.useCurvedBBs:
-            useBBs = [TextLine(bb) for bb in useBBs] #self.x1y1x2y2rToCurved(useBBs)
+            useBBs = [TextLine(bb,step_size=self.text_line_smoothness) for bb in useBBs] #self.x1y1x2y2rToCurved(useBBs)
 
         if self.text_rec is not None:
             if useGTBBs and gtTrans is not None: # and len(gtTrans)==useBBs.size[0]:
