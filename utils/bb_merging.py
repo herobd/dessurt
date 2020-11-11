@@ -336,11 +336,12 @@ class TextLine:
         else:
             step_size = self.step_size#max(100,min(200,7*np.linalg.norm(top_points_np.mean(axis=0)-bot_points_np.mean(axis=0))))
             #we're going to try to distribute the poly points evenly along it horizontally by adjusting the step size
-            total_disance = round((top_total_distance+bot_total_distance)/2)
-            if total_disance%step_size<0.5*step_size:
-                step_size = total_disance/(total_disance//step_size)
-            else:
-                step_size = total_disance/(1+total_disance//step_size)
+            total_distance = round((top_total_distance+bot_total_distance)/2)
+            if total_distance>step_size:
+                if total_distance%step_size<0.5*step_size:
+                    step_size = total_distance/(total_distance//step_size)
+                else:
+                    step_size = total_distance/(1+total_distance//step_size)
         #if step_size==0: #Detection error with flat box
         #    for p in top_points:
         #        p[1]-=2
