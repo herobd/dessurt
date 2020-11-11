@@ -365,16 +365,22 @@ class PairingGroupingGraph(BaseModel):
             self.mergeFeaturizerConv = nn.Sequential(*layers)
             if 'merge_pred_net' in config:
                 merge_pred_desc = config['merge_pred_net']#TODO
-                merge_pred_desc = [last_ch_relC+self.numShapeFeats-3]+merge_pred_desc+['FCnR1']
+                if self.reintroduce_visual_features=='map':
+                    merge_pred_desc = [last_ch_relC+self.numShapeFeats-3]+merge_pred_desc+['FCnR1']
+                else:
+                    merge_pred_desc = [last_ch_relC+self.numShapeFeats-3,'ReLU']+merge_pred_desc+['FCnR1']
                 layers, last_ch = make_layers(merge_pred_desc,norm=feat_norm,dropout=True)
                 self.mergepred  = nn.Sequential(*layers)
             else:
                 #merge_pred_desc = ['FC{}'.format(last_ch_relC+self.numShapeFeats)]
-                self.mergepred = nn.Sequential(
+                layers = [
                         nn.Linear(last_ch_relC+self.numShapeFeats,last_ch_relC+self.numShapeFeats),
                         nn.ReLU(True),
                         nn.Linear(last_ch_relC+self.numShapeFeats,1)
-                        )
+                        ]
+                if self.reintroduce_visual_features!='map':
+                    layers = [nn.ReLU(True)]+layers
+                self.mergepred = nn.Sequential(*layers)
 
         #self.roi_align = RoIAlign(self.pool_h,self.pool_w,1.0/detect_save_scale) Facebook implementation
         self.roi_align = RoIAlign((self.pool_h,self.pool_w),1.0/detect_save_scale,-1)
@@ -1903,13 +1909,15 @@ class PairingGroupingGraph(BaseModel):
         #print('------rel------')
         if merge_only:
             return rel_features, candidates, rel_prop_scores #we won't build the graph
-        rel_features = self.reintroduce_edge_visual_maps[0](rel_features) #this is an extra linear layer to prep the features for the graph (which expects non-activated values)
+        if self.reintroduce_edge_visual_maps is not None:
+            rel_features = self.reintroduce_edge_visual_maps[0](rel_features) #this is an extra linear layer to prep the features for the graph (which expects non-activated values)
     
         #compute features for the bounding boxes by themselves
         #This will be replaced with/appended to some type of word embedding
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
         bb_features = self.computeNodeVisualFeatures(features,features2,imageHeight,imageWidth,bbs,groups,text_emb,allMasks,merge_only,debug_image)
-        bb_features = self.reintroduce_node_visual_maps[0](bb_features) #this is an extra linear layer to prep the features for the graph (which expects non-activated values)
+        if self.reintroduce_node_visual_maps is not None:
+            bb_features = self.reintroduce_node_visual_maps[0](bb_features) #this is an extra linear layer to prep the features for the graph (which expects non-activated values)
         #rint('node features built')
         #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
         #print('------node------')
