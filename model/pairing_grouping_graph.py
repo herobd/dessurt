@@ -634,9 +634,9 @@ class PairingGroupingGraph(BaseModel):
             self.debug=True
         else:
             self.debug=False
-        #t###self.opt_cand=[]#t#
-        #t###self.opt_createG=[]#t#
-        #t#self.opt_history=defaultdict(list)#t#
+        ##self.opt_cand=[]#t#
+        ##self.opt_createG=[]#t#
+        self.opt_history=defaultdict(list)#t#
         if type(self.pairer) is BinaryPairReal and type(self.pairer.shape_layers) is not nn.Sequential:
             print("Shape feats aligned to feat dataset.")
 
@@ -651,7 +651,7 @@ class PairingGroupingGraph(BaseModel):
 
     def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=300, debug=False,old_nn=False,gtTrans=None,merge_first_only=False):
         assert(image.size(0)==1) #implementation designed for batch size of 1. Should work to do data parallelism, since each copy of the model will get a batch size of 1
-        #t###tic=timeit.default_timer()#t#
+        ##tic=timeit.default_timer()#t#
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
         bbPredictions, offsetPredictions, _,_,_,_ = self.detector(image)
         _=None
@@ -664,14 +664,14 @@ class PairingGroupingGraph(BaseModel):
             saved_features2=self.detector.saved_features2
         else:
             saved_features2=None
-        #t###print('   detector: {}'.format(timeit.default_timer()-tic))#t#
+        ##print('   detector: {}'.format(timeit.default_timer()-tic))#t#
 
         if saved_features is None:
             print('ERROR:no saved features!')
             import pdb;pdb.set_trace()
 
         
-        #t###tic=timeit.default_timer()#t#
+        ##tic=timeit.default_timer()#t#
         if self.useHardConfThresh:
             self.used_threshConf = self.confThresh
         else:
@@ -689,7 +689,7 @@ class PairingGroupingGraph(BaseModel):
         #print('THresh: {}'.format(self.used_threshConf))
         ###
 
-        #t###print('   process boxes: {}'.format(timeit.default_timer()-tic))#t#
+        ##print('   process boxes: {}'.format(timeit.default_timer()-tic))#t#
         #bbPredictions should be switched for GT for training? Then we can easily use BCE loss. 
         #Otherwise we have to to alignment first
         if not useGTBBs:
@@ -795,13 +795,13 @@ class PairingGroupingGraph(BaseModel):
                 bbTrans = transcriptions
 
                 if self.merge_first:
-                    #t#tic=timeit.default_timer()#t#
+                    tic=timeit.default_timer()#t#
                     #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
                     #We don't build a full graph, just propose edges and extract the edge features
                     edgeOuts,edgeIndexes,merge_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,image=image,merge_only=True)
                     #_,edgeIndexes, edgeFeatures,_ = graph
-                    #t#time = timeit.default_timer()-tic#t#
-                    #t#self.opt_history['m1st createGraph'].append(time)#t#
+                    time = timeit.default_timer()-tic#t#
+                    self.opt_history['m1st createGraph'].append(time)#t#
                     if edgeOuts is not None:
                         edgeOuts = self.mergepred(edgeOuts)
                         edgeOuts = edgeOuts[:,None,:] #introduce repition dim (to match graph network)
@@ -818,7 +818,7 @@ class PairingGroupingGraph(BaseModel):
                     if edgeIndexes is not None:
                         startBBs = len(useBBs)
                         #perform predicted merges
-                        #t#tic2=timeit.default_timer()#t#
+                        tic2=timeit.default_timer()#t#
                         useBBs,bbTrans=self.mergeAndGroup(
                                 self.mergeThresh[0],
                                 None,
@@ -835,19 +835,19 @@ class PairingGroupingGraph(BaseModel):
                                 skip_rec=merge_first_only,
                                 merge_only=True)
                         #This mergeAndGroup performs first ATR
-                        #t#time = timeit.default_timer()-tic2#t#
-                        #t#self.opt_history['m1st mergeAndGroup'].append(time)#t#
+                        time = timeit.default_timer()-tic2#t#
+                        self.opt_history['m1st mergeAndGroup'].append(time)#t#
                         groups=[[i] for i in range(len(useBBs))]
                         #print('merge first reduced graph by {} nodes ({}->{}). max edge pred:{}, mean:{}'.format(startBBs-len(useBBs),startBBs,len(useBBs),torch.sigmoid(edgeOuts.max()),torch.sigmoid(edgeOuts.mean())))
-                    #t#time = timeit.default_timer()-tic#t#
-                    #t#self.opt_history['m1st Full'].append(time)#t#
+                    time = timeit.default_timer()-tic#t#
+                    self.opt_history['m1st Full'].append(time)#t#
                     if merge_first_only:
-                        #t#for name,times in self.opt_history.items():#t#
-                            #t#print('time {}({}): {}'.format(name,len(times),np.mean(times)))#t#
-                            #t#if len(times)>300: #t#
-                                #t#times.pop(0)   #t#
-                                #t#if len(times)>600:#t#
-                                    #t#times.pop(0)#t#
+                        for name,times in self.opt_history.items():#t#
+                            print('time {}({}): {}'.format(name,len(times),np.mean(times)))#t#
+                            if len(times)>300: #t#
+                                times.pop(0)   #t#
+                                if len(times)>600:#t#
+                                    times.pop(0)#t#
                         return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, None, merge_prop_scores, None
 
                     if bbTrans is not None:
@@ -866,14 +866,14 @@ class PairingGroupingGraph(BaseModel):
 
 
 
-                #t#tic=timeit.default_timer()#t#
+                tic=timeit.default_timer()#t#
                 #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
                 graph,edgeIndexes,rel_prop_scores = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,image=image)
 
                 #print('createGraph')
                 #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
-                #t#time = timeit.default_timer()-tic#t#
-                #t#self.opt_history['createGraph'].append(time)#t#
+                time = timeit.default_timer()-tic#t#
+                self.opt_history['createGraph'].append(time)#t#
 
                 #undirected
                 #edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
@@ -883,7 +883,7 @@ class PairingGroupingGraph(BaseModel):
                 last_node_visual_feats = graph[0]
                 last_edge_visual_feats = graph[2]
 
-                #t#tic=timeit.default_timer()#t#
+                tic=timeit.default_timer()#t#
 
                 #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
                 nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = self.graphnets[0](graph)
@@ -972,8 +972,8 @@ class PairingGroupingGraph(BaseModel):
                 #print('all iters GCN')
                 #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
 
-                #t#time = timeit.default_timer()-tic#t#
-                #t#self.opt_history['all graph iters'].append(time)#t#
+                time = timeit.default_timer()-tic#t#
+                self.opt_history['all graph iters'].append(time)#t#
 
 
             else:
@@ -982,12 +982,12 @@ class PairingGroupingGraph(BaseModel):
             #for rel in relOuts:
             #    i,j,a=graphToDetectionsMap(
 
-            #t#for name,times in self.opt_history.items():#t#
-                #t#print('time {}({}): {}'.format(name,len(times),np.mean(times)))#t#
-                #t#if len(times)>300: #t#
-                    #t#times.pop(0)   #t#
-                    #t#if len(times)>600:#t#
-                        #t#times.pop(0)#t#
+            for name,times in self.opt_history.items():#t#
+                print('time {}({}): {}'.format(name,len(times),np.mean(times)))#t#
+                if len(times)>300: #t#
+                    times.pop(0)   #t#
+                    if len(times)>600:#t#
+                        times.pop(0)#t#
 
             return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final
         else:
@@ -1867,7 +1867,7 @@ class PairingGroupingGraph(BaseModel):
 
 
     def createGraph(self,bbs,features,features2,imageHeight,imageWidth,text_emb=None,flip=None,debug_image=None,image=None,merge_only=False):
-        #t#tic=timeit.default_timer()#t#
+        tic=timeit.default_timer()#t#
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
         if self.relationshipProposal == 'line_of_sight':
             assert(not merge_only)
@@ -1877,8 +1877,8 @@ class PairingGroupingGraph(BaseModel):
             candidates, rel_prop_scores = self.selectFeatureNNEdges(bbs,imageHeight,imageWidth,image,features.device,merge_only=merge_only)
             if self.legacy:
                 bbs=bbs[:,1:] #discard confidence, we kept it so the proposer could see them
-        #t#self.opt_history['candidates per bb'].append((timeit.default_timer()-tic)/len(bbs))#t#
-        #t#self.opt_history['candidates /bb^2'].append((timeit.default_timer()-tic)/(len(bbs)**2))#t#
+        self.opt_history['candidates per bb'].append((timeit.default_timer()-tic)/len(bbs))#t#
+        self.opt_history['candidates /bb^2'].append((timeit.default_timer()-tic)/(len(bbs)**2))#t#
         if len(candidates)==0:
             if self.useMetaGraph:
                 return None, None, None
@@ -1939,13 +1939,13 @@ class PairingGroupingGraph(BaseModel):
             #features
             universalFeatures=None
 
-            #t##time = timeit.default_timer()-tic#t#
+            #time = timeit.default_timer()-tic#t#
             #print('   create graph: {}'.format(time)) #old 0.37, new 0.16
             ##self.opt_createG.append(time)
-            #t##if len(self.opt_createG)>17:#t#
-            #t##    print('   create graph running mean: {}'.format(np.mean(self.opt_createG)))#t#
-            #t##    if len(self.opt_createG)>30:#t#
-            #t##        self.opt_createG = self.opt_createG[1:]#t#
+            #if len(self.opt_createG)>17:#t#
+            #    print('   create graph running mean: {}'.format(np.mean(self.opt_createG)))#t#
+            #    if len(self.opt_createG)>30:#t#
+            #        self.opt_createG = self.opt_createG[1:]#t#
             return (nodeFeatures, edgeIndexes, edgeFeatures, universalFeatures), relIndexes, rel_prop_scores
         else:
             if bb_features is None:
@@ -2061,7 +2061,7 @@ class PairingGroupingGraph(BaseModel):
             pool_w=self.pool_w
             pool2_h=self.pool2_h
             pool2_w=self.pool2_w
-        #t#tic=timeit.default_timer()#t#
+        tic=timeit.default_timer()#t#
 
         #stackedEdgeFeatWindows = torch.FloatTensor((len(edges),features.size(1)+2,self.relWindowSize,self.relWindowSize)).to(features.device())
 
@@ -2164,7 +2164,7 @@ class PairingGroupingGraph(BaseModel):
             rois[:,3]=max_X
             rois[:,4]=max_Y
             
-            #t#self.opt_history['computeEdgeFs rois setup{}'.format(' m1st' if merge_only else '')].append(timeit.default_timer()-tic) #t#
+            self.opt_history['computeEdgeFs rois setup{}'.format(' m1st' if merge_only else '')].append(timeit.default_timer()-tic) #t#
 
 
             ###DEBUG
@@ -2230,7 +2230,7 @@ class PairingGroupingGraph(BaseModel):
         innerbatches = [(s,min(s+self.roi_batch_size,len(edges))) for s in range(0,len(edges),self.roi_batch_size)]
         #crop from feats, ROI pool
         for ib,(b_start,b_end) in enumerate(innerbatches): #we can batch extracting computing the feature vector from rois to save memory
-            #t#tic=timeit.default_timer()#t#
+            tic=timeit.default_timer()#t#
             if ib>0:
                 torch.set_grad_enabled(False)
             b_rois = rois[b_start:b_end]
@@ -2251,7 +2251,7 @@ class PairingGroupingGraph(BaseModel):
                 if not self.splitFeatures:
                     stackedEdgeFeatWindows = torch.cat( (stackedEdgeFeatWindows,stackedEdgeFeatWindows2), dim=1)
                     stackedEdgeFeatWindows2=None
-            #t#self.opt_history['computeEdge    iter roialign{}'.format(' m1st' if merge_only else '')].append(timeit.default_timer()-tic) #t#
+            self.opt_history['computeEdge    iter roialign{}'.format(' m1st' if merge_only else '')].append(timeit.default_timer()-tic) #t#
             #print('{} roi profile'.format('merge' if merge_only else 'full'))
             #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
 
@@ -2295,7 +2295,7 @@ class PairingGroupingGraph(BaseModel):
                 #    blY2 = (blY_index2-b_rois[:,2])*h_m
 
             if not merge_only or self.merge_use_mask:
-                #t#tic2=timeit.default_timer()#t#
+                tic2=timeit.default_timer()#t#
                 for i,(index1, index2) in enumerate(b_edges):
                     if self.useShapeFeats!='only':
                         if self.useCurvedBBs:
@@ -2365,8 +2365,8 @@ class PairingGroupingGraph(BaseModel):
                             if debug_image is not None:
                                 debug_masks.append(cropArea)
                 
-                #t#self.opt_history['computeEdge    iter mask create{}'.format(' m1st' if merge_only else '')].append(timeit.default_timer()-tic2) #t#
-            #t#tic2=timeit.default_timer()#t#
+                self.opt_history['computeEdge    iter mask create{}'.format(' m1st' if merge_only else '')].append(timeit.default_timer()-tic2) #t#
+            tic2=timeit.default_timer()#t#
         
 
             if self.useShapeFeats:
@@ -2484,7 +2484,7 @@ class PairingGroupingGraph(BaseModel):
                             shapeFeats[:,startPos +2] = (allFeats2[:,0]-imageWidth/2)/(imageWidth/2)
                             shapeFeats[:,startPos +3] = (allFeats2[:,1]-imageHeight/2)/(imageHeight/2)
 
-            #t#self.opt_history['computeEdge    iter loc feats{}'.format(' m1st' if merge_only else '')].append(timeit.default_timer()-tic2) #t#
+            self.opt_history['computeEdge    iter loc feats{}'.format(' m1st' if merge_only else '')].append(timeit.default_timer()-tic2) #t#
             ###DEBUG
             if debug_image is not None:
                 for i in range(4):
@@ -2525,7 +2525,7 @@ class PairingGroupingGraph(BaseModel):
             assert(not torch.isnan(b_relFeats).any())
             relFeats.append(b_relFeats)
             
-            #t#self.opt_history['computeEdgeFs feat iter{}'.format(' m1st' if merge_only else '')].append(timeit.default_timer()-tic) #t#
+            self.opt_history['computeEdgeFs feat iter{}'.format(' m1st' if merge_only else '')].append(timeit.default_timer()-tic) #t#
         if self.training:
             torch.set_grad_enabled(True)
         relFeats = torch.cat(relFeats,dim=0)
@@ -2736,7 +2736,7 @@ class PairingGroupingGraph(BaseModel):
     def selectFeatureNNEdges(self,bbs,imageHeight,imageWidth,image,device,merge_only=False):
         if len(bbs)<2:
             return [], None
-        #t#tic=timeit.default_timer()#t#
+        tic=timeit.default_timer()#t#
         
         if self.useCurvedBBs:
             #0: tlXDiff
@@ -2771,20 +2771,20 @@ class PairingGroupingGraph(BaseModel):
             if merge_only or self.no_betweenPixels:
                 line_counts=0
             else:
-                #t#tic2=timeit.default_timer()#t#
+                tic2=timeit.default_timer()#t#
                 line_counts = self.betweenPixels(bbs,image)
-                #t#time=timeit.default_timer()-tic2#t#
-                #t#self.opt_history['candidates betweenPixels{}'.format(' m1st' if merge_only else '')].append(time) #t#
+                time=timeit.default_timer()-tic2#t#
+                self.opt_history['candidates betweenPixels{}'.format(' m1st' if merge_only else '')].append(time) #t#
             numClassFeat = bbs[0].getCls().shape[0]
             
             #conf, x,y,r,h,w,tl, tr, br, bl = torch.FloatTensor([bb.getFeatureInfo() for bb in bbs]).permute(1,0)
             #conf, x,y,r,h,w,tlx,tly,trx,try,brx,bry,blx,bly,r_left,r_rightA,classFeats = bb.getFeatureInfo()
 
-            #t#tic2=timeit.default_timer()#t#
+            tic2=timeit.default_timer()#t#
             allFeats = torch.FloatTensor([bb.getFeatureInfo() for bb in bbs])
-            #t#time=timeit.default_timer()-tic2#t#
-            #t#self.opt_history['candidates getFeatureInfo{}'.format(' m1st' if merge_only else '')].append(time) #t#
-            #t#tic2=timeit.default_timer()#t#
+            time=timeit.default_timer()-tic2#t#
+            self.opt_history['candidates getFeatureInfo{}'.format(' m1st' if merge_only else '')].append(time) #t#
+            tic2=timeit.default_timer()#t#
             num_bb = allFeats.size(0)
             conf1 = allFeats[:,None,0].expand(-1,num_bb)
             conf2 = allFeats[None,:,0].expand(num_bb,-1)
@@ -2838,8 +2838,8 @@ class PairingGroupingGraph(BaseModel):
             ro2 = allFeats[None,:,17].expand(num_bb,-1)
             read_order_diff=ro1-ro2
 
-            #t#time=timeit.default_timer()-tic2#t#
-            #t#self.opt_history['candidates expand features{}'.format(' m1st' if merge_only else '')].append(time) #t#
+            time=timeit.default_timer()-tic2#t#
+            self.opt_history['candidates expand features{}'.format(' m1st' if merge_only else '')].append(time) #t#
 
         else:
             #features: tlXDiff,trXDiff,brXDiff,blXDiff,tlYDiff,trYDiff,brYDiff,blYDiff, centerXDiff, centerYDiff, absX, absY, h1, w1, h2, w2, classpred1, classpred2, line of sight (binary)
@@ -2898,10 +2898,10 @@ class PairingGroupingGraph(BaseModel):
             blX = -w*cos_r + h*sin_r +x
             blY =  w*sin_r + h*cos_r +y
 
-            #t#tic=timeit.default_timer()#t#
+            tic=timeit.default_timer()#t#
             line_of_sight = self.selectLineOfSightEdges(bbs,imageHeight,imageWidth,return_all=True)
-            #t#print('   candidates line-of-sight: {}'.format(timeit.default_timer()-tic))#t#
-            #t#tic=timeit.default_timer()#t#
+            print('   candidates line-of-sight: {}'.format(timeit.default_timer()-tic))#t#
+            tic=timeit.default_timer()#t#
             conf1 = conf[:,None].expand(-1,conf.size(0))
             conf2 = conf[None,:].expand(conf.size(0),-1)
             x1 = x[:,None].expand(-1,x.size(0))
@@ -2937,7 +2937,7 @@ class PairingGroupingGraph(BaseModel):
             blY1 = blY[:,None].expand(-1,blY.size(0))
             blY2 = blY[None,:].expand(blY.size(0),-1)
 
-        #t#tic2 = timeit.default_timer()#t#
+        tic2 = timeit.default_timer()#t#
         if not self.legacy:
             num_feats = 30+numClassFeat*2
         else:
@@ -3009,15 +3009,15 @@ class PairingGroupingGraph(BaseModel):
         features[:,:,14:19]/=(self.normalizeVert+self.normalizeHorz)/2
         features = features.view(len(bbs)**2,num_feats) #flatten
 
-        #t#time=timeit.default_timer()-tic2#t#
-        #t#self.opt_history['candidates place features{}'.format(' m1st' if merge_only else '')].append(time) #t#
-        #t###time = timeit.default_timer()-tic#t#
-        #t###print('   candidates feats: {}'.format(time))#t#
+        time=timeit.default_timer()-tic2#t#
+        self.opt_history['candidates place features{}'.format(' m1st' if merge_only else '')].append(time) #t#
+        ##time = timeit.default_timer()-tic#t#
+        ##print('   candidates feats: {}'.format(time))#t#
         ##self.opt_cand.append(time)
-        #t###if len(self.opt_cand)>30:#t#
-        #t###    print('   candidates feats running mean: {}'.format(np.mean(self.opt_cand)))#t#
-        #t###    self.opt_cand = self.opt_cand[1:]#t#
-        #t#tic=timeit.default_timer()#t#
+        ##if len(self.opt_cand)>30:#t#
+        ##    print('   candidates feats running mean: {}'.format(np.mean(self.opt_cand)))#t#
+        ##    self.opt_cand = self.opt_cand[1:]#t#
+        tic=timeit.default_timer()#t#
         if merge_only:
             rel_pred = self.merge_prop_nn(features.to(device))
             #features=features.to(device)
@@ -3036,9 +3036,6 @@ class PairingGroupingGraph(BaseModel):
         else:
             rel_pred = self.rel_prop_nn(features.to(device))
 
-        #t#time=timeit.default_timer()-tic#t#
-        #t#self.opt_history['candidates net{}'.format(' m1st' if merge_only else '')].append(time) #t#
-        #t#tic=timeit.default_timer()#t#
 
         rel_pred2d = rel_pred.view(len(bbs),len(bbs)) #unflatten
         rel_pred2d_comb = (torch.triu(rel_pred2d,diagonal=1)+torch.tril(rel_pred2d,diagonal=-1).permute(1,0))/2
@@ -3056,15 +3053,12 @@ class PairingGroupingGraph(BaseModel):
         #    assert(abs(score-scoreD)<0.00001 and rel==relD)
         #DDDD
 
-        #t#time=timeit.default_timer()-tic#t#
-        #t#self.opt_history['candidates edge lists{}'.format(' m1st' if merge_only else '')].append(time) #t#
-        #t#tic=timeit.default_timer()#t#
+        tic=timeit.default_timer()#t#
 
         rels_ordered.sort(key=lambda x: x[0], reverse=True)
 
-        #t#time=timeit.default_timer()-tic#t#
-        #t#self.opt_history['candidates sort{}'.format(' m1st' if merge_only else '')].append(time) #t#
-        #t#tic=timeit.default_timer()#t#
+        time=timeit.default_timer()-tic#t#
+        self.opt_history['candidates sort{}'.format(' m1st' if merge_only else '')].append(time) #t#
 
         keep = math.ceil(self.percent_rel_to_keep*len(rels_ordered))
         if merge_only:
@@ -3078,10 +3072,8 @@ class PairingGroupingGraph(BaseModel):
         else:
             implicit_threshold = rels_ordered[-1][0]-0.1 #We're taking everything
 
-        #t#time=timeit.default_timer()-tic#t#
-        #t#self.opt_history['candidates final bookkeeping{}'.format(' m1st' if merge_only else '')].append(time) #t#
 
-        #t###print('   candidates net and thresh: {}'.format(timeit.default_timer()-tic))#t#
+        ##print('   candidates net and thresh: {}'.format(timeit.default_timer()-tic))#t#
         return keep_rels, (rel_pred,rel_coords, implicit_threshold)
 
 
@@ -3094,7 +3086,7 @@ class PairingGroupingGraph(BaseModel):
         values = torch.FloatTensor(len(bbs),len(bbs)).zero_()
         for i,bb1 in enumerate(bbs[:-1]):
             for j,bb2 in zip(range(i+1,len(bbs)),bbs[i+1:]):
-                #t#tic=timeit.default_timer()#t#
+                tic=timeit.default_timer()#t#
                 x1,y1 = bb1.getCenterPoint()
                 x2,y2 = bb2.getCenterPoint()
 
@@ -3102,16 +3094,16 @@ class PairingGroupingGraph(BaseModel):
                 x2 = min(image.size(3)-1,max(0,x2))
                 y1 = min(image.size(2)-1,max(0,y1))
                 y2 = min(image.size(2)-1,max(0,y2))
-                #t#TIME_getCenter.append(timeit.default_timer()-tic)#t#
-                #t#tic=timeit.default_timer()#t#
+                TIME_getCenter.append(timeit.default_timer()-tic)#t#
+                tic=timeit.default_timer()#t#
                 rr,cc = draw.line(int(round(y1)),int(round(x1)),int(round(y2)),int(round(x2)))
-                #t#TIME_draw_line.append(timeit.default_timer()-tic)#t#
-                #t#tic=timeit.default_timer()#t#
+                TIME_draw_line.append(timeit.default_timer()-tic)#t#
+                tic=timeit.default_timer()#t#
                 v = image[0,:,rr,cc].mean()#.cpu()
-                #t#TIME_sum_pixels.append(timeit.default_timer()-tic)#t#
+                TIME_sum_pixels.append(timeit.default_timer()-tic)#t#
                 values[i,j] = v
                 values[j,i] = v
-        #t###print('    candidates, betweenPixels, getCenter:{}, draw.line:{}, sum pixels:{}'.format(np.mean(TIME_getCenter),np.mean(TIME_draw_line),np.mean(TIME_sum_pixels)))#t#
+        ##print('    candidates, betweenPixels, getCenter:{}, draw.line:{}, sum pixels:{}'.format(np.mean(TIME_getCenter),np.mean(TIME_draw_line),np.mean(TIME_sum_pixels)))#t#
         return values
 
 

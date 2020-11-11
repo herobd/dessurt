@@ -177,7 +177,7 @@ class GraphPairTrainer(BaseTrainer):
         #self.model.eval()
         #print("WARNING EVAL")
 
-        #t#tic=timeit.default_timer()#t#
+        ticAll=timeit.default_timer()#t##t#
         batch_idx = (iteration-1) % len(self.data_loader)
         try:
             thisInstance = self.data_loader_iter.next()
@@ -187,9 +187,9 @@ class GraphPairTrainer(BaseTrainer):
         if not self.model_ref.detector.predNumNeighbors:
             thisInstance['num_neighbors']=None
         ##toc=timeit.default_timer()
-        #t#print('time train data: {}'.format(timeit.default_timer()-tic))#t#
+        self.opt_history['get data'].append(timeit.default_timer()-ticAll)#t#
         
-        #t#tic=timeit.default_timer()#t#
+        tic=timeit.default_timer()#t##t#
 
         self.optimizer.zero_grad()
 
@@ -215,8 +215,9 @@ class GraphPairTrainer(BaseTrainer):
             losses, run_log, out = self.newRun(thisInstance,useGT,threshIntur)
         else:
             losses, run_log, out = self.run(thisInstance,useGT,threshIntur)
-        #t#print('time train run: {}'.format(timeit.default_timer()-tic))#t#
-        #t#tic=timeit.default_timer()#t#
+        self.opt_history['full run'].append(timeit.default_timer()-tic)#t#
+
+        tic=timeit.default_timer()#t##t#
         loss=0
         for name in losses.keys():
             losses[name] *= self.lossWeights[name[:-4]]
@@ -227,7 +228,7 @@ class GraphPairTrainer(BaseTrainer):
 
         torch.nn.utils.clip_grad_value_(self.model.parameters(),1)
         self.optimizer.step()
-        #t#print('time train backprop: {}'.format(timeit.default_timer()-tic))#t#
+        self.opt_history['backprop'].append(timeit.default_timer()-tic)#t#
         meangrad=0
         count=0
         for m in self.model.parameters():
@@ -249,6 +250,14 @@ class GraphPairTrainer(BaseTrainer):
             **run_log
 
         }
+        self.opt_history['Full iteration'].append(timeit.default_timer()-ticAll)#t#
+        for name,times in self.opt_history.items():#t#
+            print('time {}({}): {}'.format(name,len(times),np.mean(times)))#t#
+            if len(times)>300: #t#
+                times.pop(0)#t#
+                if len(times)>600:#t#
+                    times.pop(0)#t#
+        print('--------------------------')#t#
         return log
 
     def _minor_log(self, log):
@@ -498,7 +507,7 @@ class GraphPairTrainer(BaseTrainer):
 
 
 
-    def simplerAlignEdgePred(self,targetBoxes,gtGroups,gtGroupAdj,outputBoxes,edgePred,edgePredIndexes,predGroups,rel_prop_pred,thresh_edge,thresh_rel,thresh_overSeg,thresh_group,thresh_error,merge_only=False):
+    def simplerAlignEdgePred(self,targetBoxes,targetIndexToGroup,gtGroupAdj,outputBoxes,edgePred,edgePredIndexes,predGroups,rel_prop_pred,thresh_edge,thresh_rel,thresh_overSeg,thresh_group,thresh_error,merge_only=False):
         assert(self.useBadBBPredForRelLoss=='full' or self.useBadBBPredForRelLoss==1)
         if edgePred is None:
             if targetBoxes is None:
@@ -538,7 +547,7 @@ class GraphPairTrainer(BaseTrainer):
             #should this be the same as AP_?
             numClasses = self.model_ref.numBBTypes
 
-            #t#tic=timeit.default_timer()#t#
+            tic=timeit.default_timer()#t##t#
             
             if targetBoxes is not None:
                 targetBoxes = targetBoxes.cpu()
@@ -557,9 +566,9 @@ class GraphPairTrainer(BaseTrainer):
                 #targIndex=torch.LongTensor(len(outputBoxes)).fill_(-1)
                 targIndex = [-1]*len(outputBoxes)
             
-            #t#print('\tsimplerAlign newGetTargIndexForPreds: {}'.format(timeit.default_timer()-tic))#t#
+            self.opt_history['simplerAlign newGetTargIndexForPreds'].append(timeit.default_timer()-tic)#t#
 
-            #t#tic=timeit.default_timer()#t#
+            tic=timeit.default_timer()#t##t#
 
             #Create gt vector to match edgePred.values()
             num_internal_iters = edgePred.size(-2)
@@ -613,15 +622,15 @@ class GraphPairTrainer(BaseTrainer):
                 wasGroup=None
                 ts0=predGroupsT[n0]
                 ts1=predGroupsT[n1]
-                gtGroup0 = getGTGroup(ts0,gtGroups)
-                gtGroup1 = getGTGroup(ts1,gtGroups)
+                gtGroup0 = getGTGroup(ts0,targetIndexToGroup)
+                gtGroup1 = getGTGroup(ts1,targetIndexToGroup)
                 if gtGroup1==-1:
                     gtGroup1=-2 #so gtGroup0!=gtGroup1
                 if len(ts0)>0 and len(ts1)>0:
                     #if len(ts0)==1 and overSegmented[ts0[0]] and len(ts1)==1 and overSegmented[ts1[0]]:S
                     #only merge if we are not grouped (group size=1), we are pieces of the same bb
-                    purity_0 = purity(ts0,gtGroups)
-                    purity_1 = purity(ts1,gtGroups)
+                    purity_0 = purity(ts0,targetIndexToGroup)
+                    purity_1 = purity(ts1,targetIndexToGroup)
                     if purity_0<1 or purity_1<1:
                         wasError=True
                     else:
@@ -880,7 +889,7 @@ class GraphPairTrainer(BaseTrainer):
                     }
                 predTypes = [saveEdgePred,saveRelPred,saveOverSegPred,saveGroupPred,saveErrorPred]
 
-            #t#print('\tsimplerAlign everything else: {}'.format(timeit.default_timer()-tic))#t#
+            self.opt_history['simplerAlign everything else (not prop)'].append(timeit.default_timer()-tic)#t#
 
 
         if rel_prop_pred is not None:
@@ -888,44 +897,67 @@ class GraphPairTrainer(BaseTrainer):
             relPropScores,relPropIds, threshPropRel = rel_prop_pred
 
             #print('\tcount rel prop: {}'.format(len(relPropIds)))
-            #t#tic=timeit.default_timer()#t#
+            tic=timeit.default_timer()#t##t#
             truePropPred=falsePropPred=falseNegProp=0
             propPredsPos=[]
             propPredsNeg=[]
-            for i,(n0,n1) in enumerate(relPropIds):
-                if not merge_only and (n0,n1) in shouldBeEdge: #unsure if this really saves time
-                    isEdge = shouldBeEdge[(n0,n1)]
-                else:
-                    t0 = targIndex[n0]
-                    t1 = targIndex[n1]
-                    #ts0=predGroupsT[n0]
-                    #ts1=predGroupsT[n1]
-                    #assert(len(predGroupsT[n0])<=1 and len(predGroupsT[n1])<=1) removing for efficiency
-                    isEdge=False
-                    if t0>=0 and t1>=0:
-                        if t0==t1:
-                            isEdge=True
-                        elif not merge_only:
-                            gtGroup0 = getGTGroup([t0],gtGroups)
-                            gtGroup1 = getGTGroup([t1],gtGroups)
-                            
-                            if gtGroup0==gtGroup1:
+            if not merge_only:
+                for i,(n0,n1) in enumerate(relPropIds):
+                    if (n0,n1) in shouldBeEdge: #unsure if this really saves time
+                        isEdge = shouldBeEdge[(n0,n1)]
+                    else:
+                        t0 = targIndex[n0]
+                        t1 = targIndex[n1]
+                        #ts0=predGroupsT[n0]
+                        #ts1=predGroupsT[n1]
+                        #assert(len(predGroupsT[n0])<=1 and len(predGroupsT[n1])<=1) removing for efficiency
+                        isEdge=False
+                        if t0>=0 and t1>=0:
+                            if t0==t1:
                                 isEdge=True
                             else:
-                                if (min(gtGroup0,gtGroup1),max(gtGroup0,gtGroup1)) in gtGroupAdj:
+                                gtGroup0 = targetIndexToGroup[t0]#getGTGroup([t0],gtGroups)
+                                gtGroup1 = targetIndexToGroup[t1]#getGTGroup([t1],gtGroups)
+                                
+                                if gtGroup0==gtGroup1:
                                     isEdge=True
-                if isEdge:
-                    propPredsPos.append(relPropScores[i])
-                    if relPropScores[i]>threshPropRel:
-                        truePropPred+=1
+                                else:
+                                    if (min(gtGroup0,gtGroup1),max(gtGroup0,gtGroup1)) in gtGroupAdj:
+                                        isEdge=True
+                    if isEdge:
+                        propPredsPos.append(relPropScores[i])
+                        if relPropScores[i]>threshPropRel:
+                            truePropPred+=1
+                        else:
+                            falseNegProp+=1
                     else:
-                        falseNegProp+=1
-                else:
-                    propPredsNeg.append(relPropScores[i])
-                    if relPropScores[i]>threshPropRel:
-                        falsePropPred+=1
-            #t#time = timeit.default_timer()-tic#t#
-            #t#print('\tsimplerAlign proposal: {}, per edge: {}'.format(time,time/len(relPropIds)))#t# 
+                        propPredsNeg.append(relPropScores[i])
+                        if relPropScores[i]>threshPropRel:
+                            falsePropPred+=1
+            else:
+                #TODO WORKING ON VECTORIZATION
+                isEdge = torch.BoolTensor([(targIndex[n0]==targIndex[n1] and targIndex[n0]>=0) for n0,n1 in relPropIds])
+                relPropScoresAboveThresh = relPropScores>threshPropRel
+                truePropPred= (isEdge*relPropScoresAboveThresh).sum()
+                falseNegProp= (isEdge*~relPropScoresAboveThresh).sum()
+                ###
+                for i,(n0,n1) in enumerate(relPropIds):
+                    t0 = targIndex[n0]
+                    t1 = targIndex[n1]
+                    isEdge= t0==t1 and t0>=0
+                    if isEdge:
+                        propPredsPos.append(relPropScores[i])
+                        if relPropScores[i]>threshPropRel:
+                            truePropPred+=1
+                        else:
+                            falseNegProp+=1
+                    else:
+                        propPredsNeg.append(relPropScores[i])
+                        if relPropScores[i]>threshPropRel:
+                            falsePropPred+=1
+            time = timeit.default_timer()-tic#t##t#
+            self.opt_history['simplerAlign proposal'].append(time)#t#
+            self.opt_history['simplerAlign proposal per edge'].append(time/len(relPropIds))#t#
             #per: 5.0e-5
 
             #tic=timeit.default_timer()#t#
@@ -1325,13 +1357,15 @@ class GraphPairTrainer(BaseTrainer):
         image, targetBoxes, adj, target_num_neighbors = self._to_tensor(instance)
         gtGroups = instance['gt_groups']
         gtGroupAdj = instance['gt_groups_adj']
+        targetIndexToGroup = instance['targetIndexToGroup']
+        targetIndexToGroup = instance['targetIndexToGroup']
         if self.use_gt_trans:
             gtTrans = instance['transcription']
             if (gtTrans)==0:
                 gtTrans=None
         else:
             gtTrans = None
-        #t#tic=timeit.default_timer()#t#
+        tic=timeit.default_timer()#t##t#
         if useGT and targetBoxes is not None:
             if self.model_ref.useCurvedBBs:
                 #build targets of GT to pass as detections
@@ -1425,8 +1459,8 @@ class GraphPairTrainer(BaseTrainer):
                     gtTrans = gtTrans,
                     merge_first_only = self.iteration<self.merge_first_only_until)
             #gtPairing,predPairing = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred)
-        #t#print('time run model: {}'.format(timeit.default_timer()-tic))#t#
-        #t#tic=timeit.default_timer()#t#
+        self.opt_history['run model'].append(timeit.default_timer()-tic)#t#
+        tic=timeit.default_timer()#t##t#
         ### TODO code prealigned
         losses=defaultdict(lambda:0)
         log={}
@@ -1437,10 +1471,10 @@ class GraphPairTrainer(BaseTrainer):
         if allEdgePred is not None:
             for graphIteration,(outputBoxes,edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allOutputBoxes,allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
 
-                #t#tic2=timeit.default_timer()#t#
+                tic2=timeit.default_timer()#t##t#
                 predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, proposedInfoI, logIter, edgePredTypes = self.simplerAlignEdgePred(
                         targetBoxes,
-                        gtGroups,
+                        targetIndexToGroup,
                         gtGroupAdj,
                         outputBoxes,
                         edgePred,
@@ -1454,7 +1488,7 @@ class GraphPairTrainer(BaseTrainer):
                         self.thresh_error[graphIteration],
                         merge_only= graphIteration==0 and self.model_ref.merge_first
                         )
-                #t#print('time run g{} newAlignEdgePred: {}'.format(graphIteration,timeit.default_timer()-tic2))#t#
+                self.opt_history['newAlignEdgePred gI{}'.format(graphIteration)].append(timeit.default_timer()-tic2)#t#
                 allEdgePredTypes.append(edgePredTypes)
                 if graphIteration==0 and self.model_ref.merge_first:
                     mergeProposedInfo=proposedInfoI
@@ -1627,7 +1661,7 @@ class GraphPairTrainer(BaseTrainer):
                             logIter['bb_pred_covered_noclass']=pred_covered_noclass
 
 
-                    #t#print('time run box_loss: {}'.format(timeit.default_timer()-tic2))#t#
+                    self.opt_history['box_loss'].append(timeit.default_timer()-tic2)#t#
 
                     #boxLoss *= self.lossWeights['box']
                     #if relLoss is not None:
@@ -1719,8 +1753,8 @@ class GraphPairTrainer(BaseTrainer):
                     log['bb_allRecall_{}'.format(graphIteration)]=allRecall
                     log['bb_allFm_{}'.format(graphIteration)]= 2*allPrec*allRecall/(allPrec+allRecall) if allPrec+allRecall>0 else 0
 
-        #t#print('time run all_losses: {}'.format(timeit.default_timer()-tic))#t#
-        #t#tic=timeit.default_timer()#t#
+        self.opt_history['all losses'].append(timeit.default_timer()-tic)#t#
+        tic=timeit.default_timer()#t##t#
         #print final state of graph
         ###
         if final is not None:
@@ -1736,6 +1770,7 @@ class GraphPairTrainer(BaseTrainer):
         #log['rel_prec']= fullPrec
         #log['rel_recall']= eRecall
         #log['rel_Fm']= 2*(fullPrec*eRecall)/(eRecall+fullPrec) if eRecall+fullPrec>0 else 0
+        self.opt_history['final eval'].append(timeit.default_timer()-tic)#t#
 
         if not self.model_ref.detector_frozen:
             if 'nnFinalLoss' in losses:
@@ -1857,7 +1892,7 @@ class GraphPairTrainer(BaseTrainer):
         predToGTGroup={}
         offId = -1
         for node,predGroupT in predGroupsT.items():
-            gtGroupId = getGTGroup(predGroupT,gtGroups)
+            gtGroupId = getGTGroup(predGroupT,targetIndexToGroup)
             predToGTGroup[node]=gtGroupId
             if gtGroupId<0:
                 purity=0
