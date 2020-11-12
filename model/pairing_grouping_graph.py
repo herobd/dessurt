@@ -331,7 +331,7 @@ class PairingGroupingGraph(BaseModel):
                 new_layer = [last_ch_relC,'k1-{}'.format(graph_in_channels-self.numShapeFeats)]
                 print('WARNING: featurizer_conv did not line up with graph_in_channels, adding layer k1-{}'.format(graph_in_channels-self.numShapeFeats))
                 #new_layer = last_ch_relC,'C3-{}'.format(graph_in_channels-self.numShapeFeats)]
-                #new_layer, last_ch_relC = make_layers(new_layer,norm=feat_norm,dropout=True) 
+                new_layer, last_ch_relC = make_layers(new_layer,norm=feat_norm,dropout=True) 
                 layers+=new_layer
         layers.append( nn.AvgPool2d((fsizeY,fsizeX)) )
         self.relFeaturizerConv = nn.Sequential(*layers)
