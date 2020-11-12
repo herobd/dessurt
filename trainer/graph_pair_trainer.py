@@ -1090,7 +1090,7 @@ class GraphPairTrainer(BaseTrainer):
                         else:
                             saveErrorPred[i]='UN'
 
-            time = timeit.default_timer()-tic
+            #t#time = timeit.default_timer()-tic#t#
             #t#self.opt_history['simplerAlign edge loop'].append(time)#t#
             #t#self.opt_history['simplerAlign edge loop per'].append(time/len(edgePredIndexes))#t#
             #t#tic=timeit.default_timer()#t#
