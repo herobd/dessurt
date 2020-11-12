@@ -29,6 +29,8 @@ def pure(targetIndexes,targetIndexToGroup):
     return True
 
 def purity(targetIndexes,targetIndexToGroup):
+    if len(targetIndexes)==0:
+        return 0
     groups=defaultdict(lambda: 0)
     for t in targetIndexes:
         gtId = targetIndexToGroup[t]
