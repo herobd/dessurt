@@ -2148,8 +2148,8 @@ class PairingGroupingGraph(BaseModel):
             else:
                 padX=padY=  self.expandedRelContext
 
-            D_xs = min_X<max_X
-            D_ys = min_Y<max_Y
+            D_xs = min_X<=max_X
+            D_ys = min_Y<=max_Y
             if not D_xs.all():
                 print('bad x')
                 print(min_X[~D_xs])
