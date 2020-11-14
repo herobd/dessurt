@@ -913,7 +913,7 @@ class GraphPairTrainer(BaseTrainer):
             saveEdgePredMat[UN]=saveIndex['UN']
             saveEdgePred ={i:revSaveIndex[saveEdgePredMat[i].item()] for i in range(len(edgePredIndexes)) if saveEdgePredMat[i]>0}
 
-            time = timeit.default_timer()-tic
+            #t#time = timeit.default_timer()-tic#t#
             #t#self.opt_history['simplerAlign edge loop'].append(time)#t#
             #t#self.opt_history['simplerAlign edge loop per'].append(time/len(edgePredIndexes))#t#
             #t#tic=timeit.default_timer()#t#
