@@ -1883,8 +1883,11 @@ class PairingGroupingGraph(BaseModel):
             candidates, rel_prop_scores = self.selectFeatureNNEdges(bbs,imageHeight,imageWidth,image,features.device,merge_only=merge_only)
             if self.legacy:
                 bbs=bbs[:,1:] #discard confidence, we kept it so the proposer could see them
-        #t#self.opt_history['candidates per bb'].append((timeit.default_timer()-tic)/len(bbs))#t#
-        #t#self.opt_history['candidates /bb^2'].append((timeit.default_timer()-tic)/(len(bbs)**2))#t#
+        #t#time = timeit.default_timer()-tic#t#
+        #t#self.opt_history['candidates per bb'].append(time/len(bbs))#t#
+        #t#self.opt_history['candidates /bb^2'].append(time/(len(bbs)**2))#t#
+        #t#if merge_only:#t#
+            #t#self.opt_history['candidates m1st'].append(time)#t#
         if len(candidates)==0:
             if self.useMetaGraph:
                 return None, None, None
@@ -2069,6 +2072,11 @@ class PairingGroupingGraph(BaseModel):
             pool_w=self.pool_w
             pool2_h=self.pool2_h
             pool2_w=self.pool2_w
+        #t##groups_index1 = [ [bbs[b] for b in groups[c[0]]] for c in edges ] #t#
+        #t##groups_index2 = [ [bbs[b] for b in groups[c[1]]] for c in edges ] #t#
+        #t##tic=timeit.default_timer()#t#
+        #t##debug=[groupRect([bb.boundingRect() for bb in group]) for group in groups_index1]#t#
+        #t##self.opt_history['computeEdgeFs bb compute{}'.format(' m1st' if merge_only else '')].append(timeit.default_timer()-tic) #t#
         #t#tic=timeit.default_timer()#t#
 
         #stackedEdgeFeatWindows = torch.FloatTensor((len(edges),features.size(1)+2,self.relWindowSize,self.relWindowSize)).to(features.device())
@@ -2114,20 +2122,28 @@ class PairingGroupingGraph(BaseModel):
 
 
 
+
+
+
         if self.useShapeFeats!='only':
             #get axis aligned rectangle from corners
-            rois = torch.zeros((len(edges),5)) #(batchIndex,x1,y1,x2,y2) as expected by ROI Align
+            #t#tic2=timeit.default_timer()#t#
+            rois = torch.zeros((len(edges),5)).to(features.device) #(batchIndex,x1,y1,x2,y2) as expected by ROI Align
             groups_index1 = [ [bbs[b] for b in groups[c[0]]] for c in edges ]
             groups_index2 = [ [bbs[b] for b in groups[c[1]]] for c in edges ]
+            #t#self.opt_history['computeEdgeFs ROISETUP setup{}'.format(' m1st' if merge_only else '')].append(timeit.default_timer()-tic2) #t#
             if self.useCurvedBBs:
 
-                min_X1,min_Y1,max_X1,max_Y1 = torch.IntTensor([groupRect([bb.boundingRect() for bb in group]) for group in groups_index1]).permute(1,0)
-                min_X2,min_Y2,max_X2,max_Y2 = torch.IntTensor([groupRect([bb.boundingRect() for bb in group]) for group in groups_index2]).permute(1,0)
+                #t#tic2=timeit.default_timer()#t#
+
+                min_X1,min_Y1,max_X1,max_Y1 = torch.IntTensor([groupRect([bb.boundingRect() for bb in group]) for group in groups_index1]).permute(1,0).to(features.device).chunk(4,dim=0)
+                min_X2,min_Y2,max_X2,max_Y2 = torch.IntTensor([groupRect([bb.boundingRect() for bb in group]) for group in groups_index2]).permute(1,0).to(features.device).chunk(4,dim=0)
                 min_X = torch.min(min_X1,min_X2)
                 min_Y = torch.min(min_Y1,min_Y2)
                 max_X = torch.max(max_X1,max_X2)
                 max_Y = torch.max(max_Y1,max_Y2)
 
+                #t#self.opt_history['computeEdgeFs ROISETUP minmax{}'.format(' m1st' if merge_only else '')].append(timeit.default_timer()-tic2) #t#
 
 
 
@@ -2160,10 +2176,15 @@ class PairingGroupingGraph(BaseModel):
                 print(max_Y[~D_ys])
             assert((D_xs).all())
             assert((D_ys).all())
-            max_X = torch.max(torch.min((max_X+padX).float(),torch.FloatTensor([imageWidth-1])),torch.FloatTensor([1]))
-            min_X = torch.max(torch.min((min_X-padX).float(),torch.FloatTensor([imageWidth-2])),torch.FloatTensor([0]))
-            max_Y = torch.max(torch.min((max_Y+padY).float(),torch.FloatTensor([imageHeight-1])),torch.FloatTensor([1]))
-            min_Y = torch.max(torch.min((min_Y-padY).float(),torch.FloatTensor([imageHeight-2])),torch.FloatTensor([0]))
+
+            #t#tic2=timeit.default_timer()#t#
+            oneT = torch.FloatTensor([1]).to(features.device)
+            zeroT = torch.FloatTensor([1]).to(features.device)
+            max_X = torch.max(torch.min((max_X+padX).float(),torch.FloatTensor([imageWidth-1]).to(features.device)),oneT)
+            min_X = torch.max(torch.min((min_X-padX).float(),torch.FloatTensor([imageWidth-2]).to(features.device)),zeroT.to(features.device))
+            max_Y = torch.max(torch.min((max_Y+padY).float(),torch.FloatTensor([imageHeight-1]).to(features.device)),oneT)
+            min_Y = torch.max(torch.min((min_Y-padY).float(),torch.FloatTensor([imageHeight-2]).to(features.device)),zeroT)
+            zeroT=oneT=None
             #min_X = torch.max(min_X-padX,torch.IntTensor([0]))
             #max_Y = torch.min(max_Y+padY,torch.IntTensor([imageHeight-1]))
             #min_Y = torch.max(min_Y-padY,torch.IntTensor([0]))
@@ -2171,6 +2192,7 @@ class PairingGroupingGraph(BaseModel):
             rois[:,2]=min_Y
             rois[:,3]=max_X
             rois[:,4]=max_Y
+            #t#self.opt_history['computeEdgeFs ROISETUP finalize{}'.format(' m1st' if merge_only else '')].append(timeit.default_timer()-tic2) #t#
             
             #t#self.opt_history['computeEdgeFs rois setup{}'.format(' m1st' if merge_only else '')].append(timeit.default_timer()-tic) #t#
 
@@ -2248,7 +2270,8 @@ class PairingGroupingGraph(BaseModel):
             #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
 
             if merge_only:
-                stackedEdgeFeatWindows = self.merge_roi_align(features,b_rois.to(features.device))
+                #o#stackedEdgeFeatWindows = self.merge_roi_align(features,b_rois.to(features.device))
+                stackedEdgeFeatWindows = self.merge_roi_align(features,b_rois)
             else:
                 stackedEdgeFeatWindows = self.roi_align(features,b_rois.to(features.device))
             if features2 is not None:
