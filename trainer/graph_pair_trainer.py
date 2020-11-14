@@ -783,10 +783,6 @@ class GraphPairTrainer(BaseTrainer):
                 predsRelAboveThresh = torch.sigmoid(predsRel[:,-1])>thresh_rel
                 saveRelPredMat = torch.IntTensor(len(edgePredIndexes)).zero_()
 
-                d_indexesRel = torch.nonzero(wasRel)
-                d_indexesNoRel = torch.nonzero(wasNoRel)
-                d_indexesRel = set([a.item() for a in d_indexesRel])
-                d_indexesNoRel = set([a.item() for a in d_indexesNoRel])
                 predsGTRel = predsRel[wasRel]
                 predsGTNoRel = predsRel[wasNoRel]
                 TP = wasRel*predsRelAboveThresh
