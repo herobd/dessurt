@@ -47,6 +47,10 @@ class TextLine:
             self.std_r = clone.std_r
             self.r_left = clone.r_left
             self.r_right = clone.r_right
+            self.minx = clone.minx
+            self.miny = clone.miny
+            self.maxx = clone.maxx
+            self.maxy = clone.maxy
 
             self.poly_points = clone.poly_points.copy() if clone.poly_points is not None else None
             self.center_point = clone.center_point
@@ -119,6 +123,8 @@ class TextLine:
                 self.width = self.all_primitive_rects[0][1][0]-self.all_primitive_rects[0][0][0]
             
             self.poly_points = np.array( top_points+bot_points[::-1] )
+            self.minx,self.miny = self.poly_points.min(axis=0)
+            self.maxx,self.maxy = self.poly_points.max(axis=0)
 
             check_point_angles(self.poly_points)
 
@@ -560,7 +566,8 @@ class TextLine:
         self.height = vert_sum/len(self.point_pairs)
         self.width = horz_sum/2
 
-
+        self.minx,self.miny = self.poly_points.min(axis=0)
+        self.maxx,self.maxy = self.poly_points.max(axis=0)
 
     def getReadPosition(self):
         if self.median_angle is None:
@@ -662,9 +669,7 @@ class TextLine:
     def boundingRect(self):
         if self.poly_points is None:
             self.compute()
-        minx,miny = self.poly_points.min(axis=0)
-        maxx,maxy = self.poly_points.max(axis=0)
-        return minx,miny,maxx,maxy
+        return self.minx,self.miny,self.maxx,self.maxy
 
     def getFeatureInfo(self):
         if self.poly_points is None:

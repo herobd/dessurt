@@ -621,539 +621,306 @@ class GraphPairTrainer(BaseTrainer):
             #t#tic=timeit.default_timer()#t#
 
             ##new vectorization
-            #o##We only operate over the subset of nodes that have an edge
-            #o#nodeLs = [p[0] for p in edgePredIndexes]
-            #o#nodeRs = [p[1] for p in edgePredIndexes]
-            #o#nodes_with_edges = list(set(nodeLs+nodeRs))
-            #o#node_to_nwe_index = {n:i for i,n in enumerate(nodes_with_edges)}
-            #o#nweLs = [node_to_nwe_index[n] for n in nodeLs]
-            #o#nweRs = [node_to_nwe_index[n] for n in nodeRs]
+            #We only operate over the subset of nodes that have an edge
+            nodeLs = [p[0] for p in edgePredIndexes]
+            nodeRs = [p[1] for p in edgePredIndexes]
+            nodes_with_edges = list(set(nodeLs+nodeRs))
+            node_to_nwe_index = {n:i for i,n in enumerate(nodes_with_edges)}
+            nweLs = [node_to_nwe_index[n] for n in nodeLs]
+            nweRs = [node_to_nwe_index[n] for n in nodeRs]
 
-            #o##get information for that subset of nodes
-            #o#compute = [(
-            #o#    len(predGroupsT[n0]),
-            #o#    len(predGroups[n0]),
-            #o#    getGTGroup(predGroupsT[n0],targetIndexToGroup),
-            #o#    purity(predGroupsT[n0],targetIndexToGroup),
-            #o#    predGroupsT[n0][0] if len(predGroupsT[n0])>0 else -1
-            #o#    ) for n0 in nodes_with_edges]
-
-
-            #o#edge_loss_device = predsEdge.device #is it best to have this on gpu?
-            #o#
-            #o##expand information into row and column matrices to allow all-to-all node comparisons
-            #o#g_target_len, g_len, GTGroups, purities, ts_0 = zip(*compute)
-            #o#gtGroupToNWE = {gt:nwe for nwe,gt in enumerate(GTGroups)}
-
-            #o#g_target_len = torch.IntTensor(g_target_len).to(edge_loss_device)
-            #o#g_len = torch.IntTensor(g_len).to(edge_loss_device)
-            #o#purities = torch.FloatTensor(purities).to(edge_loss_device)
-            #o#ts_0 = torch.IntTensor(ts_0).to(edge_loss_device)
-            #o#GTGroups = torch.IntTensor(GTGroups).to(edge_loss_device)
-
-            #o#g_target_len_L = g_target_len[nweLs]
-            #o#g_target_len_R = g_target_len[nweRs]
-            #o#g_len_R = g_len[nweRs]
-            #o#g_len_L = g_len[nweLs]
-            #o#purity_R = purities[nweRs]
-            #o#purity_L = purities[nweLs]
-            #o#ts_0_R = ts_0[nweRs]
-            #o#ts_0_L = ts_0[nweLs]
-            #o#same_ts_0 = (ts_0_R==ts_0_L) * (ts_0_R>=0) * (ts_0_L>=0)
-            #o#GTGroups_R = GTGroups[nweRs]
-            #o#GTGroups_L = GTGroups[nweLs]
-            #o#same_GTGroups = (GTGroups_R==GTGroups_L) * (GTGroups_R>=0) * (GTGroups_L>=0) #have to account for -1 being unaligned
-
-            #o##g_target_len_R = g_target_len[:,None].expand(len(nodes_with_edges),len(nodes_with_edges))
-            #o##g_target_len_C = g_target_len[None,:].expand(len(nodes_with_edges),len(nodes_with_edges))
-            #o##g_len_R = g_len[:,None].expand(len(nodes_with_edges),len(nodes_with_edges))
-            #o##g_len_C = g_len[None,:].expand(len(nodes_with_edges),len(nodes_with_edges))
-            #o##purity_R = purities[:,None].expand(len(nodes_with_edges),len(nodes_with_edges))
-            #o##purity_C = purities[None,:].expand(len(nodes_with_edges),len(nodes_with_edges))
-            #o##ts_0_R = ts_0[:,None].expand(len(nodes_with_edges),len(nodes_with_edges))
-            #o##ts_0_C = ts_0[None,:].expand(len(nodes_with_edges),len(nodes_with_edges))
-            #o##same_ts_0 = ts_0_R==ts_0_C
-            #o##GTGroups_R = GTGroups[:,None].expand(len(nodes_with_edges),len(nodes_with_edges))
-            #o##GTGroups_L = GTGroups[None,:].expand(len(nodes_with_edges),len(nodes_with_edges))
-            #o##same_GTGroups = GTGroups_R==GTGroups_L
+            #get information for that subset of nodes
+            compute = [(
+                len(predGroupsT[n0]),
+                len(predGroups[n0]),
+                getGTGroup(predGroupsT[n0],targetIndexToGroup),
+                purity(predGroupsT[n0],targetIndexToGroup),
+                predGroupsT[n0][0] if len(predGroupsT[n0])>0 else -1
+                ) for n0 in nodes_with_edges]
 
 
-            #o###which (of all edges) are actually ones we predicted
-            #o##predEdgesMat = torch.BoolTensor(len(nodes_with_edges),len(nodes_with_edges)).zero_()
-            #o##N0, N1 = zip(*edgePredIndexes)
-            #o##N0 = [node_to_nwe_index[n] for n in N0]
-            #o##N1 = [node_to_nwe_index[n] for n in N1]
-            #o##predEdgesMat[N0+N1,N1+N0]=True
+            edge_loss_device = predsEdge.device #is it best to have this on gpu?
+            
+            #expand information into row and column matrices to allow all-to-all node comparisons
+            g_target_len, g_len, GTGroups, purities, ts_0 = zip(*compute)
+            gtNE = [(GTGroups[node_to_nwe_index[n0]],GTGroups[node_to_nwe_index[n1]])  for n0,n1 in edgePredIndexes]
+            #gtGroupToNWE = {gt:nwe for nwe,gt in enumerate(GTGroups)}
 
-            #o##which edges are GT ones
-            #o#gtGroupAdjMat = torch.BoolTensor(len(nodes_with_edges),len(nodes_with_edges)).zero_()
-            #o#gtNWEAdj = [(gtGroupToNWE[n0],gtGroupToNWE[n1]) for n0,n1 in gtGroupAdj if (n0 in gtGroupToNWE and n1 in gtGroupToNWE)]
-            #o#if len(gtNWEAdj)>0:
-            #o#    N0,N1 = zip(*gtNWEAdj)
-            #o#    gtGroupAdjMat[N0+N1,N1+N0]=True
+            g_target_len = torch.IntTensor(g_target_len).to(edge_loss_device)
+            g_len = torch.IntTensor(g_len).to(edge_loss_device)
+            purities = torch.FloatTensor(purities).to(edge_loss_device)
+            ts_0 = torch.IntTensor(ts_0).to(edge_loss_device)
+            GTGroups = torch.IntTensor(GTGroups).to(edge_loss_device)
 
-            #o#gtGroupAdjMat = gtGroupAdjMat[nweLs,nweRs].to(edge_loss_device)
+            g_target_len_L = g_target_len[nweLs]
+            g_target_len_R = g_target_len[nweRs]
+            g_len_R = g_len[nweRs]
+            g_len_L = g_len[nweLs]
+            purity_R = purities[nweRs]
+            purity_L = purities[nweLs]
+            ts_0_R = ts_0[nweRs]
+            ts_0_L = ts_0[nweLs]
+            same_ts_0 = (ts_0_R==ts_0_L) * (ts_0_R>=0) * (ts_0_L>=0)
+            GTGroups_R = GTGroups[nweRs]
+            GTGroups_L = GTGroups[nweLs]
+            same_GTGroups = (GTGroups_R==GTGroups_L) * (GTGroups_R>=0) * (GTGroups_L>=0) #have to account for -1 being unaligned
 
-            #o#
-
-            #o##common conditions
-            #o#bothTarged = (g_target_len_R>0)*(g_target_len_L>0)
-            #o#badTarged = (g_target_len_R==0)+(g_target_len_L==0)
-            #o#bothPure = (purity_R>0.8)*(purity_L>0.8)
-            #o#
-            #o##Actually start determining GT/training scenarios
-            #o#wasRel = bothTarged*((g_len_L>1)+(g_len_R>1)+~same_ts_0)*bothPure*gtGroupAdjMat
-            #o#wasNoRel = (badTarged+(bothTarged*((g_len_L>1)+(g_len_R>1)+~same_ts_0)*bothPure*~gtGroupAdjMat))
-            #o#
-            #o#wasNoOverSeg = (badTarged+(bothTarged*bothPure*~((g_len_R==1)*(g_len_L==1)*same_ts_0)))
-            #o#wasOverSeg = bothTarged*(g_len_R==1)*(g_len_L==1)*same_ts_0
-            #o#if self.init_merge_rule is None:
-            #o#    pass
-            #o#elif self.init_merge_rule=='adjacent':
-            #o#    tx,ty,bx,by = zip(* [outputBoxes[n].boundingRect() for n in nodes_with_edges])
-            #o#    tx = torch.FloatTensor(tx).to(edge_loss_device)
-            #o#    ty = torch.FloatTensor(ty).to(edge_loss_device)
-            #o#    bx = torch.FloatTensor(bx).to(edge_loss_device)
-            #o#    by = torch.FloatTensor(by).to(edge_loss_device)
-            #o#    tx_R = tx[nweRs]
-            #o#    tx_L = tx[nweLs]
-            #o#    ty_R = ty[nweRs]
-            #o#    ty_L = ty[nweLs]
-            #o#    bx_R = bx[nweRs]
-            #o#    bx_L = bx[nweLs]
-            #o#    by_R = by[nweRs]
-            #o#    by_L = by[nweLs]
-            #o#    #tx_R = tx[:,None].expand(len(nodes_with_edges),len(nodes_with_edges))
-            #o#    #tx_L = tx[None,:].expand(len(nodes_with_edges),len(nodes_with_edges))
-            #o#    #ty_R = ty[:,None].expand(len(nodes_with_edges),len(nodes_with_edges))
-            #o#    #ty_L = ty[None,:].expand(len(nodes_with_edges),len(nodes_with_edges))
-            #o#    #bx_R = bx[:,None].expand(len(nodes_with_edges),len(nodes_with_edges))
-            #o#    #bx_L = bx[None,:].expand(len(nodes_with_edges),len(nodes_with_edges))
-            #o#    #by_R = by[:,None].expand(len(nodes_with_edges),len(nodes_with_edges))
-            #o#    #by_L = by[None,:].expand(len(nodes_with_edges),len(nodes_with_edges))
-
-            #o#    #roughly see if the two polygons are overlapping
-            #o#    overlapping = ((torch.min(bx_R,bx_L)-torch.max(tx_R,tx_L))>0) * ((torch.min(by_R,by_L)-torch.max(ty_R,ty_L))>0)
-
-            #o#    #define adjacency as having the end points being close. Only calculate where needed (not overlapping, but is overSeg candidate
-            #o#    #close_ends = torch.BoolTensor(len(nodes_with_edges),len(nodes_with_edges)).zero_()
-            #o#    close_ends = torch.BoolTensor(len(edgePredIndexes)).zero_()
-            #o#    #for nwe0,nwe1 in torch.triu(torch.nonzero(~overlapping*wasOverSeg),1):
-            #o#    for i in torch.nonzero(~overlapping*wasOverSeg):
-            #o#        n0,n1 = edgePredIndexes[i]
-            #o#        #n0 = nodes_with_edges[nwe0]
-            #o#        #n1 = nodes_with_edges[nwe1]
-            #o#        point_pairs_0 = outputBoxes[n0].pairPoints()
-            #o#        point_pairs_1 = outputBoxes[n1].pairPoints()
-            #o#        dist = min(util.pointDistance(point_pairs_0[0][0],point_pairs_1[-1][0]),util.pointDistance(point_pairs_0[-1][0],point_pairs_1[0][0]),util.pointDistance(point_pairs_0[0][1],point_pairs_1[-1][1]),util.pointDistance(point_pairs_0[-1][1],point_pairs_1[0][1]))
-            #o#        mean_h = (outputBoxes[n0].getHeight()+outputBoxes[n1].getHeight())/2
-            #o#        if dist<mean_h:
-            #o#            #close_ends[nwe0,nwe1]=True
-            #o#            #close_ends[nwe1,nwe0]=True
-            #o#            close_ends[i]=True
+            #g_target_len_R = g_target_len[:,None].expand(len(nodes_with_edges),len(nodes_with_edges))
+            #g_target_len_C = g_target_len[None,:].expand(len(nodes_with_edges),len(nodes_with_edges))
+            #g_len_R = g_len[:,None].expand(len(nodes_with_edges),len(nodes_with_edges))
+            #g_len_C = g_len[None,:].expand(len(nodes_with_edges),len(nodes_with_edges))
+            #purity_R = purities[:,None].expand(len(nodes_with_edges),len(nodes_with_edges))
+            #purity_C = purities[None,:].expand(len(nodes_with_edges),len(nodes_with_edges))
+            #ts_0_R = ts_0[:,None].expand(len(nodes_with_edges),len(nodes_with_edges))
+            #ts_0_C = ts_0[None,:].expand(len(nodes_with_edges),len(nodes_with_edges))
+            #same_ts_0 = ts_0_R==ts_0_C
+            #GTGroups_R = GTGroups[:,None].expand(len(nodes_with_edges),len(nodes_with_edges))
+            #GTGroups_L = GTGroups[None,:].expand(len(nodes_with_edges),len(nodes_with_edges))
+            #same_GTGroups = GTGroups_R==GTGroups_L
 
 
-            #o#    wasOverSeg *= overlapping+close_ends.to(edge_loss_device) #refine candidates by rule
+            ##which (of all edges) are actually ones we predicted
+            #predEdgesMat = torch.BoolTensor(len(nodes_with_edges),len(nodes_with_edges)).zero_()
+            #N0, N1 = zip(*edgePredIndexes)
+            #N0 = [node_to_nwe_index[n] for n in N0]
+            #N1 = [node_to_nwe_index[n] for n in N1]
+            #predEdgesMat[N0+N1,N1+N0]=True
 
-            #o#else:
-            #o#    raise NotImplementedError('Unknown merge rule: {}'.format(self.merge_rule))
-            #o#
-            #o#wasGroup = bothTarged*((g_len_L>1)+(g_len_R>1)+~same_ts_0)*bothPure*same_GTGroups
-            #o#wasNoGroup = badTarged+(bothTarged*((g_len_L>1)+(g_len_R>1)+~same_ts_0)*bothPure*~same_GTGroups)
+            #which edges are GT ones
+            gtGroupAdjMat = [(min(gtGroup0,gtGroup1),max(gtGroup0,gtGroup1)) in gtGroupAdj for gtGroup0,gtGroup1 in gtNE]
+            gtGroupAdjMat = torch.BoolTensor(gtGroupAdjMat).to(edge_loss_device)
 
-            #o#wasError = bothTarged*((purity_R<1)+(purity_L<1))
-            #o#wasNoError = bothTarged*~((purity_R<1)+(purity_L<1))
+            
 
-            #o##build vectors for loss, score results, and indicate each edges case (saveEdgePred)
-            #o#saveIndex={'TP':1,'TN':2,'FP':3,'FN':4,'UP':5,'UN':6}
-            #o#revSaveIndex={v:k for k,v in saveIndex.items()}
+            #common conditions
+            bothTarged = (g_target_len_R>0)*(g_target_len_L>0)
+            badTarged = (g_target_len_R==0)+(g_target_len_L==0)
+            bothPure = (purity_R>0.8)*(purity_L>0.8)
+            
+            #Actually start determining GT/training scenarios
+            wasRel = bothTarged*((g_len_L>1)+(g_len_R>1)+~same_ts_0)*bothPure*~same_GTGroups*gtGroupAdjMat
+            wasNoRel = (badTarged+(bothTarged*((g_len_L>1)+(g_len_R>1)+~same_ts_0)*bothPure*~same_GTGroups*~gtGroupAdjMat))
+            
+            wasNoOverSeg = (badTarged+(bothTarged*bothPure*~((g_len_R==1)*(g_len_L==1)*same_ts_0)))
+            wasOverSeg = bothTarged*(g_len_R==1)*(g_len_L==1)*same_ts_0
+            if not merge_only or self.init_merge_rule is None:
+                pass
+            elif self.init_merge_rule=='adjacent':
+                tx,ty,bx,by = zip(* [outputBoxes[n].boundingRect() for n in nodes_with_edges])
+                tx = torch.FloatTensor(tx).to(edge_loss_device)
+                ty = torch.FloatTensor(ty).to(edge_loss_device)
+                bx = torch.FloatTensor(bx).to(edge_loss_device)
+                by = torch.FloatTensor(by).to(edge_loss_device)
+                tx_R = tx[nweRs]
+                tx_L = tx[nweLs]
+                ty_R = ty[nweRs]
+                ty_L = ty[nweLs]
+                bx_R = bx[nweRs]
+                bx_L = bx[nweLs]
+                by_R = by[nweRs]
+                by_L = by[nweLs]
+                #tx_R = tx[:,None].expand(len(nodes_with_edges),len(nodes_with_edges))
+                #tx_L = tx[None,:].expand(len(nodes_with_edges),len(nodes_with_edges))
+                #ty_R = ty[:,None].expand(len(nodes_with_edges),len(nodes_with_edges))
+                #ty_L = ty[None,:].expand(len(nodes_with_edges),len(nodes_with_edges))
+                #bx_R = bx[:,None].expand(len(nodes_with_edges),len(nodes_with_edges))
+                #bx_L = bx[None,:].expand(len(nodes_with_edges),len(nodes_with_edges))
+                #by_R = by[:,None].expand(len(nodes_with_edges),len(nodes_with_edges))
+                #by_L = by[None,:].expand(len(nodes_with_edges),len(nodes_with_edges))
 
-            #o#predsEdgeAboveThresh = torch.sigmoid(predsEdge[:,-1])>thresh_edge
+                #roughly see if the two polygons are overlapping
+                overlapping = ((torch.min(bx_R,bx_L)-torch.max(tx_R,tx_L))>0) * ((torch.min(by_R,by_L)-torch.max(ty_R,ty_L))>0)
 
-            #o#saveEdgePredMat = torch.IntTensor(len(edgePredIndexes)).zero_()
-            #o#if not merge_only:
-
-            #o#    shouldBeEdge_new = wasRel+wasOverSeg+wasGroup
-
-            #o#    #TP,FP,FN,TN moved to below as reused by merge_only
-
-            #o#    unknownEdge = wasError*~shouldBeEdge_new
-            #o#    predsUnkEdge_new = predsEdge[unknownEdge]
-            #o#    UP = unknownEdge*predsEdgeAboveThresh
-            #o#    saveEdgePredMat[UP]=saveIndex['UP']
-            #o#    UN = unknownEdge*~predsEdgeAboveThresh
-            #o#    saveEdgePredMat[UP]=saveIndex['UN']
-            #o#    saveEdgePred_new ={i:revSaveIndex[saveEdgePredMat[i].item()] for i in range(len(edgePredIndexes)) if saveEdgePredMat[i]>0}
-
-            #o#    predsRelAboveThresh = torch.sigmoid(predsRel[:,-1])>thresh_rel
-            #o#    saveRelPredMat = torch.IntTensor(len(edgePredIndexes)).zero_()
-
-            #o#    predsGTRel_new = predsRel[wasRel]
-            #o#    predsGTNoRel_new = predsRel[wasNoRel]
-            #o#    TP = wasRel*predsRelAboveThresh
-            #o#    truePosRel_new = TP.sum().item()
-            #o#    saveRelPredMat[TP]=saveIndex['TP']
-            #o#    FP = wasNoRel*predsRelAboveThresh
-            #o#    falsePosRel_new = FP.sum().item()
-            #o#    saveRelPredMat[FP]=saveIndex['FP']
-            #o#    FN = wasRel*~predsRelAboveThresh
-            #o#    falseNegRel_new = FN.sum().item()
-            #o#    saveRelPredMat[FN]=saveIndex['FN']
-            #o#    TN = wasNoRel*~predsRelAboveThresh
-            #o#    trueNegRel_new = TN.sum().item()
-            #o#    saveRelPredMat[TN]=saveIndex['TN']
-            #o#    unk = ~wasRel*~wasNoRel
-            #o#    UP = unk*predsRelAboveThresh
-            #o#    saveRelPredMat[UP]=saveIndex['UP']
-            #o#    UN = unk*~predsRelAboveThresh
-            #o#    saveRelPredMat[UP]=saveIndex['UN']
-            #o#    saveRelPred_new ={i:revSaveIndex[saveRelPredMat[i].item()] for i in range(len(edgePredIndexes)) if saveRelPredMat[i]>0}
-
-
-            #o#    predsGroupAboveThresh = torch.sigmoid(predsGroup[:,-1])>thresh_rel
-            #o#    saveGroupPredMat = torch.IntTensor(len(edgePredIndexes)).zero_()
-
-            #o#    predsGTGroup_new = predsGroup[wasGroup]
-            #o#    predsGTNoGroup_new = predsGroup[wasNoGroup]
-            #o#    TP = wasGroup*predsGroupAboveThresh
-            #o#    truePosGroup_new = TP.sum().item()
-            #o#    saveGroupPredMat[TP]=saveIndex['TP']
-            #o#    FP = wasNoGroup*predsGroupAboveThresh
-            #o#    falsePosGroup_new = FP.sum().item()
-            #o#    saveGroupPredMat[FP]=saveIndex['FP']
-            #o#    FN = wasGroup*~predsGroupAboveThresh
-            #o#    falseNegGroup_new = FN.sum().item()
-            #o#    saveGroupPredMat[FN]=saveIndex['FN']
-            #o#    TN = wasNoGroup*~predsGroupAboveThresh
-            #o#    trueNegGroup_new = TN.sum().item()
-            #o#    saveGroupPredMat[TN]=saveIndex['TN']
-            #o#    unk = ~wasGroup*~wasNoGroup
-            #o#    UP = unk*predsGroupAboveThresh
-            #o#    saveGroupPredMat[UP]=saveIndex['UP']
-            #o#    UN = unk*~predsGroupAboveThresh
-            #o#    saveGroupPredMat[UP]=saveIndex['UN']
-            #o#    saveGroupPred_new ={i:revSaveIndex[saveGroupPredMat[i].item()] for i in range(len(edgePredIndexes)) if saveGroupPredMat[i]>0}
+                #define adjacency as having the end points being close. Only calculate where needed (not overlapping, but is overSeg candidate
+                #close_ends = torch.BoolTensor(len(nodes_with_edges),len(nodes_with_edges)).zero_()
+                close_ends = torch.BoolTensor(len(edgePredIndexes)).zero_()
+                #for nwe0,nwe1 in torch.triu(torch.nonzero(~overlapping*wasOverSeg),1):
+                for i in torch.nonzero(~overlapping*wasOverSeg):
+                    n0,n1 = edgePredIndexes[i]
+                    #n0 = nodes_with_edges[nwe0]
+                    #n1 = nodes_with_edges[nwe1]
+                    point_pairs_0 = outputBoxes[n0].pairPoints()
+                    point_pairs_1 = outputBoxes[n1].pairPoints()
+                    dist = min(util.pointDistance(point_pairs_0[0][0],point_pairs_1[-1][0]),util.pointDistance(point_pairs_0[-1][0],point_pairs_1[0][0]),util.pointDistance(point_pairs_0[0][1],point_pairs_1[-1][1]),util.pointDistance(point_pairs_0[-1][1],point_pairs_1[0][1]))
+                    mean_h = (outputBoxes[n0].getHeight()+outputBoxes[n1].getHeight())/2
+                    if dist<mean_h:
+                        #close_ends[nwe0,nwe1]=True
+                        #close_ends[nwe1,nwe0]=True
+                        close_ends[i]=True
 
 
-            #o#    predsOverSegAboveThresh = torch.sigmoid(predsOverSeg[:,-1])>thresh_rel
-            #o#    saveOverSegPredMat = torch.IntTensor(len(edgePredIndexes)).zero_()
+                wasOverSeg *= overlapping+close_ends.to(edge_loss_device) #refine candidates by rule
 
-            #o#    predsGTOverSeg_new = predsOverSeg[wasOverSeg]
-            #o#    predsGTNotOverSeg_new = predsOverSeg[wasNoOverSeg]
-            #o#    TP = wasOverSeg*predsOverSegAboveThresh
-            #o#    truePosOverSeg_new = TP.sum().item()
-            #o#    saveOverSegPredMat[TP]=saveIndex['TP']
-            #o#    FP = wasNoOverSeg*predsOverSegAboveThresh
-            #o#    falsePosOverSeg_new = FP.sum().item()
-            #o#    saveOverSegPredMat[FP]=saveIndex['FP']
-            #o#    FN = wasOverSeg*~predsOverSegAboveThresh
-            #o#    falseNegOverSeg_new = FN.sum().item()
-            #o#    saveOverSegPredMat[FN]=saveIndex['FN']
-            #o#    TN = wasNoOverSeg*~predsOverSegAboveThresh
-            #o#    trueNegOverSeg_new = TN.sum().item()
-            #o#    saveOverSegPredMat[TN]=saveIndex['TN']
-            #o#    unk = ~wasOverSeg*~wasNoOverSeg
-            #o#    UP = unk*predsOverSegAboveThresh
-            #o#    saveOverSegPredMat[UP]=saveIndex['UP']
-            #o#    UN = unk*~predsOverSegAboveThresh
-            #o#    saveOverSegPredMat[UP]=saveIndex['UN']
-            #o#    saveOverSegPred_new ={i:revSaveIndex[saveOverSegPredMat[i].item()] for i in range(len(edgePredIndexes)) if saveOverSegPredMat[i]>0}
+            else:
+                raise NotImplementedError('Unknown merge rule: {}'.format(self.merge_rule))
+            
+            wasGroup = bothTarged*((g_len_L>1)+(g_len_R>1)+~same_ts_0)*bothPure*same_GTGroups
+            wasNoGroup = badTarged+(bothTarged*((g_len_L>1)+(g_len_R>1)+~same_ts_0)*bothPure*~same_GTGroups)
 
+            wasError = bothTarged*((purity_R<1)+(purity_L<1))
+            wasNoError = bothTarged*~((purity_R<1)+(purity_L<1))
 
-            #o#    predsErrorAboveThresh = torch.sigmoid(predsError[:,-1])>thresh_rel
-            #o#    saveErrorPredMat = torch.IntTensor(len(edgePredIndexes)).zero_()
+            #build vectors for loss, score results, and indicate each edges case (saveEdgePred)
+            saveIndex={'TP':1,'TN':2,'FP':3,'FN':4,'UP':5,'UN':6}
+            revSaveIndex={v:k for k,v in saveIndex.items()}
 
-            #o#    predsGTError_new = predsError[wasError]
-            #o#    predsGTNoError_new = predsError[wasNoError]
-            #o#    TP = wasError*predsErrorAboveThresh
-            #o#    truePosError_new = TP.sum().item()
-            #o#    saveErrorPredMat[TP]=saveIndex['TP']
-            #o#    FP = wasNoError*predsErrorAboveThresh
-            #o#    falsePosError_new = FP.sum().item()
-            #o#    saveErrorPredMat[FP]=saveIndex['FP']
-            #o#    FN = wasError*~predsErrorAboveThresh
-            #o#    falseNegError_new = FN.sum().item()
-            #o#    saveErrorPredMat[FN]=saveIndex['FN']
-            #o#    TN = wasNoError*~predsErrorAboveThresh
-            #o#    trueNegError_new = TN.sum().item()
-            #o#    saveErrorPredMat[TN]=saveIndex['TN']
-            #o#    unk = ~wasError*~wasNoError
-            #o#    UP = unk*predsErrorAboveThresh
-            #o#    saveErrorPredMat[UP]=saveIndex['UP']
-            #o#    UN = unk*~predsErrorAboveThresh
-            #o#    saveErrorPredMat[UP]=saveIndex['UN']
-            #o#    saveErrorPred_new ={i:revSaveIndex[saveErrorPredMat[i].item()] for i in range(len(edgePredIndexes)) if saveErrorPredMat[i]>0}
+            predsEdgeAboveThresh = torch.sigmoid(predsEdge[:,-1])>thresh_edge
 
-            #o#else:
-            #o#    shouldBeEdge_new = wasOverSeg
-            #o#predsGTEdge_new = predsEdge[shouldBeEdge_new]
-            #o#TP=shouldBeEdge_new*predsEdgeAboveThresh
-            #o#truePosEdge_new = TP.sum().item()
-            #o#saveEdgePredMat[TP]=saveIndex['TP']
-            #o#FN=shouldBeEdge_new*~predsEdgeAboveThresh
-            #o#falseNegEdge_new = FN.sum().item()
-            #o#saveEdgePredMat[FN]=saveIndex['FN']
+            saveEdgePredMat = torch.IntTensor(len(edgePredIndexes)).zero_()
+            if not merge_only:
 
-            #o#shouldNotBeEdge_new = ~wasError*~shouldBeEdge_new
-            #o#predsGTNoEdge_new = predsEdge[shouldNotBeEdge_new]
-            #o#FP = shouldNotBeEdge_new*predsEdgeAboveThresh
-            #o#falsePosEdge_new = FP.sum().item()
-            #o#saveEdgePredMat[FP]=saveIndex['FP']
-            #o#TN = shouldNotBeEdge_new*~predsEdgeAboveThresh
-            #o#trueNegEdge_new = TN.sum().item()
-            #o#saveEdgePredMat[TN]=saveIndex['TN']
+                shouldBeEdge = wasRel+wasOverSeg+wasGroup
+
+                #TP,FP,FN,TN moved to below as reused by merge_only
+
+                #unknownEdge = wasError*~shouldBeEdge
+                #UP = unknownEdge*predsEdgeAboveThresh
+                #saveEdgePredMat[UP]=saveIndex['UP']
+                #UN = unknownEdge*~predsEdgeAboveThresh
+                #saveEdgePredMat[UN]=saveIndex['UN']
+                #saveEdgePred ={i:revSaveIndex[saveEdgePredMat[i].item()] for i in range(len(edgePredIndexes)) if saveEdgePredMat[i]>0}
+
+                predsRelAboveThresh = torch.sigmoid(predsRel[:,-1])>thresh_rel
+                saveRelPredMat = torch.IntTensor(len(edgePredIndexes)).zero_()
+
+                d_indexesRel = torch.nonzero(wasRel)
+                d_indexesNoRel = torch.nonzero(wasNoRel)
+                d_indexesRel = set([a.item() for a in d_indexesRel])
+                d_indexesNoRel = set([a.item() for a in d_indexesNoRel])
+                predsGTRel = predsRel[wasRel]
+                predsGTNoRel = predsRel[wasNoRel]
+                TP = wasRel*predsRelAboveThresh
+                truePosRel = TP.sum().item()
+                saveRelPredMat[TP]=saveIndex['TP']
+                FP = wasNoRel*predsRelAboveThresh
+                falsePosRel = FP.sum().item()
+                saveRelPredMat[FP]=saveIndex['FP']
+                FN = wasRel*~predsRelAboveThresh
+                falseNegRel = FN.sum().item()
+                saveRelPredMat[FN]=saveIndex['FN']
+                TN = wasNoRel*~predsRelAboveThresh
+                trueNegRel = TN.sum().item()
+                saveRelPredMat[TN]=saveIndex['TN']
+                unk = ~wasRel*~wasNoRel
+                UP = unk*predsRelAboveThresh
+                saveRelPredMat[UP]=saveIndex['UP']
+                UN = unk*~predsRelAboveThresh
+                saveRelPredMat[UN]=saveIndex['UN']
+                saveRelPred ={i:revSaveIndex[saveRelPredMat[i].item()] for i in range(len(edgePredIndexes)) if saveRelPredMat[i]>0}
 
 
-            ##old
-            for i,(n0,n1) in enumerate(edgePredIndexes):
-                wasRel=None
-                wasOverSeg=None
-                wasError=None
-                wasGroup=None
-                ts0=predGroupsT[n0]
-                ts1=predGroupsT[n1]
-                gtGroup0 = getGTGroup(ts0,targetIndexToGroup)
-                gtGroup1 = getGTGroup(ts1,targetIndexToGroup)
-                if gtGroup1==-1:
-                    gtGroup1=-2 #so gtGroup0!=gtGroup1
-                if len(ts0)>0 and len(ts1)>0:
-                    #if len(ts0)==1 and overSegmented[ts0[0]] and len(ts1)==1 and overSegmented[ts1[0]]:S
-                    #only merge if we are not grouped (group size=1), we are pieces of the same bb
-                    purity_0 = purity(ts0,targetIndexToGroup)
-                    purity_1 = purity(ts1,targetIndexToGroup)
-                    if purity_0<1 or purity_1<1:
-                        wasError=True
-                    else:
-                        wasError=False
-                        
-                    if purity_0>0.8 and purity_1>0.8:
-                        if len(predGroups[n0])==1 and len(predGroups[n1])==1 and ts0[0]==ts1[0]:
-                            assert(purity_0==1)
-                            assert(purity_1==1)
-                            if not merge_only or self.init_merge_rule is None:
-                                wasOverSeg=True
-                            elif self.init_merge_rule=='adjacent':
-                                tx0,ty0,bx0,by0 = outputBoxes[n0].boundingRect()
-                                tx1,ty1,bx1,by1 = outputBoxes[n1].boundingRect()
-                                #roughly see if the two polygons are overlapping
-                                if (min(bx0,bx1)-max(tx0,tx1))>0 and (min(by0,by1)-max(ty0,ty1))>0:
-                                    wasOverSeg=True
-                                else:
-                                    #define adjacency as having the end points being close
-                                    point_pairs_0 = outputBoxes[n0].pairPoints()
-                                    point_pairs_1 = outputBoxes[n1].pairPoints()
-                                    dist = min(util.pointDistance(point_pairs_0[0][0],point_pairs_1[-1][0]),util.pointDistance(point_pairs_0[-1][0],point_pairs_1[0][0]),util.pointDistance(point_pairs_0[0][1],point_pairs_1[-1][1]),util.pointDistance(point_pairs_0[-1][1],point_pairs_1[0][1]))
-                                    mean_h = (outputBoxes[n0].getHeight()+outputBoxes[n1].getHeight())/2
-                                    if dist<mean_h:
-                                        wasOverSeg=True
-                            else:
-                                raise NotImplementedError('Unknown merge rule: {}'.format(self.merge_rule))
-                            wasError=False
-                        else:
-                            wasOverSeg=False
-                            
-                            if gtGroup0==gtGroup1:
-                                wasGroup=True
-                            else:
-                                wasGroup=False
-                                if (min(gtGroup0,gtGroup1),max(gtGroup0,gtGroup1)) in gtGroupAdj:
-                                    wasRel=True
-                                else:
-                                    wasRel=False
-                else:
-                    wasRel=False
-                    wasOverSeg=False
-                    wasGroup=False
-                    #wasError=True hmm, should this be an error? Not means error has a fairly strict definition of meaning a group in the relationship is impure
+                predsGroupAboveThresh = torch.sigmoid(predsGroup[:,-1])>thresh_group
+                saveGroupPredMat = torch.IntTensor(len(edgePredIndexes)).zero_()
 
-                if (not merge_only and (wasRel or wasGroup)) or wasOverSeg:
-                    shouldBeEdge[(n0,n1)]=True
-                    predsGTEdge.append(predsEdge[i])
-                    if torch.sigmoid(predsEdge[i])>thresh_edge:
-                        truePosEdge+=1
-                        saveEdgePred[i]='TP'
-                    else:
-                        falseNegEdge+=1
-                        saveEdgePred[i]='FN'
-                elif not wasError:
-                    shouldBeEdge[(n0,n1)]=False
-                    predsGTNoEdge.append(predsEdge[i])
-                    if torch.sigmoid(predsEdge[i])>thresh_edge:
-                        falsePosEdge+=1
-                        saveEdgePred[i]='FP'
-                    else:
-                        trueNegEdge+=1
-                        saveEdgePred[i]='TN'
-                else:
-                    if torch.sigmoid(predsEdge[i])>thresh_edge:
-                        saveEdgePred[i]='UP'
-                    else:
-                        saveEdgePred[i]='UN'
+                predsGTGroup = predsGroup[wasGroup]
+                predsGTNoGroup = predsGroup[wasNoGroup]
+                TP = wasGroup*predsGroupAboveThresh
+                truePosGroup = TP.sum().item()
+                saveGroupPredMat[TP]=saveIndex['TP']
+                FP = wasNoGroup*predsGroupAboveThresh
+                falsePosGroup = FP.sum().item()
+                saveGroupPredMat[FP]=saveIndex['FP']
+                FN = wasGroup*~predsGroupAboveThresh
+                falseNegGroup = FN.sum().item()
+                saveGroupPredMat[FN]=saveIndex['FN']
+                TN = wasNoGroup*~predsGroupAboveThresh
+                trueNegGroup = TN.sum().item()
+                saveGroupPredMat[TN]=saveIndex['TN']
+                unk = ~wasGroup*~wasNoGroup
+                UP = unk*predsGroupAboveThresh
+                saveGroupPredMat[UP]=saveIndex['UP']
+                UN = unk*~predsGroupAboveThresh
+                saveGroupPredMat[UN]=saveIndex['UN']
+                saveGroupPred ={i:revSaveIndex[saveGroupPredMat[i].item()] for i in range(len(edgePredIndexes)) if saveGroupPredMat[i]>0}
 
 
-                if not merge_only:
-                    if wasRel is not None:
-                        if wasRel:
-                            predsGTRel.append(predsRel[i])
-                        else:
-                            predsGTNoRel.append(predsRel[i])
-                        if torch.sigmoid(predsRel[i])>thresh_rel:
-                            if wasRel:
-                                truePosRel+=1
-                                saveRelPred[i]='TP'
-                            else:
-                                falsePosRel+=1
-                                saveRelPred[i]='FP'
-                        else:
-                            if wasRel:
-                                falseNegRel+=1
-                                saveRelPred[i]='FN'
-                            else:
-                                trueNegRel+=1
-                                saveRelPred[i]='TN'
-                    else:
-                        if torch.sigmoid(predsRel[i])>thresh_rel:
-                            saveRelPred[i]='UP'
-                        else:
-                            saveRelPred[i]='UN'
-                    if wasOverSeg is not None:
-                        if wasOverSeg:
-                            predsGTOverSeg.append(predsOverSeg[i])
-                        else:
-                            predsGTNotOverSeg.append(predsOverSeg[i])
-                        if torch.sigmoid(predsOverSeg[i])>thresh_overSeg:
-                            if wasOverSeg:
-                                truePosOverSeg+=1
-                                saveOverSegPred[i]='TP'
-                            else:
-                                falsePosOverSeg+=1
-                                saveOverSegPred[i]='FP'
-                        else:
-                            if wasOverSeg:
-                                falseNegOverSeg+=1
-                                saveOverSegPred[i]='FN'
-                            else:
-                                trueNegOverSeg+=1
-                                saveOverSegPred[i]='TN'
-                    else:
-                        if torch.sigmoid(predsOverSeg[i])>thresh_overSeg:
-                            saveOverSegPred[i]='UP'
-                        else:
-                            saveOverSegPred[i]='UN'
-                    if wasGroup is not None:
-                        if wasGroup:
-                            predsGTGroup.append(predsGroup[i])
-                        else:
-                            predsGTNoGroup.append(predsGroup[i])
-                        if torch.sigmoid(predsGroup[i])>thresh_group:
-                            if wasGroup:
-                                truePosGroup+=1
-                                saveGroupPred[i]='TP'
-                                successfulEdge=True
-                            else:
-                                falsePosGroup+=1
-                                saveGroupPred[i]='FP'
-                        else:
-                            if wasGroup:
-                                falseNegGroup+=1
-                                saveGroupPred[i]='FN'
-                            else:
-                                trueNegGroup+=1
-                                saveGroupPred[i]='TN'
-                    else:
-                        if torch.sigmoid(predsGroup[i])>thresh_group:
-                            saveGroupPred[i]='UP'
-                        else:
-                            saveGroupPred[i]='UN'
-                    if wasError is not None:
-                        if wasError:
-                            predsGTError.append(predsError[i])
-                        else:
-                            predsGTNoError.append(predsError[i])
-                        if torch.sigmoid(predsError[i])>thresh_error:
-                            if wasError:
-                                truePosError+=1
-                                saveErrorPred[i]='TP'
-                            else:
-                                falsePosError+=1
-                                saveErrorPred[i]='FP'
-                        else:
-                            if wasError:
-                                falseNegError+=1
-                                saveErrorPred[i]='FN'
-                            else:
-                                trueNegError+=1
-                                saveErrorPred[i]='TN'
-                    else:
-                        if torch.sigmoid(predsError[i])>thresh_error:
-                            saveErrorPred[i]='UP'
-                        else:
-                            saveErrorPred[i]='UN'
+                predsOverSegAboveThresh = torch.sigmoid(predsOverSeg[:,-1])>thresh_overSeg
+                saveOverSegPredMat = torch.IntTensor(len(edgePredIndexes)).zero_()
+
+                d_indexesOverSeg = torch.nonzero(wasOverSeg)
+                d_indexesNoOverSeg = torch.nonzero(wasNoOverSeg)
+                d_indexesOverSeg = set([a.item() for a in d_indexesOverSeg])
+                d_indexesNoOverSeg = set([a.item() for a in d_indexesNoOverSeg])
+                predsGTOverSeg = predsOverSeg[wasOverSeg]
+                predsGTNotOverSeg = predsOverSeg[wasNoOverSeg]
+                TP = wasOverSeg*predsOverSegAboveThresh
+                truePosOverSeg = TP.sum().item()
+                saveOverSegPredMat[TP]=saveIndex['TP']
+                FP = wasNoOverSeg*predsOverSegAboveThresh
+                falsePosOverSeg = FP.sum().item()
+                saveOverSegPredMat[FP]=saveIndex['FP']
+                FN = wasOverSeg*~predsOverSegAboveThresh
+                falseNegOverSeg = FN.sum().item()
+                saveOverSegPredMat[FN]=saveIndex['FN']
+                TN = wasNoOverSeg*~predsOverSegAboveThresh
+                trueNegOverSeg = TN.sum().item()
+                saveOverSegPredMat[TN]=saveIndex['TN']
+                unk = ~wasOverSeg*~wasNoOverSeg
+                UP = unk*predsOverSegAboveThresh
+                saveOverSegPredMat[UP]=saveIndex['UP']
+                UN = unk*~predsOverSegAboveThresh
+                saveOverSegPredMat[UN]=saveIndex['UN']
+                saveOverSegPred ={i:revSaveIndex[saveOverSegPredMat[i].item()] for i in range(len(edgePredIndexes)) if saveOverSegPredMat[i]>0}
+
+
+                predsErrorAboveThresh = torch.sigmoid(predsError[:,-1])>thresh_error
+                saveErrorPredMat = torch.IntTensor(len(edgePredIndexes)).zero_()
+
+                predsGTError = predsError[wasError]
+                predsGTNoError = predsError[wasNoError]
+                TP = wasError*predsErrorAboveThresh
+                truePosError = TP.sum().item()
+                saveErrorPredMat[TP]=saveIndex['TP']
+                FP = wasNoError*predsErrorAboveThresh
+                falsePosError = FP.sum().item()
+                saveErrorPredMat[FP]=saveIndex['FP']
+                FN = wasError*~predsErrorAboveThresh
+                falseNegError = FN.sum().item()
+                saveErrorPredMat[FN]=saveIndex['FN']
+                TN = wasNoError*~predsErrorAboveThresh
+                trueNegError = TN.sum().item()
+                saveErrorPredMat[TN]=saveIndex['TN']
+                unk = ~wasError*~wasNoError
+                UP = unk*predsErrorAboveThresh
+                saveErrorPredMat[UP]=saveIndex['UP']
+                UN = unk*~predsErrorAboveThresh
+                saveErrorPredMat[UN]=saveIndex['UN']
+                saveErrorPred ={i:revSaveIndex[saveErrorPredMat[i].item()] for i in range(len(edgePredIndexes)) if saveErrorPredMat[i]>0}
+
+            else:
+                shouldBeEdge = wasOverSeg
+                d_indexesRel=d_indexesNoRel=d_indexesOverSeg=d_indexesNoOverSeg=None
+            predsGTEdge = predsEdge[shouldBeEdge]
+            TP=shouldBeEdge*predsEdgeAboveThresh
+            truePosEdge = TP.sum().item()
+            saveEdgePredMat[TP]=saveIndex['TP']
+            FN=shouldBeEdge*~predsEdgeAboveThresh
+            falseNegEdge = FN.sum().item()
+            saveEdgePredMat[FN]=saveIndex['FN']
+
+            shouldNotBeEdge = ~wasError*~shouldBeEdge
+            predsGTNoEdge = predsEdge[shouldNotBeEdge]
+            FP = shouldNotBeEdge*predsEdgeAboveThresh
+            falsePosEdge = FP.sum().item()
+            saveEdgePredMat[FP]=saveIndex['FP']
+            TN = shouldNotBeEdge*~predsEdgeAboveThresh
+            trueNegEdge = TN.sum().item()
+            saveEdgePredMat[TN]=saveIndex['TN']
+            unk = ~shouldBeEdge*~shouldNotBeEdge
+            UP = unk*predsEdgeAboveThresh
+            saveEdgePredMat[UP]=saveIndex['UP']
+            UN = unk*~predsEdgeAboveThresh
+            saveEdgePredMat[UN]=saveIndex['UN']
+            saveEdgePred ={i:revSaveIndex[saveEdgePredMat[i].item()] for i in range(len(edgePredIndexes)) if saveEdgePredMat[i]>0}
 
             #t#time = timeit.default_timer()-tic#t#
             #t#self.opt_history['simplerAlign edge loop'].append(time)#t#
             #t#self.opt_history['simplerAlign edge loop per'].append(time/len(edgePredIndexes))#t#
             #t#tic=timeit.default_timer()#t#
             
-            #stack all label divisions into tensors
-            if len(predsGTEdge)>0:
-                predsGTEdge = torch.stack(predsGTEdge,dim=1).to(edgePred.device)
-            else:
-                predsGTEdge = torch.FloatTensor(num_internal_iters,0).to(edgePred.device)
-            if len(predsGTNoEdge)>0:
-                predsGTNoEdge = torch.stack(predsGTNoEdge,dim=1).to(edgePred.device)
-            else:
-                predsGTNoEdge = torch.FloatTensor(num_internal_iters,0).to(edgePred.device)
-
-            #o###DEBUG
-            #o#assert(predsGTEdge.sum() == predsGTEdge_new.sum())
-            #o#assert(predsGTNoEdge.sum() == predsGTNoEdge_new.sum())
-
             if not merge_only:
-                if len(predsGTRel)>0:
-                    predsGTRel = torch.stack(predsGTRel,dim=1).to(edgePred.device)
-                else:
-                    predsGTRel = torch.FloatTensor(num_internal_iters,0).to(edgePred.device)
-                if len(predsGTNoRel)>0:
-                    predsGTNoRel = torch.stack(predsGTNoRel,dim=1).to(edgePred.device)
-                else:
-                    predsGTNoRel = torch.FloatTensor(num_internal_iters,0).to(edgePred.device)
-                if len(predsGTOverSeg)>0:
-                    predsGTOverSeg = torch.stack(predsGTOverSeg,dim=1).to(edgePred.device)
-                else:
-                    predsGTOverSeg = torch.FloatTensor(num_internal_iters,0).to(edgePred.device)
-                if len(predsGTNotOverSeg)>0:
-                    predsGTNotOverSeg = torch.stack(predsGTNotOverSeg,dim=1).to(edgePred.device)
-                else:
-                    predsGTNotOverSeg = torch.FloatTensor(num_internal_iters,0).to(edgePred.device)
-                if len(predsGTGroup)>0:
-                    predsGTGroup = torch.stack(predsGTGroup,dim=1).to(edgePred.device)
-                else:
-                    predsGTGroup = torch.FloatTensor(num_internal_iters,0).to(edgePred.device)
-                if len(predsGTNoGroup)>0:
-                    predsGTNoGroup = torch.stack(predsGTNoGroup,dim=1).to(edgePred.device)
-                else:
-                    predsGTNoGroup = torch.FloatTensor(num_internal_iters,0).to(edgePred.device)
-                if len(predsGTError)>0:
-                    predsGTError = torch.stack(predsGTError,dim=1).to(edgePred.device)
-                else:
-                    predsGTError = torch.FloatTensor(num_internal_iters,0).to(edgePred.device)
-                if len(predsGTNoError)>0:
-                    predsGTNoError = torch.stack(predsGTNoError,dim=1).to(edgePred.device)
-                else:
-                    predsGTNoError = torch.FloatTensor(num_internal_iters,0).to(edgePred.device)
-                
-                predsGTYes = torch.cat((predsGTEdge,predsGTRel,predsGTOverSeg,predsGTGroup,predsGTError),dim=1)
-                predsGTNo = torch.cat((predsGTNoEdge,predsGTNoRel,predsGTNotOverSeg,predsGTNoGroup,predsGTNoError),dim=1)
-                #o###DEBUG
-                #o#assert(predsGTRel.sum() == predsGTRel_new.sum())
-                #o#assert(predsGTNoRel.sum() == predsGTNoRel_new.sum())
-                #o#assert(predsGTGroup.sum() == predsGTGroup_new.sum())
-                #o#assert(predsGTNoGroup.sum() == predsGTNoGroup_new.sum())
-                #o#assert(predsGTOverSeg.sum() == predsGTOverSeg_new.sum())
-                #o#assert(predsGTNotOverSeg.sum() == predsGTNotOverSeg_new.sum())
-                #o#assert(predsGTError.sum() == predsGTError_new.sum())
-                #o#assert(predsGTNoError.sum() == predsGTNoError_new.sum())
+                predsGTYes = torch.cat((predsGTEdge,predsGTRel,predsGTOverSeg,predsGTGroup,predsGTError),dim=0)
+                predsGTNo = torch.cat((predsGTNoEdge,predsGTNoRel,predsGTNotOverSeg,predsGTNoGroup,predsGTNoError),dim=0)
 
             else: #merge_only
                 predsGTYes=predsGTEdge
@@ -1161,8 +928,6 @@ class GraphPairTrainer(BaseTrainer):
             recallEdge = truePosEdge/(truePosEdge+falseNegEdge) if truePosEdge+falseNegEdge>0 else 1
             precEdge = truePosEdge/(truePosEdge+falsePosEdge) if truePosEdge+falsePosEdge>0 else 1
 
-            #o###DEBUG
-            #o#assert(truePosEdge==truePosEdge_new and trueNegEdge==trueNegEdge_new and falseNegEdge==falseNegEdge_new and falsePosEdge==falsePosEdge_new)
 
             if merge_only:
                 log = {
@@ -1172,11 +937,6 @@ class GraphPairTrainer(BaseTrainer):
                     }
                 predTypes=[saveEdgePred]
             else:
-                #o###DEBUG
-                #o#assert(truePosRel==truePosRel_new and trueNegRel==trueNegRel_new and falseNegRel==falseNegRel_new and falsePosRel==falsePosRel_new)
-                #o#assert(truePosGroup==truePosGroup_new and trueNegGroup==trueNegGroup_new and falseNegGroup==falseNegGroup_new and falsePosGroup==falsePosGroup_new)
-                #o#assert(truePosOverSeg==truePosOverSeg_new and trueNegOverSeg==trueNegOverSeg_new and falseNegOverSeg==falseNegOverSeg_new and falsePosOverSeg==falsePosOverSeg_new)
-                #o#assert(truePosError==truePosError_new and trueNegError==trueNegError_new and falseNegError==falseNegError_new and falsePosError==falsePosError_new)
 
                 recallRel = truePosRel/(truePosRel+falseNegRel) if truePosRel+falseNegRel>0 else 1
                 precRel = truePosRel/(truePosRel+falsePosRel) if truePosRel+falsePosRel>0 else 1
@@ -1228,27 +988,27 @@ class GraphPairTrainer(BaseTrainer):
                 #         
                 #    ) for n0,n1 in relPropIds]).to(relPropScores.device)
                 for i,(n0,n1) in enumerate(relPropIds):
-                    if (n0,n1) in shouldBeEdge: #unsure if this really saves time
-                        isEdge = shouldBeEdge[(n0,n1)]
-                    else:
-                        t0 = targIndex[n0]
-                        t1 = targIndex[n1]
-                        #ts0=predGroupsT[n0]
-                        #ts1=predGroupsT[n1]
-                        #assert(len(predGroupsT[n0])<=1 and len(predGroupsT[n1])<=1) removing for efficiency
-                        isEdge=False
-                        if t0>=0 and t1>=0:
-                            if t0==t1:
+                    #if (n0,n1) in shouldBeEdge: #unsure if this really saves time
+                    #    isEdge = shouldBeEdge[(n0,n1)]
+                    #else:
+                    t0 = targIndex[n0]
+                    t1 = targIndex[n1]
+                    #ts0=predGroupsT[n0]
+                    #ts1=predGroupsT[n1]
+                    #assert(len(predGroupsT[n0])<=1 and len(predGroupsT[n1])<=1) removing for efficiency
+                    isEdge=False
+                    if t0>=0 and t1>=0:
+                        if t0==t1:
+                            isEdge=True
+                        else:
+                            gtGroup0 = targetIndexToGroup[t0]#getGTGroup([t0],gtGroups)
+                            gtGroup1 = targetIndexToGroup[t1]#getGTGroup([t1],gtGroups)
+                            
+                            if gtGroup0==gtGroup1:
                                 isEdge=True
                             else:
-                                gtGroup0 = targetIndexToGroup[t0]#getGTGroup([t0],gtGroups)
-                                gtGroup1 = targetIndexToGroup[t1]#getGTGroup([t1],gtGroups)
-                                
-                                if gtGroup0==gtGroup1:
+                                if (min(gtGroup0,gtGroup1),max(gtGroup0,gtGroup1)) in gtGroupAdj:
                                     isEdge=True
-                                else:
-                                    if (min(gtGroup0,gtGroup1),max(gtGroup0,gtGroup1)) in gtGroupAdj:
-                                        isEdge=True
                     if isEdge:
                         propPredsPos.append(relPropScores[i])
                         if relPropScores[i]>threshPropRel:
@@ -1482,18 +1242,18 @@ class GraphPairTrainer(BaseTrainer):
             else:
                 bbPredNN_use = None
                 bbPredClass_use = None
-        if relPred is not None:
-            numEdgePred = relPred.size(0)
-            if predPairingShouldBeTrue is not None:
-                lenTrue = predPairingShouldBeTrue.size(0)
-            else:
-                lenTrue = 0
-            if predPairingShouldBeFalse is not None:
-                lenFalse = predPairingShouldBeFalse.size(0)
-            else:
-                lenFalse = 0
-        else:
-            numEdgePred = lenTrue = lenFalse = 0
+        #if relPred is not None:
+        #    numEdgePred = relPred.size(0)
+        #    if predPairingShouldBeTrue is not None:
+        #        lenTrue = predPairingShouldBeTrue.size(0)
+        #    else:
+        #        lenTrue = 0
+        #    if predPairingShouldBeFalse is not None:
+        #        lenFalse = predPairingShouldBeFalse.size(0)
+        #    else:
+        #        lenFalse = 0
+        #else:
+        #    numEdgePred = lenTrue = lenFalse = 0
         numBoxPred = outputBoxes.size(0)
         #if len(predPairing.size())>0 and predPairing.size(0)>0:
         #    relLoss = self.loss['rel'](predPairing,gtPairing)
@@ -1890,18 +1650,18 @@ class GraphPairTrainer(BaseTrainer):
                 ####
 
 
-                if edgePred is not None:
-                    numEdgePred = edgePred.size(0)
-                    if predEdgeShouldBeTrue is not None:
-                        lenTrue = predEdgeShouldBeTrue.size(0)
-                    else:
-                        lenTrue = 0
-                    if predEdgeShouldBeFalse is not None:
-                        lenFalse = predEdgeShouldBeFalse.size(0)
-                    else:
-                        lenFalse = 0
-                else:
-                    numEdgePred = lenTrue = lenFalse = 0
+                #if edgePred is not None:
+                #    numEdgePred = edgePred.size(0)
+                #    if predEdgeShouldBeTrue is not None:
+                #        lenTrue = predEdgeShouldBeTrue.size(0)
+                #    else:
+                #        lenTrue = 0
+                #    if predEdgeShouldBeFalse is not None:
+                #        lenFalse = predEdgeShouldBeFalse.size(0)
+                #    else:
+                #        lenFalse = 0
+                #else:
+                #    numEdgePred = lenTrue = lenFalse = 0
 
                 relLoss = None
                 #separating the loss into true and false portions is not only convienint, it balances the loss between true/false examples
