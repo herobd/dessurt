@@ -47,6 +47,10 @@ def graph(log,plot=True,substring=None):
                 plt.xlabel('iterations')
                 plt.ylabel(metric)
                 plt.title(metric)
+
+                if i>15:
+                    print('WARNING, too many windows, stopping')
+                    break
         plt.show()
     else:
         i=1

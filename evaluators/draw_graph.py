@@ -222,7 +222,15 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                     edgesToDraw.append((i,x1,y1,x2,y2))
 
         if predTypes is not None:
-            edgeClassification = [(predTypes[i],edgePred[:,-1,i]) for i in range(len(predTypes))]
+            if edgePred.size(2) >= len(predTypes):
+                edgeClassification = [(predTypes[i],edgePred[:,-1,i]) for i in range(len(predTypes))]
+            else:
+                edgeClassification = [
+                        (predTypes[0],1),
+                        (predTypes[1],edgePred[:,-1,0]),
+                        (predTypes[2],edgePred[:,-1,1]),
+                        (predTypes[3],edgePred[:,-1,2])
+                        ]
 
             for i,x1,y1,x2,y2 in edgesToDraw:
                     lineColor = (0,edgePred[i,-1,0].item(),0)
