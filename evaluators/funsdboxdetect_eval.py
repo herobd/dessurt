@@ -8,7 +8,7 @@ from model.alignment_loss import alignment_loss
 import math
 from model.loss import *
 from collections import defaultdict
-from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist, getTargIndexForPreds_iou, getTargIndexForPreds_dist, non_max_sup_overseg, non_max_sup_keep_overlap_iou
+from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist, getTargIndexForPreds_iou, getTargIndexForPreds_dist, non_max_sup_overseg, non_max_sup_keep_overlap_iou, non_max_sup_overseg
 import json
 
 #THRESH=0.5
@@ -135,7 +135,10 @@ def FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startInd
                 maxConf = outputBBs[b,:,0].max().item()
                 threshConf = maxConf*THRESH#max(maxConf*THRESH,0.5)
                 print('b:{}, maxConf: {}, meanConf: {}, thresh: {}'.format(b,maxConf,outputBBs[b,:,0].mean().item(),threshConf))
+
                 threshed_outputBBs.append(outputBBs[b,outputBBs[b,:,0]>threshConf].cpu())
+                if 'SUP' in config:
+                    threshed_outputBBs[0] = non_max_sup_overseg(threshed_outputBBs[0])
             outputBBs = threshed_outputBBs
 
             #Uhh, I don't know if there is an effiecient method to prune out reduntant predictions, as you have to recompute things every time you prune one. For now, I won't worry about it

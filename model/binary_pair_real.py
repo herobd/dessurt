@@ -13,6 +13,7 @@ from model.simpleNN import SimpleNN
 class BinaryPairReal(nn.Module):
     def __init__(self, config): # predCount, base_0, base_1):
         super(BinaryPairReal, self).__init__()
+        self.undirected = (not config['directed']) if 'directed' in config else True
         numBBOut = config['bb_out'] if 'bb_out' in config else (config['node_out'] if 'node_out' in config else 0)
         numRelOut = config['rel_out'] if 'rel_out' in config else (config['edge_out'] if 'edge_out' in config else 1)
 
@@ -101,6 +102,9 @@ class BinaryPairReal(nn.Module):
             featsB=None
             resB=None
         #import pdb;pdb.set_trace()
+        if self.undirected:
+            res = (res[:res.size(0)//2] + res[res.size(0)//2:])/2
+            featsRel = (featsRel[:featsRel.size(0)//2] + featsRel[featsRel.size(0)//2:])/2
         if adjacencyMatrix is None and numBBs is None:
             return resB[:,None,:],res[:,None,:], featsB,featsRel, u_features
         else:
