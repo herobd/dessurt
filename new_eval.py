@@ -45,7 +45,7 @@ def save_style(location,volume,styles,authors,ids=None,doIds=False, spaced=None,
 
 
 
-def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=None, config=None, thresh=None, addToConfig=None, test=False, toEval=None,verbosity=2):
+def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=None, config=None, thresh=None, addToConfig=None, test=False, toEval=None,verbosity=2, do_train=False):
     np.random.seed(1234)
     torch.manual_seed(1234)
     if resume is not None:
@@ -78,7 +78,11 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
             addTo=config
             printM='added config['
             for i in range(len(add)-2):
-                addTo = addTo[add[i]]
+                try:
+                    key = int(add[i])
+                except ValueError:
+                    key = add[i]
+                addTo = addTo[key]
                 printM+=add[i]+']['
             value = add[-1]
             if value=="":
@@ -92,7 +96,8 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                     try:
                         value = float(value)
                     except ValueError:
-                        pass
+                        if value == 'None':
+                            value=None
             addTo[add[-2]] = value
             printM+=add[-2]+']={}'.format(value)
             print(printM)
@@ -340,7 +345,7 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                                 stringsVal=[]
                             
                     
-                if not test:
+                if not test and do_train:
                     #for trainIndex in range(index,index+step*batchSize, batchSize):
                     #    if trainIndex/batchSize < len(data_loader):
                     if batch < len(data_loader):
@@ -522,6 +527,8 @@ if __name__ == '__main__':
                         help='Arbitrary key-value pairs to add to config of the form "k1=v1,k2=v2,...kn=vn".  You can nest keys with k1=k2=k3=v')
     parser.add_argument('-T', '--test', default=False, action='store_const', const=True,
                         help='Run test set')
+    parser.add_argument('-D', '--do_train', default=False, action='store_const', const=True,
+                        help='Run train set')
     parser.add_argument('-N', '--notify', default='', type=str,
                         help='send messages to server, name')
     parser.add_argument('-v', '--verbosity', default=2, type=int,
@@ -564,9 +571,9 @@ if __name__ == '__main__':
     try:
         if args.gpu is not None:
             with torch.cuda.device(args.gpu):
-                main(args.checkpoint, args.savedir, args.number, index, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,toEval=toEval,verbosity=args.verbosity)
+                main(args.checkpoint, args.savedir, args.number, index, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,toEval=toEval,verbosity=args.verbosity,do_train=args.do_train)
         else:
-            main(args.checkpoint, args.savedir, args.number, index, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,toEval=toEval,verbosity=args.verbosity)
+            main(args.checkpoint, args.savedir, args.number, index, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,toEval=toEval,verbosity=args.verbosity,do_train=args.do_train)
     except Exception as er:
         if len(args.notify)>0:
             update_status(name,er)

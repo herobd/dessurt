@@ -231,7 +231,9 @@ class GraphPairDataset(torch.utils.data.Dataset):
             for group in groups:
                 for i in group:
                     assert(i<bbs.shape[1])
-
+            targetIndexToGroup={}
+            for groupId,bbIds in enumerate(groups):
+                targetIndexToGroup.update({bbId:groupId for bbId in bbIds})
         return {
                 "img": img,
                 "bb_gt": bbs,
@@ -243,6 +245,7 @@ class GraphPairDataset(torch.utils.data.Dataset):
                 "transcription": [trans[id] for id in ids],
                 "metadata": [metadata[id] for id in ids if id in metadata],
                 "gt_groups": groups,
+                "targetIndexToGroup":targetIndexToGroup,
                 "gt_groups_adj": groups_adj
                 }
 
