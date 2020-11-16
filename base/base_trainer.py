@@ -361,7 +361,7 @@ class BaseTrainer:
             for k,v in state_dict.items():
                 state_dict[k]=v.cpu()
             state['state_dict']= state_dict
-            if self.swa:
+            if self.swa and self.swa_model is not None:
                 swa_state_dict = self.swa_model.state_dict()
                 for k,v in swa_state_dict.items():
                     swa_state_dict[k]=v.cpu()
