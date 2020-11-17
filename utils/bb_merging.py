@@ -26,9 +26,14 @@ def check_point_angles(points):
                 (z0<0 and z1<0 and z2<0 and z3<0) )
 
 class TextLine:
-    #two constructors. One takes vector, other two TextLines and merges them
-    def __init__(self,pred_bb_info=None,other=None,clone=None):
+    #Three constructors. 
+    #   if clone is an argument, it is a clone constructor
+    #   if only pred_bb_info (no other, no clone) this is constructing a text line from a single detector detection (one axis aligned rectangle
+    #   if other is provided, other and pred_bb_info are both TextLines and it merges them,
+    #step_size is a parameter efffecting the smoothness/straightness of the final merged poly. 200 seems to be a good number for FUNSD
+    def __init__(self,pred_bb_info=None,other=None,clone=None,step_size='original'):
         if clone is not None:
+            self.step_size = clone.step_size
             self.all_conf = list(clone.all_conf) if clone.all_conf is not None else None
             self.all_cls = list(clone.all_cls) if clone.all_cls is not None else None
             self.all_primitive_rects = list(clone.all_primitive_rects)
@@ -42,12 +47,16 @@ class TextLine:
             self.std_r = clone.std_r
             self.r_left = clone.r_left
             self.r_right = clone.r_right
+            self.minx = clone.minx
+            self.miny = clone.miny
+            self.maxx = clone.maxx
+            self.maxy = clone.maxy
 
             self.poly_points = clone.poly_points.copy() if clone.poly_points is not None else None
             self.center_point = clone.center_point
             self.point_pairs = list(clone.point_pairs) if clone.point_pairs is not None else None
         elif other is None:
-
+            self.step_size = step_size
             pred_bb_info = pred_bb_info.cpu().detach()
             self.all_conf = [pred_bb_info[0].item()]
             self.all_cls = [pred_bb_info[6:].numpy()]
@@ -114,6 +123,8 @@ class TextLine:
                 self.width = self.all_primitive_rects[0][1][0]-self.all_primitive_rects[0][0][0]
             
             self.poly_points = np.array( top_points+bot_points[::-1] )
+            self.minx,self.miny = self.poly_points.min(axis=0)
+            self.maxx,self.maxy = self.poly_points.max(axis=0)
 
             check_point_angles(self.poly_points)
 
@@ -125,6 +136,7 @@ class TextLine:
             self.r_right = self.median_angle
             
         else:
+            self.step_size = pred_bb_info.step_size
             if pred_bb_info.all_conf is not None and other.all_conf is not None:
                 self.all_conf =  pred_bb_info.all_conf+other.all_conf
             else:
@@ -227,17 +239,6 @@ class TextLine:
                     else:
                         inter_second=[rect[0][0],top_points[second_i][1]]
                         top_points = top_points[:second_i+1]+[inter_second,rect[0],rect[1],inter_first]+top_points[first_i:]
-                #if rect[0][1]<last_point_top[1]:
-                #    #we need to step back all toppoints until we reach where rect[0][0] is
-                #    #anyplace rect is above, we need to redo the points
-                #    ri=-1
-                #    #while top_points[ri][0]<rect[0]
-                #    #oldwrong
-                #    top_points.append( [rect[0][0],last_point_top[1]] )
-                #    top_points.append( rect[0] )
-                #    top_points.append( rect[1] )
-                #    top_points.append( [rect[1][0],last_point_top[1]] )
-                ##otherwise it doesn't matter
                 assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
             else:
                 if rect[0][0]>=last_point_top[0]: #this rectangle starts after the last
@@ -255,48 +256,6 @@ class TextLine:
                         inter_second=[rect[0][0],top_points[second_i][1]]
                         second_i = len(top_points)+second_i
                         top_points = top_points[:second_i+1]+[inter_second,rect[0]]
-                #elif rect[0][1]<last_point_top[1]: #if the rect/line im adding is above
-                #    if top_points[-2][0]>rect[0][0]: #if prior line was clipped, we need to work with the intersection point top_points[-2]
-                #        if top_points[-3][1]>rect[0][1]:
-                #            intersect_point = [rect[0][0],top_points[-2][1]]
-                #            top_points[-3]=intersect_point
-                #            top_points[-2]=rect[0]
-                #            top_points.pop()
-                #            assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
-                #        else:
-                #            intersect_point=[top_points[-3][0],rect[0][1]]
-                #            top_points[-2]=intersect_point
-                #            top_points.pop()
-                #            assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
-                #    else:
-                #        intersect_point = [rect[0][0],last_point_top[1]]
-                #        top_points[-1]=intersect_point
-                #        top_points.append(rect[0])
-                #        assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
-                #elif rect[0][1]>last_point_top[1]: #if the rect/line im adding is below
-                #    if top_points[-2][0]>rect[0][0]:
-                #        if top_points[-3][1]>rect[0][1]:
-                #            last_two_points = top_points[-2:]
-                #            intersect_point_3 = [rect[0][0],top_points[-3][1]]
-                #            top_points[-3]=intersect_point_3
-                #            top_points[-2]=rect[0]
-                #            intersect_point_2 = [top_points[-2][0],rect[0][1]]
-                #            top_points[-1]=intersect_point_2
-                #            top_points+=last_two_points
-                #            assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
-                #        intersection_point_1 = [top_points[-1][0],rect[1][1]]
-                #        top_points.append(intersection_point_1)
-                #        assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
-
-                #    else:
-                #        intersect_point = [last_point_top[0],rect[0][1]]
-                #        top_points.append(intersect_point)
-                #        assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
-                #else:
-                #    #it's straight across, we'll just average the two outside points to provide a good midpoint
-                #    #import pdb;pdb.set_trace()
-                #    top_points[-1]=[(top_points[-2][0]+rect[1][0])/2,(top_points[-2][1]+rect[1][1])/2]
-                #    assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
                 assert(rect[1][0]>=top_points[-1][0])
                 top_points.append(rect[1])
                 assert(all([top_points[i][0]<=top_points[i+1][0] for i in range(len(top_points)-1)]))
@@ -354,42 +313,6 @@ class TextLine:
                         inter_second=[rect[3][0],bot_points[second_i][1]]
                         second_i = len(bot_points)+second_i
                         bot_points = bot_points[:second_i+1]+[inter_second,rect[3]]
-                #elif rect[3][1]>last_point_bot[1]:
-                #    if bot_points[-2][0]>rect[3][0]: #if prior line was clipped, we need to work with the intersection point bot_points[-2]
-                #        if bot_points[-3][1]<rect[3][1]:
-                #            intersect_point = [rect[3][0],bot_points[-2][1]]
-                #            bot_points[-3]=intersect_point
-                #            bot_points[-2]=rect[3]
-                #            bot_points.pop()
-                #        else:
-                #            intersect_point=[bot_points[-3][0],rect[3][1]]
-                #            bot_points[-2]=intersect_point
-                #            bot_points.pop()
-                #    else:
-                #        intersect_point = [rect[3][0],last_point_bot[1]]
-                #        bot_points[-1]=intersect_point
-                #        bot_points.append(rect[3])
-                #elif rect[3][1]<last_point_bot[1]:
-                #    if bot_points[-2][0]>rect[3][0]:
-                #        if bot_points[-3][1]<rect[3][1]:
-                #            last_two_points = bot_points[-2:]
-                #            intersect_point_3 = [rect[3][0],bot_points[-3][1]]
-                #            bot_points[-3]=intersect_point_3
-
-                #            bot_points[-2]=rect[3]
-
-                #            intersect_point_2 = [bot_points[-2][0],rect[3][1]]
-                #            bot_points[-1]=intersect_point_2
-                #            bot_points+=last_two_points
-                #        intersection_point_1 = [bot_points[-1][0],rect[2][1]]
-                #        bot_points.append(intersection_point_1)
-
-                #    else:
-                #        intersect_point = [last_point_bot[0],rect[3][1]]
-                #        bot_points.append(intersect_point)
-                ##else:
-                ##    #it's straight across, we'll just average the two overlapped points to provide a good midpoint
-                ##    bot_points[-1]=[(bot_points[-2][0]+rect[2][0])/2,(bot_points[-2][1]+rect[2][1])/2]
 
                 assert(rect[2][0]>=bot_points[-1][0])
                 bot_points.append(rect[2])
@@ -398,31 +321,6 @@ class TextLine:
             #print(bot_points)
 
 
-        #all_top_points = [rect[0] for rect in primitive_rects]+[rect[1] for rect in primitive_rects]
-        #all_top_points.sort(key=lambda p:p[0])
-        #top_points=[all_top_points[0]]
-        #for point in all_top_points[1:]:
-        #    if point[1]<top_points[-1][1]:
-        #        top_points.append([point[0],top_points[-1][1]])
-        #        top_points.append(point)
-        #    elif point[1]>top_points[-1][1]:
-
-        #all_bot_points = [rect[3] for rect in primitive_rects]+[rect[2] for rect in primitive_rects]
-        #all_bot_points.sort(key=lambda p:p[0])
-
-            #print(bot_points)
-
-        #remove points that are actually the same
-        #for i in range(len(top_points)-1):
-        #    if top_points[i][0]==top_points[i+1][0] and top_points[i][1]==top_points[i+1][1]:
-        #        toremove.append(i)
-
-        #top_points.reverse()
-        #bot_points.reverse()
-
-
-        #print('top ps {}'.format(top_points))
-        #print('bot ps {}'.format(bot_points))
 
         #smooth
         #for i in range(1,len(top_points)-1):
@@ -434,19 +332,22 @@ class TextLine:
         for i in range(len(bot_points)-1):
             bot_total_distance += math.sqrt((bot_points[i][0]-bot_points[i+1][0])**2 + (bot_points[i][1]-bot_points[i+1][1])**2)
         
-        #DEBUG#
-        self._top_points=list(top_points)
-        self._bot_points=list(bot_points)
-        if not horz:
-            self._top_points = [(y,x) for x,y in self._top_points]
-            self._bot_points = [(y,x) for x,y in self._bot_points]
-        #DEBUG#
 
     
-        #step size is average "height"
         top_points_np=np.array(top_points)
         bot_points_np=np.array(bot_points)
-        step_size = np.linalg.norm(top_points_np.mean(axis=0)-bot_points_np.mean(axis=0))
+
+        if self.step_size=='original':
+            step_size = np.linalg.norm(top_points_np.mean(axis=0)-bot_points_np.mean(axis=0)) #average height
+        else:
+            step_size = self.step_size#max(100,min(200,7*np.linalg.norm(top_points_np.mean(axis=0)-bot_points_np.mean(axis=0))))
+            #we're going to try to distribute the poly points evenly along it horizontally by adjusting the step size
+            total_distance = round((top_total_distance+bot_total_distance)/2)
+            if total_distance>step_size:
+                if total_distance%step_size<0.5*step_size:
+                    step_size = total_distance/(total_distance//step_size)
+                else:
+                    step_size = total_distance/(1+total_distance//step_size)
         #if step_size==0: #Detection error with flat box
         #    for p in top_points:
         #        p[1]-=2
@@ -665,7 +566,8 @@ class TextLine:
         self.height = vert_sum/len(self.point_pairs)
         self.width = horz_sum/2
 
-
+        self.minx,self.miny = self.poly_points.min(axis=0)
+        self.maxx,self.maxy = self.poly_points.max(axis=0)
 
     def getReadPosition(self):
         if self.median_angle is None:
@@ -767,9 +669,7 @@ class TextLine:
     def boundingRect(self):
         if self.poly_points is None:
             self.compute()
-        minx,miny = self.poly_points.min(axis=0)
-        maxx,maxy = self.poly_points.max(axis=0)
-        return minx,miny,maxx,maxy
+        return self.minx,self.miny,self.maxx,self.maxy
 
     def getFeatureInfo(self):
         if self.poly_points is None:
