@@ -1,14 +1,10 @@
 from collections import defaultdict
 
-def getGTGroup(targetIndexes,gtGroups):
+def getGTGroup(targetIndexes,targetIndexToGroup):
     ids=defaultdict(lambda: 0)
     for t in targetIndexes:
-        for gtId, ts in enumerate(gtGroups):
-            if t in ts:
-                ids[gtId]+=1
-                break #a bb won't be in two groups
-    #if len(targetIndexes)==1:
-    #    return ids.keys()[0]
+        gtId = targetIndexToGroup[t]
+        ids[gtId]+=1
 
     bestId=-1
     bestCount=-1
@@ -21,18 +17,22 @@ def getGTGroup(targetIndexes,gtGroups):
 
     return bestId
 
-def pure(targetIndexes,gtGroups):
+
+
+def pure(targetIndexes,targetIndexToGroup):
     test=set()
     for t in targetIndexes:
-        for gtId, ts in enumerate(gtGroups):
-            if t in ts:
-                test.add(gtId)
-    return len(test)==1
+        if gtId is None:
+            gtId = targetIndexToGroup[t]
+        elif gtId!= targetIndexToGroup[t]:
+            return False
+    return True
 
-def purity(targetIndexes,gtGroups):
+def purity(targetIndexes,targetIndexToGroup):
+    if len(targetIndexes)==0:
+        return 0
     groups=defaultdict(lambda: 0)
     for t in targetIndexes:
-        for gtId, ts in enumerate(gtGroups):
-            if t in ts:
-                groups[gtId]+=1
+        gtId = targetIndexToGroup[t]
+        groups[gtId]+=1
     return max(groups.values())/len(targetIndexes)

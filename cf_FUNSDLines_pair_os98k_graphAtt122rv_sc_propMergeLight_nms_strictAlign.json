@@ -1,5 +1,5 @@
 {
-    "name": "FUNSDLines_pair_os98k_graphAtt122rv_smallContext_propMergeLight",
+    "name": "FUNSDLines_pair_os98k_graphAtt122rv_sc_propMergeLight_nms_strictAlign",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -77,6 +77,8 @@
         "conf_thresh_change_iters": 0,
         "retry_count":1,
 
+        "gt_bb_align_IOcU_thresh": 0.55,
+
         "mergeAndGroup": true,
         "train_hard_detect_limit": 2000,
 
@@ -98,8 +100,10 @@
     "arch": "PairingGroupingGraph", 
     "model": {
         "detector_checkpoint": "saved/FUNSDLines_detect_augRFh_oversegMultScl/checkpoint-iteration98042.pth",
+        "overseg_non_max_sup": true,
         "conf_thresh": 0.7,
         "start_frozen": true,
+
         "relationship_proposal": "feature_nn",
         "percent_rel_to_keep": 0.4,
         "max_rel_to_keep": 3000,
