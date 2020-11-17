@@ -1,5 +1,5 @@
 {
-    "name": "FUNSDLines_detect_augRFh_oversegMultScl",
+    "name": "NAF_detect_augRFh_oversegMultScl",
     "cuda": true,
     "gpu": 0,
     "super_computer":false,
@@ -8,14 +8,14 @@
     "data_loader": {
         "data_set_name": "FormsBoxDetect",
         "data_dir": "../data/forms",
-        "batch_size": 5,
+        "batch_size": 8,
         "shuffle": true,
         "num_workers": 2,
         "crop_to_page":false,
         "color":false,
         "rescale_range": [0.4,0.65],
         "crop_params": {
-            "crop_size":[652,1608],
+            "crop_size":[652,1208],
             "pad":0,
             "rot_degree_std_dev": 1,
             "rot_freq": 0.5
@@ -34,7 +34,7 @@
     "validation": {
         "shuffle": false,
         "rescale_range": [0.52,0.52],
-        "batch_size": 4,
+        "batch_size": 8,
         "crop_params": null
     },
 
