@@ -15,7 +15,7 @@
         "color":false,
         "rescale_range": [0.4,0.65],
         "crop_params": {
-            "crop_size":[652,1608],
+            "crop_size":[652,1208],
             "pad":0,
             "rot_degree_std_dev": 1,
             "rot_freq": 0.5
