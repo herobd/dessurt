@@ -180,7 +180,7 @@ class BaseTrainer:
                   indent=4, sort_keys=False)
         self.swa = config['trainer']['swa'] if 'swa' in config['trainer'] else (config['trainer']['weight_averaging'] if 'weight_averaging' in config['trainer'] else False)
         if self.swa:
-            self.swa_model = AveragedModel(self.model)#type(self.model)(config['model'])
+            self.swa_model = None#AveragedModel(self.model)#type(self.model)(config['model'])
             #if config['cuda']:
             #    self.swa_model = self.swa_model.to(self.gpu)
             self.swa_start = config['trainer']['swa_start'] if 'swa_start' in config['trainer'] else config['trainer']['weight_averaging_start']
@@ -230,6 +230,8 @@ class BaseTrainer:
                 #swa_n = (self.iterations-self.swa_start)//self.swa_c_iters
                 #moving_average(self.swa_model, self.model, 1.0 / (swa_n + 1))
                 #swa_n += 1
+                if self.swa_model is None:
+                    self.swa_model = AveragedModel(self.model)
                 self.swa_model.update_parameters(self.model)
 
             if self.side_process:
@@ -359,7 +361,7 @@ class BaseTrainer:
             for k,v in state_dict.items():
                 state_dict[k]=v.cpu()
             state['state_dict']= state_dict
-            if self.swa:
+            if self.swa and self.swa_model is not None:
                 swa_state_dict = self.swa_model.state_dict()
                 for k,v in swa_state_dict.items():
                     swa_state_dict[k]=v.cpu()
@@ -421,7 +423,8 @@ class BaseTrainer:
         #print(checkpoint['state_dict'].keys())
         if ('save_mode' not in self.config or self.config['save_mode']=='state_dict') and 'state_dict' in checkpoint:
             self.model.load_state_dict(checkpoint['state_dict'])
-            if self.swa:
+            if self.swa and 'swa_state_dict' in checkpoint:
+                self.swa_model = AveragedModel(self.model)
                 self.swa_model.load_state_dict(checkpoint['swa_state_dict'])
         else:
             self.model = checkpoint['model']

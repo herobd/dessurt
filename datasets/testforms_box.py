@@ -8,6 +8,8 @@ from matplotlib.patches import Polygon
 import numpy as np
 import torch
 
+from utils import img_f
+
 def display(data):
     batchSize = data['img'].size(0)
     for b in range(batchSize):
@@ -22,15 +24,17 @@ def display(data):
 
 
 
-        fig = plt.figure()
+        #fig = plt.figure()
         #gs = gridspec.GridSpec(1, 3)
 
-        ax_im = plt.subplot()
-        ax_im.set_axis_off()
-        if img.shape[2]==1:
-            ax_im.imshow(img[0])
-        else:
-            ax_im.imshow(img)
+        #ax_im = plt.subplot()
+        #ax_im.set_axis_off()
+        #if img.shape[2]==1:
+        #    ax_im.imshow(img[0])
+        #else:
+        #    ax_im.imshow(img)A
+        if  img.shape[2]==1:
+            img = img_f.gray2rgb(img)
 
         colors = {  'text_start_gt':'g-',
                     'text_end_gt':'b-',
@@ -45,30 +49,33 @@ def display(data):
             xc=data['bb_gt'][b,i,0]
             yc=data['bb_gt'][b,i,1]
             rot=data['bb_gt'][b,i,2]
-            print(rot)
+            #print(rot)
             h=data['bb_gt'][b,i,3]
             w=data['bb_gt'][b,i,4]
             text=data['bb_gt'][b,i,13]
             field=data['bb_gt'][b,i,14]
             if text>0:
-                color = 'b-'
+                color = (1,0,0)#'b-'
             else:
-                color = 'r-'
+                color = (0,1,0)#'r-'
             tr = (math.cos(rot)*w-math.sin(rot)*h +xc, -math.sin(rot)*w-math.cos(rot)*h +yc)
             tl = (-math.cos(rot)*w-math.sin(rot)*h +xc, math.sin(rot)*w-math.cos(rot)*h +yc)
             br = (math.cos(rot)*w+math.sin(rot)*h +xc, -math.sin(rot)*w+math.cos(rot)*h +yc)
             bl = (-math.cos(rot)*w+math.sin(rot)*h +xc, math.sin(rot)*w+math.cos(rot)*h +yc)
             #print([tr,tl,br,bl])
 
-            ax_im.plot([tr[0],tl[0],bl[0],br[0],tr[0]],[tr[1],tl[1],bl[1],br[1],tr[1]],color)
+            #ax_im.plot([tr[0],tl[0],bl[0],br[0],tr[0]],[tr[1],tl[1],bl[1],br[1],tr[1]],color)
+            img_f.polylines(img,np.array([tr,tl,bl,br]),'transparent',color)
             
             if data['bb_gt'].shape[2]>15:
                 blank = data['bb_gt'][b,i,15]
                 if blank>0:
-                    ax_im.plot(tr[0],tr[1],'mo')
+                    #ax_im.plot(tr[0],tr[1],'mo')
+                    img[tr[1]-1:tr[1]+2,tr[0]-1:tr[0]+2,2]=1
                 paired = data['bb_gt'][b,i,16]
                 if paired>0:
-                    ax_im.plot(br[0],br[1],'go')
+                    #ax_im.plot(br[0],br[1],'go')
+                    img[tr[1]-1:tr[1]+2,tr[0]-1:tr[0]+2,0:2]=1
 
 
         if 'line_gt' in data and data['line_gt'] is not None:
@@ -95,7 +102,9 @@ def display(data):
                         y0=gt[b,i,1]
 
                         ax_im.plot([x0],[y0],colors[name])
-        plt.show()
+        #plt.show()
+        img_f.imshow('page',img)
+        img_f.show()
     print('batch complete')
 
 
@@ -112,11 +121,12 @@ if __name__ == "__main__":
     data=FormsBoxDetect(dirPath=dirPath,split='train',config={'crop_to_page':False,'rescale_range':[0.4,0.65],
         'crop_params':{ "crop_size":[652,1608], 
                         "pad":0, 
-                        "rot_degree_std_dev":1.5,
+                        "rot_degree_std_dev":1,
+                        "rot_freq": 0.5,
                         "flip_horz": False,
                         "flip_vert": False}, 
-        'no_blanks':False,
-        'use_paired_class':True,
+        'color': False,
+        'no_blanks':True,
         "swap_circle":True,
         'no_graphics':True,
         'rotation':True,
