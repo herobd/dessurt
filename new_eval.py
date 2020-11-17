@@ -79,10 +79,10 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
             printM='added config['
             for i in range(len(add)-2):
                 try:
-                    key = int(add[i])
+                    indName = int(add[i])
                 except ValueError:
-                    key = add[i]
-                addTo = addTo[key]
+                    indName = add[i]
+                addTo = addTo[indName]
                 printM+=add[i]+']['
             value = add[-1]
             if value=="":
@@ -192,6 +192,7 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
     trainer.save_images_every=-1
     #saveFunc = eval(trainer_class+'_printer')
     saveFunc = eval(config['data_loader']['data_set_name']+'_eval')
+
 
     step=5
 
@@ -567,7 +568,6 @@ if __name__ == '__main__':
         toEval=args.eval[1:-1].split(',')
     else:
         toEval=args.eval
-
     try:
         if args.gpu is not None:
             with torch.cuda.device(args.gpu):

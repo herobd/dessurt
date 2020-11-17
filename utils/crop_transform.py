@@ -412,6 +412,9 @@ class CropBoxTransform(object):
             rot = np.array([  [math.cos(amount), -math.sin(amount), 0],
                             [math.sin(amount), math.cos(amount), 0],
                             [0,0,1] ])
+            rrot = np.array([  [math.cos(-amount), -math.sin(-amount), 0],
+                            [math.sin(-amount), math.cos(-amount), 0],
+                            [0,0,1] ])
             center = np.array([ [1,0,-org_img.shape[1]/2],
                                 [0,1,-org_img.shape[0]/2],
                                 [0,0,1] ])
@@ -419,23 +422,30 @@ class CropBoxTransform(object):
             uncenter = np.array([   [1,0,org_img.shape[1]/2],
                                     [0,1,org_img.shape[0]/2],
                                     [0,0,1] ])
-            M = rot.dot(center)
-            #M=center
+            M=center
+            rM=center
             if self.flip_horz and np.random.uniform()<0.33:
+                assert(False) #this is broken, I don't know why
                 flipH = np.array([  [-1,0,0],
                                     [0,1,0],
                                     [0,0,1] ])
                 M = flipH.dot(M)
+                rM = flipH.dot(rM)
             if self.flip_vert and np.random.uniform()<0.33:
                 #M[0:2,1]*=-1
                 flipV = np.array([  [1,0,0],
                                     [0,-1,0],
                                     [0,0,1] ])
                 M = flipV.dot(M)
+                rM = flipV.dot(rM)
+            M = rot.dot(M)
+            rM = rrot.dot(rM)
+            #M=center
             M = uncenter.dot(M)
             M=M[:2] #opencv didn't want 3x3
+            rM = uncenter.dot(rM)[:2]
             #rotate image
-            org_img = img_f.warpAffine(org_img,M,(org_img.shape[1],org_img.shape[0]))
+            org_img = img_f.warpAffine(org_img,M,(org_img.shape[0],org_img.shape[1]))
             if len(org_img.shape)==2:
                 org_img = org_img[:,:,None]
             if pixel_gt is not None:
@@ -446,7 +456,8 @@ class CropBoxTransform(object):
             if bb_gt is not None:
                 points = np.reshape(bb_gt[0,:,0:16],(-1,2)) #reshape all box points to vector of x,y pairs
                 points = np.append(points,np.ones((points.shape[0],1)),axis=1) #append 1 to make homogeneous (x,y,1)
-                points = M.dot(points.T).T #multiply rot matrix
+                #I HAVE NO IDEA WHY I NEED THE OPPOSITE ROTATION HERE
+                points = rM.dot(points.T).T #multiply rot matrix
                 bb_gt[0,:,0:16] = np.reshape(points,(-1,16)) #reshape back to single vector for each bb
 
             if line_gts is not None:
@@ -489,6 +500,7 @@ class CropBoxTransform(object):
         #pad out to allow random samples to take space off of the page
         ##tic=timeit.default_timer()
         #org_img = np.pad(org_img, self.pad_params, 'mean')
+        print('org_img: {}'.format(org_img.shape))
         if org_img.shape[2]==3:
             org_img = np.pad(org_img, pad_params, 'constant', constant_values=0) #zero, since that what Conv2d pads with
         else:
@@ -496,6 +508,7 @@ class CropBoxTransform(object):
         if pixel_gt is not None:
             pixel_gt = np.pad(pixel_gt, pad_params, 'constant')
         ##print('pad: {}'.format(timeit.default_timer()-##tic))
+        print('pad img: {}'.format(org_img.shape))
         
         ##tic=timeit.default_timer()
         #corner points
@@ -546,6 +559,7 @@ class CropBoxTransform(object):
         crop_params, org_img, pixel_gt, line_gt_match, point_gt_match, new_bb_gt, new_bb_auxs, cropPoint = generate_random_crop(org_img, pixel_gt, line_gts, point_gts, self.random_crop_params, bb_gt=bb_gt, bb_auxs=bb_auxs, query_bb=query_bb, cropPoint=cropPoint)
         #print(crop_params)
         #print(gt_match)
+        print('crop img: {}'.format(org_img.shape))
         
         ##tic=timeit.default_timer()
         #new_bb_gt=bb_gt[bb_gt_match][None,...] #this is done in generate_random_crop() as it modified some bbs
