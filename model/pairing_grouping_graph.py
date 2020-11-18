@@ -646,6 +646,8 @@ class PairingGroupingGraph(BaseModel):
         if type(self.pairer) is BinaryPairReal and type(self.pairer.shape_layers) is not nn.Sequential:
             print("Shape feats aligned to feat dataset.")
 
+        self.set_detect_params = (useBeginningOfLast,useFeatsLayer,useFeatsScale,useFLayer2,useFScale2)
+
 
     def unfreeze(self): 
         if self.detector_frozen:
@@ -659,11 +661,16 @@ class PairingGroupingGraph(BaseModel):
         assert(image.size(0)==1) #implementation designed for batch size of 1. Should work to do data parallelism, since each copy of the model will get a batch size of 1
         #t###tic=timeit.default_timer()#t#
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
+        if not self.detector.forGraphPairing:
+            self.detector.setForGraphPairing(*self.set_detect_params)
+
         bbPredictions, offsetPredictions, _,_,_,_ = self.detector(image)
         _=None
         #print('detector')
         #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
-
+        if self.detector.saved_features is None:
+            self.detector.setForGraphPairing(*self.set_detect_params)
+            bbPredictions, offsetPredictions, _,_,_,_ = self.detector(image)
         saved_features=self.detector.saved_features
         self.detector.saved_features=None
         if self.use2ndFeatures:
