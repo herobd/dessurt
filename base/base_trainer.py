@@ -180,7 +180,7 @@ class BaseTrainer:
                   indent=4, sort_keys=False)
         self.swa = config['trainer']['swa'] if 'swa' in config['trainer'] else (config['trainer']['weight_averaging'] if 'weight_averaging' in config['trainer'] else False)
         if self.swa:
-            self.swa_model = None#AveragedModel(self.model)#type(self.model)(config['model'])
+            self.swa_model = AveragedModel(self.model)#type(self.model)(config['model'])
             #if config['cuda']:
             #    self.swa_model = self.swa_model.to(self.gpu)
             self.swa_start = config['trainer']['swa_start'] if 'swa_start' in config['trainer'] else config['trainer']['weight_averaging_start']

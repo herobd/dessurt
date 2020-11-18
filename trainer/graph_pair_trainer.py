@@ -289,6 +289,7 @@ class GraphPairTrainer(BaseTrainer):
             The validation metrics in log must have the key 'val_metrics'.
         """
         self.model.eval()
+
         val_metrics = {}#defaultdict(lambda: 0.0)
         val_count = defaultdict(lambda: 1)
 
