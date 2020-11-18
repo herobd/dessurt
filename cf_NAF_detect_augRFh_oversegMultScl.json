@@ -34,7 +34,7 @@
     "validation": {
         "shuffle": false,
         "rescale_range": [0.52,0.52],
-        "batch_size": 5,
+        "batch_size": 1,
         "crop_params": null
     },
 
