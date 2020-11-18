@@ -1115,19 +1115,24 @@ def build_oversegmented_targets_multiscale(
                         num_assigned +=1
                         if isHorz:
                             T=ti_y-tile_y #negative if above tile center (just add predcition to center)
-                            #T = max(min(T,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
-                            assert(abs(T)<MAX_H_PRED)
+                            T = max(min(T,MAX_H_PRED-0.01),0.01-MAX_H_PRED)#this clips the max heigh it can predict
+                            #assert(abs(T)<MAX_H_PRED)
                             targ_T[b, assigned, cell_y, cell_x] = inv_tanh(T/MAX_H_PRED)
                             B=bi_y-tile_y 
-                            #B = max(min(B,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
-                            assert(abs(B)<MAX_H_PRED)
+                            B = max(min(B,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
+                            #assert(abs(B)<MAX_H_PRED)
                             targ_B[b, assigned, cell_y, cell_x] = inv_tanh(B/MAX_H_PRED)
                             
                             L=li_x-tile_x #negative if left of tile center (just add predcition to center)
                             L = max(min(L,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
-                            targ_L[b, assigned, cell_y, cell_x] = inv_tanh(L/MAX_W_PRED)
                             R=ri_x-tile_x 
                             R = max(min(R,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
+                            if gw<0.1 and R<L:
+                                #this is a hack
+                                tmp=R
+                                R=L
+                                L=tmp
+                            targ_L[b, assigned, cell_y, cell_x] = inv_tanh(L/MAX_W_PRED)
                             targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_W_PRED)
 
                             assert(R>=L and T<=B)
