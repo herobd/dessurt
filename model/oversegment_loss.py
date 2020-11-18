@@ -828,6 +828,7 @@ def build_oversegmented_targets_multiscale(
                                     #print('tri inside:{}, outside top:{}, bot:{}'.format(s_b*rtri_x+c_b-(s_r*rtri_x+c_r),s_r*rtri_x+c_r-ti_y,bi_y-(s_b*rtri_x+c_b)))
                                     ri_x = min(ri_x,rtri_x)
                                 #print('b_to_th_inter_x:{}  b_to_r_inter_x:{} orri_x:{}  rtri_x:{}'.format(b_to_th_inter_x,b_to_r_inter_x,(b_to_th_inter_x+tile_x)/2,rtri_x if b_to_th_inter_x>b_to_r_inter_x else None))
+                            ri_x = max(ri_x,(gt_left_x+gt_right_x)/2)
                             if math.isinf(s_r):
                                 ri_x = min(ri_x,c_r)
                             #else:
@@ -857,6 +858,7 @@ def build_oversegmented_targets_multiscale(
                                     #unless the optimal point is along the bb corner
                                     ltri_x = (c_l-c_b+(bi_y-ti_y)/2)/(s_b-s_l) #this is optimal along corner
                                     li_x = max(li_x,ltri_x)
+                            li_x = min(li_x,(gt_left_x+gt_right_x)/2)
                             if math.isinf(s_l):
                                 li_x = max(li_x,c_l)
                             #else:
