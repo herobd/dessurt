@@ -210,6 +210,11 @@ class FormsBoxDetect(BoxDetectDataset):
         self.only_opposite_pairs = config['only_opposite_pairs'] if 'only_opposite_pairs' in config else False
         self.onlyFormStuff = False
         self.errors=[]
+        self.classMap = {
+                "text": 16,
+                "field": 17,
+                "blank": 18
+                }
 
 
     def parseAnn(self,np_img,annotations,s,imageName):

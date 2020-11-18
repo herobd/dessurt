@@ -2,7 +2,7 @@
     "name": "NAF_detect_augRFh_oversegMultScl",
     "cuda": true,
     "gpu": 0,
-    "super_computer":false,
+    "super_computer":true,
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {

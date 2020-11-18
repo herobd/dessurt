@@ -1135,7 +1135,8 @@ def build_oversegmented_targets_multiscale(
                             targ_L[b, assigned, cell_y, cell_x] = inv_tanh(L/MAX_W_PRED)
                             targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_W_PRED)
 
-                            assert(R>=L and T<=B)
+                            print('WARNING/ overseg loss L:{}, R:{}, T:{}, B:{}'.format(L,R,T,B))
+                            #assert(R>=L and T<=B)
                         else:
                             #T=ti_y-tile_y #negative if above tile center (just add predcition to center)
                             ##T = max(min(T,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
@@ -1161,13 +1162,20 @@ def build_oversegmented_targets_multiscale(
                             targ_B[b, assigned, cell_y, cell_x] = inv_tanh(B/MAX_W_PRED)
                             
                             L=ti_y-tile_y #negative if left of tile center (just add predcition to center)
-                            assert(abs(L)<MAX_H_PRED)
-                            targ_L[b, assigned, cell_y, cell_x] = inv_tanh(L/MAX_H_PRED)
+                            L = max(min(L,MAX_H_PRED-0.01),0.01-MAX_H_PRED)#this clips the max heigh it can predict
+                            #assert(abs(L)<MAX_H_PRED)
                             R=bi_y-tile_y 
-                            assert(abs(R)<MAX_H_PRED)
+                            R = max(min(R,MAX_H_PRED-0.01),0.01-MAX_H_PRED)#this clips the max heigh it can predict
+                            #assert(abs(R)<MAX_H_PRED)
+                            if gw<0.1 and R<L:
+                                #this is a hack
+                                tmp=R
+                                R=L
+                                L=tmp
+                            targ_L[b, assigned, cell_y, cell_x] = inv_tanh(L/MAX_H_PRED)
                             targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_H_PRED)
-
-                            assert(R>=L and T<=B)
+                            print('WARNING/ overseg loss L:{}, R:{}, T:{}, B:{}'.format(L,R,T,B))
+                            #assert(R>=L and T<=B)
                         #t#times_assign.append(timeit.default_timer()-tic2)
 
 
