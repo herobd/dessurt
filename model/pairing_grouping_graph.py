@@ -340,7 +340,7 @@ class PairingGroupingGraph(BaseModel):
             if self.splitFeatures:
                 raise NotImplementedError('split feature embedding not implemented for merge_first model')
             merge_featurizer_conv = config['merge_featurizer_conv']
-            merge_featurizer_conv = [detectorSavedFeatSize+bbMasks] + merge_featurizer_conv #bbMasks are appended
+            merge_featurizer_conv = [detectorSavedFeatSize] + merge_featurizer_conv #bbMasks are appended
             layers, last_ch_relC = make_layers(merge_featurizer_conv,norm=feat_norm,dropout=True) 
             #if last_ch_relC+self.numShapeFeats!=graph_in_channels:
             #    new_layer = [last_ch_relC,'k1-{}'.format(graph_in_channels-self.numShapeFeats)]
