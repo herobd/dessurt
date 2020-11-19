@@ -56,7 +56,7 @@ class GraphPairTrainer(BaseTrainer):
 
 
         self.mergeAndGroup = config['trainer']['mergeAndGroup']
-        self.classMap = self.data_loader.dataset.classMap
+        self.classMap = {k:v for k,v in self.data_loader.dataset.classMap.items() if k!='blank'}
 
 
         #default is unfrozen, can be frozen by setting 'start_froze' in the PairingGraph models params
@@ -289,6 +289,7 @@ class GraphPairTrainer(BaseTrainer):
             The validation metrics in log must have the key 'val_metrics'.
         """
         self.model.eval()
+
         val_metrics = {}#defaultdict(lambda: 0.0)
         val_count = defaultdict(lambda: 1)
 
@@ -783,10 +784,6 @@ class GraphPairTrainer(BaseTrainer):
                 predsRelAboveThresh = torch.sigmoid(predsRel[:,-1])>thresh_rel
                 saveRelPredMat = torch.IntTensor(len(edgePredIndexes)).zero_()
 
-                d_indexesRel = torch.nonzero(wasRel)
-                d_indexesNoRel = torch.nonzero(wasNoRel)
-                d_indexesRel = set([a.item() for a in d_indexesRel])
-                d_indexesNoRel = set([a.item() for a in d_indexesNoRel])
                 predsGTRel = predsRel[wasRel]
                 predsGTNoRel = predsRel[wasNoRel]
                 TP = wasRel*predsRelAboveThresh
@@ -1427,7 +1424,7 @@ class GraphPairTrainer(BaseTrainer):
 
 
     def newRun(self,instance,useGT,threshIntur=None,get=[]):
-        numClasses = len(self.data_loader.dataset.classMap)
+        numClasses = len(self.classMap)
         image, targetBoxes, adj, target_num_neighbors = self._to_tensor(instance)
         gtGroups = instance['gt_groups']
         gtGroupAdj = instance['gt_groups_adj']
@@ -1450,12 +1447,12 @@ class GraphPairTrainer(BaseTrainer):
                 numAnchors = self.model_ref.detector.numAnchors
                 numBBParams = self.model_ref.detector.numBBParams
                 numBBParams = self.model_ref.detector.numBBParams
-                numBBTypes = numClasses
+                numBBTypes = self.model_ref.numBBTypes
                 grid_sizesH=[image.size(2)//s[0] for s in scale]
                 grid_sizesW=[image.size(3)//s[0] for s in scale]
 
 
-                nGT, masks, conf_masks, t_Ls, t_Ts, t_Rs, t_Bs, t_rs, tconf_scales, tcls_scales, pred_covered, gt_covered, recall, precision, pred_covered_noclass, gt_covered_noclass, recall_noclass, precision_noclass = build_oversegmented_targets_multiscale(ph_boxes, ph_conf, ph_cls, targetBoxes, [targetBoxes.size(1)], numClasses, grid_sizesH, grid_sizesW,scale=scale, assign_mode='split', close_anchor_rule='unmask')
+                nGT, masks, conf_masks, t_Ls, t_Ts, t_Rs, t_Bs, t_rs, tconf_scales, tcls_scales, pred_covered, gt_covered, recall, precision, pred_covered_noclass, gt_covered_noclass, recall_noclass, precision_noclass = build_oversegmented_targets_multiscale(ph_boxes, ph_conf, ph_cls, targetBoxes, [targetBoxes.size(1)], numBBTypes, grid_sizesH, grid_sizesW,scale=scale, assign_mode='split', close_anchor_rule='unmask')
                 
                 for i in range(len(t_Ls)):
                     assert((t_Ls[i]<=t_Rs[i]).all() and (t_Ts[i]<=t_Bs[i]).all())
@@ -1915,7 +1912,7 @@ class GraphPairTrainer(BaseTrainer):
 
     def final_eval(self,targetBoxes,gtGroups,gt_groups_adj,targetIndexToGroup,outputBoxes,predGroups,predPairs,predTrans=None):
         log={}
-        numClasses = len(self.data_loader.dataset.classMap)
+        numClasses = len(self.classMap)
         if targetBoxes is not None:
             targetBoxes = targetBoxes.cpu()
             if self.model_ref.useCurvedBBs:

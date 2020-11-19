@@ -16,6 +16,7 @@ NUM_ANCHORS=4 #2 for horz, 2 for vert. 2 allows prediction of overlapped bbs
 class OverSegBoxDetector(nn.Module): #BaseModel
     def __init__(self, config): # predCount, base_0, base_1):
         super(OverSegBoxDetector, self).__init__()
+        self.forGraphPairing=False
         self.config = config
         self.rotation = True
         self.numBBTypes = config['number_of_box_types']
@@ -136,6 +137,8 @@ class OverSegBoxDetector(nn.Module): #BaseModel
         return bbPredictions, offsetPredictions_scales, None,None,None, pixelPreds #, avg_conf_per_anchor
 
     def setForGraphPairing(self,beginningOfLast=False,featuresFromHere=-1,featuresFromScale=-2,f2Here=None,f2Scale=None):
+        self.forGraphPairing=True
+        self.saved_features=None
         assert(len(featuresFromScale)==2 and featuresFromScale[0]>=0 and featuresFromScale[1]>=0)
         assert(f2Scale is None or (len(f2Scale)==2 and f2Scale[0]>=0 and f2Scale[1]>=0))
         def save_feats(module,input,output):
