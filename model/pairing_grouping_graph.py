@@ -892,6 +892,7 @@ class PairingGroupingGraph(BaseModel):
                 #t#tic=timeit.default_timer()#t#
 
                 #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
+                print('node feats mean:{:.2}, min:{:.2}, max:{:.2},   edge feats mean:{:.2}, min:{:.2}, max:{:.2}'.format(graph[0].mean(), graph[0].min(), graph[0].max(),graph[2].mean(), graph[2].min(), graph[2].max()))
                 nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = self.graphnets[0](graph)
                 assert(edgeOuts is None or not torch.isnan(edgeOuts).any())
                 edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
