@@ -1,5 +1,5 @@
 {
-    "name": "FUNSDLines_pair_os98k_binary3P3rv_smallContext_prop",
+    "name": "FUNSDLines_pair_os98k_graphAtt122rv_smallContext_prop_tess",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -64,14 +64,11 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 400000,
-        "swa": true,
-        "swa_start": 300000,
-        "swa_c_iters": 10000,
+        "iterations": 625000,
         "save_dir": "saved/",
-        "val_step": 20000,
-        "save_step": 20000,
-        "save_step_minor": 250,
+        "val_step": 5000,
+        "save_step": 25000,
+        "save_step_minor": 25,
         "log_step": 50,
         "verbosity": 1,
         "monitor": "loss",
@@ -83,19 +80,19 @@
         "mergeAndGroup": true,
         "train_hard_detect_limit": 2000,
 
-        "merge_first_only_until": 1000,
+        "merge_first_only_until": 980,
         "init_merge_rule": "adjacent",
 
         "unfreeze_detector": 2000,
         "partial_from_gt": 0,
-        "stop_from_gt": 500,
+        "stop_from_gt": 2000,
         "max_use_pred": 0.5,
         "use_all_bb_pred_for_rel_loss": true,
 
         "freeze_param_names": ["text_rec"],
 
         "use_learning_schedule": "multi_rise",
-        "warmup_steps": [1000,2000],
+        "warmup_steps": [1000,200],
         "adapt_lr": false
     },
     "arch": "PairingGroupingGraph", 
@@ -144,39 +141,55 @@
         "reintroduce_visual_features": true,
         "graph_config": [
         {
-            "arch": "BinaryPairReal",
+            "arch": "MetaGraphNet",
             "in_channels": 256,
             "node_out": 5,
             "edge_out": 5,
-            "layers": ["FC256","FC256","FC256"],
-            "layers_bb": ["FC256","FC256","FC256"],
+            "num_layers": 1,
+            "num_heads": 4,
+            "repetitions": 1,
+            "use_repetition_res": false,
+            "encode_type": "attention",
 	    "merge_thresh": 0.6,
             "group_thresh": 0.95,
             "keep_edge_thresh": 0.3
         },
         {
-            "arch": "BinaryPairReal",
+            "arch": "MetaGraphNet",
             "in_channels": 256,
             "node_out": 5,
             "edge_out": 5,
-            "layers": ["FC256","FC256","FC256"],
-            "layers_bb": ["FC256","FC256","FC256"],
+            "num_layers": 2,
+            "num_heads": 4,
+            "repetitions": 1,
+            "use_repetition_res": false,
+            "encode_type": "attention",
 	    "merge_thresh": 0.7,
             "group_thresh": 0.9,
             "keep_edge_thresh": 0.4
         },
         {
-            "arch": "BinaryPairReal",
+            "arch": "MetaGraphNet",
             "in_channels": 256,
             "node_out": 5,
             "edge_out": 5,
-            "layers": ["FC256","FC256","FC256"],
-            "layers_bb": ["FC256","FC256","FC256"],
+            "num_layers": 2,
+            "num_heads": 4,
+            "repetitions": 1,
+            "use_repetition_res": false,
+            "encode_type": "attention",
 	    "merge_thresh": 0.6,
             "group_thresh": 0.6,
             "keep_edge_thresh": 0.5
+        }],
+
+        "text_rec": {
+            "model": "tesseract",
+            "height": 20,
+            "embedding": "BP",
+            "num_feats": 128,
+            "batch_size": 1
         }
-        ]
 
     }
 }

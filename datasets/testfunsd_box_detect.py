@@ -7,6 +7,7 @@ from matplotlib import gridspec
 from matplotlib.patches import Polygon
 import numpy as np
 import torch
+from utils import img_f
 
 def display(data):
     batchSize = data['img'].size(0)
@@ -16,15 +17,17 @@ def display(data):
 
 
 
-        fig = plt.figure()
+        #fig = plt.figure()
         #gs = gridspec.GridSpec(1, 3)
 
-        ax_im = plt.subplot()
-        ax_im.set_axis_off()
+        #ax_im = plt.subplot()
+        #ax_im.set_axis_off()
+        #if img.shape[2]==1:
+        #    ax_im.imshow(img[0])
+        #else:
+        #    ax_im.imshow(img)
         if img.shape[2]==1:
-            ax_im.imshow(img[0])
-        else:
-            ax_im.imshow(img)
+            img = img_f.gray2rgb(img)
 
         colors = {  'text_start_gt':'g-',
                     'text_end_gt':'b-',
@@ -46,13 +49,13 @@ def display(data):
             answer=data['bb_gt'][b,i,15]
             other=data['bb_gt'][b,i,16]
             if header:
-                color = 'r-'
+                color = (1,0,0)#'r-'
             elif question:
-                color = 'b-'
+                color = (0,0,1)#'b-'
             elif answer:
-                color = 'g-'
+                color = (0,1,0)#'g-'
             elif other:
-                color = 'y-'
+                color = (1,1,0)#'y-'
             else:
                 assert(False)
             tr = (math.cos(rot)*w-math.sin(rot)*h +xc, -math.sin(rot)*w-math.cos(rot)*h +yc)
@@ -61,10 +64,13 @@ def display(data):
             bl = (-math.cos(rot)*w+math.sin(rot)*h +xc, math.sin(rot)*w+math.cos(rot)*h +yc)
             #print([tr,tl,br,bl])
 
-            ax_im.plot([tr[0],tl[0],bl[0],br[0],tr[0]],[tr[1],tl[1],bl[1],br[1],tr[1]],color)
+            #ax_im.plot([tr[0],tl[0],bl[0],br[0],tr[0]],[tr[1],tl[1],bl[1],br[1],tr[1]],color)
+            img_f.polylines(img,np.array([tr,tl,bl,br]),'transparent',color)
             
 
-        plt.show()
+        #plt.show()
+        img_f.imshow('page',img)
+        img_f.show()
     print('batch complete')
 
 
@@ -81,11 +87,13 @@ if __name__ == "__main__":
     data=FUNSDBoxDetect(dirPath=dirPath,split='train',config={
         "split_to_lines": True,
         'rescale_range':[1,1],
-        'xxxcrop_params':{ "crop_size":[652,1608], 
+        #'crop_params':{ "crop_size":[652,1608], 
+        'crop_params':{ "crop_size":[2000,1000], 
                         "pad":0, 
-                        "rot_degree_std_dev":1.5,
-                        "flip_horz": True,
-                        "flip_vert": True}, 
+                        "rot_degree_std_dev":3,
+                        "flip_horz": False,
+                        "flip_vert": False}, 
+        'color': False
 })
     data.cluster(start,repeat,'FUNSDLines_anchors_maxW100_{}.json',use_max_width=100)
 
