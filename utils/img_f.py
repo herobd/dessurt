@@ -147,6 +147,9 @@ def polylines(img,points,isClosed,color,thickness=1):
         rr,cc = skimage.draw.polygon_perimeter(points[:,1],points[:,0],shape=img.shape)
     img[rr,cc]=color
 
+def fillConvexPoly(img,points,color):
+    return polylines(img,points,True,color)
+
 def warpAffine(img,M,shape=None):
     if shape is None:
         shape=img.shape

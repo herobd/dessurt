@@ -233,7 +233,6 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                         (predTypes[3],edgePred[:,-1,2])
                         ]
 
-
             for i,x1,y1,x2,y2 in edgesToDraw:
                     lineColor = (0,edgePred[i,-1,0].item(),0)
                     boxColors=[]

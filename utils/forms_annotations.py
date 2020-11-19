@@ -455,11 +455,11 @@ def getBBWithPoints(useBBs,s,useBlankClass=False,usePairedClass=False, useAllCla
         blX = bb['poly_points'][3][0]
         blY = bb['poly_points'][3][1]
 
-        ##DEBUG
-        h = math.sqrt(((tlX+trX)/2 - (blX+brX)/2)**2 + ((tlY+trY)/2 - (blY+brY)/2)**2)
-        w = math.sqrt(((tlX+blX)/2 - (brX+trX)/2)**2 + ((tlY+blY)/2 - (trY+brY)/2)**2)
-        assert(h/w<5 or min(h,w)<1)
-        ##DEBUG
+        ###DEBUG
+        #h = math.sqrt(((tlX+trX)/2 - (blX+brX)/2)**2 + ((tlY+trY)/2 - (blY+brY)/2)**2)
+        #w = math.sqrt(((tlX+blX)/2 - (brX+trX)/2)**2 + ((tlY+blY)/2 - (trY+brY)/2)**2)
+        #assert(h/w<5 or min(h,w)<1)
+        ###DEBUG
             
 
         bbs[:,j,0]=tlX*s
