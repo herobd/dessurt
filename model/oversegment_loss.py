@@ -780,11 +780,11 @@ def build_oversegmented_targets_multiscale(
                         bi_y = s_b*bi_x+c_b
 
                         if isHorz:
-                            ti_y = max(ti_y,g_min_y)
-                            bi_y = min(bi_y,g_max_y)
+                            ti_y = min(max(ti_y,g_min_y),g_max_y)
+                            bi_y = min(max(bi_y,g_min_y),g_max_y)
                         else:
-                            ti_y = max(ti_y,g_min_x)
-                            bi_y = min(bi_y,g_max_x)
+                            ti_y = min(max(ti_y,g_min_x),g_max_x)
+                            bi_y = min(max(bi_y,g_min_x),g_max_x)
 
                         #print('t:{},{}  ti:{},{}  bi:{},{}'.format(tx,ty,ti_x,ti_y,bi_x,bi_y))
                         
@@ -1117,6 +1117,15 @@ def build_oversegmented_targets_multiscale(
  
                         #assert(ti_y==ti_y and bi_y==bi_y and ri_x==ri_x and li_x ==li_x)
                         #assert(not (math.isinf(ti_y) or math.isinf(bi_y) or math.isinf(ri_x) or math.isinf(li_x)))
+                        if abs(ti_y-bi_y)<0.0001:
+                            center = (ti_y+bi_y)/2
+                            ti_y = center-0.0001
+                            bi_y = center+0.0001
+                        if abs(ri_x-li_x)<0.0001:
+                            center = (ri_x+li_x)/2
+                            li_x = center-0.0001
+                            ri_x = center+0.0001
+
                         num_assigned +=1
                         if isHorz:
                             T=ti_y-tile_y #negative if above tile center (just add predcition to center)
