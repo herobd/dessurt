@@ -342,7 +342,11 @@ class PairingGroupingGraph(BaseModel):
             if self.splitFeatures:
                 raise NotImplementedError('split feature embedding not implemented for merge_first model')
             merge_featurizer_conv = config['merge_featurizer_conv']
-            merge_featurizer_conv = [detectorSavedFeatSize] + merge_featurizer_conv #bbMasks are appended
+            if self.reintroduce_visual_features!='fixed map':
+                extra = bbMasks
+            else:
+                extra = 0
+            merge_featurizer_conv = [detectorSavedFeatSize+extra] + merge_featurizer_conv #bbMasks are appended
             layers, last_ch_relC = make_layers(merge_featurizer_conv,norm=feat_norm,dropout=True) 
             #if last_ch_relC+self.numShapeFeats!=graph_in_channels:
             #    new_layer = [last_ch_relC,'k1-{}'.format(graph_in_channels-self.numShapeFeats)]
@@ -509,7 +513,7 @@ class PairingGroupingGraph(BaseModel):
                 self.keepEdgeThresh.append(graphconfig['keep_edge_thresh'] if 'keep_edge_thresh' in graphconfig else 0.4)
             self.pairer = None
 
-            if 'map' in self.reintroduce_visual_features:
+            if type(self.reintroduce_visual_features) is str and 'map' in self.reintroduce_visual_features:
                 self.reintroduce_node_visual_maps = nn.ModuleList()
                 self.reintroduce_edge_visual_maps = nn.ModuleList()
                 self.reintroduce_node_visual_maps.append(nn.Linear(graph_in_channels,graph_in_channels))
