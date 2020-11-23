@@ -278,10 +278,11 @@ class NodeTreeFunc(nn.Module):
         return out
 
 class NodeAttFunc(nn.Module):
-    def __init__(self,ch,heads=4,dropout=0.1,norm='group',useRes=True,useGlobal=False,hidden_ch=None,agg_thinker='cat',rcrhdn_size=0,relu_node_act=False,att_mod=False):
+    def __init__(self,ch,heads=4,dropout=0.1,norm='group',useRes=True,useGlobal=False,hidden_ch=None,agg_thinker='cat',rcrhdn_size=0,relu_node_act=False,att_mod=False,more_norm=False):
         super(NodeAttFunc, self).__init__()
         self.thinker=agg_thinker
         self.res=useRes
+        self.norm_before_att=more_norm
 
         if rcrhdn_size!=0:
             if rcrhdn_size<0:
@@ -303,8 +304,10 @@ class NodeAttFunc(nn.Module):
 
         if self.thinker=='cat':
             node_in=2
-        else:
+        elif self.thinker=='add':
             node_in=1
+        else:
+            raise NotImplementedError('Unknown thinker option for NodeAttFunction: {}'.format(self.thinker))
         self.useGlobal=useGlobal
         if useGlobal:
             node_in+=1
@@ -320,6 +323,8 @@ class NodeAttFunc(nn.Module):
             actM.append(nn.GroupNorm(getGroupSize(hidden_ch),hidden_ch))
             if self.use_rcrhdn:
                 actR.append(nn.GroupNorm(getGroupSize(ch),ch))
+            if more_norm:
+                dropN.append(nn.GroupNorm(getGroupSize(ch*node_in+rcrhdn_size),ch*node_in+rcrhdn_size))
 
         elif norm:
             raise NotImplemented('Norm: {}, not implmeneted for NodeAttFunc'.format(norm))
@@ -347,6 +352,7 @@ class NodeAttFunc(nn.Module):
             self.start_rcrhdn_nodes = nn.Sequential(*actR,nn.Linear(ch,self.rcrhdn_size))
             if self.use_rcrhdn=='gru':
                 self.node_rcr = nn.GRU(input_size=ch*node_in,hidden_size=rcrhdn_size,num_layers=1)
+                #maybe add normalization layer?
 
     def clear(self):
         self.rcrhdn_nodes=None
@@ -363,17 +369,25 @@ class NodeAttFunc(nn.Module):
         mask = torch.zeros(x.size(0), edge_attr.size(0))
         mask[col,eRange]=1
         mask = mask.to(x.device)
+
+        if self.norm_before_att:
+            x=self.actN(x)
+
         #Add batch dimension
         x_b = x[None,...]
         edge_attr_b = edge_attr[None,...]
         g = self.mhAtt(x_b,edge_attr_b,edge_attr_b,mask) 
+        
         #above uses unnormalized, unactivated features.
         g = g[0] #discard batch dim
-
-        if self.use_rcrhdn and self.use_rcrhdn!='gru':
-            xa = self.actN(torch.cat((x,self.rcrhdn_nodes),dim=1))
+        
+        if not self.norm_before_att:
+            if self.use_rcrhdn and self.use_rcrhdn!='gru':
+                xa = self.actN(torch.cat((x,self.rcrhdn_nodes),dim=1))
+            else:
+                xa = self.actN(x)
         else:
-            xa = self.actN(x)
+            xa=x
         if u is not None:
             assert(u.size(0)==1)
             us = u.expand(source.size(0),u.size(1))
@@ -388,6 +402,9 @@ class NodeAttFunc(nn.Module):
                 input=torch.cat((xa,g),dim=1)
             elif self.thinker=='add':
                 input= g+xa
+        if self.norm_before_att:
+            if self.use_rcrhdn and self.use_rcrhdn!='gru':
+                input=torch.cat((input,self.rcrhdn_nodes),dim=1)
         if self.use_rcrhdn=='gru':
             self.rcrhdn_nodes = self.node_rcr(input[None,...], self.rcrhdn_nodes[None,...])[1][0]
             input = torch.cat((input,self.rcrhdn_nodes),dim=1)
@@ -786,6 +803,13 @@ class MetaGraphNet(nn.Module):
         dropout = config['dropout'] if 'dropout' in config else 0.1
         hasEdgeInfo = config['input_edge'] if 'input_edge' in config else True
 
+        if 'better_norm_attention' in config and config['better_norm_attention']:
+            node_att_thinker='add'
+            node_att_more_norm=True
+        else:
+            node_att_thinker='cat'
+            node_att_more_norm=False
+
         self.trackAtt=False
 
         actN=[]
@@ -838,7 +862,7 @@ class MetaGraphNet(nn.Module):
             def getEdgeFunc(i):
                 return EdgeFunc(ch,dropout=dropout,norm=norm,useRes=True,useGlobal=useGlobal,hidden_ch=None,soft_prune_edges=soft_prune_edges_l[i],edge_decider=edge_decider,rcrhdn_size=rcrhdn_size[i],avgEdges=avgEdges)
             def getNodeFunc(i):
-                return NodeAttFunc(ch,heads=heads,dropout=dropout,norm=norm,useRes=True,useGlobal=useGlobal,hidden_ch=None,agg_thinker='cat',rcrhdn_size=rcrhdn_size[i],att_mod=att_mod)
+                return NodeAttFunc(ch,heads=heads,dropout=dropout,norm=norm,useRes=True,useGlobal=useGlobal,hidden_ch=None,agg_thinker=node_att_thinker,rcrhdn_size=rcrhdn_size[i],att_mod=att_mod,more_norm=node_att_more_norm)
             def getGlobalFunc(i):
                 if useGlobal:
                     return GlobalFunc(ch,heads=heads,dropout=dropout,norm=norm,useRes=True,hidden_ch=None,rcrhdn_size=rcrhdn_size[i])
