@@ -509,7 +509,7 @@ class PairingGroupingGraph(BaseModel):
                 self.keepEdgeThresh.append(graphconfig['keep_edge_thresh'] if 'keep_edge_thresh' in graphconfig else 0.4)
             self.pairer = None
 
-            if 'map' in self.reintroduce_visual_features:
+            if type(self.reintroduce_visual_features) is str and 'map' in self.reintroduce_visual_features:
                 self.reintroduce_node_visual_maps = nn.ModuleList()
                 self.reintroduce_edge_visual_maps = nn.ModuleList()
                 self.reintroduce_node_visual_maps.append(nn.Linear(graph_in_channels,graph_in_channels))
@@ -1954,6 +1954,8 @@ class PairingGroupingGraph(BaseModel):
             return edge_vis_features, candidates, rel_prop_scores #we won't build the graph
         if self.reintroduce_edge_visual_maps is not None:
             rel_features = self.reintroduce_edge_visual_maps[0](edge_vis_features) #this is an extra linear layer to prep the features for the graph (which expects non-activated values)
+        else:
+            rel_features = edge_vis_features
     
         #compute features for the bounding boxes by themselves
         #This will be replaced with/appended to some type of word embedding
@@ -1961,6 +1963,8 @@ class PairingGroupingGraph(BaseModel):
         node_vis_features = self.computeNodeVisualFeatures(features,features2,imageHeight,imageWidth,bbs,groups,text_emb,allMasks,merge_only,debug_image)
         if self.reintroduce_node_visual_maps is not None:
             bb_features = self.reintroduce_node_visual_maps[0](node_vis_features) #this is an extra linear layer to prep the features for the graph (which expects non-activated values)
+        else:
+            bb_features = node_vis_features
         #rint('node features built')
         #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
         #print('------node------')
