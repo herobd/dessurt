@@ -344,7 +344,7 @@ class PairingGroupingGraph(BaseModel):
             if self.splitFeatures:
                 raise NotImplementedError('split feature embedding not implemented for merge_first model')
             merge_featurizer_conv = config['merge_featurizer_conv']
-            if self.reintroduce_visual_features!='fixed map':
+            if self.merge_use_mask:
                 extra = bbMasks
             else:
                 extra = 0
