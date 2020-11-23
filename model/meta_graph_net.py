@@ -317,7 +317,6 @@ class NodeAttFunc(nn.Module):
         self.actN_u=[]
         actR=[]
         if 'group' in norm:
-            self.actN.append(nn.GroupNorm(getGroupSize(ch+rcrhdn_size),ch+rcrhdn_size_out))
             if useGlobal:
                 self.actN_u.append(nn.GroupNorm(getGroupSize(ch),ch))
             actM.append(nn.GroupNorm(getGroupSize(hidden_ch),hidden_ch))
@@ -325,6 +324,10 @@ class NodeAttFunc(nn.Module):
                 actR.append(nn.GroupNorm(getGroupSize(ch),ch))
             if more_norm:
                 dropN.append(nn.GroupNorm(getGroupSize(ch*node_in+rcrhdn_size),ch*node_in+rcrhdn_size))
+                self.norm1N = nn.GroupNorm(getGroupSize(ch),ch)
+                self.norm1E = nn.GroupNorm(getGroupSize(ch),ch)
+            else:
+                self.actN.append(nn.GroupNorm(getGroupSize(ch+rcrhdn_size),ch+rcrhdn_size_out))
 
         elif norm:
             raise NotImplemented('Norm: {}, not implmeneted for NodeAttFunc'.format(norm))
@@ -340,7 +343,8 @@ class NodeAttFunc(nn.Module):
         actR.append(nn.ReLU(inplace=True))
         if relu_node_act:
             self.actN.append(nn.ReLU(inplace=True))
-        self.actN=nn.Sequential(*self.actN)
+        if not more_norm:
+            self.actN=nn.Sequential(*self.actN)
         if useGlobal:
             self.actN_u=nn.Sequential(*self.actN_u)
 
@@ -371,7 +375,8 @@ class NodeAttFunc(nn.Module):
         mask = mask.to(x.device)
 
         if self.norm_before_att:
-            x=self.actN(x)
+            x=self.norm1N(x)
+            edge_attr=self.norm1E(edge_attr)
 
         #Add batch dimension
         x_b = x[None,...]

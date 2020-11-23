@@ -411,6 +411,9 @@ def build_oversegmented_targets_multiscale(
         #For oversegmented, we need to identify all tiles (not just on) that correspon to gt
         #That brings up an interesting alternative: limit all predictions to their local tile (width). Proba not now...
         for t in range(target_sizes[b]): #range(target.shape[1]):
+            if target[b, t, 4]<0.1:
+                print('WARNING: skipped narrow bb {}'.format(target[b, t, 0:5]))
+                continue
             #t#tic2=timeit.default_timer()
             #print('DEBUG t:{}'.format(t))
             num_assigned=0
