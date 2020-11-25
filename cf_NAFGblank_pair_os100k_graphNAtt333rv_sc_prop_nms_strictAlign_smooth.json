@@ -16,7 +16,7 @@
         "color":false,
         "rescale_range": [0.4,0.65],
         "crop_params": {
-            "crop_size":[600,1400],
+            "crop_size":[600,1200],
 	    "pad":0
         },
         "no_blanks": false,
@@ -69,9 +69,9 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 400000,
+        "iterations": 500000,
         "swa": true,
-        "swa_start": 300000,
+        "swa_start": 400000,
         "swa_c_iters": 10000,
         "save_dir": "saved/",
         "val_step": 20000,
@@ -114,9 +114,9 @@
         "start_frozen": true,
 
         "relationship_proposal": "feature_nn",
-        "percent_rel_to_keep": 0.4,
-        "max_rel_to_keep": 3000,
-        "max_merge_rel_to_keep": 6000,
+        "percent_rel_to_keep": 0.35,
+        "max_rel_to_keep": 2500,
+        "max_merge_rel_to_keep": 5600,
         "roi_batch_size": 600,
 
 	"use_rel_shape_feats": "corner",
