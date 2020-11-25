@@ -2519,7 +2519,9 @@ class PairingGroupingGraph(BaseModel):
                     shapeFeats[:,19] = (allFeats1[:,17]-allFeats2[:,17])/self.normalizeDist 
                     if self.numBBTypes==3 and allFeats1[:,18:].size(1)==2:
                         shapeFeats[:,20:20+self.numBBTypes-1] = allFeats1[:,18:]
+                        shapeFeats[:,20+self.numBBTypes-1]=0
                         shapeFeats[:,20+self.numBBTypes:20+2*self.numBBTypes-1] = allFeats2[:,18:]
+                        shapeFeats[:,20+self.numBBTypes-1]=0
                     else:
                         shapeFeats[:,20:20+self.numBBTypes] = allFeats1[:,18:]
                         shapeFeats[:,20+self.numBBTypes:20+2*self.numBBTypes] = allFeats2[:,18:]
@@ -2718,6 +2720,7 @@ class PairingGroupingGraph(BaseModel):
                         node_shapeFeats[:,5]=torch.sqrt( ((allFeats[:,6:8]+allFeats[:,12:14])/2 - (allFeats[:,8:10]+allFeats[:,10:12])/2).pow(2).sum(dim=1))/self.normalizeHorz
                         if self.numBBTypes==3 and allFeats[:,18:].size(1)==2: #catch error in blank detection (but not graph pred)
                             node_shapeFeats[:,6:6+self.numBBTypes-1]=torch.sigmoid(allFeats[:,18:])
+                            node_shapeFeats[:,6+self.numBBTypes-1]=0
                         else:
                             node_shapeFeats[:,6:6+self.numBBTypes]=torch.sigmoid(allFeats[:,18:])
                         if self.usePositionFeature:
