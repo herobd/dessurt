@@ -23,10 +23,14 @@ class BinaryPairReal(nn.Module):
         dropout = config['dropout'] if 'dropout' in config else True
 
         layer_desc = config['layers'] if 'layers' in config else ['FC256','FC256','FC256']
+        if 'Norm' in layer_desc[0]:
+            act= ['GroupNorm','ReLU']
+        else:
+            act =[]
         layer_desc = [in_ch]+layer_desc#+['FCnR{}'.format(numRelOut)]
         layers, last_ch_relC = make_layers(layer_desc,norm=norm,dropout=dropout)
         self.layersRel = nn.Sequential(*layers)
-        final, fin_ch_iout = make_layers([last_ch_relC,'FCnR{}'.format(numRelOut)],norm=norm,dropout=dropout)
+        final, fin_ch_iout = make_layers([last_ch_relC,*act,'FCnR{}'.format(numRelOut)],norm=norm,dropout=dropout)
         self.finalRel = nn.Sequential(*final)
 
         if numBBOut>0:
@@ -34,7 +38,7 @@ class BinaryPairReal(nn.Module):
             layer_desc = [in_ch]+layer_desc#+['FCnR{}'.format(numBBOut)]
             layers, last_ch_bbC = make_layers(layer_desc,norm=norm,dropout=dropout)
             self.layersBB = nn.Sequential(*layers)
-            final, fin_ch_out = make_layers([last_ch_bbC,'FCnR{}'.format(numBBOut)],norm=norm,dropout=dropout)
+            final, fin_ch_out = make_layers([last_ch_bbC,*act,'FCnR{}'.format(numBBOut)],norm=norm,dropout=dropout)
             self.finalBB = nn.Sequential(*final)
 
         #This is written to by the PairingGraph object (which holds this one)
