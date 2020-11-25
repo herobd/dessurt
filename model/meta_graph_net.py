@@ -71,9 +71,9 @@ class EdgeFunc(nn.Module):
         acts = [actS,actM,actR,actP]
 
         if self.sep_norm:
-            self.source_norm = nn.GroupNorm(getGroupSize(edge_in),edge_in)
-            self.target_norm = nn.GroupNorm(getGroupSize(edge_in),edge_in)
-            self.edge_norm = nn.GroupNorm(getGroupSize(edge_in),edge_in)
+            self.source_norm = nn.GroupNorm(getGroupSize(ch),ch)
+            self.target_norm = nn.GroupNorm(getGroupSize(ch),ch)
+            self.edge_norm = nn.GroupNorm(getGroupSize(ch),ch)
         
         if 'group' in norm:
             if not self.sep_norm:
