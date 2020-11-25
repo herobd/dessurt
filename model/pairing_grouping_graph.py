@@ -2525,7 +2525,7 @@ class PairingGroupingGraph(BaseModel):
                         shapeFeats[:,20:20+self.numBBTypes-1] = allFeats1[:,18:]
                         shapeFeats[:,20+self.numBBTypes-1]=0
                         shapeFeats[:,20+self.numBBTypes:20+2*self.numBBTypes-1] = allFeats2[:,18:]
-                        shapeFeats[:,20+self.numBBTypes-1]=0
+                        shapeFeats[:,20+2*self.numBBTypes-1]=0
                     else:
                         shapeFeats[:,20:20+self.numBBTypes] = allFeats1[:,18:]
                         shapeFeats[:,20+self.numBBTypes:20+2*self.numBBTypes] = allFeats2[:,18:]
