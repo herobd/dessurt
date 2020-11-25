@@ -126,7 +126,7 @@
         "feat_norm": "group_norm",
 
         "merge_first": true,
-        "merge_use_mask": false,
+        "merge_use_mask": true,
         "expand_merge_context": [1,1],
         "merge_featurizer_start_h": 1,
         "merge_featurizer_start_w": 1,
