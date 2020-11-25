@@ -374,9 +374,9 @@ class PairingGroupingGraph(BaseModel):
             if 'merge_pred_net' in config:
                 merge_pred_desc = config['merge_pred_net']#TODO
                 if self.reintroduce_visual_features=='map':
-                    merge_pred_desc = [last_ch_relC+self.numShapeFeats-3]+merge_pred_desc+['FCnR1']
+                    merge_pred_desc = [last_ch_relC+self.numShapeFeats]+merge_pred_desc+['FCnR1']
                 else:
-                    merge_pred_desc = [last_ch_relC+self.numShapeFeats-3,'ReLU']+merge_pred_desc+['FCnR1']
+                    merge_pred_desc = [last_ch_relC+self.numShapeFeats,'ReLU']+merge_pred_desc+['FCnR1']
                 layers, last_ch = make_layers(merge_pred_desc,norm=feat_norm,dropout=True)
                 self.mergepred  = nn.Sequential(*layers)
             else:
@@ -833,6 +833,7 @@ class PairingGroupingGraph(BaseModel):
                     #t#time = timeit.default_timer()-tic#t#
                     #t#self.opt_history['m1st createGraph'].append(time)#t#
                     if edgeOuts is not None:
+                        #print(edgeOuts.size())
                         edgeOuts = self.mergepred(edgeOuts)
                         edgeOuts = edgeOuts[:,None,:] #introduce repition dim (to match graph network)
 
@@ -2635,6 +2636,8 @@ class PairingGroupingGraph(BaseModel):
                 #THESE ARE THE VISUAL FEATURES FOR EDGES, but do we also want to include shape feats?
             #print('{} append, net profile'.format('merge' if merge_only else 'full'))
             #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
+            #print('b_relFeats {}'.format(b_relFeats.size()))
+            #print('shapeFeats {}',format(shapeFeats.size()))
             if self.useShapeFeats:
                 if self.useShapeFeats=='only':
                     b_relFeats = shapeFeats.to(features.device)
