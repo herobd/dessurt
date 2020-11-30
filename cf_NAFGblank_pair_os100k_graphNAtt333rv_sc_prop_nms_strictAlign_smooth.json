@@ -115,8 +115,8 @@
 
         "relationship_proposal": "feature_nn",
         "percent_rel_to_keep": 0.35,
-        "max_rel_to_keep": 2500,
-        "max_merge_rel_to_keep": 5500,
+        "max_rel_to_keep": 2000,
+        "max_merge_rel_to_keep": 5000,
         "roi_batch_size": 600,
 
 	"use_rel_shape_feats": "corner",
@@ -170,7 +170,8 @@
             "better_norm_edge": true,
 	    "merge_thresh": 0.8,
             "group_thresh": 0.95,
-            "keep_edge_thresh": 0.25
+            "keep_edge_thresh": 0.25,
+            "debug_check_input": false
         },
         {
             "arch": "MetaGraphNet",
@@ -186,7 +187,8 @@
             "better_norm_edge": true,
 	    "merge_thresh": 0.9,
             "group_thresh": 0.9,
-            "keep_edge_thresh": 0.3
+            "keep_edge_thresh": 0.3,
+            "debug_check_input": false
         },
         {
             "arch": "MetaGraphNet",
@@ -202,7 +204,8 @@
             "better_norm_edge": true,
 	    "merge_thresh": 0.9,
             "group_thresh": 0.6,
-            "keep_edge_thresh": 0.5
+            "keep_edge_thresh": 0.5,
+            "debug_check_input": false
         }]
 
 
