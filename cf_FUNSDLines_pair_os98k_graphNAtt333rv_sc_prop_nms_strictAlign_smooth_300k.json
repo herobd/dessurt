@@ -1,5 +1,5 @@
 {
-    "name": "FUNSDLines_pair_os98k_graphNAtt333rv_sc_prop_nms_strictAlign_smooth",
+    "name": "FUNSDLines_pair_os98k_graphNAtt333rv_sc_prop_nms_strictAlign_smooth_300k",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -64,9 +64,9 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 500000,
+        "iterations": 400000,
         "swa": true,
-        "swa_start": 400000,
+        "swa_start": 300000,
         "swa_c_iters": 10000,
         "save_dir": "saved/",
         "val_step": 20000,
