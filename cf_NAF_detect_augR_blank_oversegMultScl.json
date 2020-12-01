@@ -1,5 +1,5 @@
 {
-    "name": "NAF_detect_augRFh_oversegMultScl",
+    "name": "NAF_detect_augR_blank_oversegMultScl",
     "cuda": true,
     "gpu": 0,
     "super_computer":true,
@@ -17,10 +17,10 @@
         "crop_params": {
             "crop_size":[700,1100],
             "pad":0,
-            "rot_degree_std_dev": 1,
-            "rot_freq": 0.5
+            "rot_degree_std_dev": 1.2,
+            "rot_freq": 0.7
         },
-        "no_blanks": true,
+        "no_blanks": false,
         "swap_circle":true,
         "no_graphics":true,
         "cache_resized_images": true,
@@ -63,7 +63,7 @@
         "iterations": 200000,
         "save_dir": "saved/",
         "val_step": 10000,
-        "save_step": 20000,
+        "save_step": 50000,
         "save_step_minor": 500,
         "log_step": 500,
         "verbosity": 1,
@@ -78,7 +78,7 @@
     "arch": "OverSegBoxDetector", 
     "model": {
         "color":false,
-        "number_of_box_types": 2,
+        "number_of_box_types": 3,
         "number_of_pixel_types": 0,
         "norm_type": "group_norm",
         "dropout": true,

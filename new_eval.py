@@ -154,7 +154,7 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
             if 'style' in config['model'] and 'lookup' in config['model']['style']:
                 model.style_extractor.add_authors(data_loader.dataset.authors) ##HERE
             #just strip off the 'module.' tag. I DON'T KNOW IF THIS WILL WORK PROPERLY WITH BATCHNORM
-            new_state_dict = {key[7:]:value for key,value in checkpoint['state_dict'] if key.startswith('module.')}
+            new_state_dict = {key[7:]:value for key,value in checkpoint['swa_state_dict'].items() if key.startswith('module.')}
             model.load_state_dict(new_state_dict)
             print('Successfully loaded SWA model')
         elif 'state_dict' in checkpoint:
