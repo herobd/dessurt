@@ -239,6 +239,8 @@ class BoxDetectDataset(torch.utils.data.Dataset):
 
         ##tic=timeit.default_timer()
         np_img = img_f.imread(imagePath, 1 if self.color else 0)#/255.0
+        if np_img.max()<200:
+            np_img*=255
         if np_img is None or np_img.shape[0]==0:
             print("ERROR, could not open "+imagePath)
             return self.__getitem__((index+1)%self.__len__())

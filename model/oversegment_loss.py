@@ -1115,8 +1115,7 @@ def build_oversegmented_targets_multiscale(
                         targ_cls[b, assigned, cell_y, cell_x] = target[b, t,13:]
                         targ_r[b, assigned, cell_y, cell_x] = math.asin(gr/np.pi)/np.pi
  
-                        #assert(ti_y==ti_y and bi_y==bi_y and ri_x==ri_x and li_x ==li_x)
-                        #assert(not (math.isinf(ti_y) or math.isinf(bi_y) or math.isinf(ri_x) or math.isinf(li_x)))
+                        #prevent 0 area
                         if abs(ti_y-bi_y)<0.0001:
                             center = (ti_y+bi_y)/2
                             ti_y = center-0.0001
