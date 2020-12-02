@@ -102,21 +102,19 @@ class SimpleFullGradMod():
         """
         Compute intermediate gradients for an image
         """
+        with torch.enable_grad():
+            self.model.eval()
+            image = image.requires_grad_()
+            allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final = self.model(image)
+            edge_preds = allEdgeOuts[-1][:,-1,0]
 
-        self.model.eval()
-        image = image.requires_grad_()
-        allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final = self.model(image)
-        edge_preds = allEdgeOuts[-1][:,-1,0]
 
-        if target_class is None:
-            target_class = out.data.max(1, keepdim=True)[1]
+            # Select the output unit corresponding to the target class
+            # -1 compensates for negation in nll_loss function
+            #output_scalar = -1. * F.nll_loss(out, target_class.flatten(), reduction='sum')
+            output_scalar = -1. * F.binary_cross_entropy_with_logits(edge_preds,torch.ones_like(edge_preds),reduction='sum')
 
-        # Select the output unit corresponding to the target class
-        # -1 compensates for negation in nll_loss function
-        #output_scalar = -1. * F.nll_loss(out, target_class.flatten(), reduction='sum')
-        output_scalar = -1. * F.binary_cross_entropy_loss(edge_preds,torch.ones_like(edge_preds),reduction='sum')
-
-        return self.model_ext.getFeatureGrads(image, output_scalar)
+            return self.model_ext.getFeatureGrads(image, output_scalar)
 
     def _postProcess(self, input, eps=1e-6):
         # Absolute value

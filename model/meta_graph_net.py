@@ -802,7 +802,7 @@ class MetaGraphNet(nn.Module):
     def __init__(self, config): # predCount, base_0, base_1):
         super(MetaGraphNet, self).__init__()
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.validate_input = config['debug_check_input'] if 'debug_check_input' in config else True
+        self.validate_input = config['debug_check_input'] if 'debug_check_input' in config else False
 
         
         self.useRepRes = config['use_repetition_res'] if 'use_repetition_res' in config else False
@@ -1021,8 +1021,9 @@ class MetaGraphNet(nn.Module):
         if self.undirected:
             out_edges = (out_edges[:out_edges.size(0)//2] + out_edges[out_edges.size(0)//2:])/2
             edge_features = (edge_features[:edge_features.size(0)//2] + edge_features[edge_features.size(0)//2:])/2
-        assert(node_features.max()<1000)
-        assert(edge_features.max()<1000)
+        if self.validate_input:
+            assert(node_features.max()<1000)
+            assert(edge_features.max()<1000)
 
         return out_nodes, out_edges, node_features, edge_features, u_features
 
