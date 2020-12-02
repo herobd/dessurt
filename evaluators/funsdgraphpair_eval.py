@@ -131,7 +131,10 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         losses, log, out = trainer.newRun(instance,False,get=toEval)
 
     if do_saliency_map:
-        s_data = data.cuda().requires_grad_()
+        if config['cuda']:
+            s_data = data.cuda().requires_grad_()
+        else:
+            s_data = data.requires_grad_()
         #saliency_maps,edges_info = trainer.saliency_model(s_data)
         saliency_model = SimpleFullGradMod(trainer.model)
         saliency_maps,edges_info = saliency_model.saliency(s_data)
