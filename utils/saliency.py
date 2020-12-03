@@ -85,15 +85,17 @@ class FullGradExtractor:
 
         # Gradients w.r.t. input
         input_gradients = []
+        self.model.zero_grad()
         for output_scalar in output_scalars:
-            self.model.zero_grad()
             input_gradients.append( torch.autograd.grad(
                 outputs = output_scalar, 
                 inputs = x, 
                 retain_graph=True,
                 create_graph=False)[0].cpu().detach() )
             #torch.cuda.empty_cache()
-            print(get_gpu_memory_map())
+            #print(get_gpu_memory_map())
+            stats=torch.cuda.memory_stats(0)
+            print(stats['allocated_bytes.all.current'])
         input_gradients = torch.cat(input_gradients,dim=0)
         #self.model.zero_grad()
         #input_gradients = torch.autograd.grad(
