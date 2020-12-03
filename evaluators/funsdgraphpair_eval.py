@@ -79,6 +79,19 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
     numClasses=len(trainer.classMap)
 
     resultsDirName='results'
+
+    if do_saliency_map:
+        if config['cuda']:
+            s_data = data.cuda().requires_grad_()
+        else:
+            s_data = data.requires_grad_()
+        #saliency_maps,edges_info = trainer.saliency_model(s_data)
+        saliency_model = SimpleFullGradMod(trainer.model)
+        saliency_maps,edges_info = saliency_model.saliency(s_data)
+        image = (1-data[0].cpu())/2
+        for ei,(saliency_map,edge_info) in enumerate(zip(saliency_maps,edges_info)):
+            #draw edge unto image
+            save_saliency_map(image, saliency_map, os.path.join(outDir,'{}_saliency_{}.png'.format(imageName,ei)))
     #if outDir is not None and resultsDirName is not None:
         #rPath = os.path.join(outDir,resultsDirName)
         #if not os.path.exists(rPath):
@@ -130,18 +143,6 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
     else:
         losses, log, out = trainer.newRun(instance,False,get=toEval)
 
-    if do_saliency_map:
-        if config['cuda']:
-            s_data = data.cuda().requires_grad_()
-        else:
-            s_data = data.requires_grad_()
-        #saliency_maps,edges_info = trainer.saliency_model(s_data)
-        saliency_model = SimpleFullGradMod(trainer.model)
-        saliency_maps,edges_info = saliency_model.saliency(s_data)
-        image = (1-data[0].cpu())/2
-        for ei,(saliency_map,edge_info) in enumerate(zip(saliency_maps,edges_info)):
-            #draw edge unto image
-            save_saliency_map(image, saliency_map, os.path.join(outDir,'{}_saliency_{}.png'.format(imgageName,ei)))
 
     if trackAtt:
         if model.pairer is None:

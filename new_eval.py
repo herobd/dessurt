@@ -202,7 +202,8 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
         train_iter = iter(data_loader)
     valid_iter = iter(valid_data_loader)
 
-    with torch.no_grad():
+    print("WARNING GRAD ENABLED")
+    with torch.enable_grad():
         if index is None:
 
 

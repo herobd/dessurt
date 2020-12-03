@@ -1115,15 +1115,15 @@ class PairingGroupingGraph(BaseModel):
             node_features = self.reintroduce_node_visual_maps[giter](cat_node_f)
             if edge_features.size(1)==0:
                 edge_features = edge_visual_feats
-                assert(edge_features.size(0)==0 or edge_features.max()<900)
+                #assert(edge_features.size(0)==0 or edge_features.max()<900)
             elif edge_features.size(0)==edge_visual_feats.size(0)*2:
                 edge_features = self.reintroduce_edge_visual_maps[giter](torch.cat((edge_features_old,edge_visual_feats.repeat(2,1)),dim=1))
-                assert(edge_features.size(0)==0 or edge_features.max()<900)
+                #assert(edge_features.size(0)==0 or edge_features.max()<900)
 
             else:
                 edge_features = self.reintroduce_edge_visual_maps[giter](torch.cat((edge_features_old,edge_visual_feats),dim=1))
-                assert(edge_features.size(0)==0 or edge_features.max()<900)
-            assert(node_features.max()<900)
+                #assert(edge_features.size(0)==0 or edge_features.max()<900)
+            #assert(node_features.max()<900)
             
         elif self.reintroduce_visual_features=='map':
             node_features_old=node_features
