@@ -21,9 +21,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from math import isclose
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+import numpy as np
+from utils import img_f
+from utils.gpu import get_gpu_memory_map
 
 class FullGradExtractor:
     #Extract tensors needed for FullGrad using hooks
@@ -78,14 +78,30 @@ class FullGradExtractor:
         if not module.bias is None:
             self.feature_grads.append(out_grad[0])
 
-    def getFeatureGrads(self, x, output_scalar):
+    def getFeatureGrads(self, x, output_scalars):
         
         # Empty feature grads list 
         self.feature_grads = []
 
-        self.model.zero_grad()
         # Gradients w.r.t. input
-        input_gradients = torch.autograd.grad(outputs = output_scalar, inputs = x)[0]
+        input_gradients = []
+        for output_scalar in output_scalars:
+            self.model.zero_grad()
+            input_gradients.append( torch.autograd.grad(
+                outputs = output_scalar, 
+                inputs = x, 
+                retain_graph=True,
+                create_graph=False)[0].cpu().detach() )
+            #torch.cuda.empty_cache()
+            print(get_gpu_memory_map())
+        input_gradients = torch.cat(input_gradients,dim=0)
+        #self.model.zero_grad()
+        #input_gradients = torch.autograd.grad(
+        #    outputs = output_scalars,
+        #    inputs = x,
+        #    grad_outputs = torch.ones_like(output_scalars),
+        #    )[0]
+        #import pdb;pdb.set_trace()
 
         return input_gradients, self.feature_grads
 
@@ -102,8 +118,8 @@ class SimpleFullGradMod():
         """
         Compute intermediate gradients for an image
         """
+        self.model.train()
         with torch.enable_grad():
-            self.model.eval()
             image = image.requires_grad_()
             allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final = self.model(image)
             edge_preds = allEdgeOuts[-1][:,-1,0]
@@ -112,7 +128,7 @@ class SimpleFullGradMod():
             # Select the output unit corresponding to the target class
             # -1 compensates for negation in nll_loss function
             #output_scalar = -1. * F.nll_loss(out, target_class.flatten(), reduction='sum')
-            output_scalar = -1. * F.binary_cross_entropy_with_logits(edge_preds,torch.ones_like(edge_preds),reduction='sum')
+            output_scalar = -1. * F.binary_cross_entropy_with_logits(edge_preds,torch.ones_like(edge_preds),reduction='none')
 
             return self.model_ext.getFeatureGrads(image, output_scalar)
 
@@ -137,6 +153,8 @@ class SimpleFullGradMod():
         input_grad, intermed_grad = self._getGradients(image)
         
         im_size = image.size()
+        #im_size[2] //= 2
+        #im_size[2] //= 2
         assert(im_size[0]==1)
         image = image.expand(input_grad.size(0),-1,-1,-1) #expand to number of edges
 
@@ -151,8 +169,9 @@ class SimpleFullGradMod():
             # Select only Conv layers 
             if len(intermed_grad[i].size()) == len(im_size):
                 temp = self._postProcess(intermed_grad[i])
+                temp = gradient.sum(1, keepdim=True)
                 gradient = F.interpolate(temp, size=(im_size[2], im_size[3]), mode = 'bilinear', align_corners=True) 
-                cam += gradient.sum(1, keepdim=True)
+                cam += gradient#.sum(1, keepdim=True)
 
         return cam, [None]*cam.size(0)
 
@@ -175,9 +194,12 @@ def save_saliency_map(image, saliency_map, filename):
     saliency_map = saliency_map.clip(0,1)
 
     image = np.uint8(image * 255).transpose(1,2,0)
-    image[:,:,1]*=saliency_map
+    if image.shape[2]==1:
+        image = np.repeat(image,3,2)
+    image[:,:,1]=image[:,:,1].astype(float)*saliency_map
+    image[:,:,2]=image[:,:,2].astype(float)*(1-saliency_map)
     saliency_map = np.uint8(saliency_map * 255).transpose(1, 2, 0)
-    image[:,:,0]=saliency_map
+    image[:,:,0]=saliency_map[:,:,0]
 
     img_f.imwrite(filename, image)
 
