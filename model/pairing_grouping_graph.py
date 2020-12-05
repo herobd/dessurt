@@ -104,6 +104,7 @@ class PairingGroupingGraph(BaseModel):
         super(PairingGroupingGraph, self).__init__(config)
         self.useCurvedBBs=False
         self.legacy= 'legacy' in config and config['legacy']
+        self.all_grad=False
 
         if 'detector_checkpoint' in config:
             if os.path.exists(config['detector_checkpoint']):
@@ -2343,7 +2344,7 @@ class PairingGroupingGraph(BaseModel):
         #crop from feats, ROI pool
         for ib,(b_start,b_end) in enumerate(innerbatches): #we can batch extracting computing the feature vector from rois to save memory
             #t#tic=timeit.default_timer()#t#
-            if ib>0:
+            if ib>0 and not self.all_grad:
                 torch.set_grad_enabled(False)
             b_rois = rois[b_start:b_end]
             b_edges = edges[b_start:b_end]
