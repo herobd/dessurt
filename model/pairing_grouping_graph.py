@@ -104,6 +104,7 @@ class PairingGroupingGraph(BaseModel):
         super(PairingGroupingGraph, self).__init__(config)
         self.useCurvedBBs=False
         self.legacy= 'legacy' in config and config['legacy']
+        self.all_grad=False
 
         if 'detector_checkpoint' in config:
             if os.path.exists(config['detector_checkpoint']):
@@ -673,7 +674,7 @@ class PairingGroupingGraph(BaseModel):
             print('Unfroze detector')
         
 
-    def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=300, debug=False,old_nn=False,gtTrans=None,merge_first_only=False):
+    def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=5000, debug=False,old_nn=False,gtTrans=None,merge_first_only=False):
         assert(image.size(0)==1) #implementation designed for batch size of 1. Should work to do data parallelism, since each copy of the model will get a batch size of 1
         #t###tic=timeit.default_timer()#t#
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
@@ -1115,15 +1116,15 @@ class PairingGroupingGraph(BaseModel):
             node_features = self.reintroduce_node_visual_maps[giter](cat_node_f)
             if edge_features.size(1)==0:
                 edge_features = edge_visual_feats
-                assert(edge_features.size(0)==0 or edge_features.max()<900)
+                #assert(edge_features.size(0)==0 or edge_features.max()<900)
             elif edge_features.size(0)==edge_visual_feats.size(0)*2:
                 edge_features = self.reintroduce_edge_visual_maps[giter](torch.cat((edge_features_old,edge_visual_feats.repeat(2,1)),dim=1))
-                assert(edge_features.size(0)==0 or edge_features.max()<900)
+                #assert(edge_features.size(0)==0 or edge_features.max()<900)
 
             else:
                 edge_features = self.reintroduce_edge_visual_maps[giter](torch.cat((edge_features_old,edge_visual_feats),dim=1))
-                assert(edge_features.size(0)==0 or edge_features.max()<900)
-            assert(node_features.max()<900)
+                #assert(edge_features.size(0)==0 or edge_features.max()<900)
+            #assert(node_features.max()<900)
             
         elif self.reintroduce_visual_features=='map':
             node_features_old=node_features
@@ -2343,7 +2344,7 @@ class PairingGroupingGraph(BaseModel):
         #crop from feats, ROI pool
         for ib,(b_start,b_end) in enumerate(innerbatches): #we can batch extracting computing the feature vector from rois to save memory
             #t#tic=timeit.default_timer()#t#
-            if ib>0:
+            if ib>0 and not self.all_grad:
                 torch.set_grad_enabled(False)
             b_rois = rois[b_start:b_end]
             b_edges = edges[b_start:b_end]

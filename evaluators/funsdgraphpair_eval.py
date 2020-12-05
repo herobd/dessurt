@@ -16,6 +16,7 @@ import json
 from utils.forms_annotations import fixAnnotations, getBBInfo
 from evaluators.draw_graph import draw_graph
 
+from utils.saliency import SimpleFullGradMod, save_saliency_map
 
 
 def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startIndex=None, lossFunc=None, toEval=None):
@@ -72,10 +73,25 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         useDetections = config['useDetect']
     confThresh = config['conf_thresh'] if 'conf_thresh' in config else None
 
+    do_saliency_map =  config['saliency'] if 'saliency' in config else False
+
 
     numClasses=len(trainer.classMap)
 
     resultsDirName='results'
+
+    if do_saliency_map and outDir is not None:
+        if config['cuda']:
+            s_data = data.cuda().requires_grad_()
+        else:
+            s_data = data.requires_grad_()
+        #saliency_maps,edges_info = trainer.saliency_model(s_data)
+        saliency_maps,edges_info = trainer.saliency_model.saliency(s_data)
+        if saliency_maps is not None:
+            image = (1-data[0].cpu())/2
+            for ei,saliency_map in enumerate(saliency_maps):
+                #draw edge unto image
+                save_saliency_map(image, saliency_map, edges_info, ei, os.path.join(outDir,'{}_saliency_{}.png'.format(imageName,ei)))
     #if outDir is not None and resultsDirName is not None:
         #rPath = os.path.join(outDir,resultsDirName)
         #if not os.path.exists(rPath):
@@ -126,6 +142,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         exit()
     else:
         losses, log, out = trainer.newRun(instance,False,get=toEval)
+
 
     if trackAtt:
         if model.pairer is None:
