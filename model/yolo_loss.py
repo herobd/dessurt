@@ -360,7 +360,7 @@ def build_targets(
             th[b, best_n, gj, gi] = math.log(gh / anchors[best_n][1] + 1e-16)
             # One-hot encoding of label
             #target_label = int(target[b, t, 0])
-            tcls[b, best_n, gj, gi] = target[b, t,13:]
+            tcls[b, best_n, gj, gi] = target[b, t,-nC:]
             if target_num_neighbors is not None:
                 tneighbors[b, best_n, gj, gi] = target_num_neighbors[b, t]
             tconf[b, best_n, gj, gi] = 1
