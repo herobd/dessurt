@@ -15,6 +15,7 @@ from collections import defaultdict
 import pickle
 #import requests
 import warnings
+from utils.saliency import SimpleFullGradMod
 
 def update_status(name,message):
     try:
@@ -193,6 +194,9 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
     #saveFunc = eval(trainer_class+'_printer')
     saveFunc = eval(config['data_loader']['data_set_name']+'_eval')
 
+    do_saliency_map =  config['saliency'] if 'saliency' in config else False
+    if do_saliency_map:
+        trainer.saliency_model = SimpleFullGradMod(trainer.model)
 
     step=5
 
@@ -202,6 +206,7 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
         train_iter = iter(data_loader)
     valid_iter = iter(valid_data_loader)
 
+    #print("WARNING GRAD ENABLED")
     with torch.no_grad():
         if index is None:
 
