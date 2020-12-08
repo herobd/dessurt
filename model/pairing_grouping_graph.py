@@ -2236,10 +2236,10 @@ class PairingGroupingGraph(BaseModel):
 
                 min_X1,min_Y1,max_X1,max_Y1 = torch.IntTensor([groupRect([[tlX[b],tlY[b],brX[b],brY[b]] for b in group]) for group in groupIs_index1]).permute(1,0)
                 min_X2,min_Y2,max_X2,max_Y2 = torch.IntTensor([groupRect([[tlX[b],tlY[b],brX[b],brY[b]] for b in group]) for group in groupIs_index2]).permute(1,0)
-                min_X = torch.min(min_X1,min_X2)
-                min_Y = torch.min(min_Y1,min_Y2)
-                max_X = torch.max(max_X1,max_X2)
-                max_Y = torch.max(max_Y1,max_Y2)
+                min_X = torch.min(min_X1,min_X2).to(features.device)
+                min_Y = torch.min(min_Y1,min_Y2).to(features.device)
+                max_X = torch.max(max_X1,max_X2).to(features.device)
+                max_Y = torch.max(max_Y1,max_Y2).to(features.device)
             if merge_only:
                 padX = self.expandedMergeContextX
                 padY = self.expandedMergeContextY
