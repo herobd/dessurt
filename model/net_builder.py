@@ -252,6 +252,8 @@ def make_layers(cfg, dilation=1, norm=None, dropout=None):
             modules.append(nn.Sequential(*layers))
             layers = [nn.MaxPool2d(kernel_size=(2,3), stride=(2,3))]
             layerCodes = [v]
+        elif type(v)==str and v=='GroupNorm':
+            layers.append(nn.GroupNorm(getGroupSize(in_channels[-1]),in_channels[-1]))
         elif type(v)==str and v == 'ReLU':
             layers.append( nn.ReLU(inplace=True) )
             layerCodes.append(v)

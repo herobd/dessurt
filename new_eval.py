@@ -15,6 +15,7 @@ from collections import defaultdict
 import pickle
 #import requests
 import warnings
+from utils.saliency import SimpleFullGradMod
 
 def update_status(name,message):
     try:
@@ -154,7 +155,7 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
             if 'style' in config['model'] and 'lookup' in config['model']['style']:
                 model.style_extractor.add_authors(data_loader.dataset.authors) ##HERE
             #just strip off the 'module.' tag. I DON'T KNOW IF THIS WILL WORK PROPERLY WITH BATCHNORM
-            new_state_dict = {key[7:]:value for key,value in checkpoint['state_dict'] if key.startswith('module.')}
+            new_state_dict = {key[7:]:value for key,value in checkpoint['swa_state_dict'].items() if key.startswith('module.')}
             model.load_state_dict(new_state_dict)
             print('Successfully loaded SWA model')
         elif 'state_dict' in checkpoint:
@@ -193,6 +194,9 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
     #saveFunc = eval(trainer_class+'_printer')
     saveFunc = eval(config['data_loader']['data_set_name']+'_eval')
 
+    do_saliency_map =  config['saliency'] if 'saliency' in config else False
+    if do_saliency_map:
+        trainer.saliency_model = SimpleFullGradMod(trainer.model)
 
     step=5
 
@@ -202,6 +206,7 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
         train_iter = iter(data_loader)
     valid_iter = iter(valid_data_loader)
 
+    #print("WARNING GRAD ENABLED")
     with torch.no_grad():
         if index is None:
 

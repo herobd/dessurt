@@ -151,17 +151,26 @@ if __name__ == "__main__":
     else:
         repeat=1
     data=FormsGraphPair(dirPath=dirPath,split='valid',config={
-        'color':False,
-        'crop_to_page':False,
-        'rescale_range':[1,1],
-        'Xrescale_range':[0.4,0.65],
-        'Xcrop_params':{"crop_size":[652,1608],"pad":0}, 
-        'no_blanks':True,
+	"data_set_name": "FormsGraphPair",
+        "special_dataset": None,
+        "data_dir": "../data/forms",
+        "batch_size": 1,
+        "shuffle": True,
+        "num_workers": 2,
+        "crop_to_page":False,
+        "color":False,
+        "rescale_range": [0.4,0.65],
+        "#crop_params": None,
+        "crop_params": {
+            "crop_size":[600,1200],
+            "pad":0
+        },
+        "no_blanks": False,
         "swap_circle":True,
-        'no_graphics':True,
-        'rotation':False,
-        'only_opposite_pairs':False,
-        #"only_types": ["text_start_gt"]
+        "no_graphics":True,
+        "cache_resized_images": True,
+        "rotation": False,
+        "only_opposite_pairs": True
 })
 
     dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=forms_graph_pair.collate)

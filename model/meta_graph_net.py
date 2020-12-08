@@ -34,11 +34,12 @@ class MetaGraphFCEncoderLayer(nn.Module):
         return node_featuresN, edge_indexes, edge_features, u_features
 
 class EdgeFunc(nn.Module):
-    def __init__(self,ch,dropout=0.1,norm='group',useRes=True,useGlobal=False,hidden_ch=None,soft_prune_edges=False,edge_decider=None,rcrhdn_size=0,avgEdges=False):
+    def __init__(self,ch,dropout=0.1,norm='group',useRes=True,useGlobal=False,hidden_ch=None,soft_prune_edges=False,edge_decider=None,rcrhdn_size=0,avgEdges=False,sep_norm=False):
         super(EdgeFunc, self).__init__()
         self.soft_prune_edges=soft_prune_edges
         self.res=useRes
         self.avgEdges=avgEdges
+        self.sep_norm = sep_norm
 
         if rcrhdn_size!=0:
             if rcrhdn_size<0:
@@ -68,9 +69,15 @@ class EdgeFunc(nn.Module):
         actR=[]
         actP=[]
         acts = [actS,actM,actR,actP]
+
+        if self.sep_norm:
+            self.source_norm = nn.GroupNorm(getGroupSize(ch),ch)
+            self.target_norm = nn.GroupNorm(getGroupSize(ch),ch)
+            self.edge_norm = nn.GroupNorm(getGroupSize(ch),ch)
         
         if 'group' in norm:
-            actS.append(nn.GroupNorm(getGroupSize(edge_in*ch+rcrhdn_size,edge_in*8),edge_in*ch+rcrhdn_size))
+            if not self.sep_norm:
+                actS.append(nn.GroupNorm(getGroupSize(edge_in*ch+rcrhdn_size,edge_in*8),edge_in*ch+rcrhdn_size))
             actM.append(nn.GroupNorm(getGroupSize(hidden_ch),hidden_ch))
             if self.use_rcrhdn:
                 actR.append(nn.GroupNorm(getGroupSize(ch),ch))
@@ -117,9 +124,14 @@ class EdgeFunc(nn.Module):
         # u: [B, F_u], where B is the number of graphs.
         if u is not None:
             assert(u.size(0)==1)
+            assert(not self.sep_norm)
             us = u.expand(source.size(0),u.size(1))
             out = torch.cat([source, target, edge_attr,us], dim=1)
         else:
+            if self.sep_norm:
+                source = self.source_norm(source)
+                target = self.target_norm(target)
+                edge_attr = self.edge_norm(edge_attr)
             out = torch.cat([source, target, edge_attr], dim=1)
         if self.use_rcrhdn=='gru':
             self.rcrhdn_edges = self.edge_rcr(out[None,...], self.rcrhdn_edges[None,...])[1][0]
@@ -186,7 +198,7 @@ class NodeTreeFunc(nn.Module):
             act1Step.append(nn.GroupNorm(getGroupSize(ch*3),ch*3))
             act2Step.append(nn.GroupNorm(getGroupSize(ch*2),ch*2))
         elif norm:
-            raise NotImplemented('Norm: {}, not implmeneted for EdgeFunc'.format(norm))
+            raise NotImplemented('Norm: {}, not implmeneted for NodeTreeF'.format(norm))
         if dropout is not None:
             if type(dropout) is float or dropout==0:
                 da=dropout
@@ -790,6 +802,7 @@ class MetaGraphNet(nn.Module):
     def __init__(self, config): # predCount, base_0, base_1):
         super(MetaGraphNet, self).__init__()
         self.logger = logging.getLogger(self.__class__.__name__)
+        self.validate_input = config['debug_check_input'] if 'debug_check_input' in config else False
 
         
         self.useRepRes = config['use_repetition_res'] if 'use_repetition_res' in config else False
@@ -814,6 +827,8 @@ class MetaGraphNet(nn.Module):
         else:
             node_att_thinker='cat'
             node_att_more_norm=False
+        edge_sep_norm = 'better_norm_edge' in config and config['better_norm_edge']
+
 
         self.trackAtt=False
 
@@ -865,7 +880,7 @@ class MetaGraphNet(nn.Module):
             heads = config['num_heads'] if 'num_heads' in config else 4
 
             def getEdgeFunc(i):
-                return EdgeFunc(ch,dropout=dropout,norm=norm,useRes=True,useGlobal=useGlobal,hidden_ch=None,soft_prune_edges=soft_prune_edges_l[i],edge_decider=edge_decider,rcrhdn_size=rcrhdn_size[i],avgEdges=avgEdges)
+                return EdgeFunc(ch,dropout=dropout,norm=norm,useRes=True,useGlobal=useGlobal,hidden_ch=None,soft_prune_edges=soft_prune_edges_l[i],edge_decider=edge_decider,rcrhdn_size=rcrhdn_size[i],avgEdges=avgEdges,sep_norm=edge_sep_norm)
             def getNodeFunc(i):
                 return NodeAttFunc(ch,heads=heads,dropout=dropout,norm=norm,useRes=True,useGlobal=useGlobal,hidden_ch=None,agg_thinker=node_att_thinker,rcrhdn_size=rcrhdn_size[i],att_mod=att_mod,more_norm=node_att_more_norm)
             def getGlobalFunc(i):
@@ -927,7 +942,10 @@ class MetaGraphNet(nn.Module):
 
     def forward(self, input):
         node_features, edge_indexes, edge_features, u_features = input
-        assert(node_features.min()<0 and 'Im assuming the input has not been ReLUed')
+        if self.validate_input:
+            assert(node_features.min()<0 and 'Im assuming the input has not been ReLUed')
+            assert(node_features.max()<900)
+            assert(edge_features.size(0)==0 or edge_features.max()<900)
         if self.randomReps:
             if self.training:
                 repetitions=np.random.randint(self.minReps,self.maxReps+1)
@@ -1003,6 +1021,9 @@ class MetaGraphNet(nn.Module):
         if self.undirected:
             out_edges = (out_edges[:out_edges.size(0)//2] + out_edges[out_edges.size(0)//2:])/2
             edge_features = (edge_features[:edge_features.size(0)//2] + edge_features[edge_features.size(0)//2:])/2
+        if self.validate_input:
+            assert(node_features.max()<1000)
+            assert(edge_features.max()<1000)
 
         return out_nodes, out_edges, node_features, edge_features, u_features
 
