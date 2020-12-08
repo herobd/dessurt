@@ -104,6 +104,7 @@ class PairingGroupingGraph(BaseModel):
         super(PairingGroupingGraph, self).__init__(config)
         self.useCurvedBBs=False
         self.legacy= 'legacy' in config and config['legacy']
+        self.all_grad=False
 
         if 'detector_checkpoint' in config:
             if os.path.exists(config['detector_checkpoint']):
@@ -918,8 +919,8 @@ class PairingGroupingGraph(BaseModel):
                 #t#tic=timeit.default_timer()#t#
 
                 #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
-                print('{} node feats mean:{:.3}, std:{:.3}, min:{:.2}, max:{:.2}'.format(0,graph[0].mean(),graph[0].std(),   graph[0].min(), graph[0].max()))
-                print('  edge feats mean:{:.3}, std:{:.3}, min:{:.2}, max:{:.2}'.format(graph[2].mean(), graph[2].std(),  graph[2].min(), graph[2].max()))
+                #print('{} node feats mean:{:.3}, std:{:.3}, min:{:.2}, max:{:.2}'.format(0,graph[0].mean(),graph[0].std(),   graph[0].min(), graph[0].max()))
+                #print('  edge feats mean:{:.3}, std:{:.3}, min:{:.2}, max:{:.2}'.format(graph[2].mean(), graph[2].std(),  graph[2].min(), graph[2].max()))
                 nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = self.graphnets[0](graph)
                 assert(edgeOuts is None or not torch.isnan(edgeOuts).any())
                 edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
@@ -983,8 +984,8 @@ class PairingGroupingGraph(BaseModel):
                         break #we have no graph, so we can just end here
                     #print('!D! after  edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(graph[2].size(),len(useBBs),graph[0].size(),len(edgeIndexes)))
                     #print('      graph num edges: {}'.format(graph[1].size()))
-                    print('{} node feats mean:{:.3}, std:{:.3}, min:{:.2}, max:{:.2}'.format(gIter,graph[0].mean(),graph[0].std(),   graph[0].min(), graph[0].max()))
-                    print('  edge feats mean:{:.3}, std:{:.3}, min:{:.2}, max:{:.2}'.format(graph[2].mean(), graph[2].std(),  graph[2].min(), graph[2].max()))
+                    #print('{} node feats mean:{:.3}, std:{:.3}, min:{:.2}, max:{:.2}'.format(gIter,graph[0].mean(),graph[0].std(),   graph[0].min(), graph[0].max()))
+                    #print('  edge feats mean:{:.3}, std:{:.3}, min:{:.2}, max:{:.2}'.format(graph[2].mean(), graph[2].std(),  graph[2].min(), graph[2].max()))
                     nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = graphnet(graph)
                     #edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
                     useBBs = self.updateBBs(useBBs,groups,nodeOuts)
@@ -2343,7 +2344,7 @@ class PairingGroupingGraph(BaseModel):
         #crop from feats, ROI pool
         for ib,(b_start,b_end) in enumerate(innerbatches): #we can batch extracting computing the feature vector from rois to save memory
             #t#tic=timeit.default_timer()#t#
-            if ib>0:
+            if ib>0 and not self.all_grad:
                 torch.set_grad_enabled(False)
             b_rois = rois[b_start:b_end]
             b_edges = edges[b_start:b_end]
