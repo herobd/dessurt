@@ -422,9 +422,26 @@ class BaseTrainer:
         self.monitor_best = checkpoint['monitor_best']
         #print(checkpoint['state_dict'].keys())
         if ('save_mode' not in self.config or self.config['save_mode']=='state_dict') and 'state_dict' in checkpoint:
+            #Brain surgery, allow restarting with modified model
+            keys=checkpoint['state_dict'].keys()
+            init_state_dict = self.model.state_dict()
+            for key in keys:
+                if init_state_dict[key].size(0)>checkpoint['state_dict'][key].size(0):
+                    orig_size = checkpoint['state_dict'][key].size(0)
+                    init_state_dict[key][:orig_size] = checkpoint['state_dict'][key]
+                    checkpoint['state_dict'][key] = init_state_dict[key]
+                    self.logger.info('BRAIN SURGERY PERFORMED on {}'.format(key))
             self.model.load_state_dict(checkpoint['state_dict'])
             if self.swa and 'swa_state_dict' in checkpoint:
                 self.swa_model = AveragedModel(self.model)
+                keys=checkpoint['swa_state_dict'].keys()
+                init_state_dict = self.swa_model.state_dict()
+                for key in keys:
+                    if torch.is_tensor(init_state_dict[key]) and len(init_state_dict[key].size())>0 and init_state_dict[key].size(0)>checkpoint['swa_state_dict'][key].size(0):
+                        orig_size = checkpoint['swa_state_dict'][key].size(0)
+                        init_state_dict[key][:orig_size] = checkpoint['swa_state_dict'][key]
+                        checkpoint['swa_state_dict'][key] = init_state_dict[key]
+                        self.logger.info('BRAIN SURGERY PERFORMED on {}'.format(key))
                 self.swa_model.load_state_dict(checkpoint['swa_state_dict'])
         else:
             self.model = checkpoint['model']
