@@ -58,10 +58,10 @@ def display(data):
                 color = (1,0,0)#'b-'
             else:
                 color = (0,1,0)#'r-'
-            tr = (math.cos(rot)*w-math.sin(rot)*h +xc, -math.sin(rot)*w-math.cos(rot)*h +yc)
-            tl = (-math.cos(rot)*w-math.sin(rot)*h +xc, math.sin(rot)*w-math.cos(rot)*h +yc)
-            br = (math.cos(rot)*w+math.sin(rot)*h +xc, -math.sin(rot)*w+math.cos(rot)*h +yc)
-            bl = (-math.cos(rot)*w+math.sin(rot)*h +xc, math.sin(rot)*w+math.cos(rot)*h +yc)
+            tr = (int(math.cos(rot)*w-math.sin(rot)*h +xc), int(-math.sin(rot)*w-math.cos(rot)*h +yc))
+            tl = (int(-math.cos(rot)*w-math.sin(rot)*h +xc),int( math.sin(rot)*w-math.cos(rot)*h +yc))
+            br = (int(math.cos(rot)*w+math.sin(rot)*h +xc), int(-math.sin(rot)*w+math.cos(rot)*h +yc))
+            bl = (int(-math.cos(rot)*w+math.sin(rot)*h +xc),int( math.sin(rot)*w+math.cos(rot)*h +yc))
             #print([tr,tl,br,bl])
 
             #ax_im.plot([tr[0],tl[0],bl[0],br[0],tr[0]],[tr[1],tl[1],bl[1],br[1],tr[1]],color)
@@ -72,10 +72,11 @@ def display(data):
                 if blank>0:
                     #ax_im.plot(tr[0],tr[1],'mo')
                     img[tr[1]-1:tr[1]+2,tr[0]-1:tr[0]+2,2]=1
-                paired = data['bb_gt'][b,i,16]
-                if paired>0:
-                    #ax_im.plot(br[0],br[1],'go')
-                    img[tr[1]-1:tr[1]+2,tr[0]-1:tr[0]+2,0:2]=1
+                if  data['bb_gt'].size(2)>16:
+                    paired = data['bb_gt'][b,i,16]
+                    if paired>0:
+                        #ax_im.plot(br[0],br[1],'go')
+                        img[tr[1]-1:tr[1]+2,tr[0]-1:tr[0]+2,0:2]=1
 
 
         if 'line_gt' in data and data['line_gt'] is not None:
@@ -118,19 +119,29 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=FormsBoxDetect(dirPath=dirPath,split='train',config={'crop_to_page':False,'rescale_range':[0.4,0.65],
-        'crop_params':{ "crop_size":[652,1608], 
-                        "pad":0, 
-                        "rot_degree_std_dev":1,
-                        "rot_freq": 0.5,
-                        "flip_horz": False,
-                        "flip_vert": False}, 
-        'color': False,
-        'no_blanks':True,
+    data=FormsBoxDetect(dirPath=dirPath,split='train',config={
+	"data_set_name": "FormsBoxDetect",
+        "data_dir": "../data/forms",
+        "batch_size": 5,
+        "shuffle": True,
+        "num_workers": 3,
+        "crop_to_page":False,
+        "color":False,
+        "rescale_range": [0.4,0.65],
+        "crop_params": {
+            "crop_size":[700,1100],
+            "pad":0,
+            "rot_degree_std_dev": 1,
+            "rot_freq": 0.5
+        },
+        "no_blanks": False,
         "swap_circle":True,
-        'no_graphics':True,
-        'rotation':True,
-        "only_types": {"boxes":True}
+        "no_graphics":True,
+        "cache_resized_images": True,
+        "only_types": {
+            "boxes":True
+        },
+        "rotation": True
 })
     #data.cluster(start,repeat,'anchors_rot_{}.json')
 
