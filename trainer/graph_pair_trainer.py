@@ -1924,9 +1924,11 @@ class GraphPairTrainer(BaseTrainer):
             if outputBoxes is not None:
                 if self.model_ref.useCurvedBBs:
                     outputBoxesNotBlanks=torch.FloatTensor([box.getCls() for box in outputBoxes])
+                    assert(outputBoxesNotBlanks.min()>=0)
+                    outputBoxesNotBlanks=outputBoxesNotBlanks[:,blank_index-13]<0.5
                 else:
                     outputBoxesNotBlanks=outputBoxes[:,1+blank_index-8]<0.5
-                assert(any(outputBoxesNotBlanks))
+                assert(outputBoxesNotBlanks.any())
                 outputBoxes = outputBoxes[outputBoxesNotBlanks]
                 newToOldOutputBoxes = torch.arange(0,len(outputBoxesNotBlanks),dtype=torch.int64)[outputBoxesNotBlanks]
                 oldToNewOutputBoxes = {o.item():n for n,o in enumerate(newToOldOutputBoxes)}
