@@ -425,8 +425,8 @@ def classIOU(boxesT,boxesP, num_classes, boxesPXYWH=[0,1,4,3]):
     iou = inter_area / (bP_area + bT_area - inter_area + 1e-16)
 
     #
-    gt_cls_ind = torch.argmax(boxesT[:,-num_classes:],dim=1)
-    pr_cls_ind = torch.argmax(boxesP[:,-num_classes:],dim=1)
+    gt_cls_ind = torch.argmax(boxesT[:,13:13+num_classes:],dim=1)
+    pr_cls_ind = torch.argmax(boxesP[:,5:5+num_classes:],dim=1)
     gt_cls_ind = gt_cls_ind[:,None].expand(boxesT.size(0), boxesP.size(0))
     pr_cls_ind = pr_cls_ind[None,:].expand(boxesT.size(0), boxesP.size(0))
     class_compatible = gt_cls_ind==pr_cls_ind
@@ -608,7 +608,7 @@ def getWidth(inter):
     #print('length: {}, length_i:{}, max_dist:{}, top: {}, bot: {}, A: {}, B: {}'.format(length,length_i,max_dist,top_point_i,bot_point_i,side_point_A,side_point_B))
     #import pdb;pdb.set_trace()
 
-def classPolyIOU(rboxes,bbs):
+def classPolyIOU(rboxes,bbs,num_classes):
 
     #first we'll find encompassing boxes and compute IOU based on those (fast)
     #for intersections, we'll compute the intersection using polygons (slow)
@@ -663,8 +663,8 @@ def classPolyIOU(rboxes,bbs):
     iou *= angle_compatible
 
     if len(bbs)>0:
-        gt_cls_ind = torch.argmax(rboxes[:,13:],dim=1)
-        pr_allClss = torch.FloatTensor([bb.getCls() for bb in bbs])
+        gt_cls_ind = torch.argmax(rboxes[:,13:13+num_classes],dim=1)
+        pr_allClss = torch.FloatTensor([bb.getCls()[:num_classes] for bb in bbs]) #discard extra classes
         #pr_allClss = torch.stack([bb.getCls() for bb in bbs],dim=0)
         pr_cls_int = torch.argmax(pr_allClss,dim=1)
         gt_cls_ind = gt_cls_ind[:,None].expand(rboxes.size(0), len(bbs))
@@ -1234,7 +1234,7 @@ def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_ta
     if train_targs:
         allIOUs = allPolyIO_clipU(target,pred)
     else:
-        allIOUs = classPolyIOU(target,pred)
+        allIOUs = classPolyIOU(target,pred,numClasses)
 
     hits = allIOUs>iou_thresh
     #overSeg_thresh = iou_thresh*1.05

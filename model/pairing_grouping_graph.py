@@ -1182,10 +1182,14 @@ class PairingGroupingGraph(BaseModel):
             if self.predClass:
                 #if not useGTBBs:
                 nodeClassPred = torch.sigmoid(nodeOuts[:,-1,self.nodeIdxClass:self.nodeIdxClassEnd].detach()).cpu()
-                bbClasPred = torch.FloatTensor(bbs.size(0),self.nodeIdxClassEnd-self.nodeIdxClass)
+                bbClasPred = torch.FloatTensor(bbs.size(0),nodeClassPred.size(1))
                 for i,group in enumerate(groups):
                     bbClasPred[group] = nodeClassPred[i].detach()
-                bbs[:,-self.numBBTypes:] = bbClasPred
+                if self.numBBTypes==nodeClassPred.size(1):
+                    bbs[:,-self.numBBTypes:] = bbClasPred
+                else:
+                    diff = self.numBBTypes-nodeClassPred.size(1)
+                    bbs[:,-self.numBBTypes:-diff] = bbClasPred
         return bbs
 
     #This merges two bounding box predictions, assuming they were oversegmented
