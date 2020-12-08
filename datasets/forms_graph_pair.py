@@ -145,15 +145,15 @@ class FormsGraphPair(GraphPairDataset):
 
         self.useClasses = config['use_classes'] if 'use_classes' in config else []
         self.classMap={
-                'textGeneric':16,
-                'fieldGeneric':17,
+                'textGeneric':13,
+                'fieldGeneric':14,
                 }
         for i,clas in enumerate(self.useClasses):
-            self.classMap[clas]=i+18
+            self.classMap[clas]=i+15
         if not self.no_blanks:
-            self.classMap['blank']=18+len(self.useClasses)
+            self.classMap['blank']=15+len(self.useClasses)
         if self.use_paired_class:
-            self.classMap['paired']=18+len(self.useClasses) + (0 if self.no_blanks else 1)
+            self.classMap['paired']=15+len(self.useClasses) + (0 if self.no_blanks else 1)
 
 
 

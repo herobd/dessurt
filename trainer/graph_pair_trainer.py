@@ -56,7 +56,8 @@ class GraphPairTrainer(BaseTrainer):
 
 
         self.mergeAndGroup = config['trainer']['mergeAndGroup']
-        self.classMap = {k:v for k,v in self.data_loader.dataset.classMap.items() if k!='blank'}
+        self.classMap = self.data_loader.dataset.classMap
+        self.scoreClassMap = {k:v for k,v in self.data_loader.dataset.classMap.items() if k!='blank'}
 
 
         #default is unfrozen, can be frozen by setting 'start_froze' in the PairingGraph models params
@@ -1912,7 +1913,35 @@ class GraphPairTrainer(BaseTrainer):
 
     def final_eval(self,targetBoxes,gtGroups,gt_groups_adj,targetIndexToGroup,outputBoxes,predGroups,predPairs,predTrans=None):
         log={}
-        numClasses = len(self.classMap)
+        numClasses = len(self.scoreClassMap)
+
+        #Remove blanks
+        if 'blank' in self.classMap:
+            blank_index = self.classMap['blank']
+            if targetBoxes is not None:
+                gtNotBlanks = targetBoxes[0,:,blank_index]<0.5
+                targetBoxes=targetBoxes[:,gtNotBlanks]
+            if outputBoxes is not None:
+                if self.model_ref.useCurvedBBs:
+                    outputBoxesNotBlanks=torch.FloatTensor([box.getCls() for box in outputBoxes])
+                else:
+                    outputBoxesNotBlanks=outputBoxes[:,1+blank_index-8]<0.5
+                assert(any(outputBoxesNotBlanks))
+                outputBoxes = outputBoxes[outputBoxesNotBlanks]
+                newToOldOutputBoxes = torch.arange(0,len(outputBoxesNotBlanks),dtype=torch.int64)[outputBoxesNotBlanks]
+                oldToNewOutputBoxes = {o.item():n for n,o in enumerate(newToOldOutputBoxes)}
+                if predGroups is not None:
+                    predGroups = [[oldToNewOutputBoxes[bId] for bId in group if bId in oldToNewOutputBoxes] for group in predGroups]
+                    newToOldGroups = []
+                    newGroups = []
+                    for gId,group in enumerate(predGroups):
+                        if len(group)>0:
+                            newGroups.append(group)
+                            newToOldGroups.append(gId)
+                    predPairs = [(newToOldGroups[g1],newToOldGroups[g2]) for g1,g2 in predPairs if g1 in newToOldGroups and g2 in newToOldGroups]
+                if predTrans is not None:
+                    predTrans = [predTrans[newToOldOutputBoxes[n]] for n in range(len(newToOldOutputBoxes))]
+
         if targetBoxes is not None:
             targetBoxes = targetBoxes.cpu()
             if self.model_ref.useCurvedBBs:
