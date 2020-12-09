@@ -29,7 +29,7 @@ def plotRect(img,color,xyrhw,lineWidth=1):
     img_f.line(img,br,bl,color,lineWidth)
     img_f.line(img,bl,tl,color,lineWidth)
 
-def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,image,predTypes,targetBoxes,model,path,verbosity=2,bbTrans=None,useTextLines=False,targetGroups=None,targetPairs=None):
+def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,image,predTypes,targetBoxes,classMap,path,verbosity=2,bbTrans=None,useTextLines=False,targetGroups=None,targetPairs=None):
     #for graphIteration,(outputBoxes,nodePred,edgePred,edgeIndexes,predGroups) in zip(allOutputBoxes,allNodePred,allEdgePred,allEdgeIndexes,allPredGroups):
         if bbTrans is not None:
             transPath = path[:-3]+'txt'
@@ -78,16 +78,29 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
         if verbosity>1 and outputBoxes is not None:
             #Draw pred bbs
             bbs = outputBoxes
+            numClasses=len(classMap)
+            if 'blank' in classMap:
+                blank=True
+                numClasses-=1
+                for cls,idx in classMap.items():
+                    if cls!='blank':
+                        assert(idx<classMap['blank'])
+            else:
+                blank=False
             for j in range(len(bbs)):
                 #circle aligned predictions
                 if useTextLines:
                     conf = bbs[j].getConf()
-                    maxIndex = np.argmax(bbs[j].getCls())
+                    maxIndex = np.argmax(bbs[j].getCls()[:numClasses])
                     if 'gI0' in path:
                         assert(len(bbs[j].all_primitive_rects)==1)
+                    if blank:
+                        is_blank = bbs[j].getCls()[-1]>0.5
                 else:
                     conf = bbs[j,0]
-                    maxIndex =np.argmax(bbs[j,-model.numBBTypes:])
+                    maxIndex =np.argmax(bbs[j,5:5+numClasses])
+                    if blank:
+                        is_blank = bbs[j,-1]>0.5
                 shade = conf#(conf-bb_thresh)/(1-bb_thresh)
                 #print(shade)
                 #if name=='text_start_gt' or name=='field_end_gt':
@@ -117,6 +130,16 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                     plotRect(image,color,bbs[j,1:6],lineWidth)
                     x=int(bbs[j,1])
                     y=int(bbs[j,2])
+
+                if blank and is_blank:
+                    #draw a B at center of box
+                    image[y-2:y+3,x-1]=color
+                    image[y-2,x]=color
+                    image[y-1,x+1]=color
+                    image[y,x]=color
+                    image[y+1,x+1]=color
+                    image[y+2,x]=color
+
 
                 if verbosity>3 and predNN is not None:
                     targ_j = bbAlignment[j].item()
