@@ -1790,7 +1790,7 @@ class GraphPairTrainer(BaseTrainer):
                             image,
                             edgePredTypes,
                             targetBoxes,
-                            self.model,
+                            self.classMap,
                             path,
                             useTextLines=self.model_ref.useCurvedBBs,
                             targetGroups=instance['gt_groups'],
@@ -1833,7 +1833,22 @@ class GraphPairTrainer(BaseTrainer):
             if self.save_images_every>0 and self.iteration%self.save_images_every==0:
                 path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b','final'))#instance['name'],graphIteration))
                 finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = final
-                draw_graph(finalOutputBoxes,self.model_ref.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,image,None,targetBoxes,self.model,path,bbTrans=finalBBTrans,useTextLines=self.model_ref.useCurvedBBs,targetGroups=instance['gt_groups'],targetPairs=instance['gt_groups_adj'])
+                draw_graph(
+                        finalOutputBoxes,
+                        self.model_ref.used_threshConf,
+                        None,
+                        None,
+                        finalEdgeIndexes,
+                        finalPredGroups,
+                        image,
+                        None,
+                        targetBoxes,
+                        self.classMap,
+                        path,
+                        bbTrans=finalBBTrans,
+                        useTextLines=self.model_ref.useCurvedBBs,
+                        targetGroups=instance['gt_groups'],
+                        targetPairs=instance['gt_groups_adj'])
                 #print('saved {}'.format(path))
             finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = final
             #print('DEBUG final num node:{}, num edges: {}'.format(len(finalOutputBoxes) if finalOutputBoxes is not None else 0,len(finalEdgeIndexes) if finalEdgeIndexes is not None else 0))
