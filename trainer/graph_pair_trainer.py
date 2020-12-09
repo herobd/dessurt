@@ -1924,7 +1924,6 @@ class GraphPairTrainer(BaseTrainer):
             if outputBoxes is not None:
                 if self.model_ref.useCurvedBBs:
                     outputBoxesNotBlanks=torch.FloatTensor([box.getCls() for box in outputBoxes])
-                    assert(outputBoxesNotBlanks.min()>=0)
                     outputBoxesNotBlanks=outputBoxesNotBlanks[:,blank_index-13]<0.5
                     outputBoxes = [box for i,box in enumerate(outputBoxes) if outputBoxesNotBlanks[i]]
                 else:
@@ -1942,6 +1941,9 @@ class GraphPairTrainer(BaseTrainer):
                             newToOldGroups.append(gId)
                     oldToNewGroups = {o:n for n,o in enumerate(newToOldGroups)}
                     predPairs = [(oldToNewGroups[g1],oldToNewGroups[g2]) for g1,g2 in predPairs if g1 in oldToNewGroups and g2 in oldToNewGroups]
+                    for a,b in predPairs:
+                        assert(a < len(predGroups))
+                        assert(b < len(predGroups))
                 if predTrans is not None:
                     predTrans = [predTrans[newToOldOutputBoxes[n]] for n in range(len(newToOldOutputBoxes))]
 
