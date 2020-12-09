@@ -1985,7 +1985,7 @@ class GraphPairTrainer(BaseTrainer):
 
 
         predGroupsT={}
-        if predGroups is not None:
+        if predGroups is not None and targIndex is not None:
             for node in range(len(predGroups)):
                 predGroupsT[node] = [targIndex[bb].item() for bb in predGroups[node] if targIndex[bb].item()>=0]
         
