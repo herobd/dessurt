@@ -760,7 +760,7 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClas
     #how many classes are there?
     if ignoreClasses:
         numClasses=1
-    if len(target.size())>1:
+    if len(target.size())>1 and target.size(0)>0:
         #numClasses=target.size(1)-13
         pass
     elif pred is not None and len(pred.size())>1 and pred.size(0)>0:
@@ -945,7 +945,7 @@ def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeC
     #how many classes are there?
     if ignoreClasses:
         numClasses=1
-    if len(target.size())>1:
+    if len(target.size())>1 and target.size(0)>0:
         #numClasses=target.size(1)-13
         pass
     elif pred is not None and len(pred)>0:
@@ -1191,7 +1191,7 @@ def newGetTargIndexForPreds_iou(target,pred,iou_thresh,numClasses,train_targs):
     if pred is None: 
         return None
 
-    if len(target.size())<=1:
+    if len(target.size())<=1 or target.size(0)==0:
         return None
 
     #first get all IOUs. These are already filtered with angle and class
