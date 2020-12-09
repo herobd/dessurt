@@ -1936,7 +1936,7 @@ class GraphPairTrainer(BaseTrainer):
             if targetBoxes is not None:
                 gtNotBlanks = targetBoxes[0,:,blank_index]<0.5
                 targetBoxes=targetBoxes[:,gtNotBlanks]
-            if outputBoxes is not None:
+            if outputBoxes is not None and len(outputBoxes)>0:
                 if self.model_ref.useCurvedBBs:
                     outputBoxesNotBlanks=torch.FloatTensor([box.getCls() for box in outputBoxes])
                     outputBoxesNotBlanks=outputBoxesNotBlanks[:,blank_index-13]<0.5

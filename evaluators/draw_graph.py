@@ -5,6 +5,7 @@ from skimage import color, io
 from PIL import Image
 from PIL import ImageFont
 from PIL import ImageDraw
+from utils.forms_annotations import calcCorners
 import torch
 
 def getCorners(xyrhw):
@@ -15,11 +16,13 @@ def getCorners(xyrhw):
     w=xyrhw[4].item()
     h = min(30000,h)
     w = min(30000,w)
-    tr = ( int(w*math.cos(rot)-h*math.sin(rot) + xc),  int(w*math.sin(rot)+h*math.cos(rot) + yc) )
-    tl = ( int(-w*math.cos(rot)-h*math.sin(rot) + xc), int(-w*math.sin(rot)+h*math.cos(rot) + yc) )
-    br = ( int(w*math.cos(rot)+h*math.sin(rot) + xc),  int(w*math.sin(rot)-h*math.cos(rot) + yc) )
-    bl = ( int(-w*math.cos(rot)+h*math.sin(rot) + xc), int(-w*math.sin(rot)-h*math.cos(rot) + yc) )
-    return tr,tl,br,bl
+    #tr = ( int(w*math.cos(rot)-h*math.sin(rot) + xc),  int(w*math.sin(rot)+h*math.cos(rot) + yc) )
+    #tl = ( int(-w*math.cos(rot)-h*math.sin(rot) + xc), int(-w*math.sin(rot)+h*math.cos(rot) + yc) )
+    #br = ( int(w*math.cos(rot)+h*math.sin(rot) + xc),  int(w*math.sin(rot)-h*math.cos(rot) + yc) )
+    #bl = ( int(-w*math.cos(rot)+h*math.sin(rot) + xc), int(-w*math.sin(rot)-h*math.cos(rot) + yc) )
+    #return tr,tl,br,bl
+    tl,tr,br,bl= calcCorners(xc,yc,rot,h,w)
+    return [int(x) for x in tl],[int(x) for x in tr],[int(x) for x in br],[int(x) for x in bl]
 
 def plotRect(img,color,xyrhw,lineWidth=1):
     tr,tl,br,bl=getCorners(xyrhw)
@@ -141,6 +144,11 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                     image[y,x]=color
                     image[y+1,x+1]=color
                     image[y+2,x]=color
+
+                    image[y-4:y+5,x-4]=color
+                    image[y-4:y+5,x+5]=color
+                    image[y-4,x-4:x+5]=color
+                    image[y+4,x-4:x+5]=color
 
 
                 if verbosity>3 and predNN is not None:
