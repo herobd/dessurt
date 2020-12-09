@@ -990,7 +990,7 @@ def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeC
     if pred is not None and len(pred)>0:
         #This is an alternate metric that computes AP of all classes together
         #Your only a hit if you have the same class
-        allIOUs = classPolyIOU(target,pred) 
+        allIOUs = classPolyIOU(target,pred,numClasses) 
         validHits = allHits = allIOUs>iou_thresh
         #evalute hits to see if they're valid (matching class)
 
