@@ -1225,7 +1225,7 @@ def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_ta
     if pred is None: 
         return None
 
-    if len(target.size())<=1:
+    if len(target.size())<=1 or target.size(0)==0:
         return None
 
     #first get all IOUs. These are already filtered with angle and class
