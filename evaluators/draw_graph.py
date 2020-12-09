@@ -126,6 +126,8 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                     pts = pts.reshape((-1,1,2))
                     img_f.polylines(image,pts.astype(np.int),'transparent',color,lineWidth)
                     x,y = bbs[j].getCenterPoint()
+                    x=int(x)
+                    y=int(y)
                 else:
                     plotRect(image,color,bbs[j,1:6],lineWidth)
                     x=int(bbs[j,1])
