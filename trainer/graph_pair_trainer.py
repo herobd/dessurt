@@ -1926,10 +1926,10 @@ class GraphPairTrainer(BaseTrainer):
                     outputBoxesNotBlanks=torch.FloatTensor([box.getCls() for box in outputBoxes])
                     assert(outputBoxesNotBlanks.min()>=0)
                     outputBoxesNotBlanks=outputBoxesNotBlanks[:,blank_index-13]<0.5
+                    outputBoxes = [box for i,box in enumerate(outputBoxes) if outputBoxesNotBlanks[i]]
                 else:
                     outputBoxesNotBlanks=outputBoxes[:,1+blank_index-8]<0.5
-                assert(outputBoxesNotBlanks.any())
-                outputBoxes = outputBoxes[outputBoxesNotBlanks]
+                    outputBoxes = outputBoxes[outputBoxesNotBlanks]
                 newToOldOutputBoxes = torch.arange(0,len(outputBoxesNotBlanks),dtype=torch.int64)[outputBoxesNotBlanks]
                 oldToNewOutputBoxes = {o.item():n for n,o in enumerate(newToOldOutputBoxes)}
                 if predGroups is not None:
@@ -1940,7 +1940,8 @@ class GraphPairTrainer(BaseTrainer):
                         if len(group)>0:
                             newGroups.append(group)
                             newToOldGroups.append(gId)
-                    predPairs = [(newToOldGroups[g1],newToOldGroups[g2]) for g1,g2 in predPairs if g1 in newToOldGroups and g2 in newToOldGroups]
+                    oldToNewGroups = {o:n for n,o in enumerate(newToOldGroups)}
+                    predPairs = [(oldToNewGroups[g1],oldToNewGroups[g2]) for g1,g2 in predPairs if g1 in oldToNewGroups and g2 in oldToNewGroups]
                 if predTrans is not None:
                     predTrans = [predTrans[newToOldOutputBoxes[n]] for n in range(len(newToOldOutputBoxes))]
 

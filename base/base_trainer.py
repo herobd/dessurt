@@ -423,6 +423,7 @@ class BaseTrainer:
         #print(checkpoint['state_dict'].keys())
         if ('save_mode' not in self.config or self.config['save_mode']=='state_dict') and 'state_dict' in checkpoint:
             #Brain surgery, allow restarting with modified model
+            did_brain_surgery=False
             keys=checkpoint['state_dict'].keys()
             init_state_dict = self.model.state_dict()
             for key in keys:
@@ -431,6 +432,7 @@ class BaseTrainer:
                     init_state_dict[key][:orig_size] = checkpoint['state_dict'][key]
                     checkpoint['state_dict'][key] = init_state_dict[key]
                     self.logger.info('BRAIN SURGERY PERFORMED on {}'.format(key))
+                    did_brain_surgery=True
             self.model.load_state_dict(checkpoint['state_dict'])
             if self.swa and 'swa_state_dict' in checkpoint:
                 self.swa_model = AveragedModel(self.model)
@@ -449,12 +451,13 @@ class BaseTrainer:
                 self.swa_model = checkpoint['swa_model']
         #if self.swa:
         #    self.swa_n = checkpoint['swa_n']
-        self.optimizer.load_state_dict(checkpoint['optimizer'])
-        if self.with_cuda:
-            for state in self.optimizer.state.values():
-                for k, v in state.items():
-                    if isinstance(v, torch.Tensor):
-                        state[k] = v.cuda(self.gpu)
+        if not did_brain_surgery:
+            self.optimizer.load_state_dict(checkpoint['optimizer'])
+            if self.with_cuda:
+                for state in self.optimizer.state.values():
+                    for k, v in state.items():
+                        if isinstance(v, torch.Tensor):
+                            state[k] = v.cuda(self.gpu)
         if self.useLearningSchedule:
             self.lr_schedule.load_state_dict(checkpoint['lr_schedule'])
         self.train_logger = checkpoint['logger']
