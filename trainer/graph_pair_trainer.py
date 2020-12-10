@@ -2053,6 +2053,11 @@ class GraphPairTrainer(BaseTrainer):
         if predPairs is None:
             predPairs=[]
         for n0,n1 in predPairs:
+            if n0 not in predToGTGroup or n1 not in predToGTGroup:
+                print('ERROR, pair ({},{}) not foundi n predToGTGroup'.format(n0,n1))
+                print('predToGTGroup {}: {}'.format(len(predToGTGroup),predToGTGroup))
+                print('predGroups {}: {}'.format(len(predGroups),predGroups))
+                print('outputBoxesNotBlanks: {}'.format(outputBoxesNotBlanks))
             gtG0=predToGTGroup[n0]
             gtG1=predToGTGroup[n1]
             if gtG0>=0 and gtG1>=0:
