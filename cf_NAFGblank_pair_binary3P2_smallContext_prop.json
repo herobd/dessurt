@@ -1,30 +1,36 @@
 {
-    "name": "FUNSDLines_pair_binary3P2_smallContext_prop2",
+    "name": "NAFGblank_pair_binary3P2_smallContext_prop",
     "cuda": false,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
-    "super_computer":false,
+    "super_computer":true,
     "data_loader": {
-        "data_set_name": "FUNSDGraphPair",
-        "data_dir": "../data/FUNSD",
+        "data_set_name": "FormsGraphPair",
+        "special_dataset": null,
+        "data_dir": "../data/forms",
         "batch_size": 1,
         "shuffle": true,
         "num_workers": 2,
-        "split_to_lines": true,
         "crop_to_page":false,
         "color":false,
-        "rescale_range": [0.8,1.2],
+        "rescale_range": [0.4,0.65],
         "crop_params": {
-            "crop_size":[800,800],
-	    "pad":50
-        }
+            "crop_size":[600,1400],
+	    "pad":0
+        },
+        "no_blanks": false,
+        "swap_circle":true,
+        "no_graphics":true,
+        "cache_resized_images": true,
+        "rotation": false,
+        "only_opposite_pairs": true
 
 
     },
     "validation": {
         "shuffle": false,
-        "rescale_range": [1,1],
+        "rescale_range": [0.52,0.52],
         "crop_params": null,
         "batch_size": 1
     },
@@ -92,7 +98,7 @@
     },
     "arch": "PairingGroupingGraph", 
     "model": {
-        "detector_checkpoint": "saved/FUNSDLines_detect_augRFh_staggerLighter_NN/checkpoint-latest.pth",
+        "detector_checkpoint": "saved/NAF_detect_augR_blank/checkpoint-iteration100000.pth",
         "conf_thresh": 0.5,
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
@@ -124,7 +130,7 @@
         "graph_config": [{
             "arch": "BinaryPairReal",
             "in_channels": 256,
-            "node_out": 5,
+            "node_out": 4,
             "edge_out": 5,
             "layers": ["FC256","FC256","FC256"],
             "layers_bb": ["FC256","FC256","FC256"],
@@ -135,7 +141,7 @@
         {
             "arch": "BinaryPairReal",
             "in_channels": 256,
-            "node_out": 5,
+            "node_out": 4,
             "edge_out": 5,
             "layers": ["FC256","FC256","FC256"],
             "layers_bb": ["FC256","FC256","FC256"],

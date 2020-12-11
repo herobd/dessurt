@@ -56,7 +56,8 @@ class GraphPairTrainer(BaseTrainer):
 
 
         self.mergeAndGroup = config['trainer']['mergeAndGroup']
-        self.classMap = {k:v for k,v in self.data_loader.dataset.classMap.items() if k!='blank'}
+        self.classMap = self.data_loader.dataset.classMap
+        self.scoreClassMap = {k:v for k,v in self.data_loader.dataset.classMap.items() if k!='blank'}
 
 
         #default is unfrozen, can be frozen by setting 'start_froze' in the PairingGraph models params
@@ -1789,7 +1790,7 @@ class GraphPairTrainer(BaseTrainer):
                             image,
                             edgePredTypes,
                             targetBoxes,
-                            self.model,
+                            self.classMap,
                             path,
                             useTextLines=self.model_ref.useCurvedBBs,
                             targetGroups=instance['gt_groups'],
@@ -1832,7 +1833,22 @@ class GraphPairTrainer(BaseTrainer):
             if self.save_images_every>0 and self.iteration%self.save_images_every==0:
                 path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b','final'))#instance['name'],graphIteration))
                 finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = final
-                draw_graph(finalOutputBoxes,self.model_ref.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,image,None,targetBoxes,self.model,path,bbTrans=finalBBTrans,useTextLines=self.model_ref.useCurvedBBs,targetGroups=instance['gt_groups'],targetPairs=instance['gt_groups_adj'])
+                draw_graph(
+                        finalOutputBoxes,
+                        self.model_ref.used_threshConf,
+                        None,
+                        None,
+                        finalEdgeIndexes,
+                        finalPredGroups,
+                        image,
+                        None,
+                        targetBoxes,
+                        self.classMap,
+                        path,
+                        bbTrans=finalBBTrans,
+                        useTextLines=self.model_ref.useCurvedBBs,
+                        targetGroups=instance['gt_groups'],
+                        targetPairs=instance['gt_groups_adj'])
                 #print('saved {}'.format(path))
             finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = final
             #print('DEBUG final num node:{}, num edges: {}'.format(len(finalOutputBoxes) if finalOutputBoxes is not None else 0,len(finalEdgeIndexes) if finalEdgeIndexes is not None else 0))
@@ -1912,7 +1928,40 @@ class GraphPairTrainer(BaseTrainer):
 
     def final_eval(self,targetBoxes,gtGroups,gt_groups_adj,targetIndexToGroup,outputBoxes,predGroups,predPairs,predTrans=None):
         log={}
-        numClasses = len(self.classMap)
+        numClasses = len(self.scoreClassMap)
+
+        #Remove blanks
+        if 'blank' in self.classMap:
+            blank_index = self.classMap['blank']
+            if targetBoxes is not None:
+                gtNotBlanks = targetBoxes[0,:,blank_index]<0.5
+                targetBoxes=targetBoxes[:,gtNotBlanks]
+            if outputBoxes is not None and len(outputBoxes)>0:
+                if self.model_ref.useCurvedBBs:
+                    outputBoxesNotBlanks=torch.FloatTensor([box.getCls() for box in outputBoxes])
+                    outputBoxesNotBlanks=outputBoxesNotBlanks[:,blank_index-13]<0.5
+                    outputBoxes = [box for i,box in enumerate(outputBoxes) if outputBoxesNotBlanks[i]]
+                else:
+                    outputBoxesNotBlanks=outputBoxes[:,1+blank_index-8]<0.5
+                    outputBoxes = outputBoxes[outputBoxesNotBlanks]
+                newToOldOutputBoxes = torch.arange(0,len(outputBoxesNotBlanks),dtype=torch.int64)[outputBoxesNotBlanks]
+                oldToNewOutputBoxes = {o.item():n for n,o in enumerate(newToOldOutputBoxes)}
+                if predGroups is not None:
+                    predGroups = [[oldToNewOutputBoxes[bId] for bId in group if bId in oldToNewOutputBoxes] for group in predGroups]
+                    newToOldGroups = []
+                    newGroups = []
+                    for gId,group in enumerate(predGroups):
+                        if len(group)>0:
+                            newGroups.append(group)
+                            newToOldGroups.append(gId)
+                    oldToNewGroups = {o:n for n,o in enumerate(newToOldGroups)}
+                    predPairs = [(oldToNewGroups[g1],oldToNewGroups[g2]) for g1,g2 in predPairs if g1 in oldToNewGroups and g2 in oldToNewGroups]
+                    for a,b in predPairs:
+                        assert(a < len(predGroups))
+                        assert(b < len(predGroups))
+                if predTrans is not None:
+                    predTrans = [predTrans[newToOldOutputBoxes[n]] for n in range(len(newToOldOutputBoxes))]
+
         if targetBoxes is not None:
             targetBoxes = targetBoxes.cpu()
             if self.model_ref.useCurvedBBs:
@@ -1953,7 +2002,7 @@ class GraphPairTrainer(BaseTrainer):
 
 
         predGroupsT={}
-        if predGroups is not None:
+        if predGroups is not None and targIndex is not None:
             for node in range(len(predGroups)):
                 predGroupsT[node] = [targIndex[bb].item() for bb in predGroups[node] if targIndex[bb].item()>=0]
         
@@ -2004,6 +2053,11 @@ class GraphPairTrainer(BaseTrainer):
         if predPairs is None:
             predPairs=[]
         for n0,n1 in predPairs:
+            if n0 not in predToGTGroup or n1 not in predToGTGroup:
+                print('ERROR, pair ({},{}) not foundi n predToGTGroup'.format(n0,n1))
+                print('predToGTGroup {}: {}'.format(len(predToGTGroup),predToGTGroup))
+                print('predGroups {}: {}'.format(len(predGroups),predGroups))
+                print('outputBoxesNotBlanks: {}'.format(outputBoxesNotBlanks))
             gtG0=predToGTGroup[n0]
             gtG1=predToGTGroup[n1]
             if gtG0>=0 and gtG1>=0:

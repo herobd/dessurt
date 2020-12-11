@@ -1,31 +1,36 @@
 {
-    "name": "FUNSDLines_pair_os98k_graphNAtt333rv_sc_prop_nms_strictAlign_smooth_300k",
+    "name": "NAFGblank_pair_os100k2_binary333rv_sc_prop_nms_strictAlign_smooth",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
     "super_computer":true,
     "data_loader": {
-        "data_set_name": "FUNSDGraphPair",
-        "data_dir": "../data/FUNSD",
+        "data_set_name": "FormsGraphPair",
+        "special_dataset": null,
+        "data_dir": "../data/forms",
         "batch_size": 1,
         "shuffle": true,
-        "num_workers": 3,
-        "split_to_lines": true,
+        "num_workers": 2,
         "crop_to_page":false,
         "color":false,
-        "rescale_range": [0.8,1.2],
+        "rescale_range": [0.4,0.65],
         "crop_params": {
-            "SMALLcrop_size":[200,400],
-            "crop_size":[600,800],
-	    "pad":50
-        }
+            "crop_size":[600,1400],
+	    "pad":0
+        },
+        "no_blanks": false,
+        "swap_circle":true,
+        "no_graphics":true,
+        "cache_resized_images": true,
+        "rotation": false,
+        "only_opposite_pairs": true
 
 
     },
     "validation": {
         "shuffle": false,
-        "rescale_range": [1,1],
+        "rescale_range": [0.52,0.52],
         "crop_params": null,
         "batch_size": 1
     },
@@ -64,9 +69,9 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 400000,
+        "iterations": 500000,
         "swa": true,
-        "swa_start": 300000,
+        "swa_start": 400000,
         "swa_c_iters": 10000,
         "save_dir": "saved/",
         "val_step": 20000,
@@ -102,7 +107,7 @@
     },
     "arch": "PairingGroupingGraph", 
     "model": {
-        "detector_checkpoint": "saved/FUNSDLines_detect_augRFh_oversegMultScl/checkpoint-iteration98042.pth",
+        "detector_checkpoint": "saved/NAF_detect_augR_blank_oversegMultScl2/checkpoint-iteration100000.pth",
         "overseg_non_max_sup": true,
         "text_line_smoothness": 200,
         "conf_thresh": 0.7,
@@ -152,50 +157,39 @@
         "reintroduce_visual_features": "fixed map",
         "graph_config": [
         {
-            "arch": "MetaGraphNet",
+            "arch": "BinaryPairReal",
             "in_channels": 512,
-            "node_out": 5,
+            "node_out": 4,
             "edge_out": 5,
-            "num_layers": 3,
-            "num_heads": 4,
-            "repetitions": 1,
-            "use_repetition_res": false,
-            "encode_type": "attention",
-            "better_norm_attention": true,
-	    "merge_thresh": 0.8,
+            "layers": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
+            "layers_bb": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
+	    "merge_thresh": 0.6,
             "group_thresh": 0.95,
             "keep_edge_thresh": 0.25
         },
         {
-            "arch": "MetaGraphNet",
+            "arch": "BinaryPairReal",
             "in_channels": 512,
-            "node_out": 5,
+            "node_out": 4,
             "edge_out": 5,
-            "num_layers": 3,
-            "num_heads": 4,
-            "repetitions": 1,
-            "use_repetition_res": false,
-            "encode_type": "attention",
-            "better_norm_attention": true,
+            "layers": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
+            "layers_bb": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
 	    "merge_thresh": 0.9,
             "group_thresh": 0.9,
             "keep_edge_thresh": 0.3
         },
         {
-            "arch": "MetaGraphNet",
+            "arch": "BinaryPairReal",
             "in_channels": 512,
-            "node_out": 5,
+            "node_out": 4,
             "edge_out": 5,
-            "num_layers": 3,
-            "num_heads": 4,
-            "repetitions": 1,
-            "use_repetition_res": false,
-            "encode_type": "attention",
-            "better_norm_attention": true,
+            "layers": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
+            "layers_bb": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
 	    "merge_thresh": 0.9,
             "group_thresh": 0.6,
             "keep_edge_thresh": 0.5
-        }]
+        }
+        ]
 
 
     }

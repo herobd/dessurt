@@ -150,7 +150,7 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
     #valid_data_loader = data_loader.split_validation()
 
     if checkpoint is not None:
-        if 'swa_state_dict' in checkpoint:
+        if 'swa_state_dict' in checkpoint and checkpoint['iteration']>config['trainer']['swa_start']:
             model = eval(config['arch'])(config['model'])
             if 'style' in config['model'] and 'lookup' in config['model']['style']:
                 model.style_extractor.add_authors(data_loader.dataset.authors) ##HERE
