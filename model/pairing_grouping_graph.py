@@ -657,9 +657,9 @@ class PairingGroupingGraph(BaseModel):
             self.debug=True
         else:
             self.debug=False
-        #t###self.opt_cand=[]#t#
-        #t###self.opt_createG=[]#t#
+
         #t#self.opt_history=defaultdict(list)#t#
+
         if type(self.pairer) is BinaryPairReal and type(self.pairer.shape_layers) is not nn.Sequential:
             print("Shape feats aligned to feat dataset.")
 
@@ -919,8 +919,8 @@ class PairingGroupingGraph(BaseModel):
                 #t#tic=timeit.default_timer()#t#
 
                 #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
-                print('{} node feats mean:{:.3}, std:{:.3}, min:{:.2}, max:{:.2}'.format(0,graph[0].mean(),graph[0].std(),   graph[0].min(), graph[0].max()))
-                print('  edge feats mean:{:.3}, std:{:.3}, min:{:.2}, max:{:.2}'.format(graph[2].mean(), graph[2].std(),  graph[2].min(), graph[2].max()))
+                #print('{} node feats mean:{:.3}, std:{:.3}, min:{:.2}, max:{:.2}'.format(0,graph[0].mean(),graph[0].std(),   graph[0].min(), graph[0].max()))
+                #print('  edge feats mean:{:.3}, std:{:.3}, min:{:.2}, max:{:.2}'.format(graph[2].mean(), graph[2].std(),  graph[2].min(), graph[2].max()))
                 nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = self.graphnets[0](graph)
                 assert(edgeOuts is None or not torch.isnan(edgeOuts).any())
                 edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
@@ -984,8 +984,8 @@ class PairingGroupingGraph(BaseModel):
                         break #we have no graph, so we can just end here
                     #print('!D! after  edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(graph[2].size(),len(useBBs),graph[0].size(),len(edgeIndexes)))
                     #print('      graph num edges: {}'.format(graph[1].size()))
-                    print('{} node feats mean:{:.3}, std:{:.3}, min:{:.2}, max:{:.2}'.format(gIter,graph[0].mean(),graph[0].std(),   graph[0].min(), graph[0].max()))
-                    print('  edge feats mean:{:.3}, std:{:.3}, min:{:.2}, max:{:.2}'.format(graph[2].mean(), graph[2].std(),  graph[2].min(), graph[2].max()))
+                    #print('{} node feats mean:{:.3}, std:{:.3}, min:{:.2}, max:{:.2}'.format(gIter,graph[0].mean(),graph[0].std(),   graph[0].min(), graph[0].max()))
+                    #print('  edge feats mean:{:.3}, std:{:.3}, min:{:.2}, max:{:.2}'.format(graph[2].mean(), graph[2].std(),  graph[2].min(), graph[2].max()))
                     nodeOuts, edgeOuts, nodeFeats, edgeFeats, uniFeats = graphnet(graph)
                     #edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
                     useBBs = self.updateBBs(useBBs,groups,nodeOuts)
@@ -1182,10 +1182,14 @@ class PairingGroupingGraph(BaseModel):
             if self.predClass:
                 #if not useGTBBs:
                 nodeClassPred = torch.sigmoid(nodeOuts[:,-1,self.nodeIdxClass:self.nodeIdxClassEnd].detach()).cpu()
-                bbClasPred = torch.FloatTensor(bbs.size(0),self.nodeIdxClassEnd-self.nodeIdxClass)
+                bbClasPred = torch.FloatTensor(bbs.size(0),nodeClassPred.size(1))
                 for i,group in enumerate(groups):
                     bbClasPred[group] = nodeClassPred[i].detach()
-                bbs[:,-self.numBBTypes:] = bbClasPred
+                if self.numBBTypes==nodeClassPred.size(1):
+                    bbs[:,-self.numBBTypes:] = bbClasPred
+                else:
+                    diff = self.numBBTypes-nodeClassPred.size(1)
+                    bbs[:,-self.numBBTypes:-diff] = bbClasPred
         return bbs
 
     #This merges two bounding box predictions, assuming they were oversegmented
@@ -2237,10 +2241,10 @@ class PairingGroupingGraph(BaseModel):
 
                 min_X1,min_Y1,max_X1,max_Y1 = torch.IntTensor([groupRect([[tlX[b],tlY[b],brX[b],brY[b]] for b in group]) for group in groupIs_index1]).permute(1,0)
                 min_X2,min_Y2,max_X2,max_Y2 = torch.IntTensor([groupRect([[tlX[b],tlY[b],brX[b],brY[b]] for b in group]) for group in groupIs_index2]).permute(1,0)
-                min_X = torch.min(min_X1,min_X2)
-                min_Y = torch.min(min_Y1,min_Y2)
-                max_X = torch.max(max_X1,max_X2)
-                max_Y = torch.max(max_Y1,max_Y2)
+                min_X = torch.min(min_X1,min_X2).to(features.device)
+                min_Y = torch.min(min_Y1,min_Y2).to(features.device)
+                max_X = torch.max(max_X1,max_X2).to(features.device)
+                max_Y = torch.max(max_Y1,max_Y2).to(features.device)
             if merge_only:
                 padX = self.expandedMergeContextX
                 padY = self.expandedMergeContextY

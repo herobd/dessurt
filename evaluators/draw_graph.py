@@ -5,6 +5,7 @@ from skimage import color, io
 from PIL import Image
 from PIL import ImageFont
 from PIL import ImageDraw
+from utils.forms_annotations import calcCorners
 import torch
 
 def getCorners(xyrhw):
@@ -15,11 +16,13 @@ def getCorners(xyrhw):
     w=xyrhw[4].item()
     h = min(30000,h)
     w = min(30000,w)
-    tr = ( int(w*math.cos(rot)-h*math.sin(rot) + xc),  int(w*math.sin(rot)+h*math.cos(rot) + yc) )
-    tl = ( int(-w*math.cos(rot)-h*math.sin(rot) + xc), int(-w*math.sin(rot)+h*math.cos(rot) + yc) )
-    br = ( int(w*math.cos(rot)+h*math.sin(rot) + xc),  int(w*math.sin(rot)-h*math.cos(rot) + yc) )
-    bl = ( int(-w*math.cos(rot)+h*math.sin(rot) + xc), int(-w*math.sin(rot)-h*math.cos(rot) + yc) )
-    return tr,tl,br,bl
+    #tr = ( int(w*math.cos(rot)-h*math.sin(rot) + xc),  int(w*math.sin(rot)+h*math.cos(rot) + yc) )
+    #tl = ( int(-w*math.cos(rot)-h*math.sin(rot) + xc), int(-w*math.sin(rot)+h*math.cos(rot) + yc) )
+    #br = ( int(w*math.cos(rot)+h*math.sin(rot) + xc),  int(w*math.sin(rot)-h*math.cos(rot) + yc) )
+    #bl = ( int(-w*math.cos(rot)+h*math.sin(rot) + xc), int(-w*math.sin(rot)-h*math.cos(rot) + yc) )
+    #return tr,tl,br,bl
+    tl,tr,br,bl= calcCorners(xc,yc,rot,h,w)
+    return [int(x) for x in tl],[int(x) for x in tr],[int(x) for x in br],[int(x) for x in bl]
 
 def plotRect(img,color,xyrhw,lineWidth=1):
     tr,tl,br,bl=getCorners(xyrhw)
@@ -29,7 +32,7 @@ def plotRect(img,color,xyrhw,lineWidth=1):
     img_f.line(img,br,bl,color,lineWidth)
     img_f.line(img,bl,tl,color,lineWidth)
 
-def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,image,predTypes,targetBoxes,model,path,verbosity=2,bbTrans=None,useTextLines=False,targetGroups=None,targetPairs=None):
+def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,image,predTypes,targetBoxes,classMap,path,verbosity=2,bbTrans=None,useTextLines=False,targetGroups=None,targetPairs=None):
     #for graphIteration,(outputBoxes,nodePred,edgePred,edgeIndexes,predGroups) in zip(allOutputBoxes,allNodePred,allEdgePred,allEdgeIndexes,allPredGroups):
         if bbTrans is not None:
             transPath = path[:-3]+'txt'
@@ -78,16 +81,29 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
         if verbosity>1 and outputBoxes is not None:
             #Draw pred bbs
             bbs = outputBoxes
+            numClasses=len(classMap)
+            if 'blank' in classMap:
+                blank=True
+                numClasses-=1
+                for cls,idx in classMap.items():
+                    if cls!='blank':
+                        assert(idx<classMap['blank'])
+            else:
+                blank=False
             for j in range(len(bbs)):
                 #circle aligned predictions
                 if useTextLines:
                     conf = bbs[j].getConf()
-                    maxIndex = np.argmax(bbs[j].getCls())
+                    maxIndex = np.argmax(bbs[j].getCls()[:numClasses])
                     if 'gI0' in path:
                         assert(len(bbs[j].all_primitive_rects)==1)
+                    if blank:
+                        is_blank = bbs[j].getCls()[-1]>0.5
                 else:
                     conf = bbs[j,0]
-                    maxIndex =np.argmax(bbs[j,-model.numBBTypes:])
+                    maxIndex =np.argmax(bbs[j,5:5+numClasses])
+                    if blank:
+                        is_blank = bbs[j,-1]>0.5
                 shade = conf#(conf-bb_thresh)/(1-bb_thresh)
                 #print(shade)
                 #if name=='text_start_gt' or name=='field_end_gt':
@@ -113,10 +129,35 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                     pts = pts.reshape((-1,1,2))
                     img_f.polylines(image,pts.astype(np.int),'transparent',color,lineWidth)
                     x,y = bbs[j].getCenterPoint()
+                    x=int(x)
+                    y=int(y)
                 else:
                     plotRect(image,color,bbs[j,1:6],lineWidth)
                     x=int(bbs[j,1])
                     y=int(bbs[j,2])
+
+                if blank and is_blank:
+                    #draw a B at center of box
+                    if x-4<0:
+                        x+=4
+                    if y-4<0:
+                        y+=4
+                    if x+4>=image.shape[1]:
+                        x-=4
+                    if y+4>=image.shape[0]:
+                        y-=4
+                    image[y-2:y+3,x-1]=color
+                    image[y-2,x]=color
+                    image[y-1,x+1]=color
+                    image[y,x]=color
+                    image[y+1,x+1]=color
+                    image[y+2,x]=color
+
+                    image[y-4:y+5,x-4]=color
+                    image[y-4:y+5,x+5]=color
+                    image[y-4,x-4:x+5]=color
+                    image[y+4,x-4:x+5]=color
+
 
                 if verbosity>3 and predNN is not None:
                     targ_j = bbAlignment[j].item()

@@ -163,9 +163,10 @@ if __name__ == '__main__':
 
     supercomputer = config['super_computer'] if 'super_computer' in config else False
     name=config['name']
-    file_name = args.config[3:-5]
-    if name!=file_name:
-        raise Exception('ERROR, name and file name do not match, {} != {} ({})'.format(name,file_name,args.config))
+    if args.config is not None:
+        file_name = args.config[3:-5]
+        if name!=file_name:
+            raise Exception('ERROR, name and file name do not match, {} != {} ({})'.format(name,file_name,args.config))
 
     assert config is not None
 

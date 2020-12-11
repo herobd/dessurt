@@ -9,6 +9,7 @@ import math
 from model.loss import *
 from collections import defaultdict
 from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist, getTargIndexForPreds_iou, getTargIndexForPreds_dist, non_max_sup_overseg, non_max_sup_keep_overlap_iou, non_max_sup_overseg
+from utils.forms_annotations import calcCorners
 import json
 
 #THRESH=0.5
@@ -21,11 +22,13 @@ def getCorners(xyrhw):
     w=xyrhw[4].item()
     h = min(30000,h)
     w = min(30000,w)
-    tr = ( int(w*math.cos(rot)-h*math.sin(rot) + xc),  int(w*math.sin(rot)+h*math.cos(rot) + yc) )
-    tl = ( int(-w*math.cos(rot)-h*math.sin(rot) + xc), int(-w*math.sin(rot)+h*math.cos(rot) + yc) )
-    br = ( int(w*math.cos(rot)+h*math.sin(rot) + xc),  int(w*math.sin(rot)-h*math.cos(rot) + yc) )
-    bl = ( int(-w*math.cos(rot)+h*math.sin(rot) + xc), int(-w*math.sin(rot)-h*math.cos(rot) + yc) )
-    return tl,tr,br,bl
+    #tr = ( int(w*math.cos(rot)-h*math.sin(rot) + xc),  int(w*math.sin(rot)+h*math.cos(rot) + yc) )
+    #tl = ( int(-w*math.cos(rot)-h*math.sin(rot) + xc), int(-w*math.sin(rot)+h*math.cos(rot) + yc) )
+    #br = ( int(w*math.cos(rot)+h*math.sin(rot) + xc),  int(w*math.sin(rot)-h*math.cos(rot) + yc) )
+    #bl = ( int(-w*math.cos(rot)+h*math.sin(rot) + xc), int(-w*math.sin(rot)-h*math.cos(rot) + yc) )
+    #return tl,tr,br,bl
+    tl,tr,br,bl= calcCorners(xc,yc,rot,h,w)
+    return [int(x) for x in tl],[int(x) for x in tr],[int(x) for x in br],[int(x) for x in bl]
 def plotRect(img,color,xyrhw,lineW=1):
     tl,tr,br,bl = getCorners(xyrhw)
 
@@ -57,7 +60,8 @@ def plotRectAndAngle(img,color,x1y1x2y2r,lineW=1):
     #yoffB = math.cos(rot)*m 
     img_f.line(img,(round(xc+xoff),round(yc+yoff)),(round(xc-xoff),round(yc-yoff)),color,lineW)
 
-
+def FormsBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startIndex=None, lossFunc=None, toEval=None):
+    return FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir, startIndex, lossFunc, toEval)
 def FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startIndex=None, lossFunc=None, toEval=None):
     def __eval_metrics(data,target):
         acc_metrics = np.zeros((output.shape[0],len(metrics)))
