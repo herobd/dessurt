@@ -1936,7 +1936,7 @@ class GraphPairTrainer(BaseTrainer):
             if targetBoxes is not None:
                 gtNotBlanks = targetBoxes[0,:,blank_index]<0.5
                 targetBoxes=targetBoxes[:,gtNotBlanks]
-            if outputBoxes is not None:
+            if outputBoxes is not None and len(outputBoxes)>0:
                 if self.model_ref.useCurvedBBs:
                     outputBoxesNotBlanks=torch.FloatTensor([box.getCls() for box in outputBoxes])
                     outputBoxesNotBlanks=outputBoxesNotBlanks[:,blank_index-13]<0.5
@@ -2005,6 +2005,10 @@ class GraphPairTrainer(BaseTrainer):
         if predGroups is not None and targIndex is not None:
             for node in range(len(predGroups)):
                 predGroupsT[node] = [targIndex[bb].item() for bb in predGroups[node] if targIndex[bb].item()>=0]
+        elif  predGroups is not None:
+            for node in range(len(predGroups)):
+                predGroupsT[node] = []
+
         
         gtGroupHit=[False]*len(gtGroups)
         groupCompleteness=[]
@@ -2053,6 +2057,11 @@ class GraphPairTrainer(BaseTrainer):
         if predPairs is None:
             predPairs=[]
         for n0,n1 in predPairs:
+            if n0 not in predToGTGroup or n1 not in predToGTGroup:
+                print('ERROR, pair ({},{}) not foundi n predToGTGroup'.format(n0,n1))
+                print('predToGTGroup {}: {}'.format(len(predToGTGroup),predToGTGroup))
+                print('predGroups {}: {}'.format(len(predGroups),predGroups))
+                print('outputBoxesNotBlanks: {}'.format(outputBoxesNotBlanks))
             gtG0=predToGTGroup[n0]
             gtG1=predToGTGroup[n1]
             if gtG0>=0 and gtG1>=0:

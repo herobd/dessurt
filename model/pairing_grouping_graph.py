@@ -657,9 +657,9 @@ class PairingGroupingGraph(BaseModel):
             self.debug=True
         else:
             self.debug=False
-        #t###self.opt_cand=[]#t#
-        #t###self.opt_createG=[]#t#
+
         #t#self.opt_history=defaultdict(list)#t#
+
         if type(self.pairer) is BinaryPairReal and type(self.pairer.shape_layers) is not nn.Sequential:
             print("Shape feats aligned to feat dataset.")
 
