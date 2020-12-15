@@ -154,7 +154,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                     image[y+2,x]=color
 
                     image[y-4:y+5,x-4]=color
-                    image[y-4:y+5,x+5]=color
+                    image[y-4:y+5,x+4]=color
                     image[y-4,x-4:x+5]=color
                     image[y+4,x-4:x+5]=color
 
