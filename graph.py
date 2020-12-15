@@ -67,7 +67,7 @@ if __name__ == '__main__':
     logger = logging.getLogger()
 
     parser = argparse.ArgumentParser(description='PyTorch Template')
-    parser.add_argument('-c', '--checkpoint', default=None, type=str,
+    parser.add_argument('-c', '--checkpoint', default='../..//Downloads/export.pth', type=str,
                         help='checkpoint file path (default: None)')
     parser.add_argument('-p', '--plot', default=1, type=int,
                         help='plot (default: True)')
