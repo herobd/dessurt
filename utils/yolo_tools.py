@@ -925,8 +925,8 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClas
                 precisions.append(1)
                 recalls.append(1)
     
-    allPrec = totalTruPos/totalPred
-    allRecall = totalTruPos/totalGT
+    allPrec = totalTruPos/totalPred if totalPred>0 else 1
+    allRecall = totalTruPos/totalGT if totalGT>0 else 1
     if getClassAP:
         classAPs=[computeAP(scores) for scores in classScores]
         #for i in range(len(classAPs)):
@@ -1191,7 +1191,7 @@ def newGetTargIndexForPreds_iou(target,pred,iou_thresh,numClasses,train_targs):
     if pred is None: 
         return None
 
-    if len(target.size())<=1 or target.size(0)==0:
+    if len(target.size())<=1 or target.size(0)==0 or pred.size(0)==0:
         return None
 
     #first get all IOUs. These are already filtered with angle and class
