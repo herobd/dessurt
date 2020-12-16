@@ -507,4 +507,6 @@ class SimpleFullGradMod():
             filename = path_prefix+'_{}_graph_all.png'.format(e)
             img_f.imwrite(filename, image_all)
 
+            filename = path_prefix+'_{}_info?.png'.format(e)
+
 
