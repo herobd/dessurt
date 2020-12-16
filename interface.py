@@ -27,7 +27,7 @@ class Controller():
             canvas.create_image(0,0,anchor='nw',image=img)
 
             self.imgs[key]=canvas
-
+        self.cur_img = None
 
 
     def changeImage(self,node1,node2,giter=None):
@@ -37,7 +37,8 @@ class Controller():
         if giter is None:
             giter=self.giter
         img = self.imgs['{}_{}_{}'.format(min(node1,node2),max(node1,node2),giter)]
-        self.cur_img.place_forget()
+        if self.cur_img is not None:
+            self.cur_img.place_forget()
         self.img.place(x=0,y=0)
 
         self.cur_node1=node1

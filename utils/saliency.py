@@ -506,7 +506,13 @@ class SimpleFullGradMod():
             img_f.polylines(image_all,np.array([(x1,y1),(x2,y1),(x2,y2),(x1,y2)]),False,(0,255,0))
             filename = path_prefix+'_{}_graph_all.png'.format(e)
             img_f.imwrite(filename, image_all)
-
-            filename = path_prefix+'_{}_info?.png'.format(e)
-
+        
+        info = {
+                'num_giters':num_giters,
+                'edge_indexes':edge_indexes,
+                'node_info':node_bb_info
+                }
+        filename = path_prefix+'info.png'
+        with open(filename,'w') as f:
+            json.dump(info,f)
 
