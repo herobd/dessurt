@@ -411,6 +411,9 @@ def build_oversegmented_targets_multiscale(
         #For oversegmented, we need to identify all tiles (not just on) that correspon to gt
         #That brings up an interesting alternative: limit all predictions to their local tile (width). Proba not now...
         for t in range(target_sizes[b]): #range(target.shape[1]):
+            if target[b, t, 4]<0.1:
+                print('WARNING: skipped narrow bb {}'.format(target[b, t, 0:5]))
+                continue
             #t#tic2=timeit.default_timer()
             #print('DEBUG t:{}'.format(t))
             num_assigned=0
@@ -777,11 +780,11 @@ def build_oversegmented_targets_multiscale(
                         bi_y = s_b*bi_x+c_b
 
                         if isHorz:
-                            ti_y = max(ti_y,g_min_y)
-                            bi_y = min(bi_y,g_max_y)
+                            ti_y = min(max(ti_y,g_min_y),g_max_y)
+                            bi_y = min(max(bi_y,g_min_y),g_max_y)
                         else:
-                            ti_y = max(ti_y,g_min_x)
-                            bi_y = min(bi_y,g_max_x)
+                            ti_y = min(max(ti_y,g_min_x),g_max_x)
+                            bi_y = min(max(bi_y,g_min_x),g_max_x)
 
                         #print('t:{},{}  ti:{},{}  bi:{},{}'.format(tx,ty,ti_x,ti_y,bi_x,bi_y))
                         
@@ -828,6 +831,7 @@ def build_oversegmented_targets_multiscale(
                                     #print('tri inside:{}, outside top:{}, bot:{}'.format(s_b*rtri_x+c_b-(s_r*rtri_x+c_r),s_r*rtri_x+c_r-ti_y,bi_y-(s_b*rtri_x+c_b)))
                                     ri_x = min(ri_x,rtri_x)
                                 #print('b_to_th_inter_x:{}  b_to_r_inter_x:{} orri_x:{}  rtri_x:{}'.format(b_to_th_inter_x,b_to_r_inter_x,(b_to_th_inter_x+tile_x)/2,rtri_x if b_to_th_inter_x>b_to_r_inter_x else None))
+                            ri_x = max(ri_x,(gt_left_x+gt_right_x)/2)
                             if math.isinf(s_r):
                                 ri_x = min(ri_x,c_r)
                             #else:
@@ -857,6 +861,7 @@ def build_oversegmented_targets_multiscale(
                                     #unless the optimal point is along the bb corner
                                     ltri_x = (c_l-c_b+(bi_y-ti_y)/2)/(s_b-s_l) #this is optimal along corner
                                     li_x = max(li_x,ltri_x)
+                            li_x = min(li_x,(gt_left_x+gt_right_x)/2)
                             if math.isinf(s_l):
                                 li_x = max(li_x,c_l)
                             #else:
@@ -1110,24 +1115,39 @@ def build_oversegmented_targets_multiscale(
                         targ_cls[b, assigned, cell_y, cell_x] = target[b, t,13:]
                         targ_r[b, assigned, cell_y, cell_x] = math.asin(gr/np.pi)/np.pi
  
-                        #assert(ti_y==ti_y and bi_y==bi_y and ri_x==ri_x and li_x ==li_x)
-                        #assert(not (math.isinf(ti_y) or math.isinf(bi_y) or math.isinf(ri_x) or math.isinf(li_x)))
+                        #prevent 0 area
+                        if abs(ti_y-bi_y)<0.0001:
+                            center = (ti_y+bi_y)/2
+                            ti_y = center-0.0001
+                            bi_y = center+0.0001
+                        if abs(ri_x-li_x)<0.0001:
+                            center = (ri_x+li_x)/2
+                            li_x = center-0.0001
+                            ri_x = center+0.0001
+
                         num_assigned +=1
                         if isHorz:
                             T=ti_y-tile_y #negative if above tile center (just add predcition to center)
-                            #T = max(min(T,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
-                            assert(abs(T)<MAX_H_PRED)
+                            T = max(min(T,MAX_H_PRED-0.01),0.01-MAX_H_PRED)#this clips the max heigh it can predict
+                            #assert(abs(T)<MAX_H_PRED)
                             targ_T[b, assigned, cell_y, cell_x] = inv_tanh(T/MAX_H_PRED)
                             B=bi_y-tile_y 
-                            #B = max(min(B,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
-                            assert(abs(B)<MAX_H_PRED)
+                            B = max(min(B,MAX_H_PRED-0.01),0.01-MAX_H_PRED)
+                            #assert(abs(B)<MAX_H_PRED)
                             targ_B[b, assigned, cell_y, cell_x] = inv_tanh(B/MAX_H_PRED)
                             
                             L=li_x-tile_x #negative if left of tile center (just add predcition to center)
                             L = max(min(L,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
-                            targ_L[b, assigned, cell_y, cell_x] = inv_tanh(L/MAX_W_PRED)
                             R=ri_x-tile_x 
                             R = max(min(R,MAX_W_PRED-0.01),0.01-MAX_W_PRED)
+                            if not (R>=L and T<=B):
+                                print('WARNING/ overseg loss L:{}, R:{}, T:{}, B:{}'.format(L,R,T,B))
+                            #if gw<0.1 and R<L:
+                            #    #this is a hack
+                            #    tmp=R
+                            #    R=L
+                            #    L=tmp
+                            targ_L[b, assigned, cell_y, cell_x] = inv_tanh(L/MAX_W_PRED)
                             targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_W_PRED)
 
                             assert(R>=L and T<=B)
@@ -1156,12 +1176,20 @@ def build_oversegmented_targets_multiscale(
                             targ_B[b, assigned, cell_y, cell_x] = inv_tanh(B/MAX_W_PRED)
                             
                             L=ti_y-tile_y #negative if left of tile center (just add predcition to center)
-                            assert(abs(L)<MAX_H_PRED)
-                            targ_L[b, assigned, cell_y, cell_x] = inv_tanh(L/MAX_H_PRED)
+                            L = max(min(L,MAX_H_PRED-0.01),0.01-MAX_H_PRED)#this clips the max heigh it can predict
+                            #assert(abs(L)<MAX_H_PRED)
                             R=bi_y-tile_y 
-                            assert(abs(R)<MAX_H_PRED)
+                            R = max(min(R,MAX_H_PRED-0.01),0.01-MAX_H_PRED)#this clips the max heigh it can predict
+                            #assert(abs(R)<MAX_H_PRED)
+                            if not (R>=L and T<=B):
+                                print('WARNING/ overseg loss L:{}, R:{}, T:{}, B:{}'.format(L,R,T,B))
+                            #if gw<0.1 and R<L:
+                            #    #this is a hack
+                            #    tmp=R
+                            #    R=L
+                            #    L=tmp
+                            targ_L[b, assigned, cell_y, cell_x] = inv_tanh(L/MAX_H_PRED)
                             targ_R[b, assigned, cell_y, cell_x] = inv_tanh(R/MAX_H_PRED)
-
                             assert(R>=L and T<=B)
                         #t#times_assign.append(timeit.default_timer()-tic2)
 

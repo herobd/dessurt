@@ -425,8 +425,8 @@ def classIOU(boxesT,boxesP, num_classes, boxesPXYWH=[0,1,4,3]):
     iou = inter_area / (bP_area + bT_area - inter_area + 1e-16)
 
     #
-    gt_cls_ind = torch.argmax(boxesT[:,-num_classes:],dim=1)
-    pr_cls_ind = torch.argmax(boxesP[:,-num_classes:],dim=1)
+    gt_cls_ind = torch.argmax(boxesT[:,13:13+num_classes:],dim=1)
+    pr_cls_ind = torch.argmax(boxesP[:,5:5+num_classes:],dim=1)
     gt_cls_ind = gt_cls_ind[:,None].expand(boxesT.size(0), boxesP.size(0))
     pr_cls_ind = pr_cls_ind[None,:].expand(boxesT.size(0), boxesP.size(0))
     class_compatible = gt_cls_ind==pr_cls_ind
@@ -608,7 +608,7 @@ def getWidth(inter):
     #print('length: {}, length_i:{}, max_dist:{}, top: {}, bot: {}, A: {}, B: {}'.format(length,length_i,max_dist,top_point_i,bot_point_i,side_point_A,side_point_B))
     #import pdb;pdb.set_trace()
 
-def classPolyIOU(rboxes,bbs):
+def classPolyIOU(rboxes,bbs,num_classes):
 
     #first we'll find encompassing boxes and compute IOU based on those (fast)
     #for intersections, we'll compute the intersection using polygons (slow)
@@ -663,8 +663,8 @@ def classPolyIOU(rboxes,bbs):
     iou *= angle_compatible
 
     if len(bbs)>0:
-        gt_cls_ind = torch.argmax(rboxes[:,13:],dim=1)
-        pr_allClss = torch.FloatTensor([bb.getCls() for bb in bbs])
+        gt_cls_ind = torch.argmax(rboxes[:,13:13+num_classes],dim=1)
+        pr_allClss = torch.FloatTensor([bb.getCls()[:num_classes] for bb in bbs]) #discard extra classes
         #pr_allClss = torch.stack([bb.getCls() for bb in bbs],dim=0)
         pr_cls_int = torch.argmax(pr_allClss,dim=1)
         gt_cls_ind = gt_cls_ind[:,None].expand(rboxes.size(0), len(bbs))
@@ -760,7 +760,7 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClas
     #how many classes are there?
     if ignoreClasses:
         numClasses=1
-    if len(target.size())>1:
+    if len(target.size())>1 and target.size(0)>0:
         #numClasses=target.size(1)-13
         pass
     elif pred is not None and len(pred.size())>1 and pred.size(0)>0:
@@ -925,8 +925,8 @@ def AP_(target,pred,iou_thresh,numClasses,ignoreClasses,beforeCls,getLoc,getClas
                 precisions.append(1)
                 recalls.append(1)
     
-    allPrec = totalTruPos/totalPred
-    allRecall = totalTruPos/totalGT
+    allPrec = totalTruPos/totalPred if totalPred>0 else 1
+    allRecall = totalTruPos/totalGT if totalGT>0 else 1
     if getClassAP:
         classAPs=[computeAP(scores) for scores in classScores]
         #for i in range(len(classAPs)):
@@ -945,7 +945,7 @@ def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeC
     #how many classes are there?
     if ignoreClasses:
         numClasses=1
-    if len(target.size())>1:
+    if len(target.size())>1 and target.size(0)>0:
         #numClasses=target.size(1)-13
         pass
     elif pred is not None and len(pred)>0:
@@ -990,7 +990,7 @@ def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeC
     if pred is not None and len(pred)>0:
         #This is an alternate metric that computes AP of all classes together
         #Your only a hit if you have the same class
-        allIOUs = classPolyIOU(target,pred) 
+        allIOUs = classPolyIOU(target,pred,numClasses) 
         validHits = allHits = allIOUs>iou_thresh
         #evalute hits to see if they're valid (matching class)
 
@@ -998,7 +998,7 @@ def AP_textLines(target,pred,iou_thresh,numClasses=2,ignoreClasses=False,beforeC
         hasHit,_ = validHits.max(dim=0) #which preds have hits
         predConf=torch.FloatTensor([p.getConf() for p in pred])
         predClasses=torch.FloatTensor([p.getCls() for p in pred])
-        predClasses_index = torch.argmax(predClasses,dim=1)
+        predClasses_index = torch.argmax(predClasses[:,:numClasses],dim=1) #remove blank if present, get max class
         #targetClasses_index_ex = targetClasses_index[:,None].expand(targetClasses_index.size(0),predClasses_index.size(0))
         #predClasses_index_ex = predClasses_index[None,:].expand(targetClasses_index.size(0),predClasses_index.size(0))
         notHitScores = predConf[~hasHit]
@@ -1191,7 +1191,7 @@ def newGetTargIndexForPreds_iou(target,pred,iou_thresh,numClasses,train_targs):
     if pred is None: 
         return None
 
-    if len(target.size())<=1:
+    if len(target.size())<=1 or target.size(0)==0 or pred.size(0)==0:
         return None
 
     #first get all IOUs. These are already filtered with angle and class
@@ -1225,7 +1225,7 @@ def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_ta
     if pred is None: 
         return None
 
-    if len(target.size())<=1:
+    if len(target.size())<=1 or target.size(0)==0:
         return None
 
     #first get all IOUs. These are already filtered with angle and class
@@ -1234,7 +1234,7 @@ def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_ta
     if train_targs:
         allIOUs = allPolyIO_clipU(target,pred)
     else:
-        allIOUs = classPolyIOU(target,pred)
+        allIOUs = classPolyIOU(target,pred,numClasses)
 
     hits = allIOUs>iou_thresh
     #overSeg_thresh = iou_thresh*1.05

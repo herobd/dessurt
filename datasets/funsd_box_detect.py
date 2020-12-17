@@ -157,6 +157,7 @@ class FUNSDBoxDetect(BoxDetectDataset):
                 'answer': 18,
                 'other': 19
                 }
+        self.no_blanks=True #too bad
 
 
     def parseAnn(self,np_img,annotations,s,imageName):

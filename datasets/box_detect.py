@@ -239,7 +239,8 @@ class BoxDetectDataset(torch.utils.data.Dataset):
 
         ##tic=timeit.default_timer()
         np_img = img_f.imread(imagePath, 1 if self.color else 0)#/255.0
-        print('read img: {}'.format(np_img.shape))
+        if np_img.max()<200:
+            np_img*=255
         if np_img is None or np_img.shape[0]==0:
             print("ERROR, could not open "+imagePath)
             return self.__getitem__((index+1)%self.__len__())
@@ -279,7 +280,6 @@ class BoxDetectDataset(torch.utils.data.Dataset):
         if not self.color:
             np_img=np_img[...,None] #add 'color' channel
         ##print('resize: {}  [{}, {}]'.format(timeit.default_timer()-tic,np_img.shape[0],np_img.shape[1]))
-        print('resized img: {}'.format(np_img.shape))
         
 
         bbs,line_gts,point_gts,pixel_gt,numClasses,numNeighbors,pairs = self.parseAnn(np_img,annotations,s,imagePath)

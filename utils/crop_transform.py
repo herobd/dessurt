@@ -500,7 +500,6 @@ class CropBoxTransform(object):
         #pad out to allow random samples to take space off of the page
         ##tic=timeit.default_timer()
         #org_img = np.pad(org_img, self.pad_params, 'mean')
-        print('org_img: {}'.format(org_img.shape))
         if org_img.shape[2]==3:
             org_img = np.pad(org_img, pad_params, 'constant', constant_values=0) #zero, since that what Conv2d pads with
         else:
@@ -508,7 +507,6 @@ class CropBoxTransform(object):
         if pixel_gt is not None:
             pixel_gt = np.pad(pixel_gt, pad_params, 'constant')
         ##print('pad: {}'.format(timeit.default_timer()-##tic))
-        print('pad img: {}'.format(org_img.shape))
         
         ##tic=timeit.default_timer()
         #corner points
@@ -559,7 +557,6 @@ class CropBoxTransform(object):
         crop_params, org_img, pixel_gt, line_gt_match, point_gt_match, new_bb_gt, new_bb_auxs, cropPoint = generate_random_crop(org_img, pixel_gt, line_gts, point_gts, self.random_crop_params, bb_gt=bb_gt, bb_auxs=bb_auxs, query_bb=query_bb, cropPoint=cropPoint)
         #print(crop_params)
         #print(gt_match)
-        print('crop img: {}'.format(org_img.shape))
         
         ##tic=timeit.default_timer()
         #new_bb_gt=bb_gt[bb_gt_match][None,...] #this is done in generate_random_crop() as it modified some bbs
