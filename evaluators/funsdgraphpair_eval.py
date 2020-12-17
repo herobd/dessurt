@@ -72,10 +72,19 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         useDetections = config['useDetect']
     confThresh = config['conf_thresh'] if 'conf_thresh' in config else None
 
+    do_saliency_map =  config['saliency'] if 'saliency' in config else False
+
 
     numClasses=len(trainer.classMap)
 
     resultsDirName='results'
+
+    if do_saliency_map and outDir is not None:
+        if config['cuda']:
+            s_data = data.cuda().requires_grad_()
+        else:
+            s_data = data.requires_grad_()
+        trainer.saliency_model.saliency(s_data,(1-data[0].cpu())/2,str(os.path.join(outDir,'{}_saliency_'.format(imageName))))
     #if outDir is not None and resultsDirName is not None:
         #rPath = os.path.join(outDir,resultsDirName)
         #if not os.path.exists(rPath):
@@ -126,6 +135,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         exit()
     else:
         losses, log, out = trainer.newRun(instance,False,get=toEval)
+
 
     if trackAtt:
         if model.pairer is None:
@@ -199,7 +209,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
                     #for j in range(metricsOut.shape[1]):
                 #    saveName+='_m:{0:.3f}'.format(metricsOut[i,j])
                 path = os.path.join(outDir,saveName+'.png')
-                draw_graph(outputBoxes,trainer.model.used_threshConf,bbPred.cpu().detach() if bbPred is not None else None,torch.sigmoid(edgePred).cpu().detach(),relIndexes,predGroups,data,edgePredTypes,targetBoxes,trainer.model,path,useTextLines=trainer.model.useCurvedBBs,targetGroups=instance['gt_groups'],targetPairs=instance['gt_groups_adj'])
+                draw_graph(outputBoxes,trainer.model.used_threshConf,bbPred.cpu().detach() if bbPred is not None else None,torch.sigmoid(edgePred).cpu().detach(),relIndexes,predGroups,data,edgePredTypes,targetBoxes,trainer.classMap,path,useTextLines=trainer.model.useCurvedBBs,targetGroups=instance['gt_groups'],targetPairs=instance['gt_groups_adj'])
                 #io.imsave(os.path.join(outDir,saveName),image)
                 #print('saved: '+os.path.join(outDir,saveName))
 
@@ -216,7 +226,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
     if outDir is not None:
         path = os.path.join(outDir,'{}_final_relFm:{:.2}_r+p:{:.2}+{:.2}_bbFm:{:.2}_r+p:{:.2}+{:.2}.png'.format(imageName,float(log['final_rel_Fm']),float(log['final_rel_recall']),float(log['final_rel_prec']),float(log['final_bb_allFm']),float(log['final_bb_allRecall']),float(log['final_bb_allPrec'])))
         finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = out['final']
-        draw_graph(finalOutputBoxes,trainer.model.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,data,None,targetBoxes,trainer.model,path,bbTrans=finalBBTrans,useTextLines=trainer.model.useCurvedBBs,targetGroups=instance['gt_groups'],targetPairs=instance['gt_groups_adj'])
+        draw_graph(finalOutputBoxes,trainer.model.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,data,None,targetBoxes,trainer.classMap,path,bbTrans=finalBBTrans,useTextLines=trainer.model.useCurvedBBs,targetGroups=instance['gt_groups'],targetPairs=instance['gt_groups_adj'])
 
     for key in losses.keys():
         losses[key] = losses[key].item()
