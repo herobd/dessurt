@@ -4,6 +4,7 @@ from PIL import Image, ImageTk
 import sys,json,os
 from utils import img_f
 
+<<<<<<< HEAD
 
 image_dir = sys.argv[1]
 image_name = sys.argv[2]
@@ -84,6 +85,52 @@ def setImage(new_node):
 
 changeImage(*selected)
 #root.mainloop()
+=======
+#Nothing selected, show node gradients (both) when hover
+#Node selected, show node gradients, on hover show edge gradients
+
+
+class Controller():
+    def __init__(self,root,image_dir,image_name,edge_indexes,num_giters):
+        self.giter='all'
+
+        for ei,(n1,n2) in enumerate(edge_indexes):
+            for giter in range(num_giters):
+                self.imgs['{}_{}_{}'.format(min(node1,node2),max(node1,node2),giter)] = img_f.imread(os.path.join(image_dir,'{}_saliency__{}_graph_g{}.png'.format(image_name,ei,giter)))
+            self.imgs['{}_{}_all'.format(min(node1,node2),max(node1,node2),giter)] = img_f.imread(os.path.join(image_dir,'{}_saliency__{}_graph_all.png'.format(image_name,ei)))
+            self.imgs['{}_{}_pix'.format(min(node1,node2),max(node1,node2),giter)] = img_f.imread(os.path.join(image_dir,'{}_saliency__{}_pixels.png'.format(image_name,ei)))
+        
+        for key in self.imgs:
+            H = self.imgs[key].shape[0]
+            W = self.imgs[key].shape[1]
+            self.H=max(H,self.H)
+            self.W=max(W,self.W)
+            canvas = tk.Canvas(root,  width=W, height=H)
+            #canvas.place(x=0,y=0)
+            img =  ImageTk.PhotoImage(image=Image.fromarray(self.imgs[key]))
+            canvas.create_image(0,0,anchor='nw',image=img)
+
+            self.imgs[key]=canvas
+
+
+
+    def changeImage(self,node1,node2,giter=None):
+        self.prev_node1 = self.cur_node1
+        self.prev_node2 = self.cur_node2
+        self.prev_giter = self.cur_giter
+        if giter is None:
+            giter=self.giter
+        img = self.imgs['{}_{}_{}'.format(min(node1,node2),max(node1,node2),giter)]
+        self.cur_img.place_forget()
+        self.img.place(x=0,y=0)
+
+        self.cur_node1=node1
+        self.cur_node2=node2
+        self.cur_giter=giter
+
+    def undoImage(self):
+        self.changeImages(self.prev_node1,self.prev_node2,self.prev_giter)
+>>>>>>> parent of 50c7588... work on interface
 
 
 class HoverButton(tk.Button):
