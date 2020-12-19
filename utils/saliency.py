@@ -1,4 +1,3 @@
-
 # Copyright (c) 2019 Idiap Research Institute, http://www.idiap.ch/
 # Written by Suraj Srinivas <suraj.srinivas@idiap.ch>
 # https://github.com/idiap/fullgrad-saliency
@@ -21,7 +20,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from math import isclose
-import json
 
 import numpy as np
 from utils import img_f
@@ -30,6 +28,7 @@ from utils.gpu import get_gpu_memory_map
 from evaluators.draw_graph import getCorners
 from utils.bb_merging import TextLine
 from collections import defaultdict
+import json
 
 def getBounds(bbs):
     if type(bbs[0]) is TextLine:
@@ -53,11 +52,11 @@ def _postProcessGrad(input, eps=1e-6):
     # Rescale operations to ensure gradients lie between 0 and 1
     flatin = input.view((input.size(0),-1))
     temp, _ = flatin.min(1, keepdim=True)
-    input = input - temp.unsqueeze(1).unsqueeze(1)
+    input = input - temp.unsqueeze(1).unsqueeze(1).detach()
 
     flatin = input.view((input.size(0),-1))
     temp, _ = flatin.max(1, keepdim=True)
-    input = input / (temp.unsqueeze(1).unsqueeze(1) + eps)
+    input = input / (temp.unsqueeze(1).unsqueeze(1).detach() + eps)
     return input
 def _postProcessFlatGrad(input, eps=1e-6):
     #Here, we're dealing with the graph, the batch dim is actually the node or edge dim (batch size of 1)
@@ -65,21 +64,10 @@ def _postProcessFlatGrad(input, eps=1e-6):
     input = abs(input)
 
     # Rescale operations to ensure gradients lie between 0 and 1
-    input = input - input.min()
+    input = input - input.min().detach()
 
-    input = input / (input.max() + eps)
+    input = input / (input.max().detach() + eps)
     return input
-
-def _extract_layer_grads(self, module, in_grad, out_grad,store_here,name):
-    # function to collect the gradient outputs
-    # from each layer
-
-    if (store_here is None or type(store_here) is bool):
-        print('error store {}'.format(store_here))
-        print(name)
-    if not module.bias is None and store_here is not None:# and (self.do_only is None or self.do_only==is_type):
-        #store_here.append(out_grad[0])
-        store_here.append(_postProcessGrad(out_grad[0]).sum(1, keepdim=True).cpu())
 
 class FullGradExtractor:
     #Extract tensors needed for FullGrad using hooks
@@ -89,8 +77,8 @@ class FullGradExtractor:
 
         self.biases = []
         self.backbone_feature_grads = []
-        self.graph_node_feature_grads = defaultdict(dict)
-        self.graph_edge_feature_grads = defaultdict(dict)
+        self.graph_node_feature_grads = defaultdict(list)
+        self.graph_edge_feature_grads = defaultdict(list)
         self.grad_handles = []
         self.do_only=False
 
@@ -120,42 +108,23 @@ class FullGradExtractor:
                 #    # Register feature-gradient hooks for each layer
                 #    handle_g = m.register_backward_hook(lambda m,i,o: self._extract_layer_grads(m,i,o,store_here,str(name)))
                 #    self.grad_handles.append(handle_g)
-                def save_plz(save_here,name):
-                    def actually_save(module,in_grad,out_grad):
-                        in_grad=None
-                        if not module.bias is None:
-                            module=None
-                            save_here[name]= _postProcessGrad(out_grad[0]).sum(1, keepdim=True).cpu()
-                            print('save_here({})[{}] <- {}'.format(len(save_here),name,save_here[name].size()))
-                            out_grad=None
-                        #stats=torch.cuda.memory_stats(0)
-                        #print('total alloc: {}\t{}'.format(stats['allocated_bytes.all.current'],name))
-                    return actually_save
                 if 'graphnets' in name:
                     giter = int(name[10])
-                    if True:
-                        node_grads = self.graph_node_feature_grads[giter]
-                        edge_grads = self.graph_edge_feature_grads[giter]
+                    if giter==0:
                         if 'node' in name:
-                            handle_g = m.register_backward_hook(save_plz(node_grads,name))
+                            handle_g = m.register_backward_hook(self._extract_layer_node0_grads)
                         elif 'edge' in name:
-                            handle_g = m.register_backward_hook(save_plz(node_grads,name))
-                    else:
-                        if giter==0:
-                            if 'node' in name:
-                                handle_g = m.register_backward_hook(self._extract_layer_node0_grads)
-                            elif 'edge' in name:
-                                handle_g = m.register_backward_hook(self._extract_layer_edge0_grads)
-                        elif giter==1:
-                            if 'node' in name:
-                                handle_g = m.register_backward_hook(self._extract_layer_node1_grads)
-                            elif 'edge' in name:
-                                handle_g = m.register_backward_hook(self._extract_layer_edge1_grads)
-                        elif giter==2:
-                            if 'node' in name:
-                                handle_g = m.register_backward_hook(self._extract_layer_node2_grads)
-                            elif 'edge' in name:
-                                handle_g = m.register_backward_hook(self._extract_layer_edge2_grads)
+                            handle_g = m.register_backward_hook(self._extract_layer_edge0_grads)
+                    elif giter==1:
+                        if 'node' in name:
+                            handle_g = m.register_backward_hook(self._extract_layer_node1_grads)
+                        elif 'edge' in name:
+                            handle_g = m.register_backward_hook(self._extract_layer_edge1_grads)
+                    elif giter==2:
+                        if 'node' in name:
+                            handle_g = m.register_backward_hook(self._extract_layer_node2_grads)
+                        elif 'edge' in name:
+                            handle_g = m.register_backward_hook(self._extract_layer_edge2_grads)
                 elif 'detector' in name:
                     handle_g = m.register_backward_hook(self._extract_layer_backbone_grads)
                 else:
@@ -163,12 +132,9 @@ class FullGradExtractor:
                 if handle_g is not None:
                     self.grad_handles.append(handle_g)
 
-
                 # Collect model biases
                 b = self._extract_layer_bias(m)
                 if (b is not None): self.biases.append(b)
-        #assert(len(self.graph_node_feature_grads)==3)
-        #assert(len(self.graph_edge_feature_grads)==3)
 
     def _clear_feature_grads(self):
         self.backbone_feature_grads.clear()# = []
@@ -203,38 +169,39 @@ class FullGradExtractor:
     def _extract_layer_backbone_grads(self, module, in_grad, out_grad):
         if not module.bias is None:
             self.backbone_feature_grads.append(_postProcessGrad(out_grad[0]).sum(1, keepdim=True).cpu())
-        #stats=torch.cuda.memory_stats(0)
-        #print('total alloc: {}\t{}'.format(stats['allocated_bytes.all.current'],'backbone'))
     def _extract_layer_edge0_grads(self, module, in_grad, out_grad):
         if not module.bias is None:
             self.graph_edge_feature_grads[0].append(_postProcessFlatGrad(out_grad[0]).sum(1, keepdim=True).cpu())
-        #stats=torch.cuda.memory_stats(0)
-        #print('total alloc: {}\t{}'.format(stats['allocated_bytes.all.current'],'edge0'))
     def _extract_layer_edge1_grads(self, module, in_grad, out_grad):
         if not module.bias is None:
             self.graph_edge_feature_grads[1].append(_postProcessFlatGrad(out_grad[0]).sum(1, keepdim=True).cpu())
-        #stats=torch.cuda.memory_stats(0)
-        #print('total alloc: {}\t{}'.format(stats['allocated_bytes.all.current'],'edge1'))
     def _extract_layer_edge2_grads(self, module, in_grad, out_grad):
         if not module.bias is None:
             self.graph_edge_feature_grads[2].append(_postProcessFlatGrad(out_grad[0]).sum(1, keepdim=True).cpu())
-        #stats=torch.cuda.memory_stats(0)
-        #print('total alloc: {}\t{}'.format(stats['allocated_bytes.all.current'],'edge2'))
     def _extract_layer_node0_grads(self, module, in_grad, out_grad):
         if not module.bias is None:
             self.graph_node_feature_grads[0].append(_postProcessFlatGrad(out_grad[0]).sum(1, keepdim=True).cpu())
-        #stats=torch.cuda.memory_stats(0)
-        #print('total alloc: {}\t{}'.format(stats['allocated_bytes.all.current'],'node0'))
     def _extract_layer_node1_grads(self, module, in_grad, out_grad):
         if not module.bias is None:
             self.graph_node_feature_grads[1].append(_postProcessFlatGrad(out_grad[0]).sum(1, keepdim=True).cpu())
-        #stats=torch.cuda.memory_stats(0)
-        #print('total alloc: {}\t{}'.format(stats['allocated_bytes.all.current'],'node1'))
     def _extract_layer_node2_grads(self, module, in_grad, out_grad):
         if not module.bias is None:
             self.graph_node_feature_grads[2].append(_postProcessFlatGrad(out_grad[0]).sum(1, keepdim=True).cpu())
-        #stats=torch.cuda.memory_stats(0)
-        #print('total alloc: {}\t{}'.format(stats['allocated_bytes.all.current'],'node2'))
+            #print('self.graph_node_feature_grads[2] len {}'.format(len(self.graph_node_feature_grads[2])))
+    def _extract_layer_grads(self, module, in_grad, out_grad,store_here,name):
+        # function to collect the gradient outputs
+        # from each layer
+
+        if (store_here is None or type(store_here) is bool):
+            print('error store {}'.format(store_here))
+            print(name)
+        if not module.bias is None and store_here is not None:# and (self.do_only is None or self.do_only==is_type):
+            #store_here.append(out_grad[0])
+            if torch.is_nan(out_grad[0]).any():
+                print('nan in {}'.format(name))
+            store_here.append(_postProcessGrad(out_grad[0]).sum(1, keepdim=True).cpu())
+            if torch.is_nan(store_here[-1]).any():
+                print('nan out {}'.format(name))
 
     def getFeatureGrads(self, x, output_scalars):
         
@@ -273,7 +240,7 @@ class FullGradExtractor:
             #    create_graph=False)
 
             for giter,grads in self.graph_node_feature_grads.items():
-                graph_node_feature_grads[giter].append(dict(grads))
+                graph_node_feature_grads[giter].append(list(grads))
             #print('graph_node_feature_grads[2] len {}'.format(len(graph_node_feature_grads[2])))
             #self._clear_feature_grads()
 
@@ -284,7 +251,7 @@ class FullGradExtractor:
             #    retain_graph=True if output_i<len(output_scalars)-1 else False,
             #    create_graph=False)
             for giter,grads in self.graph_edge_feature_grads.items():
-                graph_edge_feature_grads[giter].append(dict(grads))
+                graph_edge_feature_grads[giter].append(list(grads))
             self._clear_feature_grads()
 
             #curTensors=[]
@@ -317,17 +284,12 @@ class FullGradExtractor:
              
         input_gradients = torch.cat(input_gradients,dim=0)
         backbone_features_grads = [torch.cat(fgs,dim=0) for fgs in zip(*backbone_features_grads)]
-        graph_node_feature_grads_dict={}
         for giter,grads in graph_node_feature_grads.items():
-            #graph_node_feature_grads[giter] = [torch.stack(fgs,dim=0) for fgs in zip(*grads)] #stack here to create batch dim
-            for name in grads[0].keys():
-                graph_node_feature_grads_dict[giter][name] = torch.stack([g[name] for g in grads],dim=0)
+            graph_node_feature_grads[giter] = [torch.stack(fgs,dim=0) for fgs in zip(*grads)] #stack here to create batch dim
         for giter,grads in graph_edge_feature_grads.items():
-            #graph_edge_feature_grads[giter] = [torch.stack(fgs,dim=0) for fgs in zip(*grads)] #stack here to create batch dim
-            for name in grads[0].keys():
-                graph_edge_feature_grads_dict[giter][name] = torch.stack([g[name] for g in grads],dim=0)
+            graph_edge_feature_grads[giter] = [torch.stack(fgs,dim=0) for fgs in zip(*grads)] #stack here to create batch dim
 
-        return input_gradients, backbone_features_grads, graph_node_feature_grads_dict, graph_edge_feature_grads_dict
+        return input_gradients, backbone_features_grads, graph_node_feature_grads, graph_edge_feature_grads
 
             
 
@@ -389,32 +351,7 @@ class SimpleFullGradMod():
         input_grad, backbone_grad, graph_node_grad, graph_edge_grad, node_bb_info, edge_indexes= self._getGradients(image)
         if input_grad is None:
             return
-        
-        ####
-        if False:
-            giter=1
-            total_steps=6
-            num_nodes=len(node_bb_info[giter])
-            adj = np.zeros((num_nodes,num_nodes))
-            for n1,n2 in edge_indexes[giter]:
-                adj[n1,n2] = 1
-                adj[n2,n1] = 1
-            connected=adj.copy()
-            for i in range(total_steps-1):
-                adj = np.matmul(adj,adj)
-                connected+=adj
-            connected = connected>0
-            #img_f.imshow('ad',connected)
-            #img_f.show()
-            for ei,(n1,n2) in enumerate(edge_indexes[-1]):
-                num_node_g=len(node_bb_info[giter])
-                for n_grad in graph_node_grad[giter]:
-                    if n_grad.size(1)==num_node_g:
-                        for ni in range(num_node_g):
-                            has_grad = bool((n_grad[ei][ni]!=0).any())
-                            connect = connected[n1,ni]
-                            assert(not has_grad or connect)
-        ###
+
         
         im_size = image.size()
         #im_size[2] //= 2
@@ -494,10 +431,10 @@ class SimpleFullGradMod():
 
             pixel_image=np.copy(image)
             
-            fin_n1,fin_n2 = edge_indexes[-1][e]
-            x1,x2,y1,y2=node_bb_info[-1][fin_n1]
+            n1_f,n2_f = edge_indexes[-1][e]
+            x1,x2,y1,y2=node_bb_info[-1][n1_f]
             img_f.polylines(image,np.array([(x1,y1),(x2,y1),(x2,y2),(x1,y2)]),False,(0,255,0))
-            x1,x2,y1,y2=node_bb_info[-1][fin_n2]
+            x1,x2,y1,y2=node_bb_info[-1][n2_f]
             img_f.polylines(image,np.array([(x1,y1),(x2,y1),(x2,y2),(x1,y2)]),False,(0,255,0))
 
             filename = path_prefix+'_{}_pixels.png'.format(e)
@@ -556,16 +493,16 @@ class SimpleFullGradMod():
                     image_all[int(y1+giter*seg_vert):int(1+y2-giter*seg_vert),int(x1+giter*seg_horz):1+int(x2-giter*seg_horz)]=color
 
 
-                x1,x2,y1,y2=node_bb_info[-1][fin_n1]
+                x1,x2,y1,y2=node_bb_info[-1][n1_f]
                 img_f.polylines(image,np.array([(x1,y1),(x2,y1),(x2,y2),(x1,y2)]),False,(0,255,0))
-                x1,x2,y1,y2=node_bb_info[-1][fin_n2]
+                x1,x2,y1,y2=node_bb_info[-1][n2_f]
                 img_f.polylines(image,np.array([(x1,y1),(x2,y1),(x2,y2),(x1,y2)]),False,(0,255,0))
                 filename = path_prefix+'_{}_graph_g{}.png'.format(e,giter)
                 img_f.imwrite(filename, image)
 
-            x1,x2,y1,y2=node_bb_info[-1][fin_n1]
+            x1,x2,y1,y2=node_bb_info[-1][n1_f]
             img_f.polylines(image_all,np.array([(x1,y1),(x2,y1),(x2,y2),(x1,y2)]),False,(0,255,0))
-            x1,x2,y1,y2=node_bb_info[-1][fin_n2]
+            x1,x2,y1,y2=node_bb_info[-1][n2_f]
             img_f.polylines(image_all,np.array([(x1,y1),(x2,y1),(x2,y2),(x1,y2)]),False,(0,255,0))
             filename = path_prefix+'_{}_graph_all.png'.format(e)
             img_f.imwrite(filename, image_all)
@@ -578,4 +515,3 @@ class SimpleFullGradMod():
         filename = path_prefix+'info.json'
         with open(filename,'w') as f:
             json.dump(info,f)
-
