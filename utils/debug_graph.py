@@ -53,11 +53,11 @@ def _postProcessGrad(input, eps=1e-6):
     # Rescale operations to ensure gradients lie between 0 and 1
     flatin = input.view((input.size(0),-1))
     temp, _ = flatin.min(1, keepdim=True)
-    input = input - temp.unsqueeze(1).unsqueeze(1)
+    input = input - temp.unsqueeze(1).unsqueeze(1).detach()
 
     flatin = input.view((input.size(0),-1))
     temp, _ = flatin.max(1, keepdim=True)
-    input = input / (temp.unsqueeze(1).unsqueeze(1) + eps)
+    input = input / (temp.unsqueeze(1).unsqueeze(1).detach() + eps)
     return input
 def _postProcessFlatGrad(input, eps=1e-6):
     #Here, we're dealing with the graph, the batch dim is actually the node or edge dim (batch size of 1)
@@ -65,9 +65,9 @@ def _postProcessFlatGrad(input, eps=1e-6):
     input = abs(input)
 
     # Rescale operations to ensure gradients lie between 0 and 1
-    input = input - input.min()
+    input = input - input.min().detach()
 
-    input = input / (input.max() + eps)
+    input = input / (input.max().detach() + eps)
     return input
 
 def _extract_layer_grads(self, module, in_grad, out_grad,store_here,name):
@@ -120,43 +120,61 @@ class FullGradExtractor:
                 #    # Register feature-gradient hooks for each layer
                 #    handle_g = m.register_backward_hook(lambda m,i,o: self._extract_layer_grads(m,i,o,store_here,str(name)))
                 #    self.grad_handles.append(handle_g)
-                def save_plz(typ,name,self):
+                def save_plz(typ,name,this):
                     def actually_save(module,in_grad,out_grad):
                         in_grad=None
                         if not module.bias is None:
+                            if typ=='mhAtt':
+                                #print('{} {}'.format(name, out_grad[0].size()))
+                                if out_grad[0].size(1)==this.connected.shape[0]:
+                                    for ni in range(out_grad[0].size(1)):
+                                        if not this.connected[ni,this.cur_edge[0]]:
+                                            if (out_grad[0][0,ni]!=0).any():
+                                                print('bad node grad for [{}/{}] {}'.format(ni,out_grad[0].size(1),name))
+                                else: #edges
+                                    #print(len(this.edge_indexes))
+                                    for ei in range(out_grad[0].size(1)):
+                                        a_node = this.edge_indexes[ei if ei<len(this.edge_indexes) else ei-len(this.edge_indexes)][0] 
+                                        #print('{}/{}  {}/{}'.format(ei,out_grad[0].size(1),a_node,this.connected.shape[0]))
+                                        if not this.connected[a_node,this.cur_edge[0]]:
+                                            if (out_grad[0][0,ei]!=0).any():
+                                                print('bad edge grad for [{}/{}] {}'.format(ei,out_grad[0].size(1),name))
                             if typ=='node':
-                            module=None
-                            save_here[name]= _postProcessGrad(out_grad[0]).sum(1, keepdim=True).cpu()
-                            print('save_here({})[{}] <- {}'.format(len(save_here),name,save_here[name].size()))
+                                if (out_grad[0].size(0)==this.connected.shape[0]):
+                                    for ni in range(out_grad[0].size(0)):
+                                        if not this.connected[ni,this.cur_edge[0]]:
+
+                                            #print('{} and {} not connected'.format(ni,this.cur_edge))
+                                            #print(out_grad[0][ni])
+                                            if (out_grad[0][ni]!=0).any():
+                                                print('bad node grad for [{}/{}] {}'.format(ni,out_grad[0].size(0),name))
+                                            #print('fine')
+                                #else:
+                                #    print('{} : {} != {}'.format(name,out_grad[0].size(),this.connected.shape[0]))
+                            if typ=='edge':
+                                for ei in range(out_grad[0].size(0)):
+                                    a_node = this.edge_indexes[ei if ei<len(this.edge_indexes) else ei-len(this.edge_indexes)][0] 
+                                    #print('{}/{}  {}/{}'.format(ei,out_grad[0].size(1),a_node,this.connected.shape[0]))
+                                    if not this.connected[a_node,this.cur_edge[0]]:
+                                        if (out_grad[0][ei]!=0).any():
+                                            print('bad edge grad for [{}/{}] {}'.format(ei,out_grad[0].size(0),name))
+
+                                    
                             out_grad=None
                         #stats=torch.cuda.memory_stats(0)
                         #print('total alloc: {}\t{}'.format(stats['allocated_bytes.all.current'],name))
                     return actually_save
                 if 'graphnets' in name:
                     giter = int(name[10])
-                    if True:
-                        node_grads = None#self.graph_node_feature_grads[giter]
-                        edge_grads = None#self.graph_edge_feature_grads[giter]
-                        if 'node' in name:
+                    node_grads = None#self.graph_node_feature_grads[giter]
+                    edge_grads = None#self.graph_edge_feature_grads[giter]
+                    if giter==1:
+                        if 'mhAtt' in name:
+                            handle_g = m.register_backward_hook(save_plz('mhAtt',name,self))
+                        elif 'node' in name:
                             handle_g = m.register_backward_hook(save_plz('node',name,self))
                         elif 'edge' in name:
                             handle_g = m.register_backward_hook(save_plz('edge',name,self))
-                    else:
-                        if giter==0:
-                            if 'node' in name:
-                                handle_g = m.register_backward_hook(self._extract_layer_node0_grads)
-                            elif 'edge' in name:
-                                handle_g = m.register_backward_hook(self._extract_layer_edge0_grads)
-                        elif giter==1:
-                            if 'node' in name:
-                                handle_g = m.register_backward_hook(self._extract_layer_node1_grads)
-                            elif 'edge' in name:
-                                handle_g = m.register_backward_hook(self._extract_layer_edge1_grads)
-                        elif giter==2:
-                            if 'node' in name:
-                                handle_g = m.register_backward_hook(self._extract_layer_node2_grads)
-                            elif 'edge' in name:
-                                handle_g = m.register_backward_hook(self._extract_layer_edge2_grads)
                 else:
                     handle_g = None
                 if handle_g is not None:
@@ -197,6 +215,7 @@ class FullGradExtractor:
 
     def getFeatureGrads(self, x, output_scalars, connected, edge_indexes):
         self.connected=connected
+        self.edge_indexes=edge_indexes[1]
         # Empty feature grads list 
         self.feature_grads = []
 
@@ -213,7 +232,9 @@ class FullGradExtractor:
         #with profiler.profile(profile_memory=True,record_shapes=True) as prof:
 
         for output_i,output_scalar in enumerate(output_scalars):
-            self.cur_edge = edge_indexes[output_i]
+            self.cur_edge = edge_indexes[-1][output_i]
+            assert(self.cur_edge[0]<connected.shape[0])
+            assert(self.cur_edge[1]<connected.shape[0])
             #self.do_only='pix'
             input_gradients.append( torch.autograd.grad(
                 outputs = output_scalar, 
@@ -225,7 +246,7 @@ class FullGradExtractor:
 
             
 
-class SimpleFullGradMod():
+class GraphChecker():
     """
     Compute simple FullGrad saliency map for my graph model
     """
@@ -264,6 +285,7 @@ class SimpleFullGradMod():
                         iter_info.append(info1)
                     node_bb_info.append(iter_info)
 
+                edge_indexes = allEdgeIndexes[mf:]
                 giter=1
                 total_steps=6
                 num_nodes=len(node_bb_info[giter])
@@ -277,200 +299,16 @@ class SimpleFullGradMod():
                     connected+=adj
                 connected = connected>0
 
-                res = self.model_ext.getFeatureGrads(image, output_scalar, connected, allEdgeIndexes[mf:])+(node_bb_info,allEdgeIndexes[mf:])
+                self.model_ext.getFeatureGrads(image, output_scalar, connected, edge_indexes)
             #except RuntimeError as e:
             #    print(e)
             #    print('Skipping saliency for this image')
-            #    return None, None, None, None, None, None
-        #if not is_train:
-        #    self.model.eval()
-        return res
 
 
-    def saliency(self, image,draw_image,path_prefix):
+    def check(self, image):
         #Simple FullGrad saliency
 
         #image = image[:,:,400:-400,100:-100]
         
         self.model.eval()
-        input_grad, backbone_grad, graph_node_grad, graph_edge_grad, node_bb_info, edge_indexes= self._getGradients(image)
-        if input_grad is None:
-            return
-        
-        ####
-        if False:
-            #img_f.imshow('ad',connected)
-            #img_f.show()
-            for ei,(n1,n2) in enumerate(edge_indexes[-1]):
-                num_node_g=len(node_bb_info[giter])
-                for n_grad in graph_node_grad[giter]:
-                    if n_grad.size(1)==num_node_g:
-                        for ni in range(num_node_g):
-                            has_grad = bool((n_grad[ei][ni]!=0).any())
-                            connect = connected[n1,ni]
-                            assert(not has_grad or connect)
-        ###
-        
-        im_size = image.size()
-        #im_size[2] //= 2
-        #im_size[2] //= 2
-        assert(im_size[0]==1)
-        image = image.expand(input_grad.size(0),-1,-1,-1) #expand to number of edges
-
-        # Input-gradient * image
-        grd = input_grad.cuda() * image
-        gradient = _postProcessGrad(grd).sum(1, keepdim=True)
-        grd=None
-        cam = gradient
-
-        #cam_graph = torch.FloatTensor(*im_size).zero_()
-
-        # Aggregate Intermediate-gradients
-        for i in range(len(backbone_grad)):
-
-            # Select only Conv layers 
-            if len(backbone_grad[i].size()) == len(im_size):
-                #temp = self._postProcess(backbone_grad[i].cpu())
-                #temp = temp.sum(1, keepdim=True)
-                gradient = F.interpolate(backbone_grad[i].cuda(), size=(im_size[2], im_size[3]), mode = 'bilinear', align_corners=True) 
-                cam += gradient#.sum(1, keepdim=True)
-        
-        num_giters = len(node_bb_info)
-        cam_edges = [None]*num_giters
-        cam_nodes = [None]*num_giters
-        for giter in range(num_giters):
-            num_edge=len(edge_indexes[giter])
-            cam_e = torch.FloatTensor(input_grad.size(0),num_edge,1).zero_()
-            for e_grad in graph_edge_grad[giter]:
-                if e_grad.size(1)>num_edge:
-                    e_grad = (e_grad[:,:num_edge]+e_grad[:,num_edge:])/2 #collapse directions
-                cam_e += e_grad
-            cam_edges[giter] = cam_e
-
-            num_node=len(node_bb_info[giter])
-            cam_n = torch.FloatTensor(input_grad.size(0),num_node,1).zero_()
-            for n_grad in graph_node_grad[giter]:
-                if cam_n.size() == n_grad.size():
-                    cam_n += n_grad
-            cam_nodes[giter] = cam_n
-        #return cam, cam_graph, node_bb_info, edge_indexes
-
-        #images: pixel,pixel with each giter individualy, pixel with all giters together
-
-        draw_image = draw_image.data.cpu().numpy()
-        saliency_map = cam.data.cpu().numpy()
-
-        saliency_map = saliency_map - saliency_map.min()
-        saliency_map = saliency_map / saliency_map.max()
-        saliency_map = saliency_map.clip(0,1)
-
-        saliency_graph_edges=[cam_e.data.cpu().numpy() for cam_e in cam_edges]
-        for giter in range(num_giters):
-            saliency_graph_edges[giter] = saliency_graph_edges[giter] - saliency_graph_edges[giter].min()
-            saliency_graph_edges[giter] = saliency_graph_edges[giter] / saliency_graph_edges[giter].max()
-            saliency_graph_edges[giter] = saliency_graph_edges[giter].clip(0,1)
-
-        saliency_graph_nodes=[cam_n.data.cpu().numpy() for cam_n in cam_nodes]
-        for giter in range(num_giters):
-            saliency_graph_nodes[giter] = saliency_graph_nodes[giter] - saliency_graph_nodes[giter].min()
-            saliency_graph_nodes[giter] = saliency_graph_nodes[giter] / saliency_graph_nodes[giter].max()
-            saliency_graph_nodes[giter] = saliency_graph_nodes[giter].clip(0,1)
-
-        draw_image = np.uint8(draw_image * 255).transpose(1,2,0)
-        if draw_image.shape[2]==1:
-            draw_image = np.repeat(draw_image,3,2)
-
-        for e in range(input_grad.size(0)):
-            image = np.copy(draw_image)
-            image[:,:,1]=image[:,:,1].astype(float)*saliency_map[e]
-            image[:,:,2]=image[:,:,2].astype(float)*(1-saliency_map[e])
-            saliency_map_e = np.uint8(saliency_map[e] * 255).transpose(1, 2, 0)
-            image[:,:,0]=saliency_map_e[:,:,0]
-
-            pixel_image=np.copy(image)
-            
-            fin_n1,fin_n2 = edge_indexes[-1][e]
-            x1,x2,y1,y2=node_bb_info[-1][fin_n1]
-            img_f.polylines(image,np.array([(x1,y1),(x2,y1),(x2,y2),(x1,y2)]),False,(0,255,0))
-            x1,x2,y1,y2=node_bb_info[-1][fin_n2]
-            img_f.polylines(image,np.array([(x1,y1),(x2,y1),(x2,y2),(x1,y2)]),False,(0,255,0))
-
-            filename = path_prefix+'_{}_pixels.png'.format(e)
-            img_f.imwrite(filename, image)
-
-            image_all = np.copy(pixel_image)
-            start_line_width = 2*num_giters
-            colors=np.array([[0,1,1],[1,0,1],[1,0,0],[1,1,0],[0,1,0]])
-            for giter,(saliency_e,saliency_n) in enumerate(zip(saliency_graph_edges,saliency_graph_nodes)):
-                image = np.copy(draw_image)
-                image[:,:,0:2]=0
-
-                to_draw = defaultdict(list)
-                for e_iter,(n1,n2) in enumerate(edge_indexes[giter]):
-                    x1,x2,y1,y2=node_bb_info[giter][n1]
-                    xc1 = (x1+x2)/2
-                    yc1 = (y1+y2)/2
-                    x1,x2,y1,y2=node_bb_info[giter][n2]
-                    xc2 = (x1+x2)/2
-                    yc2 = (y1+y2)/2
-                    
-                    shade = int(255*saliency_graph_edges[giter][e][e_iter])
-
-                    to_draw[shade].append(((int(xc1),int(yc1)),(int(xc2),int(yc2))))
-                
-                width = start_line_width-2*giter
-                shades = list(to_draw.keys())
-                shades.sort()
-                for shade in shades:
-                    color = colors[giter]*shade
-                    for p1,p2 in to_draw[shade]:
-                        img_f.line(image,p1,p2,(0,shade,shade),2)
-
-                        img_f.line(image_all,p1,p2,color,width)
-
-
-
-                for n in range(len(node_bb_info[giter])):
-                    x1,x2,y1,y2=node_bb_info[giter][n]
-                    image[int(y1):int(y2+1),int(x1):int(x2+1),1:]=255*saliency_n[e][n]
-                    h = (1+y2-y1)//2
-                    seg_vert = h/num_giters
-                    if seg_vert<1:
-                        yc = (y1+y2)/2
-                        y1 = yc-num_giters
-                        y2 = yc+num_giters
-                        seg_vert=1
-                    w = (1+x2-x1)//2
-                    seg_horz = w/num_giters
-                    if seg_horz<1:
-                        xc = (x1+x2)/2
-                        x1 = xc-num_giters
-                        x2 = xc+num_giters
-                        seg_horz=1
-                    color = colors[giter]*int(255*saliency_n[e][n])
-                    image_all[int(y1+giter*seg_vert):int(1+y2-giter*seg_vert),int(x1+giter*seg_horz):1+int(x2-giter*seg_horz)]=color
-
-
-                x1,x2,y1,y2=node_bb_info[-1][fin_n1]
-                img_f.polylines(image,np.array([(x1,y1),(x2,y1),(x2,y2),(x1,y2)]),False,(0,255,0))
-                x1,x2,y1,y2=node_bb_info[-1][fin_n2]
-                img_f.polylines(image,np.array([(x1,y1),(x2,y1),(x2,y2),(x1,y2)]),False,(0,255,0))
-                filename = path_prefix+'_{}_graph_g{}.png'.format(e,giter)
-                img_f.imwrite(filename, image)
-
-            x1,x2,y1,y2=node_bb_info[-1][fin_n1]
-            img_f.polylines(image_all,np.array([(x1,y1),(x2,y1),(x2,y2),(x1,y2)]),False,(0,255,0))
-            x1,x2,y1,y2=node_bb_info[-1][fin_n2]
-            img_f.polylines(image_all,np.array([(x1,y1),(x2,y1),(x2,y2),(x1,y2)]),False,(0,255,0))
-            filename = path_prefix+'_{}_graph_all.png'.format(e)
-            img_f.imwrite(filename, image_all)
-        
-        info = {
-                'num_giters':num_giters,
-                'edge_indexes':edge_indexes,
-                'node_info':node_bb_info
-                }
-        filename = path_prefix+'info.json'
-        with open(filename,'w') as f:
-            json.dump(info,f)
-
+        self._getGradients(image)

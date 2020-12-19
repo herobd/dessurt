@@ -16,6 +16,7 @@ import pickle
 #import requests
 import warnings
 from utils.saliency import SimpleFullGradMod
+from utils.debug_graph import GraphChecker
 
 def update_status(name,message):
     try:
@@ -195,8 +196,11 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
     saveFunc = eval(config['data_loader']['data_set_name']+'_eval')
 
     do_saliency_map =  config['saliency'] if 'saliency' in config else False
+    do_graph_check_map =  config['graph_check'] if 'graph_check' in config else False
     if do_saliency_map:
         trainer.saliency_model = SimpleFullGradMod(trainer.model)
+    if do_graph_check_map:
+        trainer.graph_check_model = GraphChecker(trainer.model)
 
     step=5
 

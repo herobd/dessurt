@@ -140,6 +140,7 @@ def learned_attention(query, key, value, mask=None, dropout=None,network=None):
     if dropout is not None:
         p_attn = dropout(p_attn)
     return torch.matmul(p_attn, value), p_attn
+
 class MultiHeadedAttention(nn.Module):
     def __init__(self, h, d_model, dropout=0.1, mod=None):
         "Take in model size and number of heads."
