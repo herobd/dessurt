@@ -25,7 +25,7 @@ def getCorners(xyrhw):
     return [int(x) for x in tl],[int(x) for x in tr],[int(x) for x in br],[int(x) for x in bl]
 
 def plotRect(img,color,xyrhw,lineWidth=1):
-    tr,tl,br,bl=getCorners(xyrhw)
+    tl,tr,br,bl=getCorners(xyrhw)
 
     img_f.line(img,tl,tr,color,lineWidth)
     img_f.line(img,tr,br,color,lineWidth)

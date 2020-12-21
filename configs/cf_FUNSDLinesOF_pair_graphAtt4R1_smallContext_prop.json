@@ -1,6 +1,6 @@
 {
-    "name": "FUNSDLines_pair_binary3P2_smallContext_prop2",
-    "cuda": false,
+    "name": "FUNSDLinesOF_pair_graphAtt4R1_smallContext_prop",
+    "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
@@ -10,7 +10,7 @@
         "data_dir": "../data/FUNSD",
         "batch_size": 1,
         "shuffle": true,
-        "num_workers": 2,
+        "num_workers": 0,
         "split_to_lines": true,
         "crop_to_page":false,
         "color":false,
@@ -18,7 +18,8 @@
         "crop_params": {
             "crop_size":[800,800],
 	    "pad":50
-        }
+        },
+        "overfit": true
 
 
     },
@@ -56,21 +57,18 @@
     "loss_params": 
         {
             "box": {"ignore_thresh": 0.5,
-                    "bad_conf_weight": 20.0,
+                    "bad_conf_weight": 1.1,
                     "multiclass":true}
         },
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 400000,
-        "swa": true,
-        "swa_start": 300000,
-        "swa_c_iters": 10000,
+        "iterations": 425000,
         "save_dir": "saved/",
-        "val_step": 20000,
-        "save_step": 20000,
-        "save_step_minor": 200,
-        "log_step": 250,
+        "val_step": 5000,
+        "save_step": 25000,
+        "save_step_minor": 250,
+        "log_step": 50,
         "verbosity": 1,
         "monitor": "loss",
         "monitor_mode": "none",
@@ -93,7 +91,7 @@
     "arch": "PairingGroupingGraph", 
     "model": {
         "detector_checkpoint": "saved/FUNSDLines_detect_augRFh_staggerLighter_NN/checkpoint-latest.pth",
-        "conf_thresh": 0.5,
+        "conf_thresh": 0.45,
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
         "percent_rel_to_keep": 0.4,
@@ -122,27 +120,26 @@
 
         "fix_bi_dir": true,
         "graph_config": [{
-            "arch": "BinaryPairReal",
+            "arch": "MetaGraphNet",
             "in_channels": 256,
             "node_out": 5,
-            "edge_out": 5,
-            "layers": ["FC256","FC256","FC256"],
-            "layers_bb": ["FC256","FC256","FC256"],
-            "merge_thresh": 0.7,
-            "group_thresh": 0.9,
-            "keep_edge_thresh": 0.4
+            "edge_out": 4,
+            "num_layers": 2,
+            "num_heads": 4,
+            "repetitions": 1,
+            "use_repetition_res": false,
+            "encode_type": "attention"
         },
         {
-            "arch": "BinaryPairReal",
+            "arch": "MetaGraphNet",
             "in_channels": 256,
             "node_out": 5,
-            "edge_out": 5,
-            "layers": ["FC256","FC256","FC256"],
-            "layers_bb": ["FC256","FC256","FC256"],
-            "merge_thresh": 0.6,
-            "group_thresh": 0.6,
-            "keep_edge_thresh": 0.5
-        }
-        ]
+            "edge_out": 4,
+            "num_layers": 2,
+            "num_heads": 4,
+            "repetitions": 1,
+            "use_repetition_res": false,
+            "encode_type": "attention"
+        }]
     }
 }
