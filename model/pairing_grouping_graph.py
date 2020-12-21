@@ -121,6 +121,7 @@ class PairingGroupingGraph(BaseModel):
             elif 'state_dict' in checkpoint:
                 self.detector = eval(checkpoint['config']['arch'])(detector_config)
                 self.detector.load_state_dict(checkpoint['state_dict'])
+                #config['detector_config'] = checkpoint['config']['model']
             else:
                 self.detector = checkpoint['model']
         else:
@@ -938,6 +939,7 @@ class PairingGroupingGraph(BaseModel):
                 allEdgeIndexes.append(edgeIndexes)
 
                 #print('graph 0:   bbs:{}, nodes:{}, edges:{}'.format(useBBs.size(0),nodeOuts.size(0),edgeOuts.size(0)))
+                #print('init num bbs:{}, num keep:{}')
                 
                 for gIter,graphnet in enumerate(self.graphnets[1:]):
                     if self.merge_first:
@@ -1528,16 +1530,18 @@ class PairingGroupingGraph(BaseModel):
         if self.fully_connected:
             good_edges_copy = good_edges.copy()
             good_edges.clear() #yes, I'm returning data by chaning the internal state of an argument object. Sorry.
-        old_keep_edges=keep_edges
-        keep_edges=set()
+        if keep_edges is not None:
+            old_keep_edges=keep_edges
+            keep_edges=set()
         for edge,oldIds in newEdges_map.items():
             if oldEdgeFeats is not None:
                 if len(oldIds)==1:
                     newEdgeFeats[len(newEdges)]=oldEdgeFeats[oldIds[0]]
                 else:
                     newEdgeFeats[len(newEdges)]=self.groupEdgeFunc([oldEdgeFeats[oId] for oId in oldIds])
-            if any([oId in keep_edges for oId in oldIds]):
-                keep_edges.add(len(newEdges))
+            if keep_edges is not None:
+                if any([oId in old_keep_edges for oId in oldIds]):
+                    keep_edges.add(len(newEdges))
             newEdges.append(edge)
             if self.fully_connected:
                 good_edges.append(any([good_edges_copy[oId] for oId in oldIds]))
@@ -1578,6 +1582,8 @@ class PairingGroupingGraph(BaseModel):
     def mergeAndGroup(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,skip_rec=False,merge_only=False,good_edges=None,keep_edges=None):
         if self.useCurvedBBs:
             return self.mergeAndGroupCurved(mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,skip_rec,merge_only,good_edges,keep_edges)
+        if keep_edges is not None:
+            raise NotImplementedError('graph edge mainining not implemented for normal bbs')
         assert(not self.fully_connected)
         changedNodeIds=set()
         newBBs={}
@@ -1978,7 +1984,7 @@ class PairingGroupingGraph(BaseModel):
 
         ##D###
 
-        return bbs, newGraph, newGroups, edges, bbTrans,  None#oldToNewNodeIds
+        return bbs, newGraph, newGroups, edges, bbTrans,  None, keep_edges#oldToNewNodeIds
 
 
                 
@@ -3748,11 +3754,12 @@ class PairingGroupingGraph(BaseModel):
 
     def makeGraphMinDegree(self,edges,bbs):
         #all distances
-        if self.use_curved_bbs:
+        if self.useCurvedBBs:
             points = np.array([bb.getCenterPoint() for bb in bbs])
             points1 = points[None,:,:]
             points2 = points[:,None,:]
-            sqrd_distances = np.power(points1-points2,2).sum(axis=2)
+            #distances = np.power(points1-points2,2).sum(axis=2)
+            distances = np.abs(points1-points2).sum(axis=2) #L1 distance
         else:
             raise NotImplementedError('GraphMinDegree needs non-TextLine implemented')
         #find bbs needing degree bumped up
@@ -3762,17 +3769,19 @@ class PairingGroupingGraph(BaseModel):
             degree[n2]+=1
         #for bi,d in enumerate(degrees):
         #    if d < self.graph_min_degree:
-        np.fill_diagonal(sqrd_distances,float('inf'))
-        keep_edges=[]
-        for bi in enumerate(len(bbs)):
+        np.fill_diagonal(distances,float('inf'))
+        keep_edges=set()
+        for bi in range(len(bbs)):
             for i in range(self.graph_min_degree):
-                closest = sqrd_distances[bi].argmin()
-                keep_edges.append(closest)
+                closest = distances[bi].argmin()
                 edge = (min(bi,closest),max(bi,closest))
-                if edge not in edges:
+                try:
+                    ei = edges.index(edge)
+                    keep_edges.add(ei)
+                except ValueError:
+                    keep_edges.add(len(edges))
                     edges.append(edge)
-                sqrd_distances[bi][closest]=float('inf')
-                import pdb;pdb.set_trace()
+                distances[bi][closest]=float('inf')
         return edges,keep_edges
 
 
