@@ -1388,7 +1388,7 @@ class PairingGroupingGraph(BaseModel):
             for i,(n0,n1) in enumerate(oldEdgeIndexes):
                 if not merge_only and self.fully_connected and edgePreds[i]>keepEdgeThresh:
                     good_edges.append(i)
-                if ((keep_edges is not None and i in keep_edges) or
+                if ((keep_edges is not None and i in keep_edges) or 
                         ((not self.fully_connected or not merge_only) and edgePreds[i]>keepEdgeThresh)):
                     old_n0=n0
                     old_n1=n1
@@ -2004,9 +2004,9 @@ class PairingGroupingGraph(BaseModel):
                 bbs=bbs[:,1:] #discard confidence, we kept it so the proposer could see them
 
         if not merge_only:
-            if self.graph_min_degree is not None:
+            if self.graph_min_degree:
                 candidates,keep_edges = self.makeGraphMinDegree(candidates,bbs)
-            elif self.graph_four_connected is not None:
+            elif self.graph_four_connected:
                 candidates,keep_edges = self.makeGraphFourConnected(candidates,bbs)
             else:
                 keep_edges=None
@@ -3784,6 +3784,72 @@ class PairingGroupingGraph(BaseModel):
                 distances[bi][closest]=float('inf')
         return edges,keep_edges
 
+    def makeGraphFourConnected(self,edges,bbs):
+        if self.useCurvedBBs:
+            points = np.array([bb.getCenterPoint() for bb in bbs])
+            points1 = points[None,:,:]
+            points2 = points[:,None,:]
+            distances = np.abs(points1-points2).sum(axis=2)
+        else:
+            raise NotImplementedError('GraphMinDegree needs non-TextLine implemented')
+        keep_edges=set()
+        for bi in range(len(bbs)):
+            #pps = bbs[bi].pairPoints()
+            #tl,bl = pps[0]
+            #tr,br = pps[-1]
+            #we'll do this a rotation insensitive way first. Later I can go back...
+            x1,y1,x2,y2 = bbs[bi].boundingRect()
+            topj=None
+            topD=float('inf')
+            botj=None
+            botD=float('inf')
+            leftj=None
+            leftD=float('inf')
+            rightj=None
+            rightD=float('inf')
+            for bj in range(len(bbs)):
+                if bi!=bj:
+                    #which side is for?
+                    topL = x1-(y1-points[bj][1])
+                    topR = x2+(y1-points[bj][1])
+                    top = topL<=points[bj][0] and points[bj][0]<topR and points[bj][1]<points[bi][1]
+
+                    botL = x1-(points[bj][1]-y2)
+                    botR = x2+(points[bj][1]-y2)
+                    bot = botL=points[bj][0] and points[bj][0]<=botR and points[bj][1]>points[bi][1]
+
+                    leftT = y1-(x1-points[bj][0])
+                    leftB = y2+(x1-points[bj][0])
+                    left = leftT<=points[bj][1] and points[bj][1]<leftB and points[bj][0]<points[bi][0]
+
+                    rightT = y1-(points[bj][0]-x2)
+                    rightB = y2+(points[bj][0]-x2)
+                    right = rightT<points[bj][1] and points[bj][1]<=rightB and points[bj][0]>points[bi][0]
+
+                    assert(top+left+bot+right==1)
+                    if top and distances[bi,bj]<topD:
+                        topD=distances[bi,bj]
+                        topj=bj
+                    elif bot and distances[bi,bj]<botD:
+                        botD=distances[bi,bj]
+                        botj=bj
+                    elif left and distances[bi,bj]<leftD:
+                        leftD=distances[bi,bj]
+                        leftj=bj
+                    elif right and distances[bi,bj]<rightD:
+                        rightD=distances[bi,bj]
+                        rightj=bj
+
+            for bj in [topj,botj,leftj,rightj]:
+                if bj is not None:
+                    edge = (min(bi,bj),max(bi,bj))
+                    try:
+                        ei = edges.index(edge)
+                        keep_edges.add(ei)
+                    except ValueError:
+                        keep_edges.add(len(edges))
+                        edges.append(edge)
+        return edges,keep_edges
 
     def setDEBUG(self):
         self.debug=True
