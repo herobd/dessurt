@@ -121,6 +121,7 @@ class PairingGroupingGraph(BaseModel):
             elif 'state_dict' in checkpoint:
                 self.detector = eval(checkpoint['config']['arch'])(detector_config)
                 self.detector.load_state_dict(checkpoint['state_dict'])
+                #config['detector_config'] = checkpoint['config']['model']
             else:
                 self.detector = checkpoint['model']
         else:
@@ -132,6 +133,9 @@ class PairingGroupingGraph(BaseModel):
         self.use_overseg_non_max_sup = config['overseg_non_max_sup'] if 'overseg_non_max_sup' in config else False
 
         self.fully_connected = config['fully_connected'] if 'fully_connected' in config else False
+        self.graph_min_degree = config['graph_min_degree'] if 'graph_min_degree' in config else None
+        self.graph_four_connected = config['graph_four_connected'] if 'graph_four_connected' in config else None
+        assert(bool(self.fully_connected) + bool(self.graph_min_degree) + bool(self.graph_four_connected) <=1)
 
         useBeginningOfLast = config['use_beg_det_feats'] if 'use_beg_det_feats' in config else False
         useFeatsLayer = config['use_detect_layer_feats'] if 'use_detect_layer_feats' in config else -1
@@ -900,7 +904,7 @@ class PairingGroupingGraph(BaseModel):
 
                 #t#tic=timeit.default_timer()#t#
                 #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
-                graph,edgeIndexes,rel_prop_scores,last_node_visual_feats,last_edge_visual_feats = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,image=image)
+                graph,edgeIndexes,rel_prop_scores,last_node_visual_feats,last_edge_visual_feats,keep_edges = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,image=image)
 
                 #print('createGraph')
                 #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
@@ -935,6 +939,7 @@ class PairingGroupingGraph(BaseModel):
                 allEdgeIndexes.append(edgeIndexes)
 
                 #print('graph 0:   bbs:{}, nodes:{}, edges:{}'.format(useBBs.size(0),nodeOuts.size(0),edgeOuts.size(0)))
+                #print('init num bbs:{}, num keep:{}')
                 
                 for gIter,graphnet in enumerate(self.graphnets[1:]):
                     if self.merge_first:
@@ -946,7 +951,7 @@ class PairingGroupingGraph(BaseModel):
                         good_edges=None
                     #print('!D! {} before edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(gIter,edgeFeats.size(),len(useBBs),nodeFeats.size(),len(edgeIndexes)))
                     #print('      graph num edges: {}'.format(graph[1].size()))
-                    useBBs,graph,groups,edgeIndexes,bbTrans,same_node_map=self.mergeAndGroup(
+                    useBBs,graph,groups,edgeIndexes,bbTrans,same_node_map,keep_edges=self.mergeAndGroup(
                             self.mergeThresh[gIter],
                             self.keepEdgeThresh[gIter],
                             self.groupThresh[gIter],
@@ -959,13 +964,8 @@ class PairingGroupingGraph(BaseModel):
                             useBBs,
                             bbTrans,
                             image,
-                            good_edges=good_edges)
-                    #import pdb;pdb.set_trace()
-                    #nodes=set(range(graph[0].size(0)))
-                    #same_new = set(same_node_map.values()) 
-                    #print('{} unchanged nodes: {}'.format(gIter,same_new))
-                    #print('{} changed nodes: {}'.format(gIter,nodes-same_new))
-
+                            good_edges=good_edges,
+                            keep_edges=keep_edges)
 
                     if self.reintroduce_visual_features:
                         graph,last_node_visual_feats,last_edge_visual_feats = self.appendVisualFeatures(
@@ -1003,7 +1003,7 @@ class PairingGroupingGraph(BaseModel):
 
                 ##Final state of the graph
                 #print('!D! F before edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(edgeFeats.size(),useBBs.size(),nodeFeats.size(),len(edgeIndexes)))
-                useBBs,graph,groups,edgeIndexes,bbTrans,same_node_map=self.mergeAndGroup(
+                useBBs,graph,groups,edgeIndexes,bbTrans,same_node_map,keep_edges=self.mergeAndGroup(
                         self.mergeThresh[-1],
                         self.keepEdgeThresh[-1],
                         self.groupThresh[-1],
@@ -1259,7 +1259,23 @@ class PairingGroupingGraph(BaseModel):
         #resBatch = self.text_rec(lines)
 
     #Use the graph network's predictions to merge oversegmented detections and group nodes into a single node
-    def mergeAndGroupCurved(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,oldBBTrans,image,skip_rec=False,merge_only=False,good_edges=None):
+    def mergeAndGroupCurved(self,
+            mergeThresh,
+            keepEdgeThresh,
+            groupThresh,
+            oldEdgeIndexes,
+            edgePredictions,
+            oldGroups,
+            oldNodeFeats,
+            oldEdgeFeats,
+            oldUniversalFeats,
+            oldBBs,
+            oldBBTrans,
+            image,
+            skip_rec=False,
+            merge_only=False,
+            good_edges=None,
+            keep_edges=None):
         assert(len(oldBBs)==0 or type(oldBBs[0]) is TextLine)
         assert(oldNodeFeats is None or oldGroups is None or oldNodeFeats.size(0)==len(oldGroups))
         oldNumGroups=len(oldGroups)
@@ -1372,7 +1388,8 @@ class PairingGroupingGraph(BaseModel):
             for i,(n0,n1) in enumerate(oldEdgeIndexes):
                 if not merge_only and self.fully_connected and edgePreds[i]>keepEdgeThresh:
                     good_edges.append(i)
-                if (not self.fully_connected or not merge_only) and edgePreds[i]>keepEdgeThresh:
+                if ((keep_edges is not None and i in keep_edges) or
+                        ((not self.fully_connected or not merge_only) and edgePreds[i]>keepEdgeThresh)):
                     old_n0=n0
                     old_n1=n1
                     if n0 in oldGroupToNew:
@@ -1513,12 +1530,18 @@ class PairingGroupingGraph(BaseModel):
         if self.fully_connected:
             good_edges_copy = good_edges.copy()
             good_edges.clear() #yes, I'm returning data by chaning the internal state of an argument object. Sorry.
+        if keep_edges is not None:
+            old_keep_edges=keep_edges
+            keep_edges=set()
         for edge,oldIds in newEdges_map.items():
             if oldEdgeFeats is not None:
                 if len(oldIds)==1:
                     newEdgeFeats[len(newEdges)]=oldEdgeFeats[oldIds[0]]
                 else:
                     newEdgeFeats[len(newEdges)]=self.groupEdgeFunc([oldEdgeFeats[oId] for oId in oldIds])
+            if keep_edges is not None:
+                if any([oId in old_keep_edges for oId in oldIds]):
+                    keep_edges.add(len(newEdges))
             newEdges.append(edge)
             if self.fully_connected:
                 good_edges.append(any([good_edges_copy[oId] for oId in oldIds]))
@@ -1554,11 +1577,13 @@ class PairingGroupingGraph(BaseModel):
         #print('!D! final edges: {}'.format(len(edges)))
         ##D###
 
-        return newBBs, newGraph, newGroups, edges, newBBTrans if self.text_rec is not None else None,  oldToNewNodeIds_unchanged
+        return newBBs, newGraph, newGroups, edges, newBBTrans if self.text_rec is not None else None,  oldToNewNodeIds_unchanged, keep_edges
 
-    def mergeAndGroup(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,skip_rec=False,merge_only=False,good_edges=None):
+    def mergeAndGroup(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,skip_rec=False,merge_only=False,good_edges=None,keep_edges=None):
         if self.useCurvedBBs:
-            return self.mergeAndGroupCurved(mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,skip_rec,merge_only,good_edges)
+            return self.mergeAndGroupCurved(mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,skip_rec,merge_only,good_edges,keep_edges)
+        if keep_edges is not None:
+            raise NotImplementedError('graph edge mainining not implemented for normal bbs')
         assert(not self.fully_connected)
         changedNodeIds=set()
         newBBs={}
@@ -1959,7 +1984,7 @@ class PairingGroupingGraph(BaseModel):
 
         ##D###
 
-        return bbs, newGraph, newGroups, edges, bbTrans,  None#oldToNewNodeIds
+        return bbs, newGraph, newGroups, edges, bbTrans,  None, keep_edges#oldToNewNodeIds
 
 
                 
@@ -1977,6 +2002,14 @@ class PairingGroupingGraph(BaseModel):
             candidates, rel_prop_scores = self.selectFeatureNNEdges(bbs,imageHeight,imageWidth,image,features.device,merge_only=merge_only)
             if self.legacy:
                 bbs=bbs[:,1:] #discard confidence, we kept it so the proposer could see them
+
+        if not merge_only:
+            if self.graph_min_degree is not None:
+                candidates,keep_edges = self.makeGraphMinDegree(candidates,bbs)
+            elif self.graph_four_connected is not None:
+                candidates,keep_edges = self.makeGraphFourConnected(candidates,bbs)
+            else:
+                keep_edges=None
         #t#time = timeit.default_timer()-tic#t#
         #t#self.opt_history['candidates per bb'].append(time/len(bbs))#t#
         #t#self.opt_history['candidates /bb^2'].append(time/(len(bbs)**2))#t#
@@ -1989,8 +2022,8 @@ class PairingGroupingGraph(BaseModel):
                 return None, None, None, None, None
             else:
                 return None,None,None,None,None, None
-
-        random.shuffle(candidates)
+        if self.training:
+            random.shuffle(candidates)
         #print('proposed relationships: {}  (bbs:{})'.format(len(candidates),len(bbs)))
         #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
         #print('------prop------')
@@ -2065,7 +2098,7 @@ class PairingGroupingGraph(BaseModel):
             #t##    print('   create graph running mean: {}'.format(np.mean(self.opt_createG)))#t#
             #t##    if len(self.opt_createG)>30:#t#
             #t##        self.opt_createG = self.opt_createG[1:]#t#
-            return (nodeFeatures, edgeIndexes, edgeFeatures, universalFeatures), relIndexes, rel_prop_scores, node_vis_features,edge_vis_features
+            return (nodeFeatures, edgeIndexes, edgeFeatures, universalFeatures), relIndexes, rel_prop_scores, node_vis_features,edge_vis_features, keep_edges
         else:
             if bb_features is None:
                 numBB=0
@@ -2114,7 +2147,7 @@ class PairingGroupingGraph(BaseModel):
             #rel_features = (candidates,relFeats)
             #adjacencyMatrix = None
 
-            return bbAndRel_features, (adjacencyMatrix,numOfNeighbors), numBB, numRel, relIndexes, rel_prop_scores
+            return bbAndRel_features, (adjacencyMatrix,numOfNeighbors), numBB, numRel, relIndexes, rel_prop_scores, keep_edges
 
     def makeAllMasks(self,imageHeight,imageWidth,bbs,merge_only=False):
         if not self.useCurvedBBs:
@@ -3718,6 +3751,38 @@ class PairingGroupingGraph(BaseModel):
 
         return output_strings
 
+
+    def makeGraphMinDegree(self,edges,bbs):
+        #all distances
+        if self.useCurvedBBs:
+            points = np.array([bb.getCenterPoint() for bb in bbs])
+            points1 = points[None,:,:]
+            points2 = points[:,None,:]
+            #distances = np.power(points1-points2,2).sum(axis=2)
+            distances = np.abs(points1-points2).sum(axis=2) #L1 distance
+        else:
+            raise NotImplementedError('GraphMinDegree needs non-TextLine implemented')
+        #find bbs needing degree bumped up
+        degree=[0]*len(bbs)
+        for n1,n2 in edges:
+            degree[n1]+=1
+            degree[n2]+=1
+        #for bi,d in enumerate(degrees):
+        #    if d < self.graph_min_degree:
+        np.fill_diagonal(distances,float('inf'))
+        keep_edges=set()
+        for bi in range(len(bbs)):
+            for i in range(self.graph_min_degree):
+                closest = distances[bi].argmin()
+                edge = (min(bi,closest),max(bi,closest))
+                try:
+                    ei = edges.index(edge)
+                    keep_edges.add(ei)
+                except ValueError:
+                    keep_edges.add(len(edges))
+                    edges.append(edge)
+                distances[bi][closest]=float('inf')
+        return edges,keep_edges
 
 
     def setDEBUG(self):
