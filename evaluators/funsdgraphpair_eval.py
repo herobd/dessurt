@@ -73,6 +73,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
     confThresh = config['conf_thresh'] if 'conf_thresh' in config else None
 
     do_saliency_map =  config['saliency'] if 'saliency' in config else False
+    do_graph_check_map =  config['graph_check'] if 'graph_check' in config else False
 
 
     numClasses=len(trainer.classMap)
@@ -85,6 +86,12 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         else:
             s_data = data.requires_grad_()
         trainer.saliency_model.saliency(s_data,(1-data[0].cpu())/2,str(os.path.join(outDir,'{}_saliency_'.format(imageName))))
+    if do_graph_check_map and outDir is not None:
+        if config['cuda']:
+            s_data = data.cuda().requires_grad_()
+        else:
+            s_data = data.requires_grad_()
+        trainer.graph_check_model.check(s_data)
     #if outDir is not None and resultsDirName is not None:
         #rPath = os.path.join(outDir,resultsDirName)
         #if not os.path.exists(rPath):

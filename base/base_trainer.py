@@ -56,8 +56,8 @@ class BaseTrainer:
         if config['optimizer_type']!="none":
             main_params=[]
             slow_params=[]
-            slow_param_names = config['trainer']['slow_param_names'] if 'slow_param_names' in config else []
-            freeze_param_names = config['trainer']['freeze_param_names'] if 'freeze_param_names' in config else []
+            slow_param_names = config['trainer']['slow_param_names'] if 'slow_param_names' in config['trainer'] else []
+            freeze_param_names = config['trainer']['freeze_param_names'] if 'freeze_param_names' in config['trainer'] else []
             only_params = config['trainer']['only_params'] if 'only_params' in config['trainer'] else None
             for name,param in model.named_parameters():
                 if only_params is None or any([p in name for p in only_params]):
