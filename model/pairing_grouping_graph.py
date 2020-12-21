@@ -1388,6 +1388,8 @@ class PairingGroupingGraph(BaseModel):
                     good_edges.append(i)
                 if ((keep_edges is not None and i in keep_edges) or
                         ((not self.fully_connected or not merge_only) and edgePreds[i]>keepEdgeThresh)):
+                    old_n0=n0
+                    old_n1=n1
                     if n0 in oldGroupToNew:
                         n0 = oldGroupToNew[n0]
                     if n1 in oldGroupToNew:
@@ -1399,7 +1401,15 @@ class PairingGroupingGraph(BaseModel):
                         groupEdges.append((groupPreds[i].item(),n0,n1))
                     #else:
                     #    It disapears
-                    prunedOldEdgeIndexes.append((n0,n1))
+                    prunedOldEdgeIndexes.append((i,old_n0,old_n1))
+                #else: #D#
+                #    old_n0=n0
+                #    old_n1=n1
+                #    if n0 in oldGroupToNew:
+                #        n0 = oldGroupToNew[n0]
+                #    if n1 in oldGroupToNew:
+                #        n1 = oldGroupToNew[n1]
+                #    print('pruned [{},{}] n([{},{}])'.format(old_n0,old_n1,n0,n1))
 
             #print('!D! original edges:{}, above thresh:{}, kept edges:{}'.format(D_numOldEdges,D_numOldAboveThresh,len(groupEdges)))
              
@@ -1410,7 +1420,7 @@ class PairingGroupingGraph(BaseModel):
             for i,(n0,n1) in enumerate(oldEdgeIndexes):
                 if edgePreds[i]>keepEdgeThresh:
                     groupEdges.append((groupPreds[i].item(),n0,n1))
-                    prunedOldEdgeIndexes.append((n0,n1))
+                    prunedOldEdgeIndexes.append((i,n0,n1))
             #oldEdgeIndexes=None
 
 
@@ -1467,19 +1477,24 @@ class PairingGroupingGraph(BaseModel):
         for i,(idx,bbIds) in enumerate(workGroups.items()):
             newGroups.append([bbIdToPos[bbId] for bbId in bbIds])
             featsToCombine=[]
-            for oldIdx in newGroupToOldGrouping[idx]:
-                oldToNewIds_all[oldIdx]=i
-                featsToCombine.append(oldNodeFeats[oldIdx] if oldNodeFeats is not None else None)
-                if oldIdx in newGroupToOldMerge:
-                    for mergedIdx in newGroupToOldMerge[oldIdx]:
+            for oldNodeIdx in newGroupToOldGrouping[idx]:
+                oldToNewIds_all[oldNodeIdx]=i
+                featsToCombine.append(oldNodeFeats[oldNodeIdx] if oldNodeFeats is not None else None)
+                if oldNodeIdx in newGroupToOldMerge:
+                    for mergedIdx in newGroupToOldMerge[oldNodeIdx]:
                         featsToCombine.append(oldNodeFeats[mergedIdx] if oldNodeFeats is not None else None)
                         oldToNewIds_all[mergedIdx]=i
+
             if len(featsToCombine)==1:
-                oldToNewNodeIds_unchanged[oldIdx]=i
+                oldToNewNodeIds_unchanged[oldNodeIdx]=i
                 if oldNodeFeats is not None:
                     newNodeFeats[i]=featsToCombine[0]
             elif oldNodeFeats is not None:
                 newNodeFeats[i]=self.groupNodeFunc(featsToCombine)
+            #if oldNodeFeats is not None:
+            #    #TEST#
+            #    newNodeFeats=newNodeFeats.detach()
+
 
             if self.text_rec is not None:
                 groupTrans = [(bbs[bbId].getReadPosition(),bbTrans[bbId]) for bbId in bbIds]
@@ -1493,7 +1508,7 @@ class PairingGroupingGraph(BaseModel):
         #first change all node ids to their new ones
         D_newToOld = {v:k for k,v in oldToNewNodeIds_unchanged.items()}
         newEdges_map=defaultdict(list)
-        for i,(n0,n1)  in  enumerate(prunedOldEdgeIndexes):
+        for i,n0,n1  in  prunedOldEdgeIndexes:
             new_n0 = oldToNewIds_all[n0]
             new_n1 = oldToNewIds_all[n1]
             if new_n0 != new_n1:

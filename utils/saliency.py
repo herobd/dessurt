@@ -1,4 +1,3 @@
-
 # Copyright (c) 2019 Idiap Research Institute, http://www.idiap.ch/
 # Written by Suraj Srinivas <suraj.srinivas@idiap.ch>
 # https://github.com/idiap/fullgrad-saliency
@@ -29,6 +28,7 @@ from utils.gpu import get_gpu_memory_map
 from evaluators.draw_graph import getCorners
 from utils.bb_merging import TextLine
 from collections import defaultdict
+import json
 
 def getBounds(bbs):
     if type(bbs[0]) is TextLine:
@@ -52,11 +52,11 @@ def _postProcessGrad(input, eps=1e-6):
     # Rescale operations to ensure gradients lie between 0 and 1
     flatin = input.view((input.size(0),-1))
     temp, _ = flatin.min(1, keepdim=True)
-    input = input - temp.unsqueeze(1).unsqueeze(1)
+    input = input - temp.unsqueeze(1).unsqueeze(1).detach()
 
     flatin = input.view((input.size(0),-1))
     temp, _ = flatin.max(1, keepdim=True)
-    input = input / (temp.unsqueeze(1).unsqueeze(1) + eps)
+    input = input / (temp.unsqueeze(1).unsqueeze(1).detach() + eps)
     return input
 def _postProcessFlatGrad(input, eps=1e-6):
     #Here, we're dealing with the graph, the batch dim is actually the node or edge dim (batch size of 1)
@@ -64,9 +64,9 @@ def _postProcessFlatGrad(input, eps=1e-6):
     input = abs(input)
 
     # Rescale operations to ensure gradients lie between 0 and 1
-    input = input - input.min()
+    input = input - input.min().detach()
 
-    input = input / (input.max() + eps)
+    input = input / (input.max().detach() + eps)
     return input
 
 class FullGradExtractor:
@@ -187,7 +187,7 @@ class FullGradExtractor:
     def _extract_layer_node2_grads(self, module, in_grad, out_grad):
         if not module.bias is None:
             self.graph_node_feature_grads[2].append(_postProcessFlatGrad(out_grad[0]).sum(1, keepdim=True).cpu())
-            print('self.graph_node_feature_grads[2] len {}'.format(len(self.graph_node_feature_grads[2])))
+            #print('self.graph_node_feature_grads[2] len {}'.format(len(self.graph_node_feature_grads[2])))
     def _extract_layer_grads(self, module, in_grad, out_grad,store_here,name):
         # function to collect the gradient outputs
         # from each layer
@@ -241,6 +241,7 @@ class FullGradExtractor:
 
             for giter,grads in self.graph_node_feature_grads.items():
                 graph_node_feature_grads[giter].append(list(grads))
+            #print('graph_node_feature_grads[2] len {}'.format(len(graph_node_feature_grads[2])))
             #self._clear_feature_grads()
 
             #self.do_only='edge'
@@ -320,7 +321,8 @@ class SimpleFullGradMod():
                 #extra stuff here to extract which edge goes to which map
                 assert(output_scalar.size(0) == len(allEdgeIndexes[-1]))
                 node_bb_info=[]
-                for giter in range(len(allOutputBoxes)):
+                mf = 1 if self.model.merge_first else 0
+                for giter in range(mf,len(allOutputBoxes)):
                     iter_info=[]
                     #for g1id,g2id in allEdgeIndexes[giter]:
                     for g1id in range(len(allGroups[giter])):
@@ -330,7 +332,7 @@ class SimpleFullGradMod():
                         iter_info.append(info1)
                     node_bb_info.append(iter_info)
 
-                res = self.model_ext.getFeatureGrads(image, output_scalar)+(node_bb_info,allEdgeIndexes)
+                res = self.model_ext.getFeatureGrads(image, output_scalar)+(node_bb_info,allEdgeIndexes[mf:])
             #except RuntimeError as e:
             #    print(e)
             #    print('Skipping saliency for this image')
@@ -380,15 +382,18 @@ class SimpleFullGradMod():
         cam_nodes = [None]*num_giters
         for giter in range(num_giters):
             num_edge=len(edge_indexes[giter])
-            cam_e = torch.FloatTensor(input_grad.size(0),num_edge).zero_()
+            cam_e = torch.FloatTensor(input_grad.size(0),num_edge,1).zero_()
             for e_grad in graph_edge_grad[giter]:
+                if e_grad.size(1)>num_edge:
+                    e_grad = (e_grad[:,:num_edge]+e_grad[:,num_edge:])/2 #collapse directions
                 cam_e += e_grad
             cam_edges[giter] = cam_e
 
             num_node=len(node_bb_info[giter])
-            cam_n = torch.FloatTensor(input_grad.size(0),num_node).zero_()
+            cam_n = torch.FloatTensor(input_grad.size(0),num_node,1).zero_()
             for n_grad in graph_node_grad[giter]:
-                cam_n += n_grad
+                if cam_n.size() == n_grad.size():
+                    cam_n += n_grad
             cam_nodes[giter] = cam_n
         #return cam, cam_graph, node_bb_info, edge_indexes
 
@@ -426,21 +431,23 @@ class SimpleFullGradMod():
 
             pixel_image=np.copy(image)
             
-            n1,n2 = edge_indexes[-1][e]
-            x1,x2,y1,y2=node_bb_info[-1][n1]
+            n1_f,n2_f = edge_indexes[-1][e]
+            x1,x2,y1,y2=node_bb_info[-1][n1_f]
             img_f.polylines(image,np.array([(x1,y1),(x2,y1),(x2,y2),(x1,y2)]),False,(0,255,0))
-            x1,x2,y1,y2=node_bb_info[-1][n2]
+            x1,x2,y1,y2=node_bb_info[-1][n2_f]
             img_f.polylines(image,np.array([(x1,y1),(x2,y1),(x2,y2),(x1,y2)]),False,(0,255,0))
 
-            filename = path_prefix+'pixels.png'
+            filename = path_prefix+'_{}_pixels.png'.format(e)
             img_f.imwrite(filename, image)
 
             image_all = np.copy(pixel_image)
             start_line_width = 2*num_giters
             colors=np.array([[0,1,1],[1,0,1],[1,0,0],[1,1,0],[0,1,0]])
             for giter,(saliency_e,saliency_n) in enumerate(zip(saliency_graph_edges,saliency_graph_nodes)):
-                image = np.copy(pixel_image)
+                image = np.copy(draw_image)
+                image[:,:,0:2]=0
 
+                to_draw = defaultdict(list)
                 for e_iter,(n1,n2) in enumerate(edge_indexes[giter]):
                     x1,x2,y1,y2=node_bb_info[giter][n1]
                     xc1 = (x1+x2)/2
@@ -450,17 +457,24 @@ class SimpleFullGradMod():
                     yc2 = (y1+y2)/2
                     
                     shade = int(255*saliency_graph_edges[giter][e][e_iter])
-                    img_f.line(image,(xc1,yc2),(xc2,yc2),(0,shade,shade),2)
 
-                    width = start_line_width-2*giter
+                    to_draw[shade].append(((int(xc1),int(yc1)),(int(xc2),int(yc2))))
+                
+                width = start_line_width-2*giter
+                shades = list(to_draw.keys())
+                shades.sort()
+                for shade in shades:
                     color = colors[giter]*shade
-                    img_f.line(image_all,(xc1,yc2),(xc2,yc2),color,width)
+                    for p1,p2 in to_draw[shade]:
+                        img_f.line(image,p1,p2,(0,shade,shade),2)
+
+                        img_f.line(image_all,p1,p2,color,width)
 
 
 
-                for n in range(len(node_bb_info[g_iter])):
+                for n in range(len(node_bb_info[giter])):
                     x1,x2,y1,y2=node_bb_info[giter][n]
-                    image[y1:y2+1,x1:x2+1,1:]=255*saliency_n[e][n]
+                    image[int(y1):int(y2+1),int(x1):int(x2+1),1:]=255*saliency_n[e][n]
                     h = (1+y2-y1)//2
                     seg_vert = h/num_giters
                     if seg_vert<1:
@@ -476,13 +490,28 @@ class SimpleFullGradMod():
                         x2 = xc+num_giters
                         seg_horz=1
                     color = colors[giter]*int(255*saliency_n[e][n])
-                    image_all[y1+int(giter*seg_vert):1+y2-int(giter*seg_vert),x1+int(giter*seg_horz):1+x2-int(giter*seg_horz)]=color
+                    image_all[int(y1+giter*seg_vert):int(1+y2-giter*seg_vert),int(x1+giter*seg_horz):1+int(x2-giter*seg_horz)]=color
 
 
-                filename = path_prefix+'graph_g{}.png'.format(giter)
+                x1,x2,y1,y2=node_bb_info[-1][n1_f]
+                img_f.polylines(image,np.array([(x1,y1),(x2,y1),(x2,y2),(x1,y2)]),False,(0,255,0))
+                x1,x2,y1,y2=node_bb_info[-1][n2_f]
+                img_f.polylines(image,np.array([(x1,y1),(x2,y1),(x2,y2),(x1,y2)]),False,(0,255,0))
+                filename = path_prefix+'_{}_graph_g{}.png'.format(e,giter)
                 img_f.imwrite(filename, image)
 
-            filename = path_prefix+'graph_all.png'
+            x1,x2,y1,y2=node_bb_info[-1][n1_f]
+            img_f.polylines(image_all,np.array([(x1,y1),(x2,y1),(x2,y2),(x1,y2)]),False,(0,255,0))
+            x1,x2,y1,y2=node_bb_info[-1][n2_f]
+            img_f.polylines(image_all,np.array([(x1,y1),(x2,y1),(x2,y2),(x1,y2)]),False,(0,255,0))
+            filename = path_prefix+'_{}_graph_all.png'.format(e)
             img_f.imwrite(filename, image_all)
-
-
+        
+        info = {
+                'num_giters':num_giters,
+                'edge_indexes':edge_indexes,
+                'node_info':node_bb_info
+                }
+        filename = path_prefix+'info.json'
+        with open(filename,'w') as f:
+            json.dump(info,f)

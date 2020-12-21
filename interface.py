@@ -1,119 +1,126 @@
 import tkinter as tk
 import numpy as np
 from PIL import Image, ImageTk
-
-#Nothing selected, show node gradients (both) when hover
-#Node selected, show node gradients, on hover show edge gradients
-
-H=W=400
+import sys,json,os
+from utils import img_f
 
 
-#alabel = tk.Label(master=root,text=text)
-##alabel.place(x=3,y=3)
+image_dir = sys.argv[1]
+image_name = sys.argv[2]
+with open(os.path.join(image_dir,'{}_saliency_info.json'.format(image_name))) as f:
+    info = json.load(f)
+num_giters = info['num_giters']
+edge_indexes = info['edge_indexes']
+node_infos = info['node_info']
+root = tk.Tk() #initailize window
 
-class Controller():
-    def __init__(self,image_dir,image_name,edge_indexes,num_giters):
-        self.giter='all'
+root.geometry("{}x{}".format(754,1000))
 
-        for ei,(n1,n2) in enumerate(edge_indexes):
-            for giter in range(num_giters):
-                self.imgs['{}_{}_{}'.format(min(node1,node2),max(node1,node2),giter)] = img_f.imread(os.path.join(image_dir,'{}_saliency__{}_graph_g{}.png'.format(image_name,ei,giter))
-            self.imgs['{}_{}_all'.format(min(node1,node2),max(node1,node2),giter)] = img_f.imread(os.path.join(image_dir,'{}_saliency__{}_graph_all.png'.format(image_name,ei))
-            self.imgs['{}_{}_pix'.format(min(node1,node2),max(node1,node2),giter)] = img_f.imread(os.path.join(image_dir,'{}_saliency__{}_pixels.png'.format(image_name,ei))
+giter='all'
+imgs={}
+H=0
+W=0
+cur_node1=None
+cur_node2=None
+cur_giter=None
+for ei,(node1,node2) in enumerate(edge_indexes[-1]):
+    for giter in range(num_giters):
+        imgs['{}_{}_{}'.format(min(node1,node2),max(node1,node2),giter)] = img_f.imread(os.path.join(image_dir,'{}_saliency__{}_graph_g{}.png'.format(image_name,ei,giter)))
+    imgs['{}_{}_all'.format(min(node1,node2),max(node1,node2),giter)] = img_f.imread(os.path.join(image_dir,'{}_saliency__{}_graph_all.png'.format(image_name,ei)))
+    imgs['{}_{}_pix'.format(min(node1,node2),max(node1,node2),giter)] = img_f.imread(os.path.join(image_dir,'{}_saliency__{}_pixels.png'.format(image_name,ei)))
+    if ei==0:
+        selected=[node1,node2]
+        only='{}_{}_all'.format(min(node1,node2),max(node1,node2),giter)
+
+for key in imgs:
+    H = imgs[key].shape[0]
+    W = imgs[key].shape[1]
+    H=max(H,H)
+    W=max(W,W)
+    #canvas = tk.Canvas(root,  width=W, height=H)
+    img =  ImageTk.PhotoImage(image=Image.fromarray(imgs[key]))
+    #canvas.create_image(0,0,anchor='nw',image=img)
+    #print('canvas created {} {} {}'.format(key,H,W))
+
+    #imgs[key]=canvas
+    imgs[key]=(img,H,W)
+cur_img = None
 
 
-    def change_image(self,node1,node2,giter=None):
-        self.prev_node1 = self.cur_node1
-        self.prev_node2 = self.cur_node2
-        self.prev_giter = self.cur_giter
-        if giter is None:
-            giter=self.giter
-        img = self.imgs['{}_{}_{}'.format(min(node1,node2),max(node1,node2),giter)]
-        self.cur_img.place_forget()
-        self.img.place(x=0,y=0)
+def changeImage(node1,node2,giter=None):
+    global cur_node1,cur_node2,cur_giter,imgs,prev_node1,prev_node2,prev_giter,root
+    if giter is None:
+        giter='all'
+    key = '{}_{}_{}'.format(min(node1,node2),max(node1,node2),giter)
+    if key in imgs:
+        prev_node1 = cur_node1
+        prev_node2 = cur_node2
+        prev_giter = cur_giter
+        img,H,W = imgs['{}_{}_{}'.format(min(node1,node2),max(node1,node2),giter)]
+        if cur_img is not None:
+            cur_img.place_forget()
+        canvas = tk.Canvas(root,  width=W, height=H)
+        canvas.create_image(0,0,anchor='nw',image=img)
+        canvas.place(x=0,y=0)
 
-        self.cur_node1=node1
-        self.cur_node2=node2
-        self.cur_giter=giter
+        cur_node1=node1
+        cur_node2=node2
+        cur_giter=giter
+        return True
+    else:
+        return False
 
-    def undo_image(self):
-        self.change_images(self.prev_node1,self.prev_node2,self.prev_giter)
+def undoImage():
+    global cur_node1,cur_node2,cur_giter,imgs,prev_node1,prev_node2,prev_giter
+    changeImage(prev_node1,prev_node2,prev_giter)
+
+def previewImage(new_node):
+    global cur_node1,cur_node2,cur_giter,imgs,prev_node1,prev_node2,prev_giter,selected
+    return changeImage(selected[1],new_node)
+def setImage(new_node):
+    global cur_node1,cur_node2,cur_giter,imgs,prev_node1,prev_node2,prev_giter,selected
+    selected.pop()
+    selected.append(new_node)
+
+changeImage(*selected)
+#root.mainloop()
 
 
 class HoverButton(tk.Button):
-    def __init__(self,master, controller, selected, node_id, **kw):
+    def __init__(self,master, node_id, **kw):
         #tk.Button.__init__(self,master=master,**kw)
         tk.Frame.__init__(self,master=master,**kw)
-        self.controller=controller
-        self.selected=selected
         self.node_id=node_id
         #self.defaultBackground = self["background"]
         self.bind("<Enter>", self.on_enter)
         self.bind("<Leave>", self.on_leave)
         self.bind("<Button-1>", self.click)
+        self.exists=False
 
 
     def on_enter(self, e):
-        self.controller.change_image(self.selected[1],self.node_id)
+        self.exists=previewImage(self.node_id)
 
     def on_leave(self, e):
-        self.controller.undo_image()
+        if self.exists:
+            undoImage()
     
     def click(self,e):
-        self.selected.pop()
-        self.selected.append(self.node_id)
-        self.controller.change_image(self.selected[0],self.node_id)
-
-root = tk.Tk() #initailize window
-
-root.geometry("{}x{}".format(W,H))
-
-text='Hello world'
-#alabel.pack()
+        setImage(self.node_id)
 
 
-canvas = tk.Canvas(root,  width=W, height=H)
-canvas.place(x=0,y=0)
 
-array = np.zeros([H,W,3],dtype=np.uint8)
-array[10:20,:,1]=255
-array[:,50:140,0]=255
 
-img =  ImageTk.PhotoImage(image=Image.fromarray(array))
-canvas.create_image(0,0,anchor='nw',image=img)
-
-bcanvas = tk.Canvas(root,  width=W, height=H)
-
-barray = np.zeros([H,W,3],dtype=np.uint8)
-barray[10:20,:,2]=255
-barray[:,50:140,1]=255
-
-bimg =  ImageTk.PhotoImage(image=Image.fromarray(barray))
-bcanvas.create_image(0,0,anchor='nw',image=bimg)
-bcanvas.x=0
-bcanvas.y=0
-
-#lines
-bcanvas.create_line(23,100,23,100
-
-blabel = tk.Label(master=bcanvas,text=text)
-blabel.x=50
-blabel.y=10
-
+#root.geometry("{}x{}".format(controller.W,controller.H))
 buttons=[]
 for node_id, node_info in enumerate(node_infos[-1]):
-    abutton = HoverButton(master=root,controller,selected,node_id,width=25,height=25)#,bg='blue')
-    abutton.place(x=200,y=250)
+    x1,x2,y1,y2 = node_info
+    h = y2-y1+1
+    w = x2-x1+1
+    abutton = HoverButton(root,node_id,width=w,height=h)#,bg='blue')
+    abutton.place(x=x1,y=y1)
     buttons.append(abutton)
 
-canvas2 = tk.Canvas(root,  width=25, height=25)
-canvas2.pack()#place(x=0,y=0)
-array2 = np.zeros([25,25,3],dtype=np.uint8)
-array2[:,:,2]=255
 
-img2 =  ImageTk.PhotoImage(image=Image.fromarray(array2))
-canvas2.create_image(200,250,anchor='nw',image=img2)
 
-print('start')
 root.mainloop()
-print('end')

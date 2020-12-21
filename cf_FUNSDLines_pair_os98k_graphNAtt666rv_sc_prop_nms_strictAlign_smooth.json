@@ -1,5 +1,5 @@
 {
-    "name": "FUNSDLines_pair_os98k_graphNAtt333rv_sc_prop_nms_strictAlign_smooth",
+    "name": "FUNSDLines_pair_os98k_graphNAtt666rv_sc_prop_nms_strictAlign_smooth",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -64,9 +64,9 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 400000,
+        "iterations": 500000,
         "swa": true,
-        "swa_start": 300000,
+        "swa_start": 400000,
         "swa_c_iters": 10000,
         "save_dir": "saved/",
         "val_step": 20000,
@@ -153,10 +153,10 @@
         "graph_config": [
         {
             "arch": "MetaGraphNet",
-            "in_channels": 512,
+            "in_channels": 256,
             "node_out": 5,
             "edge_out": 5,
-            "num_layers": 3,
+            "num_layers": 6,
             "num_heads": 4,
             "repetitions": 1,
             "use_repetition_res": false,
@@ -164,14 +164,14 @@
             "better_norm_attention": true,
 	    "merge_thresh": 0.8,
             "group_thresh": 0.95,
-            "keep_edge_thresh": 0.25
+            "keep_edge_thresh": 0.1
         },
         {
             "arch": "MetaGraphNet",
-            "in_channels": 512,
+            "in_channels": 256,
             "node_out": 5,
             "edge_out": 5,
-            "num_layers": 3,
+            "num_layers": 6,
             "num_heads": 4,
             "repetitions": 1,
             "use_repetition_res": false,
@@ -179,14 +179,14 @@
             "better_norm_attention": true,
 	    "merge_thresh": 0.9,
             "group_thresh": 0.9,
-            "keep_edge_thresh": 0.3
+            "keep_edge_thresh": 0.2
         },
         {
             "arch": "MetaGraphNet",
-            "in_channels": 512,
+            "in_channels": 256,
             "node_out": 5,
             "edge_out": 5,
-            "num_layers": 3,
+            "num_layers": 6,
             "num_heads": 4,
             "repetitions": 1,
             "use_repetition_res": false,
