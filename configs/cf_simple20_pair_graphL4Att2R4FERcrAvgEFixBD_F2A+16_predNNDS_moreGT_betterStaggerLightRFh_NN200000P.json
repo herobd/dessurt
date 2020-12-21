@@ -1,25 +1,25 @@
 {
-    "name": "NAFGblank_pair_binary3P2_smallContext_prop",
-    "cuda": false,
+    "name": "Simple20_pair_graphL4Att2R4FERcrAvgEFixBD_F2A+16_predNNDS_moreGT_betterStaggerLightRFh_NN200000P",
+    "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
     "super_computer":true,
     "data_loader": {
         "data_set_name": "FormsGraphPair",
-        "special_dataset": null,
+        "special_dataset": "simple",
         "data_dir": "../data/forms",
         "batch_size": 1,
         "shuffle": true,
-        "num_workers": 2,
+        "num_workers": 1,
         "crop_to_page":false,
         "color":false,
         "rescale_range": [0.4,0.65],
         "crop_params": {
-            "crop_size":[600,1400],
+            "crop_size":[652,1608],
 	    "pad":0
         },
-        "no_blanks": false,
+        "no_blanks": true,
         "swap_circle":true,
         "no_graphics":true,
         "cache_resized_images": true,
@@ -40,24 +40,19 @@
  
     "optimizer_type": "Adam",
     "optimizer": {
-        "lr": 0.001,
+        "lr": 0.0015,
         "weight_decay": 0
     },
     "loss": {
         "box": "YoloLoss",
-        "rel": "sigmoid_BCE_loss",
-        "propRel": "sigmoid_BCE_loss",
-        "nnFinal": "MSE",
-        "classFinal": "sigmoid_BCE_loss",
-        "confFinal": "sigmoid_BCE_loss"
+        "edge": "sigmoid_BCE_loss",
+        "nn": "MSE",
+        "class": "sigmoid_BCE_loss"
     },
     "loss_weights": {
         "box": 1.0,
-        "rel": 0.5,
-        "propRel": 0.5,
-        "nnFinal": 0.25,
-        "classFinal": 0.5,
-        "confFinal": 0.5
+        "edge": 0.5,
+        "nn": 0.25
     },
     "loss_params": 
         {
@@ -68,13 +63,10 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 400000,
-        "swa": true,
-        "swa_start": 300000,
-        "swa_c_iters": 10000,
+        "iterations": 100000,
         "save_dir": "saved/",
-        "val_step": 20000,
-        "save_step": 20000,
+        "val_step": 5000,
+        "save_step": 5000,
         "save_step_minor": 250,
         "log_step": 250,
         "verbosity": 1,
@@ -85,8 +77,6 @@
         "conf_thresh_change_iters": 0,
         "retry_count":1,
 
-        "mergeAndGroup": true,
-
         "unfreeze_detector": 2000,
         "partial_from_gt": 0,
         "stop_from_gt": 20000,
@@ -96,15 +86,11 @@
         "use_learning_schedule": true,
         "adapt_lr": false
     },
-    "arch": "PairingGroupingGraph", 
+    "arch": "PairingGraph", 
     "model": {
-        "detector_checkpoint": "saved/NAF_detect_augR_blank/checkpoint-iteration100000.pth",
+        "detector_checkpoint": "saved/Forms18_augRFh_staggerLight_NN/checkpoint-iteration200000.pth.tar",
         "conf_thresh": 0.5,
         "start_frozen": true,
-        "relationship_proposal": "feature_nn",
-        "percent_rel_to_keep": 0.4,
-        "max_rel_to_keep": 300,
-
 	"use_rel_shape_feats": "corner",
         "use_detect_layer_feats": 16,
         "use_2nd_detect_layer_feats": 0,
@@ -113,42 +99,34 @@
         "use_fixed_masks": true,
         "no_grad_feats": true,
 
-        "expand_rel_context": 20,
+        "expand_rel_context": 150,
         "featurizer_start_h": 32,
         "featurizer_start_w": 32,
         "featurizer_conv": ["sep128","M","sep128","sep128","M","sep256","sep256","M",238],
         "featurizer_fc": null,
 
-        "pred_nn": false,
-        "pred_class": true,
-        "expand_bb_context": 20,
+        "pred_nn": true,
+        "pred_class": false,
+        "expand_bb_context": 150,
         "featurizer_bb_start_h": 32,
         "featurizer_bb_start_w": 32,
         "bb_featurizer_conv": ["sep64","M","sep64","sep64","M","sep128","sep128","M",250],
 
         "fix_bi_dir": true,
-        "graph_config": [{
-            "arch": "BinaryPairReal",
+        "graph_config": {
+            "arch": "MetaGraphNet",
             "in_channels": 256,
-            "node_out": 4,
-            "edge_out": 5,
-            "layers": ["FC256","FC256","FC256"],
-            "layers_bb": ["FC256","FC256","FC256"],
-            "merge_thresh": 0.7,
-            "group_thresh": 0.9,
-            "keep_edge_thresh": 0.4
-        },
-        {
-            "arch": "BinaryPairReal",
-            "in_channels": 256,
-            "node_out": 4,
-            "edge_out": 5,
-            "layers": ["FC256","FC256","FC256"],
-            "layers_bb": ["FC256","FC256","FC256"],
-            "merge_thresh": 0.6,
-            "group_thresh": 0.6,
-            "keep_edge_thresh": 0.5
+            "node_out": 1,
+            "edge_out": 1,
+            "num_layers": 2,
+            "num_heads": 4,
+            "att_mod": "learned",
+            "repetitions": 4,
+            "use_repetition_res": true,
+            "encode_type": "attention",
+            "force_encoding": true,
+            "avg_edges": true,
+            "rcrhdn_size": 64
         }
-        ]
     }
 }

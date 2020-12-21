@@ -139,13 +139,13 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                 if blank and is_blank:
                     #draw a B at center of box
                     if x-4<0:
-                        x+=4
+                        x=4
                     if y-4<0:
-                        y+=4
+                        y=4
                     if x+4>=image.shape[1]:
-                        x-=4
+                        x=image.shape[1]-5
                     if y+4>=image.shape[0]:
-                        y-=4
+                        y=image.shape[0]-5
                     image[y-2:y+3,x-1]=color
                     image[y-2,x]=color
                     image[y-1,x+1]=color

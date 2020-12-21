@@ -961,8 +961,8 @@ class PairingGroupingGraph(BaseModel):
                             image,
                             good_edges=good_edges)
                     #import pdb;pdb.set_trace()
-                    nodes=set(range(graph[0].size(0)))
-                    same_new = set(same_node_map.values()) 
+                    #nodes=set(range(graph[0].size(0)))
+                    #same_new = set(same_node_map.values()) 
                     #print('{} unchanged nodes: {}'.format(gIter,same_new))
                     #print('{} changed nodes: {}'.format(gIter,nodes-same_new))
 
