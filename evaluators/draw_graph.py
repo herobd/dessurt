@@ -32,11 +32,6 @@ def plotRect(img,color,xyrhw,lineWidth=1):
     img_f.line(img,br,bl,color,lineWidth)
     img_f.line(img,bl,tl,color,lineWidth)
 
-    if random.random()<0.25:
-        img_f.line(img,tl,(tl[0]-200,tl[1]-200),color,lineWidth)
-        img_f.line(img,tr,(tr[0]+200,tr[1]-200),color,lineWidth)
-        img_f.line(img,br,(br[0]+200,br[1]+200),color,lineWidth)
-        img_f.line(img,bl,(bl[0]-200,bl[1]+200),color,lineWidth)
 
 def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,image,predTypes,targetBoxes,classMap,path,verbosity=2,bbTrans=None,useTextLines=False,targetGroups=None,targetPairs=None):
     #for graphIteration,(outputBoxes,nodePred,edgePred,edgeIndexes,predGroups) in zip(allOutputBoxes,allNodePred,allEdgePred,allEdgeIndexes,allPredGroups):
