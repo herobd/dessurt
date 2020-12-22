@@ -33,4 +33,4 @@ cd ~/pairing
 #source pairing/bin/activate
 source activate c10
 
-python  train.py -c cf_FUNSDLines_pair_os98k_binary3P3_smallContext_prop.json -s saved/FUNSDLines_pair_os98k_binary3P3_smallContext_prop/checkpoint-latest.pth
+python  train.py -c configs/cf_FUNSDLines_pair_os98k_binary3P3_smallContext_prop.json -s saved/FUNSDLines_pair_os98k_binary3P3_smallContext_prop/checkpoint-latest.pth

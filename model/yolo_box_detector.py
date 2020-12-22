@@ -229,6 +229,7 @@ class YoloBoxDetector(nn.Module): #BaseModel
         self.net_down_modules[-2].register_forward_hook(save_final)
     def setForGraphPairing(self,beginningOfLast=False,featuresFromHere=-1,featuresFromScale=-2,f2Here=None,f2Scale=None):
         self.forGraphPairing=True
+        self.saved_features=None
         def save_feats(module,input,output):
             self.saved_features=output
         if beginningOfLast:
