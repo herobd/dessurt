@@ -1199,7 +1199,7 @@ class PairingGroupingGraph(BaseModel):
         return bbs
 
     #This merges two bounding box predictions, assuming they were oversegmented
-    def mergeBB(self,bb0,bb1,image):
+    def mergeBB(self,bb0,bb1):
         #Get encompassing rectangle for actual bb
         #REctify curved line for ATR
         #scale = self.hw_input_height/crop.size(2)
@@ -1259,7 +1259,7 @@ class PairingGroupingGraph(BaseModel):
         #resBatch = self.text_rec(lines)
 
     #Use the graph network's predictions to merge oversegmented detections and group nodes into a single node
-    def mergeAndGroupCurved(self,
+    def mergeAndGroup(self,
             mergeThresh,
             keepEdgeThresh,
             groupThresh,
@@ -1276,13 +1276,14 @@ class PairingGroupingGraph(BaseModel):
             merge_only=False,
             good_edges=None,
             keep_edges=None):
-        assert(len(oldBBs)==0 or type(oldBBs[0]) is TextLine)
+        #assert(len(oldBBs)==0 or type(oldBBs[0]) is TextLine)
         assert(oldNodeFeats is None or oldGroups is None or oldNodeFeats.size(0)==len(oldGroups))
         oldNumGroups=len(oldGroups)
         #changedNodeIds=set()
         if self.useCurvedBBs:
             bbs={i:TextLine(clone=v) for i,v in enumerate(oldBBs)}
         else:
+            oldBBs=oldBBs.cpu()
             bbs={i:v for i,v in enumerate(oldBBs)}
         if self.text_rec is not None and oldBBTrans is not None:
             bbTrans={i:v for i,v  in enumerate(oldBBTrans)}
@@ -1320,7 +1321,10 @@ class PairingGroupingGraph(BaseModel):
 
 
                         if newId0!=newId1:
-                            bb0ToMerge.merge(bb1ToMerge) # "
+                            if self.useCurvedBBs:
+                                bb0ToMerge.merge(bb1ToMerge) # "
+                            else:
+                                bbs[newId0]= self.mergeBB(bb0ToMerge,bb1ToMerge)
                             #merge two merged bbs
                             oldToNewBBIndexes = {k:(v if v!=newId1 else newId0) for k,v in oldToNewBBIndexes.items()}
                             del bbs[newId1]
@@ -1499,7 +1503,10 @@ class PairingGroupingGraph(BaseModel):
 
 
             if self.text_rec is not None:
-                groupTrans = [(bbs[bbId].getReadPosition(),bbTrans[bbId]) for bbId in bbIds]
+                if self.useCurvedBBs:
+                    groupTrans = [(bbs[bbId].getReadPosition(),bbTrans[bbId]) for bbId in bbIds]
+                else:
+                    groupTrans = [(bbs[bbId][2],bbTrans[bbId]) for bbId in bbIds] #by center y
                 groupTrans.sort(key=lambda a:a[0])
                 groupNodeTrans.append(' '.join([t[1] for t in groupTrans]))
         #D#
@@ -1577,9 +1584,12 @@ class PairingGroupingGraph(BaseModel):
         #print('!D! final edges: {}'.format(len(edges)))
         ##D###
 
+        if not self.useCurvedBBs:
+            newBBs = torch.stack(newBBs,dim=0)
+
         return newBBs, newGraph, newGroups, edges, newBBTrans if self.text_rec is not None else None,  oldToNewNodeIds_unchanged, keep_edges
 
-    def mergeAndGroup(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,skip_rec=False,merge_only=False,good_edges=None,keep_edges=None):
+    def mergeAndGroupLegacy(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,skip_rec=False,merge_only=False,good_edges=None,keep_edges=None):
         if self.useCurvedBBs:
             return self.mergeAndGroupCurved(mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,skip_rec,merge_only,good_edges,keep_edges)
         if keep_edges is not None:
@@ -1627,7 +1637,7 @@ class PairingGroupingGraph(BaseModel):
                         mergeNewId1 = None
                         bb1 = oldBBs[bbId1].cpu()
 
-                    newBB= self.mergeBB(bb0,bb1,image)
+                    newBB= self.mergeBB(bb0,bb1)
 
                     if mergeNewId0 is None and mergeNewId1 is None:
                         oldToNewBBIndexes[bbId0]=newBBIdCounter
