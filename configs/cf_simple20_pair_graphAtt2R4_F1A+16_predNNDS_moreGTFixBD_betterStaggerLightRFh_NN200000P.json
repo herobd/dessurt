@@ -1,10 +1,10 @@
 {
-    "name": "Simple20_pair_binary_F3A+16_predNNDS_noThrMvMoreGTNoGradFixedMasksBBUse_betterStaggerLightRFh_NN200000P",
+    "name": "Simple20_pair_graphAtt2R4_F1A+16_predNNDS_moreGTFixBD_betterStaggerLightRFh_NN200000P",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
-    "super_computer":false,
+    "super_computer":true,
     "data_loader": {
         "data_set_name": "FormsGraphPair",
         "special_dataset": "simple",
@@ -40,7 +40,7 @@
  
     "optimizer_type": "Adam",
     "optimizer": {
-        "lr": 0.001,
+        "lr": 0.0015,
         "weight_decay": 0
     },
     "loss": {
@@ -52,8 +52,7 @@
     "loss_weights": {
         "box": 1.0,
         "edge": 0.5,
-        "nn": 0.25,
-        "class": 0.25
+        "nn": 0.25
     },
     "loss_params": 
         {
@@ -64,7 +63,7 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 60000,
+        "iterations": 100000,
         "save_dir": "saved/",
         "val_step": 5000,
         "save_step": 5000,
@@ -95,8 +94,8 @@
 	"use_rel_shape_feats": "corner",
         "use_detect_layer_feats": 16,
         "use_2nd_detect_layer_feats": 0,
-        "use_2nd_detect_scale_feats": 3,
-        "use_2nd_detect_feats_size": 128,
+        "use_2nd_detect_scale_feats": 1,
+        "use_2nd_detect_feats_size": 32,
         "use_fixed_masks": true,
         "no_grad_feats": true,
 
@@ -113,13 +112,17 @@
         "featurizer_bb_start_w": 32,
         "bb_featurizer_conv": ["sep64","M","sep64","sep64","M","sep128","sep128","M",250],
 
+        "fix_bi_dir": true,
         "graph_config": {
-            "arch": "BinaryPairReal",
+            "arch": "MetaGraphNet",
             "in_channels": 256,
-            "bb_out": 1,
-            "rel_out": 1,
-            "layers": ["FC256","FC256"],
-            "layers_bb": ["FC256"]
+            "node_out": 1,
+            "edge_out": 1,
+            "num_layers": 2,
+            "num_heads": 4,
+            "repetitions": 4,
+            "use_repetition_res": false,
+            "encode_type": "attention"
         }
     }
 }
