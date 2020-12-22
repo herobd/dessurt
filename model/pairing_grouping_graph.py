@@ -3807,13 +3807,13 @@ class PairingGroupingGraph(BaseModel):
         botR = all_rect[:,:,2]+(-all_rect[:,:,3]+pointsJ[:,:,1])
         bot = (botL<pointsJ[:,:,0]) * (pointsJ[:,:,0]<=botR) * (pointsJ[:,:,1]>pointsI[:,:,1])
 
-        leftL = all_rect[:,:,1]-(all_rect[:,:,0]-pointsJ[:,:,0])
-        leftR = all_rect[:,:,3]+(all_rect[:,:,0]-pointsJ[:,:,0])
-        left = (leftL<=pointsJ[:,:,1]) * (pointsJ[:,:,1]<leftR) * (pointsJ[:,:,0]<=pointsI[:,:,0])
+        leftT = all_rect[:,:,1]-(all_rect[:,:,0]-pointsJ[:,:,0])
+        leftB = all_rect[:,:,3]+(all_rect[:,:,0]-pointsJ[:,:,0])
+        left = (leftT<pointsJ[:,:,1]) * (pointsJ[:,:,1]<=leftB) * (pointsJ[:,:,0]<=pointsI[:,:,0])
 
-        rightL = all_rect[:,:,1]-(-all_rect[:,:,2]+pointsJ[:,:,0])
-        rightR = all_rect[:,:,3]+(-all_rect[:,:,2]+pointsJ[:,:,0])
-        right = (rightL<=pointsJ[:,:,1]) * (pointsJ[:,:,1]<rightR) * (pointsJ[:,:,0]>pointsI[:,:,0])
+        rightT = all_rect[:,:,1]-(-all_rect[:,:,2]+pointsJ[:,:,0])
+        rightB = all_rect[:,:,3]+(-all_rect[:,:,2]+pointsJ[:,:,0])
+        right = (rightT<=pointsJ[:,:,1]) * (pointsJ[:,:,1]<rightB) * (pointsJ[:,:,0]>pointsI[:,:,0])
         
         assert((top+left+bot+right==1).all())
 
