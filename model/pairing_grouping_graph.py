@@ -3816,7 +3816,7 @@ class PairingGroupingGraph(BaseModel):
 
                     botL = x1-(points[bj][1]-y2)
                     botR = x2+(points[bj][1]-y2)
-                    bot = botL=points[bj][0] and points[bj][0]<=botR and points[bj][1]>points[bi][1]
+                    bot = botL<points[bj][0] and points[bj][0]<=botR and points[bj][1]>points[bi][1]
 
                     leftT = y1-(x1-points[bj][0])
                     leftB = y2+(x1-points[bj][0])
@@ -3849,6 +3849,37 @@ class PairingGroupingGraph(BaseModel):
                     except ValueError:
                         keep_edges.add(len(edges))
                         edges.append(edge)
+        
+        #all_rect = np.array([bb.boundingRect() for bb in bbs])[:,None,:] #channel for broadcast
+        #pointsI = points[:,None,:]
+        #pointsJ = points[None,:,:]
+        #topL = all_rect[:,:,0]-(all_rect[:,:,1]-pointsJ[:,:,1])
+        #topR = all_rect[:,:,2]+(all_rect[:,:,1]-pointsJ[:,:,1])
+        #top = topL<=points[:,:,0] and pointsJ[:,:,0]<topR and pointsJ[:,:,1]<=pointsI[:,:,1]
+
+        #botL = all_rect[:,:,0]-(-all_rect[:,:,3]+pointsJ[:,:,1])
+        #botR = all_rect[:,:,2]+(-all_rect[:,:,3]+pointsJ[:,:,1])
+        #bot = botL<=points[:,:,0] and pointsJ[:,:,0]<botR and pointsJ[:,:,1]>pointsI[:,:,1]
+
+        #leftL = all_rect[:,:,1]-(all_rect[:,:,0]+pointsJ[:,:,0])
+        #leftR = all_rect[:,:,3]+(all_rect[:,:,0]+pointsJ[:,:,0])
+        #left = leftL<=points[:,:,0] and pointsJ[:,:,0]<leftR and pointsJ[:,:,1]>pointsI[:,:,1]
+        ##...
+        #assert((top+left+bot+right==1).all())
+        #topD = top*distances
+        #topD[topD==0]=float('inf')
+        #topMins = topD.argmin(axis=1)
+        ##...
+        #for bi,bj in enumerate(topMins):
+        #    if not math.isinf(topD[bj]):
+        #        edge = (min(bi,bj),max(bi,bj))
+        #        try:
+        #            ei = edges.index(edge)
+        #            keep_edges.add(ei)
+        #        except ValueError:
+        #            keep_edges.add(len(edges))
+        #            edges.append(edge)
+
         return edges,keep_edges
 
     def setDEBUG(self):
