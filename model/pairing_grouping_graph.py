@@ -2003,13 +2003,6 @@ class PairingGroupingGraph(BaseModel):
             if self.legacy:
                 bbs=bbs[:,1:] #discard confidence, we kept it so the proposer could see them
 
-        if not merge_only:
-            if self.graph_min_degree:
-                candidates,keep_edges = self.makeGraphMinDegree(candidates,bbs)
-            elif self.graph_four_connected:
-                candidates,keep_edges = self.makeGraphFourConnected(candidates,bbs)
-            else:
-                keep_edges=None
         #t#time = timeit.default_timer()-tic#t#
         #t#self.opt_history['candidates per bb'].append(time/len(bbs))#t#
         #t#self.opt_history['candidates /bb^2'].append(time/(len(bbs)**2))#t#
@@ -2024,6 +2017,14 @@ class PairingGroupingGraph(BaseModel):
                 return None,None,None,None,None, None, None
         if self.training:
             random.shuffle(candidates)
+
+        if not merge_only:
+            if self.graph_min_degree:
+                candidates,keep_edges = self.makeGraphMinDegree(candidates,bbs)
+            elif self.graph_four_connected:
+                candidates,keep_edges = self.makeGraphFourConnected(candidates,bbs)
+            else:
+                keep_edges=None
         #print('proposed relationships: {}  (bbs:{})'.format(len(candidates),len(bbs)))
         #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
         #print('------prop------')
@@ -3807,15 +3808,28 @@ class PairingGroupingGraph(BaseModel):
         botR = all_rect[:,:,2]+(-all_rect[:,:,3]+pointsJ[:,:,1])
         bot = (botL<pointsJ[:,:,0]) * (pointsJ[:,:,0]<=botR) * (pointsJ[:,:,1]>=pointsI[:,:,1])
 
-        leftL = all_rect[:,:,1]-(all_rect[:,:,0]-pointsJ[:,:,0])
-        leftR = all_rect[:,:,3]+(all_rect[:,:,0]-pointsJ[:,:,0])
-        left = (leftL<=pointsJ[:,:,1]) * (pointsJ[:,:,1]<leftR) * (pointsJ[:,:,0]<=pointsI[:,:,0])
+        leftT = all_rect[:,:,1]-(all_rect[:,:,0]-pointsJ[:,:,0])
+        leftB = all_rect[:,:,3]+(all_rect[:,:,0]-pointsJ[:,:,0])
+        left = (leftT<pointsJ[:,:,1]) * (pointsJ[:,:,1]<=leftB) * (pointsJ[:,:,0]<=pointsI[:,:,0])
 
-        rightL = all_rect[:,:,1]-(-all_rect[:,:,2]+pointsJ[:,:,0])
-        rightR = all_rect[:,:,3]+(-all_rect[:,:,2]+pointsJ[:,:,0])
-        right = (rightL<pointsJ[:,:,1]) * (pointsJ[:,:,1]<=rightR) * (pointsJ[:,:,0]>=pointsI[:,:,0])
+        rightT = all_rect[:,:,1]-(-all_rect[:,:,2]+pointsJ[:,:,0])
+        rightB = all_rect[:,:,3]+(-all_rect[:,:,2]+pointsJ[:,:,0])
+        right = (rightT<=pointsJ[:,:,1]) * (pointsJ[:,:,1]<rightB) * (pointsJ[:,:,0]>pointsI[:,:,0])
         
-        #assert((top+left+bot+right==1).all())
+        summ = top.int()+left.int()+bot.int()+right.int()
+        if (summ!=1).any():
+            print('min: {}, max:{}'.format(summ.min(),summ.max()))
+            if summ.min()==0:
+                print(top[summ==0])
+                print(bot[summ==0])
+                print(left[summ==0])
+                print(right[summ==0])
+            if summ.max()>1:
+                print(top[summ>1])
+                print(bot[summ>1])
+                print(left[summ>1])
+                print(right[summ>1])
+        assert((summ==1).all())
 
         #Find closest for each relationship
         topD = top*distances
