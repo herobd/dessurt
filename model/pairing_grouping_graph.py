@@ -3667,20 +3667,20 @@ class PairingGroupingGraph(BaseModel):
             brX = brX.cpu()
             brY = brY.cpu()
 
-            x1 = torch.min(torch.min(tlX,trX),torch.min(brX,blX)).int()
-            x2 = torch.max(torch.max(tlX,trX),torch.max(brX,blX)).int()
-            y1 = torch.min(torch.min(tlY,trY),torch.min(brY,blY)).int()
-            y2 = torch.max(torch.max(tlY,trY),torch.max(brY,blY)).int()
+            x1 = torch.min(torch.min(tlX,trX),torch.min(brX,blX)).astype(int)
+            x2 = torch.max(torch.max(tlX,trX),torch.max(brX,blX)).astype(int)
+            y1 = torch.min(torch.min(tlY,trY),torch.min(brY,blY)).astype(int)
+            y2 = torch.max(torch.max(tlY,trY),torch.max(brY,blY)).astype(int)
 
             x1-=self.padATRx
             x2+=self.padATRx
             y1-=self.padATRy
             y2+=self.padATRy
 
-            x1 = torch.max(x1,torch.tensor(0).int())
-            x2 = torch.max(torch.min(x2,torch.tensor(image.size(3)-1).int()),torch.tensor(0).int())
-            y1 = torch.max(y1,torch.tensor(0).int())
-            y2 = torch.max(torch.min(y2,torch.tensor(image.size(2)-1).int()),torch.tensor(0).int())
+            x1 = torch.max(x1,torch.tensor(0).astype(int))
+            x2 = torch.max(torch.min(x2,torch.tensor(image.size(3)-1).astype(int)),torch.tensor(0).astype(int))
+            y1 = torch.max(y1,torch.tensor(0).astype(int))
+            y2 = torch.max(torch.min(y2,torch.tensor(image.size(2)-1).astype(int)),torch.tensor(0).astype(int))
 
             #h *=2
             #w *=2
@@ -3689,7 +3689,7 @@ class PairingGroupingGraph(BaseModel):
             if self.pad_text_height:
                 h = torch.where(h<self.hw_input_height,torch.empty_like(h).fill_(self.hw_input_height),h)
             scale = self.hw_input_height/h
-            all_scaled_w = (((x2-x1).float()+1)*scale).cpu()#.int()
+            all_scaled_w = (((x2-x1).float()+1)*scale).cpu()#.astype(int)
             scale=None
 
             output_strings=[]
@@ -3802,34 +3802,45 @@ class PairingGroupingGraph(BaseModel):
         #find directional relationships [e.g. j is on top of x]
         topL = all_rect[:,:,0]-(all_rect[:,:,1]-pointsJ[:,:,1])
         topR = all_rect[:,:,2]+(all_rect[:,:,1]-pointsJ[:,:,1])
-        top = (topL<=pointsJ[:,:,0]) * (pointsJ[:,:,0]<topR) * (pointsJ[:,:,1]<=pointsI[:,:,1])
+        top = (topL<=pointsJ[:,:,0]) * (pointsJ[:,:,0]<topR) * (pointsJ[:,:,1]<all_rect[:,:,1])
 
         botL = all_rect[:,:,0]-(-all_rect[:,:,3]+pointsJ[:,:,1])
         botR = all_rect[:,:,2]+(-all_rect[:,:,3]+pointsJ[:,:,1])
-        bot = (botL<pointsJ[:,:,0]) * (pointsJ[:,:,0]<=botR) * (pointsJ[:,:,1]>=pointsI[:,:,1])
+        bot = (botL<pointsJ[:,:,0]) * (pointsJ[:,:,0]<=botR) * (pointsJ[:,:,1]>all_rect[:,:,3])
 
         leftT = all_rect[:,:,1]-(all_rect[:,:,0]-pointsJ[:,:,0])
         leftB = all_rect[:,:,3]+(all_rect[:,:,0]-pointsJ[:,:,0])
-        left = (leftT<pointsJ[:,:,1]) * (pointsJ[:,:,1]<=leftB) * (pointsJ[:,:,0]<=pointsI[:,:,0])
+        left = (leftT<pointsJ[:,:,1]) * (pointsJ[:,:,1]<=leftB) * (pointsJ[:,:,0]<all_rect[:,:,0])
 
         rightT = all_rect[:,:,1]-(-all_rect[:,:,2]+pointsJ[:,:,0])
         rightB = all_rect[:,:,3]+(-all_rect[:,:,2]+pointsJ[:,:,0])
-        right = (rightT<=pointsJ[:,:,1]) * (pointsJ[:,:,1]<rightB) * (pointsJ[:,:,0]>pointsI[:,:,0])
+        right = (rightT<=pointsJ[:,:,1]) * (pointsJ[:,:,1]<rightB) * (pointsJ[:,:,0]>all_rect[:,:,2])
+
+        inside = (pointsJ[:,:,1]>=all_rect[:,:,1]) * (pointsJ[:,:,1]<=all_rect[:,:,3]) * (pointsJ[:,:,0]>=all_rect[:,:,0]) * (pointsJ[:,:,0]<=all_rect[:,:,2])
+
+        np.fill_diagonal(top,False)
+        np.fill_diagonal(bot,False)
+        np.fill_diagonal(left,False)
+        np.fill_diagonal(right,False)
+        np.fill_diagonal(inside,False)
         
-        summ = top.int()+left.int()+bot.int()+right.int()
-        if (summ!=1).any():
-            print('min: {}, max:{}'.format(summ.min(),summ.max()))
-            if summ.min()==0:
-                print(top[summ==0])
-                print(bot[summ==0])
-                print(left[summ==0])
-                print(right[summ==0])
-            if summ.max()>1:
-                print(top[summ>1])
-                print(bot[summ>1])
-                print(left[summ>1])
-                print(right[summ>1])
-        assert((summ==1).all())
+        #summ = top.astype(int)+left.astype(int)+bot.astype(int)+right.astype(int)+inside.astype(int)
+        #np.fill_diagonal(summ,1)
+        #if (summ!=1).any():
+        #    print('min: {}, max:{}'.format(summ.min(),summ.max()))
+        #    if summ.min()==0:
+        #        print(top[summ==0])
+        #        print(bot[summ==0])
+        #        print(left[summ==0])
+        #        print(right[summ==0])
+        #        print(inside[summ==0])
+        #    if summ.max()>1:
+        #        print(top[summ>1])
+        #        print(bot[summ>1])
+        #        print(left[summ>1])
+        #        print(right[summ>1])
+        #        print(inside[summ>1])
+        #assert((summ==1).all())
 
         #Find closest for each relationship
         topD = top*distances
@@ -3844,6 +3855,9 @@ class PairingGroupingGraph(BaseModel):
         rightD = right*distances
         rightD[rightD==0]=float('inf')
         rightMins = rightD.argmin(axis=1)
+        insideD = inside*distances
+        insideD[insideD==0]=float('inf')
+        insideMins = insideD.argmin(axis=1)
         
         for bi,bj in enumerate(topMins):
             if not math.isinf(topD[bi,bj]):
@@ -3874,6 +3888,15 @@ class PairingGroupingGraph(BaseModel):
                     edges.append(edge)
         for bi,bj in enumerate(rightMins):
             if not math.isinf(rightD[bi,bj]):
+                edge = (min(bi,bj),max(bi,bj))
+                try:
+                    ei = edges.index(edge)
+                    keep_edges.add(ei)
+                except ValueError:
+                    keep_edges.add(len(edges))
+                    edges.append(edge)
+        for bi,bj in enumerate(insideMins):
+            if not math.isinf(insideD[bi,bj]):
                 edge = (min(bi,bj),max(bi,bj))
                 try:
                     ei = edges.index(edge)
