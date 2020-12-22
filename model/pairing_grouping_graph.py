@@ -3805,7 +3805,7 @@ class PairingGroupingGraph(BaseModel):
 
         botL = all_rect[:,:,0]-(-all_rect[:,:,3]+pointsJ[:,:,1])
         botR = all_rect[:,:,2]+(-all_rect[:,:,3]+pointsJ[:,:,1])
-        bot = (botL<pointsJ[:,:,0]) * (pointsJ[:,:,0]<=botR) * (pointsJ[:,:,1]>pointsI[:,:,1])
+        bot = (botL<pointsJ[:,:,0]) * (pointsJ[:,:,0]<=botR) * (pointsJ[:,:,1]>=pointsI[:,:,1])
 
         leftL = all_rect[:,:,1]-(all_rect[:,:,0]-pointsJ[:,:,0])
         leftR = all_rect[:,:,3]+(all_rect[:,:,0]-pointsJ[:,:,0])
@@ -3813,9 +3813,9 @@ class PairingGroupingGraph(BaseModel):
 
         rightL = all_rect[:,:,1]-(-all_rect[:,:,2]+pointsJ[:,:,0])
         rightR = all_rect[:,:,3]+(-all_rect[:,:,2]+pointsJ[:,:,0])
-        right = (rightL<=pointsJ[:,:,1]) * (pointsJ[:,:,1]<rightR) * (pointsJ[:,:,0]>pointsI[:,:,0])
+        right = (rightL<pointsJ[:,:,1]) * (pointsJ[:,:,1]<=rightR) * (pointsJ[:,:,0]>=pointsI[:,:,0])
         
-        assert((top+left+bot+right==1).all())
+        #assert((top+left+bot+right==1).all())
 
         #Find closest for each relationship
         topD = top*distances
