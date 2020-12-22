@@ -3792,93 +3792,81 @@ class PairingGroupingGraph(BaseModel):
             distances = np.abs(points1-points2).sum(axis=2)
         else:
             raise NotImplementedError('GraphMinDegree needs non-TextLine implemented')
+
         keep_edges=set()
-        for bi in range(len(bbs)):
-            #pps = bbs[bi].pairPoints()
-            #tl,bl = pps[0]
-            #tr,br = pps[-1]
-            #we'll do this a rotation insensitive way first. Later I can go back...
-            x1,y1,x2,y2 = bbs[bi].boundingRect()
-            topj=None
-            topD=float('inf')
-            botj=None
-            botD=float('inf')
-            leftj=None
-            leftD=float('inf')
-            rightj=None
-            rightD=float('inf')
-            for bj in range(len(bbs)):
-                if bi!=bj:
-                    #which side is for?
-                    topL = x1-(y1-points[bj][1])
-                    topR = x2+(y1-points[bj][1])
-                    top = topL<=points[bj][0] and points[bj][0]<topR and points[bj][1]<points[bi][1]
+        all_rect = np.array([bb.boundingRect() for bb in bbs])[:,None,:] #channel for broadcast
+        pointsI = points2
+        pointsJ = points1
 
-                    botL = x1-(points[bj][1]-y2)
-                    botR = x2+(points[bj][1]-y2)
-                    bot = botL<points[bj][0] and points[bj][0]<=botR and points[bj][1]>points[bi][1]
+        #find directional relationships [e.g. j is on top of x]
+        topL = all_rect[:,:,0]-(all_rect[:,:,1]-pointsJ[:,:,1])
+        topR = all_rect[:,:,2]+(all_rect[:,:,1]-pointsJ[:,:,1])
+        top = (topL<=pointsJ[:,:,0]) * (pointsJ[:,:,0]<topR) * (pointsJ[:,:,1]<=pointsI[:,:,1])
 
-                    leftT = y1-(x1-points[bj][0])
-                    leftB = y2+(x1-points[bj][0])
-                    left = leftT<=points[bj][1] and points[bj][1]<leftB and points[bj][0]<points[bi][0]
+        botL = all_rect[:,:,0]-(-all_rect[:,:,3]+pointsJ[:,:,1])
+        botR = all_rect[:,:,2]+(-all_rect[:,:,3]+pointsJ[:,:,1])
+        bot = (botL<pointsJ[:,:,0]) * (pointsJ[:,:,0]<=botR) * (pointsJ[:,:,1]>pointsI[:,:,1])
 
-                    rightT = y1-(points[bj][0]-x2)
-                    rightB = y2+(points[bj][0]-x2)
-                    right = rightT<points[bj][1] and points[bj][1]<=rightB and points[bj][0]>points[bi][0]
+        leftL = all_rect[:,:,1]-(all_rect[:,:,0]-pointsJ[:,:,0])
+        leftR = all_rect[:,:,3]+(all_rect[:,:,0]-pointsJ[:,:,0])
+        left = (leftL<=pointsJ[:,:,1]) * (pointsJ[:,:,1]<leftR) * (pointsJ[:,:,0]<=pointsI[:,:,0])
 
-                    assert(top+left+bot+right==1)
-                    if top and distances[bi,bj]<topD:
-                        topD=distances[bi,bj]
-                        topj=bj
-                    elif bot and distances[bi,bj]<botD:
-                        botD=distances[bi,bj]
-                        botj=bj
-                    elif left and distances[bi,bj]<leftD:
-                        leftD=distances[bi,bj]
-                        leftj=bj
-                    elif right and distances[bi,bj]<rightD:
-                        rightD=distances[bi,bj]
-                        rightj=bj
-
-            for bj in [topj,botj,leftj,rightj]:
-                if bj is not None:
-                    edge = (min(bi,bj),max(bi,bj))
-                    try:
-                        ei = edges.index(edge)
-                        keep_edges.add(ei)
-                    except ValueError:
-                        keep_edges.add(len(edges))
-                        edges.append(edge)
+        rightL = all_rect[:,:,1]-(-all_rect[:,:,2]+pointsJ[:,:,0])
+        rightR = all_rect[:,:,3]+(-all_rect[:,:,2]+pointsJ[:,:,0])
+        right = (rightL<=pointsJ[:,:,1]) * (pointsJ[:,:,1]<rightR) * (pointsJ[:,:,0]>pointsI[:,:,0])
         
-        #all_rect = np.array([bb.boundingRect() for bb in bbs])[:,None,:] #channel for broadcast
-        #pointsI = points[:,None,:]
-        #pointsJ = points[None,:,:]
-        #topL = all_rect[:,:,0]-(all_rect[:,:,1]-pointsJ[:,:,1])
-        #topR = all_rect[:,:,2]+(all_rect[:,:,1]-pointsJ[:,:,1])
-        #top = topL<=points[:,:,0] and pointsJ[:,:,0]<topR and pointsJ[:,:,1]<=pointsI[:,:,1]
+        assert((top+left+bot+right==1).all())
 
-        #botL = all_rect[:,:,0]-(-all_rect[:,:,3]+pointsJ[:,:,1])
-        #botR = all_rect[:,:,2]+(-all_rect[:,:,3]+pointsJ[:,:,1])
-        #bot = botL<=points[:,:,0] and pointsJ[:,:,0]<botR and pointsJ[:,:,1]>pointsI[:,:,1]
-
-        #leftL = all_rect[:,:,1]-(all_rect[:,:,0]+pointsJ[:,:,0])
-        #leftR = all_rect[:,:,3]+(all_rect[:,:,0]+pointsJ[:,:,0])
-        #left = leftL<=points[:,:,0] and pointsJ[:,:,0]<leftR and pointsJ[:,:,1]>pointsI[:,:,1]
-        ##...
-        #assert((top+left+bot+right==1).all())
-        #topD = top*distances
-        #topD[topD==0]=float('inf')
-        #topMins = topD.argmin(axis=1)
-        ##...
-        #for bi,bj in enumerate(topMins):
-        #    if not math.isinf(topD[bj]):
-        #        edge = (min(bi,bj),max(bi,bj))
-        #        try:
-        #            ei = edges.index(edge)
-        #            keep_edges.add(ei)
-        #        except ValueError:
-        #            keep_edges.add(len(edges))
-        #            edges.append(edge)
+        #Find closest for each relationship
+        topD = top*distances
+        topD[topD==0]=float('inf')#no relationship, so inf distance
+        topMins = topD.argmin(axis=1)
+        botD = bot*distances
+        botD[botD==0]=float('inf')
+        botMins = botD.argmin(axis=1)
+        leftD = left*distances
+        leftD[leftD==0]=float('inf')
+        leftMins = leftD.argmin(axis=1)
+        rightD = right*distances
+        rightD[rightD==0]=float('inf')
+        rightMins = rightD.argmin(axis=1)
+        
+        for bi,bj in enumerate(topMins):
+            if not math.isinf(topD[bi,bj]):
+                edge = (min(bi,bj),max(bi,bj))
+                try:
+                    ei = edges.index(edge)
+                    keep_edges.add(ei)
+                except ValueError:
+                    keep_edges.add(len(edges))
+                    edges.append(edge)
+        for bi,bj in enumerate(botMins):
+            if not math.isinf(botD[bi,bj]):
+                edge = (min(bi,bj),max(bi,bj))
+                try:
+                    ei = edges.index(edge)
+                    keep_edges.add(ei)
+                except ValueError:
+                    keep_edges.add(len(edges))
+                    edges.append(edge)
+        for bi,bj in enumerate(leftMins):
+            if not math.isinf(leftD[bi,bj]):
+                edge = (min(bi,bj),max(bi,bj))
+                try:
+                    ei = edges.index(edge)
+                    keep_edges.add(ei)
+                except ValueError:
+                    keep_edges.add(len(edges))
+                    edges.append(edge)
+        for bi,bj in enumerate(rightMins):
+            if not math.isinf(rightD[bi,bj]):
+                edge = (min(bi,bj),max(bi,bj))
+                try:
+                    ei = edges.index(edge)
+                    keep_edges.add(ei)
+                except ValueError:
+                    keep_edges.add(len(edges))
+                    edges.append(edge)
 
         return edges,keep_edges
 
