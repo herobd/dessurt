@@ -41,7 +41,7 @@
     "optimizer_type": "Adam",
     "optimizer": {
         "lr": 0.001,
-        "weight_decay": 0
+        "weight_decay": 0.0000001
     },
     "loss": {
         "overseg": "MultiScaleOversegmentLoss",
