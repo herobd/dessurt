@@ -2019,9 +2019,9 @@ class PairingGroupingGraph(BaseModel):
             if merge_only:
                 return None,None,None
             if self.useMetaGraph:
-                return None, None, None, None, None
+                return None, None, None, None, None, None
             else:
-                return None,None,None,None,None, None
+                return None,None,None,None,None, None, None
         if self.training:
             random.shuffle(candidates)
         #print('proposed relationships: {}  (bbs:{})'.format(len(candidates),len(bbs)))
