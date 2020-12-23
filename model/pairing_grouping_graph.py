@@ -2234,7 +2234,6 @@ class PairingGroupingGraph(BaseModel):
         #stackedEdgeFeatWindows = torch.FloatTensor((len(edges),features.size(1)+2,self.relWindowSize,self.relWindowSize)).to(features.device())
 
         if not self.useCurvedBBs:
-            assert(all([len(g)==1 for g in groups]) )#not implemented for groups
             #get corners from bb predictions
             if self.legacy or not self.include_bb_conf:
                 x = bbs[:,0]
@@ -2267,6 +2266,7 @@ class PairingGroupingGraph(BaseModel):
             blY = blY.cpu()
             brX = brX.cpu()
             brY = brY.cpu()
+
 
         if debug_image is not None:
             debug_images=[]
