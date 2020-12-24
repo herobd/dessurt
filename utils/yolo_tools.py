@@ -662,7 +662,7 @@ def classPolyIOU(rboxes,bbs,num_classes):
     angle_compatible = angle_compatible.abs()<math.pi/3
     iou *= angle_compatible
 
-    if len(bbs)>0:
+    if len(bbs)>0 and num_classes>0:
         gt_cls_ind = torch.argmax(rboxes[:,13:13+num_classes],dim=1)
         pr_allClss = torch.FloatTensor([bb.getCls()[:num_classes] for bb in bbs]) #discard extra classes
         #pr_allClss = torch.stack([bb.getCls() for bb in bbs],dim=0)
