@@ -117,6 +117,7 @@ class GraphPairTrainer(BaseTrainer):
             self.loss['rel'] = self.loss['edge']
 
         #t#self.opt_history = defaultdict(list)#t#
+        self.do_characterization = config['characterization'] if 'characterization' in config else False
 
     def _to_tensor(self, instance):
         image = instance['img']
@@ -1851,6 +1852,20 @@ class GraphPairTrainer(BaseTrainer):
                         targetPairs=instance['gt_groups_adj'])
                 #print('saved {}'.format(path))
             finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = final
+            if self.do_characterization:
+                self.characterization_eval(
+                            allOutputBoxes,
+                            allEdgePred,
+                            allNodePred,
+                            allEdgeIndexes,
+                            allPredGroups,
+                            finalOutputBoxes,
+                            finalEdgeIndexes,
+                            finalPredGroups,
+                            targetBoxes,
+                            targetIndexToGroup,
+                            gtGroups,
+                            gtGroupAdj)
             #print('DEBUG final num node:{}, num edges: {}'.format(len(finalOutputBoxes) if finalOutputBoxes is not None else 0,len(finalEdgeIndexes) if finalEdgeIndexes is not None else 0))
         ###
         
@@ -2086,3 +2101,283 @@ class GraphPairTrainer(BaseTrainer):
             log['final_rel_Fm']=0
 
         return log
+
+    def characterization_eval(self,
+                        allOutputBoxes,
+                        allEdgePred,
+                        allNodePred,
+                        allEdgeIndexes,
+                        allPredGroups,
+                        finalOutputBoxes,
+                        finalEdgeIndexes,
+                        finalPredGroups,
+                        targetBoxes,
+                        targetIndexToGroup,
+                        gtGroups,
+                        gtGroupAdj,
+                        ):
+
+        numClasses = self.model_ref.numBBTypes
+        #go to last
+        #find alignment
+        #if rel is missing, 
+        double_rel_pred=0
+        missed_rel_from_bad_detection=0
+        missed_rel_from_bad_merge=0
+        missed_rel_from_missed_prop=0
+        missed_rel_from_bad_group=0
+        missed_rel_from_poor_alignement=0
+        missed_rel_from_misclass=0
+        missed_rel_from_pruned_edge=defaultdict(lambda: 0)
+
+        #for each gt node, look through history. Was it found? Incorrectly merged? Grouped?
+        #   found: a partail detection
+        #   merge: was there are merge which made it not a match?
+        #   was it grouped incorrectly? was it supposed to be a group, but isn't?
+        #for missing rel, was it every present? when did it disapear, were any nodes bad?
+        #for false pos rel, are either nodes bad detection or group?
+        gtBBs2Pred=[]
+        gtGroups2Pred=[]
+        allEdgeScores=[]
+        allRelScores=[]
+        allMergeScores=[]
+        allGroupScores=[]
+        num_giter = len(allOutputBoxes)
+        for graphIteration,(outputBoxes,edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allOutputBoxes,allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
+            if self.model_ref.useCurvedBBs:
+                targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,self.gt_bb_align_IOcU_thresh,numClasses,True)
+            elif self.model_ref.rotation:
+                assert(False and 'untested and should be changed to reflect new newGetTargIndexForPreds_s')
+                targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
+            else:
+                targIndex = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.5,numClasses,True)
+            targIndex = targIndex.numpy()
+
+            predGroup2GT={}
+            for node in range(len(predGroups)):
+                predGroupT = [targIndex[bb] for bb in predGroups[node] if targIndex[bb]>=0]
+                predGroup2GT[node] = getGTGroup(predGroupT,targetIndexToGroup)
+            #predGroups2GT.append(predGroup2GT)
+
+            gtBB2Pred = [-1]*len(targetBoxes[0])
+            for i,tInd in enumerate(targIndex):
+                if tInd>=0:
+                    gtBB2Pred[tInd]=i
+            gtBBs2Pred.append(gtBB2Pred)
+            gtGroup2Pred = defaultdict(list)
+            for predG,gtG in predGroup2GT.items():
+                if gtG!=-1:
+                    gtGroup2Pred[gtG].append(predG)
+            gtGroups2Pred.append(gtGroup2Pred)
+            
+            if graphIteration>0 or not self.model.merge_first:
+                if not self.model_ref.legacy:
+                    edgeScores = torch.sigmoid(edgePred[:,-1,0])
+                    relScores = torch.sigmoid(edgePred[:,-1,1])
+                    mergeScores = torch.sigmoid(edgePred[:,-1,2])
+                    groupScores = torch.sigmoid(edgePred[:,-1,3])
+                else:
+                    relScores = torch.sigmoid(edgePred[:,-1,0])
+                    mergeScores = torch.sigmoid(edgePred[:,-1,1])
+                    groupScores = torch.sigmoid(edgePred[:,-1,2])
+                    edgeScores = torch.max(torch.sigmoid(edgePred[:,-1,0:3]),dim=1)
+            else:
+                edgeScores=relScores=groupScores=None
+                mergeScores = torch.sigmoid(edgePred[:,-1,0])
+            allEdgeScores.append(edgeScores)
+            allRelScores.append(relScores)
+            allMergeScores.append(mergeScores)
+            allGroupScores.append(groupScores)
+
+        #final, we'll count it as additional graph iteration
+        if self.model_ref.useCurvedBBs:
+            targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],finalOutputBoxes,0.5,numClasses,False)
+            noClassTargIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],finalOutputBoxes,0.5,0,False)
+        elif self.model_ref.rotation:
+            assert(False and 'untested and should be changed to reflect new newGetTargIndexForPreds_s')
+            targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
+        else:
+            targIndex = newGetTargIndexForPreds_iou(targetBoxes[0],finalOutputBoxes,0.4,numClasses,False)
+        targIndex = targIndex.numpy()
+        noClassTargIndex = noClassTargIndex.numpy()
+        predGroup2GT={}
+        noClassPredGroup2GT={}
+        for node in range(len(finalPredGroups)):
+            predGroupT = [targIndex[bb] for bb in finalPredGroups[node] if targIndex[bb]>=0]
+            predGroup2GT[node] = getGTGroup(predGroupT,targetIndexToGroup)
+
+            noClassPredGroupT = [noClassTargIndex[bb] for bb in finalPredGroups[node] if noClassTargIndex[bb]>=0]
+            noClassPredGroup2GT[node] = getGTGroup(noClassPredGroupT,targetIndexToGroup)
+
+        gtBB2Pred = [-1]*len(targetBoxes[0])
+        for i,tInd in enumerate(targIndex):
+            if tInd>=0:
+                gtBB2Pred[tInd]=i
+        finalNoClassGtBB2Pred = [-1]*len(targetBoxes[0])
+        for i,tInd in enumerate(noClassTargIndex):
+            if tInd>=0:
+                finalNoClassGtBB2Pred[tInd]=i
+        gtBBs2Pred.append(gtBB2Pred)
+        gtGroup2Pred = defaultdict(list)
+        for predG,gtG in predGroup2GT.items():
+            if gtG!=-1:
+                gtGroup2Pred[gtG].append(predG)
+        gtGroups2Pred.append(gtGroup2Pred)
+
+        allEdgeIndexes.append(finalEdgeIndexes)
+        ###
+        gtEdge2Pred = {}
+        badPredEdges = []
+        for ei,(n1,n2) in enumerate(finalEdgeIndexes):
+            gtGId1 = predGroup2GT[n1]
+            gtGId2 = predGroup2GT[n2]
+            edge = (min(gtGId1,gtGId2),max(gtGId1,gtGId2))
+            if edge in gtEdge2Pred:
+                #two predicted edges claiming the same gt edge
+                #this can occur if one of both of the GT groups is still split
+                double_rel_pred+=1
+            elif edge in gtGroupAdj:
+                gtEdge2Pred[edge] = ei
+        missed_rels=gtGroupAdj.difference(set(gtEdge2Pred.keys()))
+
+        
+        for gtGId1,gtGId2 in missed_rels:
+            found1 = any([gtBBs2Pred[0][gtbb]!=-1 for gtbb in gtGroups[gtGId1]])
+            found2 = any([gtBBs2Pred[0][gtbb]!=-1 for gtbb in gtGroups[gtGId2]])
+            if not found1 or not found2:
+                missed_rel_from_bad_detection+=1
+            else:
+                for giter in range(num_giter+1): #+1 for final
+                    found1 = any([gtBBs2Pred[giter][gtbb]!=-1 for gtbb in gtGroups[gtGId1]])
+                    found2 = any([gtBBs2Pred[giter][gtbb]!=-1 for gtbb in gtGroups[gtGId2]])
+                    if giter == num_giter:
+                        noClassFound1 = any([finalNoClassGtBB2Pred[gtbb]!=-1 for gtbb in gtGroups[gtGId1]])
+                        noClassFound2 = any([finalNoClassGtBB2Pred[gtbb]!=-1 for gtbb in gtGroups[gtGId2]])
+                    if not found1:
+                        was_merge=0
+                        prevPredNodeIds = gtGroups2Pred[giter-1][gtGId1]
+                        for prevPredNodeId in prevPredNodeIds:
+                            #find all edges to see if it was merged
+                            for ei,(n1,n2) in enumerate(allEdgeIndexes[giter-1]):
+                                if n1==prevPredNodeId or n2==prevPredNodeId:
+                                    if allMergeScores[giter-1][ei]>self.model.mergeThresh[giter-1]:
+                                        was_merge+=1
+                                        break
+                        if giter == num_giter:
+                            if was_merge>len(prevPredNodeIds):
+                                missed_rel_from_bad_merge+=1
+                            else:
+                                #was it wrong class?
+                                if noClassFound1:
+                                    assert(found2 or noClassFound2)
+                                    missed_rel_from_misclass+=1
+                                else:
+                                    missed_rel_from_poor_alignement+=1
+                        else:
+                            assert(was_merge==len(prevPredNodeIds))
+                            missed_rel_from_bad_merge+=1
+                        break
+                    if not found2:
+                        was_merge=0
+                        prevPredNodeIds = gtGroups2Pred[giter-1][gtGId2]
+                        for prevPredNodeId in prevPredNodeIds:
+                            #find all edges to see if it was merged
+                            for ei,(n1,n2) in enumerate(allEdgeIndexes[giter-1]):
+                                if n1==prevPredNodeId or n2==prevPredNodeId:
+                                    if allMergeScores[giter-1][ei]>self.model.mergeThresh[giter-1]:
+                                        was_merge+=1
+                                        break
+                        if giter == num_giter:
+                            if was_merge>len(prevPredNodeIds):
+                                missed_rel_from_bad_merge+=1
+                            else:
+                                #was it wrong class?
+                                if noClassFound2:
+                                    assert(found1 or noClassFound1)
+                                    missed_rel_from_misclass+=1
+                                else:
+                                    missed_rel_from_poor_alignement+=1
+                        else:
+                            assert(was_merge==len(prevPredNodeIds))
+                            missed_rel_from_bad_merge+=1
+                        break
+
+                    predGroups1 = gtGroups2Pred[giter][gtGId1]
+                    predGroups2 = gtGroups2Pred[giter][gtGId2]
+
+                    if len(predGroups1)==0:
+                        #bad grouping on prev iter. Let's double check that
+                        was_group=0
+                        prevPredNodeIds = gtGroups2Pred[giter-1][gtGId1]
+                        for prevPredNodeId in prevPredNodeIds:
+                            #find all edges to see if it was groupd
+                            for ei,(n1,n2) in enumerate(allEdgeIndexes[giter-1]):
+                                if n1==prevPredNodeId or n2==prevPredNodeId:
+                                    if allGroupScores[giter-1][ei]>self.model.groupThresh[giter-1]:
+                                        was_group+=1
+                                        break
+                        assert(was_group==len(prevPredNodeIds))
+                        missed_rel_from_bad_group+=1
+                        break
+                    if len(predGroups2)==0:
+                        #bad grouping on prev iter. Let's double check that
+                        was_group=0
+                        prevPredNodeIds = gtGroups2Pred[giter-1][gtGId2]
+                        for prevPredNodeId in prevPredNodeIds:
+                            #find all edges to see if it was groupd
+                            for ei,(n1,n2) in enumerate(allEdgeIndexes[giter-1]):
+                                if n1==prevPredNodeId or n2==prevPredNodeId:
+                                    if allGroupScores[giter-1][ei]>self.model.groupThresh[giter-1]:
+                                        was_group+=1
+                                        break
+                        assert(was_group==len(prevPredNodeIds))
+                        missed_rel_from_bad_group+=1
+                        break
+
+
+                    if not self.model.merge_first or giter>0: #the merge-first is not doing relationships
+                        edge_present=False
+                        for ei,(n1,n2) in enumerate(allEdgeIndexes[giter]):
+                            if (n1 in predGroups1 and n2 in predGroups2) or (n2 in predGroups1 and n1 in predGroups2):
+                                edge_present=True
+                                break
+                        if not edge_present:
+                            #we have it's nodes, so it must have been dropped as an edge
+                            if (not self.model.merge_first and giter==0) or (self.model.merge_first and giter==1):
+                                #import pdb;pdb.set_trace()
+                                missed_rel_from_missed_prop+=1
+                            else:
+                                #it must have been dropped in the previous iteration. Double check this is right
+                                prevEdgePred=[]
+                                #prevRelPred=[]
+                                prevPredGroups1 = gtGroups2Pred[giter-1][gtGId1]
+                                prevPredGroups2 = gtGroups2Pred[giter-1][gtGId1]
+                                for ei,(n1,n2) in enumerate(allEdgeIndexes[giter-1]):
+                                    if (n1 in prevPredGroups1 and n2 in prevPredGroups2) or (n2 in prevPredGroups1 and n1 in prevPredGroups2):
+                                        prevEdgePred.append(allEdgeScores[giter-1][ei]>self.model.keepEdgeThresh)
+                                        #prevRelPred.append(allRelScores[giter-1][ei]>self.model.keepRelThresh)
+                                assert(not any(prevEdgePred))
+                                missed_rel_from_pruned_edge[giter-1]+=1
+
+                            break
+
+
+        print('double_rel_pred={}'.format(double_rel_pred))
+        all_sum=0
+        for giter,missed in missed_rel_from_pruned_edge.items():
+            print('missed_rel_from_pruned_edge[{}]={}'.format(giter,missed))
+            all_sum+=missed
+        print('missed_rel_from_pruned_edge[all]={}'.format(all_sum))
+        all_sum+=missed_rel_from_bad_detection+missed_rel_from_bad_merge+missed_rel_from_missed_prop+missed_rel_from_bad_group+missed_rel_from_poor_alignement+missed_rel_from_misclass
+        #missed_rel_from_bad_detection/=len(missed_rels)
+        print('missed_rel_from_bad_detection={}'.format(missed_rel_from_bad_detection))
+        #missed_rel_from_bad_merge/=len(missed_rels)
+        print('missed_rel_from_bad_merge={}'.format(missed_rel_from_bad_merge))
+        #missed_rel_from_missed_prop/=len(missed_rels)
+        print('missed_rel_from_missed_prop={}'.format(missed_rel_from_missed_prop))
+        #missed_rel_from_bad_group/=len(missed_rels)
+        print('missed_rel_from_bad_group={}'.format(missed_rel_from_bad_group))
+        print('missed_rel_from_poor_alignement={}'.format(missed_rel_from_poor_alignement))
+        print('missed_rel_from_misclass={}'.format(missed_rel_from_misclass))
+        
+        print('accounted missed={}, unaccounted missed={}'.format(all_sum,len(missed_rels)-all_sum))
