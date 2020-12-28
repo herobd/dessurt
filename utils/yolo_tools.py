@@ -425,8 +425,8 @@ def classIOU(boxesT,boxesP, num_classes, boxesPXYWH=[0,1,4,3]):
     iou = inter_area / (bP_area + bT_area - inter_area + 1e-16)
 
     #
-    gt_cls_ind = torch.argmax(boxesT[:,13:13+num_classes:],dim=1)
-    pr_cls_ind = torch.argmax(boxesP[:,5:5+num_classes:],dim=1)
+    gt_cls_ind = torch.argmax(boxesT[:,-num_classes:],dim=1) #13:
+    pr_cls_ind = torch.argmax(boxesP[:,-num_classes:],dim=1) #5+numN:
     gt_cls_ind = gt_cls_ind[:,None].expand(boxesT.size(0), boxesP.size(0))
     pr_cls_ind = pr_cls_ind[None,:].expand(boxesT.size(0), boxesP.size(0))
     class_compatible = gt_cls_ind==pr_cls_ind
