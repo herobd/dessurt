@@ -33,7 +33,7 @@ def plotRect(img,color,xyrhw,lineWidth=1):
     img_f.line(img,bl,tl,color,lineWidth)
 
 
-def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,image,predTypes,targetBoxes,classMap,path,verbosity=2,bbTrans=None,useTextLines=False,targetGroups=None,targetPairs=None):
+def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,image,predTypes,missedRels,targetBoxes,classMap,path,verbosity=2,bbTrans=None,useTextLines=False,targetGroups=None,targetPairs=None):
     #for graphIteration,(outputBoxes,nodePred,edgePred,edgeIndexes,predGroups) in zip(allOutputBoxes,allNodePred,allEdgePred,allEdgeIndexes,allPredGroups):
         if bbTrans is not None:
             transPath = path[:-3]+'txt'
@@ -75,8 +75,13 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                 groupCenters.append((round((minX+maxX)/2),round((minY+maxY)/2)))
 
             #now to pairs
-            for pair in targetPairs:
+            #for pair in targetPairs:
+            #if len(predTypes)==1:
+            #    print('num missing: {}'.format(len(missedRels)))
+            for pair in missedRels:
                 img_f.line(image,groupCenters[pair[0]],groupCenters[pair[1]],(1,0,0.1),3,draw='mult')
+                #if len(predTypes)==1:
+                #    print('{} -- {}'.format(groupCenters[pair[0]],groupCenters[pair[1]]))
 
         to_write_text=[]
         if verbosity>1 and outputBoxes is not None:
@@ -265,6 +270,8 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                     edgesToDraw.append((i,x1,y1,x2,y2))
 
         if predTypes is not None:
+            if edgePred is None:
+                edgePred = torch.FloatTensor(len(predTypes[0]),1,1).fill_(1)
             if edgePred.size(2)>=len(predTypes):
                 edgeClassification = [(predTypes[i],edgePred[:,-1,i]) for i in range(len(predTypes))]
             else:
@@ -276,7 +283,15 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                         ]
 
             for i,x1,y1,x2,y2 in edgesToDraw:
-                    lineColor = (0,edgePred[i,-1,0].item(),0)
+                    if edgeClassification[0][0][i]=='TP':
+                        lineColor = (0,edgePred[i,-1,0].item(),0)
+                    elif edgeClassification[0][0][i]=='UP':
+                        lineColor = (edgePred[i,-1,0].item(),0,edgePred[i,-1,0].item())
+                    elif edgeClassification[0][0][i]=='FN':
+                        lineColor = (edgePred[i,-1,0].item(),0,0)
+                    else: #is false positive
+                        assert(edgeClassification[0][0][i]=='FP')
+                        lineColor = (edgePred[i,-1,0].item(),edgePred[i,-1,0].item(),0)
                     boxColors=[]
                     for predType,pred in edgeClassification:
                         if predType[i]=='TP':
