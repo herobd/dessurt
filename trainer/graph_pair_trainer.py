@@ -690,8 +690,12 @@ class GraphPairTrainer(BaseTrainer):
             #predEdgesMat[N0+N1,N1+N0]=True
 
             #which edges are GT ones
-            gtGroupAdjMat = [(min(gtGroup0,gtGroup1),max(gtGroup0,gtGroup1)) in gtGroupAdj for gtGroup0,gtGroup1 in gtNE]
+            gtNE = [(min(gtGroup0,gtGroup1),max(gtGroup0,gtGroup1)) for gtGroup0,gtGroup1 in gtNE]
+            gtGroupAdjMat = [pair in gtGroupAdj for pair in gtNE]
             gtGroupAdjMat = torch.BoolTensor(gtGroupAdjMat).to(edge_loss_device)
+
+            hit_rels = set(gtNE)
+            missed_rels = gtGroupAdj.difference(hit_rels)
 
             
 
@@ -896,6 +900,9 @@ class GraphPairTrainer(BaseTrainer):
             FN=shouldBeEdge*~predsEdgeAboveThresh
             falseNegEdge = FN.sum().item()
             saveEdgePredMat[FN]=saveIndex['FN']
+            #missedGTRel TODO
+            for ind in torch.nonzero(FN):
+                missed_rels.add(gtNE[ind.item()])
 
             shouldNotBeEdge = ~wasError*~shouldBeEdge
             predsGTNoEdge = predsEdge[shouldNotBeEdge]
@@ -1062,7 +1069,7 @@ class GraphPairTrainer(BaseTrainer):
         else:
             proposedInfo = None
 
-        return predsGTYes, predsGTNo, targIndex,  proposedInfo, log, predTypes
+        return predsGTYes, predsGTNo, targIndex,  proposedInfo, log, predTypes, missed_rels
 
 
     def prealignedEdgePred(self,adj,relPred,relIndexes,rel_prop_pred):
@@ -1539,13 +1546,14 @@ class GraphPairTrainer(BaseTrainer):
         log={}
         #for graphIteration in range(len(allEdgePred)):
         allEdgePredTypes=[]
+        allMissedRels=[]
         proposedInfo=None
         mergeProposedInfo=None
         if allEdgePred is not None:
             for graphIteration,(outputBoxes,edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allOutputBoxes,allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
 
                 #t#tic2=timeit.default_timer()#t##t#
-                predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, proposedInfoI, logIter, edgePredTypes = self.simplerAlignEdgePred(
+                predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, proposedInfoI, logIter, edgePredTypes, missedRels = self.simplerAlignEdgePred(
                         targetBoxes,
                         targetIndexToGroup,
                         gtGroupAdj,
@@ -1563,6 +1571,7 @@ class GraphPairTrainer(BaseTrainer):
                         )
                 #t#self.opt_history['newAlignEdgePred gI{}'.format(graphIteration)].append(timeit.default_timer()-tic2)#t#
                 allEdgePredTypes.append(edgePredTypes)
+                allMissedRels.append(missedRels)
                 if graphIteration==0 and self.model_ref.merge_first:
                     mergeProposedInfo=proposedInfoI
                 elif (graphIteration==0 and not self.model_ref.merge_first) or (graphIteration==1 and self.model_ref.merge_first):
@@ -1790,6 +1799,7 @@ class GraphPairTrainer(BaseTrainer):
                             predGroups,
                             image,
                             edgePredTypes,
+                            missedRels,
                             targetBoxes,
                             self.classMap,
                             path,
@@ -1830,7 +1840,10 @@ class GraphPairTrainer(BaseTrainer):
         #t#tic=timeit.default_timer()#t##t#
         #print final state of graph
         ###
+        gt_groups_adj = instance['gt_groups_adj']
         if final is not None:
+            finalLog, finalRelTypes, finalMissedRels = self.final_eval(targetBoxes.cpu() if targetBoxes is not None else None,gtGroups,gt_groups_adj,targetIndexToGroup,*final)
+            log.update(finalLog)
             if self.save_images_every>0 and self.iteration%self.save_images_every==0:
                 path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b','final'))#instance['name'],graphIteration))
                 finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = final
@@ -1842,7 +1855,8 @@ class GraphPairTrainer(BaseTrainer):
                         finalEdgeIndexes,
                         finalPredGroups,
                         image,
-                        None,
+                        finalRelTypes,
+                        finalMissedRels,
                         targetBoxes,
                         self.classMap,
                         path,
@@ -1901,10 +1915,6 @@ class GraphPairTrainer(BaseTrainer):
         #if final_prop_rel_prec is not None:
         #    log['final_prop_rel_prec']=final_prop_rel_prec
 
-        gt_groups_adj = instance['gt_groups_adj']
-        if final is not None:
-            finalLog = self.final_eval(targetBoxes.cpu() if targetBoxes is not None else None,gtGroups,gt_groups_adj,targetIndexToGroup,*final)
-            log.update(finalLog)
 
         got={}#outputBoxes, outputOffsets, relPred, relIndexes, bbPred, rel_prop_pred
         for name in get:
@@ -1933,8 +1943,14 @@ class GraphPairTrainer(BaseTrainer):
                  got[name] = allOutputBoxes
             elif name=='allEdgePredTypes':
                  got[name] = allEdgePredTypes
+            elif name=='allMissedRels':
+                 got[name] = allMissedRels
             elif name=='final':
                  got[name] = final
+            elif name=='final_edgePredTypes':
+                 got[name] = finalRelTypes
+            elif name=='final_missedRels':
+                 got[name] = finalMissedRels
             elif name != 'bb_stats' and name != 'nn_acc':
                 raise NotImplementedError('Cannot get [{}], unknown'.format(name))
         return losses, log, got
@@ -2072,6 +2088,7 @@ class GraphPairTrainer(BaseTrainer):
         relPrec=0
         if predPairs is None:
             predPairs=[]
+        rel_types=[]
         for n0,n1 in predPairs:
             if n0 not in predToGTGroup or n1 not in predToGTGroup:
                 print('ERROR, pair ({},{}) not foundi n predToGTGroup'.format(n0,n1))
@@ -2085,6 +2102,13 @@ class GraphPairTrainer(BaseTrainer):
                 if pair_id in gt_groups_adj:
                     relPrec+=1
                     gtRelHit.add((min(gtG0,gtG1),max(gtG0,gtG1)))
+                    rel_types.append('TP')
+                    continue
+            rel_types.append('FP')
+
+        #print('DEBUG true positives={}'.format(len(gtRelHit)))
+        #print('DEBUG false positives={}'.format(len(predPairs)-len(gtRelHit)))
+        #print('DEBUG false negatives={}'.format(len(gt_groups_adj)-len(gtRelHit)))
         if len(predPairs)>0:
             relPrec /= len(predPairs)
         else:
@@ -2101,7 +2125,7 @@ class GraphPairTrainer(BaseTrainer):
         else:
             log['final_rel_Fm']=0
 
-        return log
+        return log, [rel_types], gt_groups_adj.difference(gtRelHit)
 
     def characterization_eval(self,
                         allOutputBoxes,
@@ -2229,6 +2253,7 @@ class GraphPairTrainer(BaseTrainer):
         ###
         gtEdge2Pred = {}
         badPredEdges = []
+        false_pos_edges = []
         for ei,(n1,n2) in enumerate(finalEdgeIndexes):
             gtGId1 = predGroup2GT[n1]
             gtGId2 = predGroup2GT[n2]
@@ -2239,6 +2264,8 @@ class GraphPairTrainer(BaseTrainer):
                 double_rel_pred+=1
             elif edge in gtGroupAdj:
                 gtEdge2Pred[edge] = ei
+            else:
+                false_pos_edges.append(edge)
         missed_rels=gtGroupAdj.difference(set(gtEdge2Pred.keys()))
 
         
@@ -2352,15 +2379,22 @@ class GraphPairTrainer(BaseTrainer):
                                 prevEdgePred=[]
                                 #prevRelPred=[]
                                 prevPredGroups1 = gtGroups2Pred[giter-1][gtGId1]
-                                prevPredGroups2 = gtGroups2Pred[giter-1][gtGId1]
+                                prevPredGroups2 = gtGroups2Pred[giter-1][gtGId2]
                                 for ei,(n1,n2) in enumerate(allEdgeIndexes[giter-1]):
                                     if (n1 in prevPredGroups1 and n2 in prevPredGroups2) or (n2 in prevPredGroups1 and n1 in prevPredGroups2):
-                                        prevEdgePred.append(allEdgeScores[giter-1][ei]>self.model.keepEdgeThresh)
+                                        prevEdgePred.append(allEdgeScores[giter-1][ei]>self.model.keepEdgeThresh[giter-1])
                                         #prevRelPred.append(allRelScores[giter-1][ei]>self.model.keepRelThresh)
+                                assert(len(prevEdgePred)>0)
                                 assert(not any(prevEdgePred))
                                 missed_rel_from_pruned_edge[giter-1]+=1
 
                             break
+
+        for gtGId1,gtGId2 for false_pos_edges:
+            #is there a bad detection? or merge? These are hard to tell apart
+            #It's a bad merge if it would fine without a given detection
+            #it's a bad detection if there is no way to have combine detected elements to match
+            TODO
 
 
         print('double_rel_pred={}'.format(double_rel_pred))
