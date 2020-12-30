@@ -5,10 +5,11 @@ import timeit
 from utils import util
 from collections import defaultdict
 from evaluators.draw_graph import draw_graph
+import matplotlib.pyplot as plt
 from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist, AP_textLines, getTargIndexForPreds_iou, newGetTargIndexForPreds_iou, getTargIndexForPreds_dist, newGetTargIndexForPreds_textLines, computeAP
 from utils.group_pairing import getGTGroup, pure, purity
 from datasets.testforms_graph_pair import display
-import random, os
+import random, os, math
 
 from model.oversegment_loss import build_oversegmented_targets_multiscale
 from model.overseg_box_detector import build_box_predictions
@@ -2146,6 +2147,14 @@ class GraphPairTrainer(BaseTrainer):
         #go to last
         #find alignment
         #if rel is missing, 
+        false_pos_is_single=0
+        false_pos_group_involved=0
+        false_pos_inpure_group=0
+        false_pos_from_bad_class=0
+        false_pos_bad_node=0
+        false_pos_with_good_nodes=0
+        false_pos_with_misclassed_nodes=0
+
         double_rel_pred=0
         missed_rel_from_bad_detection=0
         missed_rel_from_bad_merge=0
@@ -2153,6 +2162,7 @@ class GraphPairTrainer(BaseTrainer):
         missed_rel_from_bad_group=0
         missed_rel_from_poor_alignement=0
         missed_rel_from_misclass=0
+        missed_rel_was_single=0
         missed_rel_from_pruned_edge=defaultdict(lambda: 0)
 
         #for each gt node, look through history. Was it found? Incorrectly merged? Grouped?
@@ -2225,14 +2235,41 @@ class GraphPairTrainer(BaseTrainer):
             targIndex = newGetTargIndexForPreds_iou(targetBoxes[0],finalOutputBoxes,0.4,numClasses,False)
         targIndex = targIndex.numpy()
         noClassTargIndex = noClassTargIndex.numpy()
+
+        #cacluate which pred bbs are close to eachother (for density measurement)
+        bb_centers = np.array([bb.getCenterPoint() for bb in finalOutputBoxes])
+        bb_lefts = np.array([bb.pairPoints()[0] for bb in finalOutputBoxes]).mean(axis=1)
+        bb_rights = np.array([bb.pairPoints()[1] for bb in finalOutputBoxes]).mean(axis=1)
+        dist_center_center = np.power(np.power(bb_centers[None,:,:]-bb_centers[:,None,:],2).sum(axis=2),0.5)
+        dist_center_left = np.power(np.power(bb_centers[None,:,:]-bb_lefts[:,None,:],2).sum(axis=2),0.5)
+        dist_center_right = np.power(np.power(bb_centers[None,:,:]-bb_rights[:,None,:],2).sum(axis=2),0.5)
+        dist_left_right = np.power(np.power(bb_lefts[None,:,:]-bb_rights[:,None,:],2).sum(axis=2),0.5)
+        dist_right_right = np.power(np.power(bb_rights[None,:,:]-bb_rights[:,None,:],2).sum(axis=2),0.5)
+        dist_left_left = np.power(np.power(bb_lefts[None,:,:]-bb_lefts[:,None,:],2).sum(axis=2),0.5)
+        d_thresh=50
+        bb_close = (dist_center_center<d_thresh)+(dist_center_left<d_thresh)+(dist_center_right<d_thresh)+(dist_left_right<d_thresh)+(dist_right_right<d_thresh)+(dist_left_left<d_thresh)
+
         predGroup2GT={}
         noClassPredGroup2GT={}
+        finalPurity=[]
+        finalNoClassPurity=[]
+        final_density=[]
+        final_node_center=[]
         for node in range(len(finalPredGroups)):
             predGroupT = [targIndex[bb] for bb in finalPredGroups[node] if targIndex[bb]>=0]
-            predGroup2GT[node] = getGTGroup(predGroupT,targetIndexToGroup)
+            predGroup2GT[node] = getGTGroup(predGroupT,targetIndexToGroup) if purity(predGroupT,targetIndexToGroup)>0.25 else -1
+            finalPurity.append(purity(predGroupT,targetIndexToGroup))
 
             noClassPredGroupT = [noClassTargIndex[bb] for bb in finalPredGroups[node] if noClassTargIndex[bb]>=0]
             noClassPredGroup2GT[node] = getGTGroup(noClassPredGroupT,targetIndexToGroup)
+            finalNoClassPurity.append(purity(noClassPredGroupT,targetIndexToGroup))
+            
+            all_close_bbs = set()
+            for bb in finalPredGroups[node]:
+                close_bbs = bb_close[bb].nonzero()[0]
+                all_close_bbs.update(obb for obb in close_bbs if obb not in finalPredGroups[node])
+            final_density.append(len(all_close_bbs))
+            final_node_center.append(bb_centers[finalPredGroups[node]].mean(axis=0))
 
         gtBB2Pred = [-1]*len(targetBoxes[0])
         for i,tInd in enumerate(targIndex):
@@ -2254,22 +2291,39 @@ class GraphPairTrainer(BaseTrainer):
         gtEdge2Pred = {}
         badPredEdges = []
         false_pos_edges = []
+        false_pos_distances = []
+        true_pos_distances = []
+        true_pos_all_densities=[]
+        false_pos_all_densities=[]
         for ei,(n1,n2) in enumerate(finalEdgeIndexes):
             gtGId1 = predGroup2GT[n1]
             gtGId2 = predGroup2GT[n2]
             edge = (min(gtGId1,gtGId2),max(gtGId1,gtGId2))
+            distance = math.sqrt(np.power(final_node_center[n1]-final_node_center[n2],2).sum())
             if edge in gtEdge2Pred:
                 #two predicted edges claiming the same gt edge
                 #this can occur if one of both of the GT groups is still split
                 double_rel_pred+=1
             elif edge in gtGroupAdj:
                 gtEdge2Pred[edge] = ei
+                true_pos_distances.append(distance)
+                true_pos_all_densities.append(max(final_density[n1],final_density[n2]))
             else:
-                false_pos_edges.append(edge)
+                false_pos_edges.append((ei,n1,n2)+edge)
+                false_pos_distances.append(distance)
+                false_pos_all_densities.append(max(final_density[n1],final_density[n2]))
         missed_rels=gtGroupAdj.difference(set(gtEdge2Pred.keys()))
 
         
         for gtGId1,gtGId2 in missed_rels:
+            #is this a single/isolated relationship?
+            is_single = True
+            for (gn1,gn2) in gtGroupAdj:
+                if (gn1==gtGId1 and gn2!=gtGId2) or (gn1==gtGId2 and gn2!=gtGId1) or (gn2==gtGId1 and gn1!=gtGId2) or (gn2==gtGId2 and gn1!=gtGId1):
+                    is_single=False
+                    break
+            if is_single:
+                missed_rel_was_single+=1
             found1 = any([gtBBs2Pred[0][gtbb]!=-1 for gtbb in gtGroups[gtGId1]])
             found2 = any([gtBBs2Pred[0][gtbb]!=-1 for gtbb in gtGroups[gtGId2]])
             if not found1 or not found2:
@@ -2390,14 +2444,63 @@ class GraphPairTrainer(BaseTrainer):
 
                             break
 
-        for gtGId1,gtGId2 for false_pos_edges:
+        for pei,pn1,pn2,gtGId1,gtGId2 in false_pos_edges:
+            #is it single/isolated? (are there any connected predicted edges?)
+            is_single=True
+            for n1,n2 in finalEdgeIndexes:
+                if (pn1==n1 and pn2!=n2) or (pn1==n2 and pn2!=n1) or (pn2==n1 and pn1!=n2) or (pn2==n2 and pn1!=n1):
+                    is_single=False
+                    break
+            if is_single:
+                false_pos_is_single+=1
+
+            impure_group=False
+            if len(finalPredGroups[pn1])>1 or len(finalPredGroups[pn2])>1 or (gtGId1!=-1 and len(gtGroups[gtGId1])>1) or (gtGId2!=-1 and len(gtGroups[gtGId2])>1):
+                false_pos_group_involved+=1
+
+                if (finalNoClassPurity[pn1]<0.99 and len(finalPredGroups[pn1])>1) or (finalNoClassPurity[pn2]<0.99 and len(finalPredGroups[pn2])>1):
+                    false_pos_inpure_group+=1
+                    impure_group=True
+                #print('fp group {}({}) -- {}({})'.format(bb_centers[finalPredGroups[pn1][0]],finalNoClassPurity[pn1],bb_centers[finalPredGroups[pn2][0]],finalNoClassPurity[pn2]))
+                #import pdb;pdb.set_trace()
+
+
             #is there a bad detection? or merge? These are hard to tell apart
             #It's a bad merge if it would fine without a given detection
             #it's a bad detection if there is no way to have combine detected elements to match
-            TODO
+            if gtGId1==-1 or gtGId2==-2:
+                new_gt1 = noClassPredGroup2GT[pn1]
+                new_gt2 = noClassPredGroup2GT[pn2]
+                if new_gt1!=-1 and new_gt2!=-1 and (min(new_gt1,new_gt2),max(new_gt1,new_gt2)) in gtGroupAdj:
+                    false_pos_from_bad_class+=1
+                elif not impure_group and (new_gt1==-1 or new_gt2==-1):
+                    false_pos_bad_node+=1
+                    print('fp group {} -- {}'.format(bb_centers[finalPredGroups[pn1][0]],bb_centers[finalPredGroups[pn2][0]]))
+                elif not impure_group:
+                    false_pos_with_misclassed_nodes+=1
+            elif not impure_group:
+                false_pos_with_good_nodes+=1
+                
+            #TODO, chickening out and just saying "bad node"
 
+        num_true_pos = len(true_pos_distances)
+        num_false_pos = len(false_pos_distances)
+        num_false_neg = len(missed_rels)
+        print('true positives = {}'.format(num_true_pos))
+        print('false positives = {}'.format(num_false_pos))
+        print('false negatives = {}'.format(num_false_neg))
+
+        print('false_pos_is_single={}'.format(false_pos_is_single))
+        print('false_pos_group_involved={}'.format(false_pos_group_involved))
+        print('false_pos_inpure_group={}'.format(false_pos_inpure_group))
+        print('false_pos_from_bad_class={}'.format(false_pos_from_bad_class))
+        print('false_pos_bad_node={}'.format(false_pos_bad_node))
+        print('false_pos_with_good_nodes={}'.format(false_pos_with_good_nodes))
+        print('false_pos_with_misclassed_nodes={}'.format(false_pos_with_misclassed_nodes))
 
         print('double_rel_pred={}'.format(double_rel_pred))
+        print('missed_rel_was_single={}'.format(missed_rel_was_single))
+
         all_sum=0
         for giter,missed in missed_rel_from_pruned_edge.items():
             print('missed_rel_from_pruned_edge[{}]={}'.format(giter,missed))
@@ -2416,3 +2519,23 @@ class GraphPairTrainer(BaseTrainer):
         print('missed_rel_from_misclass={}'.format(missed_rel_from_misclass))
         
         print('accounted missed={}, unaccounted missed={}'.format(all_sum,len(missed_rels)-all_sum))
+
+        plt.figure(1)
+        #max_distance = max(true_pos_distances+false_pos_distances)
+        #bins = np.linspace(0, max_distance, 10)
+        plt.hist([true_pos_distances,false_pos_distances],bins=10,label=['true_pos','false_pos'],alpha=0.5)
+        plt.xlabel('distance')
+        plt.ylabel('count')
+        plt.title('rel_distances')
+        plt.legend(loc='upper right')
+
+        plt.figure(2)
+        #max_den = max(true_pos_all_densities+false_pos_all_densities)
+        #bins = np.linspace(0, max_den, 5)
+        plt.hist([true_pos_all_densities,false_pos_all_densities],bins=5,label=['true_pos','false_pos'],alpha=0.5)
+        plt.xlabel('density')
+        plt.ylabel('count')
+        plt.title('densities')
+        plt.legend(loc='upper right')
+
+        plt.show()
