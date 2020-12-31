@@ -290,7 +290,9 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                     elif edgeClassification[0][0][i]=='FN':
                         lineColor = (edgePred[i,-1,0].item(),0,0)
                     else: #is false positive
-                        assert(edgeClassification[0][0][i]=='FP')
+                        #assert(edgeClassification[0][0][i]=='FP')
+                        if edgeClassification[0][0][i]!='FP':
+                            print('ERROR, edge classsification is {}, but expected to be FP'.format(edgeClassification[0][0][i]))
                         lineColor = (edgePred[i,-1,0].item(),edgePred[i,-1,0].item(),0)
                     boxColors=[]
                     for predType,pred in edgeClassification:

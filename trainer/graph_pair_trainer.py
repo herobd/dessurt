@@ -119,6 +119,10 @@ class GraphPairTrainer(BaseTrainer):
 
         #t#self.opt_history = defaultdict(list)#t#
         self.do_characterization = config['characterization'] if 'characterization' in config else False
+        if self.do_characterization:
+            self.characterization_sum=defaultdict(int)
+            self.characterization_form=defaultdict(list)
+            self.characterization_hist=defaultdict(list)
 
     def _to_tensor(self, instance):
         image = instance['img']
@@ -1434,6 +1438,7 @@ class GraphPairTrainer(BaseTrainer):
 
 
     def newRun(self,instance,useGT,threshIntur=None,get=[]):
+        assert(not self.model_ref.predNN)
         numClasses = len(self.classMap)
         image, targetBoxes, adj, target_num_neighbors = self._to_tensor(instance)
         gtGroups = instance['gt_groups']
@@ -1486,20 +1491,6 @@ class GraphPairTrainer(BaseTrainer):
             else:
                 targetBoxes_changed=targetBoxes
 
-            #if self.iteration>=self.merge_first_only_until:
-            #    with profiler.profile(profile_memory=True, record_shapes=True) as prof:
-            #        allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred,merge_prop_scores, final = self.model(
-            #                            image,
-            #                            targetBoxes_changed,
-            #                            target_num_neighbors,
-            #                            True,
-            #                            otherThresh=self.conf_thresh_init, 
-            #                            otherThreshIntur=threshIntur, 
-            #                            hard_detect_limit=self.train_hard_detect_limit,
-            #                            gtTrans = gtTrans,
-            #                            dont_merge = self.iteration<self.merge_first_only_until)
-            #        print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
-            #else:
             allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred,merge_prop_scores, final = self.model(
                                 image,
                                 targetBoxes_changed,
@@ -1578,7 +1569,6 @@ class GraphPairTrainer(BaseTrainer):
                 elif (graphIteration==0 and not self.model_ref.merge_first) or (graphIteration==1 and self.model_ref.merge_first):
                     proposedInfo=proposedInfoI
 
-                assert(not self.model_ref.predNN)
                 if self.model_ref.predClass and nodePred is not None:
                     node_pred_use_index=[]
                     node_gt_use_class_indexes=[]
@@ -1755,19 +1745,6 @@ class GraphPairTrainer(BaseTrainer):
                 #    loss = relLoss
 
 
-                if self.model_ref.predNN and nodePredNN_use is not None and nodePredNN_use.size(0)>0:
-                    alignedNN_use = alignedNN_use[:,None] #introduce "time" dimension to broadcast
-                    nn_loss_final = self.loss['nnFinal'](nodePredNN_use,alignedNN_use)
-                    losses['nnFinalLoss']+=nn_loss_final
-                    #nn_loss_final *= self.lossWeights['nn']
-                    
-                    #if loss is not None:
-                    #    loss += nn_loss_final
-                    #else:
-                    #    loss = nn_loss_final
-                    #nn_loss_final = nn_loss_final.item()
-                #else:
-                    #nn_loss_final=0
 
                 if self.model_ref.predClass and nodePredClass_use is not None and nodePredClass_use.size(0)>0:
                     alignedClass_use = alignedClass_use[:,None] #introduce "time" dimension to broadcast
@@ -1896,12 +1873,6 @@ class GraphPairTrainer(BaseTrainer):
                 log['class loss improvement (neg is good)'] = losses['classFinalLoss'].item()-class_loss
 
 
-        if 'nn_acc' in get:
-            if self.model_ref.predNN and bbPred is not None:
-                predNN_p=bbPred[:,-1,0]
-                diffs=torch.abs(predNN_p-target_num_neighbors[0][bbAlignment].float())
-                nn_acc = (diffs<0.5).float().mean().item()
-                log['nn_acc']=nn_acc
 
         if proposedInfo is not None:
             propRecall,propPrec = proposedInfo[2:4]
@@ -2143,7 +2114,42 @@ class GraphPairTrainer(BaseTrainer):
                         gtGroupAdj,
                         ):
 
-        numClasses = self.model_ref.numBBTypes
+        numClassesFull = self.model_ref.numBBTypes
+        numClasses = len(self.scoreClassMap)
+
+        #Remove blanks
+        if 'blank' in self.classMap:
+            blank_index = self.classMap['blank']
+            if targetBoxes is not None:
+                gtNotBlanks = targetBoxes[0,:,blank_index]<0.5
+                targetBoxes=targetBoxes[:,gtNotBlanks]
+            if finalOutputBoxes is not None and len(finalOutputBoxes)>0:
+                if self.model_ref.useCurvedBBs:
+                    finalOutputBoxesNotBlanks=torch.FloatTensor([box.getCls() for box in finalOutputBoxes])
+                    finalOutputBoxesNotBlanks=finalOutputBoxesNotBlanks[:,blank_index-13]<0.5
+                    finalOutputBoxes = [box for i,box in enumerate(finalOutputBoxes) if finalOutputBoxesNotBlanks[i]]
+                else:
+                    finalOutputBoxesNotBlanks=finalOutputBoxes[:,1+blank_index-8]<0.5
+                    finalOutputBoxes = finalOutputBoxes[finalOutputBoxesNotBlanks]
+                newToOldOutputBoxes = torch.arange(0,len(finalOutputBoxesNotBlanks),dtype=torch.int64)[finalOutputBoxesNotBlanks]
+                oldToNewOutputBoxes = {o.item():n for n,o in enumerate(newToOldOutputBoxes)}
+                if predGroups is not None:
+                    predGroups = [[oldToNewOutputBoxes[bId] for bId in group if bId in oldToNewOutputBoxes] for group in predGroups]
+                    newToOldGroups = []
+                    newGroups = []
+                    for gId,group in enumerate(predGroups):
+                        if len(group)>0:
+                            newGroups.append(group)
+                            newToOldGroups.append(gId)
+                    oldToNewGroups = {o:n for n,o in enumerate(newToOldGroups)}
+                    finalEdgeIndexes = [(oldToNewGroups[g1],oldToNewGroups[g2]) for g1,g2 in finalEdgeIndexes if g1 in oldToNewGroups and g2 in oldToNewGroups]
+                    for a,b in finalEdgeIndexes:
+                        assert(a < len(predGroups))
+                        assert(b < len(predGroups))
+                if predTrans is not None:
+                    predTrans = [predTrans[newToOldOutputBoxes[n]] for n in range(len(newToOldOutputBoxes))]
+        targetBoxes=targetBoxes[0]
+
         #go to last
         #find alignment
         #if rel is missing, 
@@ -2154,6 +2160,9 @@ class GraphPairTrainer(BaseTrainer):
         false_pos_bad_node=0
         false_pos_with_good_nodes=0
         false_pos_with_misclassed_nodes=0
+        inconsistent_edges=0
+        false_pos_consistent_header_rels=0
+        false_pos_consistent_question_rels=0
 
         double_rel_pred=0
         missed_rel_from_bad_detection=0
@@ -2164,6 +2173,15 @@ class GraphPairTrainer(BaseTrainer):
         missed_rel_from_misclass=0
         missed_rel_was_single=0
         missed_rel_from_pruned_edge=defaultdict(lambda: 0)
+        missed_header_rels=0
+        missed_question_rels=0
+        hit_header_rels=0
+        hit_question_rels=0
+
+        false_pos_keep_scores=[]
+        true_pos_keep_scores=[]
+        false_pos_rel_scores=[]
+        true_pos_rel_scores=[]
 
         #for each gt node, look through history. Was it found? Incorrectly merged? Grouped?
         #   found: a partail detection
@@ -2180,12 +2198,12 @@ class GraphPairTrainer(BaseTrainer):
         num_giter = len(allOutputBoxes)
         for graphIteration,(outputBoxes,edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allOutputBoxes,allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
             if self.model_ref.useCurvedBBs:
-                targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,self.gt_bb_align_IOcU_thresh,numClasses,True)
+                targIndex = newGetTargIndexForPreds_textLines(targetBoxes,outputBoxes,self.gt_bb_align_IOcU_thresh,numClasses,True)
             elif self.model_ref.rotation:
                 assert(False and 'untested and should be changed to reflect new newGetTargIndexForPreds_s')
-                targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
+                targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes,outputBoxes,1.1,numClasses,hard_thresh=False)
             else:
-                targIndex = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.5,numClasses,True)
+                targIndex = newGetTargIndexForPreds_iou(targetBoxes,outputBoxes,0.5,numClasses,True)
             targIndex = targIndex.numpy()
 
             predGroup2GT={}
@@ -2194,7 +2212,7 @@ class GraphPairTrainer(BaseTrainer):
                 predGroup2GT[node] = getGTGroup(predGroupT,targetIndexToGroup)
             #predGroups2GT.append(predGroup2GT)
 
-            gtBB2Pred = [-1]*len(targetBoxes[0])
+            gtBB2Pred = [-1]*len(targetBoxes)
             for i,tInd in enumerate(targIndex):
                 if tInd>=0:
                     gtBB2Pred[tInd]=i
@@ -2226,20 +2244,29 @@ class GraphPairTrainer(BaseTrainer):
 
         #final, we'll count it as additional graph iteration
         if self.model_ref.useCurvedBBs:
-            targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],finalOutputBoxes,0.5,numClasses,False)
-            noClassTargIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],finalOutputBoxes,0.5,0,False)
+            targIndex = newGetTargIndexForPreds_textLines(targetBoxes,finalOutputBoxes,0.5,numClasses,False)
+            noClassTargIndex = newGetTargIndexForPreds_textLines(targetBoxes,finalOutputBoxes,0.5,0,False)
         elif self.model_ref.rotation:
             assert(False and 'untested and should be changed to reflect new newGetTargIndexForPreds_s')
-            targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
+            targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes,outputBoxes,1.1,numClasses,hard_thresh=False)
         else:
-            targIndex = newGetTargIndexForPreds_iou(targetBoxes[0],finalOutputBoxes,0.4,numClasses,False)
+            targIndex = newGetTargIndexForPreds_iou(targetBoxes,finalOutputBoxes,0.4,numClasses,False)
+            noClassTargIndex = newGetTargIndexForPreds_iou(targetBoxes,finalOutputBoxes,0.4,0,False)
         targIndex = targIndex.numpy()
         noClassTargIndex = noClassTargIndex.numpy()
 
         #cacluate which pred bbs are close to eachother (for density measurement)
-        bb_centers = np.array([bb.getCenterPoint() for bb in finalOutputBoxes])
-        bb_lefts = np.array([bb.pairPoints()[0] for bb in finalOutputBoxes]).mean(axis=1)
-        bb_rights = np.array([bb.pairPoints()[1] for bb in finalOutputBoxes]).mean(axis=1)
+        if self.model_ref.useCurvedBBs:
+            bb_centers = np.array([bb.getCenterPoint() for bb in finalOutputBoxes])
+            bb_lefts = np.array([bb.pairPoints()[0] for bb in finalOutputBoxes]).mean(axis=1)
+            bb_rights = np.array([bb.pairPoints()[1] for bb in finalOutputBoxes]).mean(axis=1)
+        else:
+            bb_centers = finalOutputBoxes[:,0:2]
+            assert(not self.model_ref.rotation)
+            bb_lefts = bb_centers.clone()
+            bb_lefts[:,0]-=finalOutputBoxes[:,4]
+            bb_rights = bb_centers.clone()
+            bb_rights[:,0]+=finalOutputBoxes[:,4]
         dist_center_center = np.power(np.power(bb_centers[None,:,:]-bb_centers[:,None,:],2).sum(axis=2),0.5)
         dist_center_left = np.power(np.power(bb_centers[None,:,:]-bb_lefts[:,None,:],2).sum(axis=2),0.5)
         dist_center_right = np.power(np.power(bb_centers[None,:,:]-bb_rights[:,None,:],2).sum(axis=2),0.5)
@@ -2271,11 +2298,11 @@ class GraphPairTrainer(BaseTrainer):
             final_density.append(len(all_close_bbs))
             final_node_center.append(bb_centers[finalPredGroups[node]].mean(axis=0))
 
-        gtBB2Pred = [-1]*len(targetBoxes[0])
+        gtBB2Pred = [-1]*len(targetBoxes)
         for i,tInd in enumerate(targIndex):
             if tInd>=0:
                 gtBB2Pred[tInd]=i
-        finalNoClassGtBB2Pred = [-1]*len(targetBoxes[0])
+        finalNoClassGtBB2Pred = [-1]*len(targetBoxes)
         for i,tInd in enumerate(noClassTargIndex):
             if tInd>=0:
                 finalNoClassGtBB2Pred[tInd]=i
@@ -2287,7 +2314,27 @@ class GraphPairTrainer(BaseTrainer):
         gtGroups2Pred.append(gtGroup2Pred)
 
         allEdgeIndexes.append(finalEdgeIndexes)
+
         ###
+        assert(len(finalOutputBoxes) == len(allOutputBoxes[-1])) #I'm assuming no merges take place on final graph adjustment
+        #map from final bbs to last bbs
+        finalBB2LastBB={}
+        for finalI, bbF in enumerate(finalOutputBoxes):
+            if self.model_ref.useCurvedBBs:
+                ppF = bbF.polyPoints()
+            else:
+                ppF = bbF[:5]
+            for lastI, bbL in enumerate(allOutputBoxes[-1]):
+                
+                if self.model_ref.useCurvedBBs:
+                    ppL = bbL.polyPoints()
+                else:
+                    ppL = bbL[:5]
+                if len(ppF)==len(ppL):
+                    max_diff = np.abs(ppF-ppL).max()
+                    if max_diff<0.01:
+                        finalBB2LastBB[finalI]=lastI
+
         gtEdge2Pred = {}
         badPredEdges = []
         false_pos_edges = []
@@ -2300,6 +2347,7 @@ class GraphPairTrainer(BaseTrainer):
             gtGId2 = predGroup2GT[n2]
             edge = (min(gtGId1,gtGId2),max(gtGId1,gtGId2))
             distance = math.sqrt(np.power(final_node_center[n1]-final_node_center[n2],2).sum())
+            is_false_pos=False
             if edge in gtEdge2Pred:
                 #two predicted edges claiming the same gt edge
                 #this can occur if one of both of the GT groups is still split
@@ -2312,10 +2360,115 @@ class GraphPairTrainer(BaseTrainer):
                 false_pos_edges.append((ei,n1,n2)+edge)
                 false_pos_distances.append(distance)
                 false_pos_all_densities.append(max(final_density[n1],final_density[n2]))
+                is_false_pos=True
+
+            #is this relationship consistent with classes
+            if self.model_ref.useCurvedBBs:
+                classIdx1 = finalOutputBoxes[finalPredGroups[n1][0]].getCls()[:numClasses].argmax()
+                classIdx2 = finalOutputBoxes[finalPredGroups[n2][0]].getCls()[:numClasses].argmax()
+            else:
+                classIdx1 = finalOutputBoxes[finalPredGroups[n1][0],5:5+numClasses].argmax()
+                classIdx2 = finalOutputBoxes[finalPredGroups[n2][0],5:5+numClasses].argmax()
+            tClass = min(classIdx1,classIdx2)
+            bClass = max(classIdx1,classIdx2)
+            is_consistent=True
+            if not (classIdx1!=classIdx2 and ((tClass==0 and bClass==1) or (tClass==1 and bClass==2))):
+                inconsistent_edges+=1
+                is_consistent=False
+            #else:
+            #    #check neighbor edges
+            #    for aei,(an1,an2) in enumerate(finalEdgeIndexes):
+            #        if aei!=ei and (an1==n1  or an2==n1 or an1==n2 or an2==n2):
+            #            #this is a shared edge. Check each consistent scenario
+            #            an1_class=finalOutputBoxes[finalPredGroups[an1][0]].getCls()[:numClasses].argmax()
+            #            an2_class=finalOutputBoxes[finalPredGroups[an2][0]].getCls()[:numClasses].argmax()
+            #            if an1_class==tClass and an1_class==1 and an2_class==0:
+            #                continue
+            #            elif an1_class==tClass and an1_class==0 and an2_class==1:
+            #                continue
+            #            elif an1_class==bClass and an1_class==1 and an2_class==2:
+            #                continue
+            #            elif an1_class==bClass and an1_class==0 and an2_class==1:
+            #                continue
+            #            elif an2_class==tClass and an2_class==1 and an1_class==0:
+            #                continue
+            #            elif an2_class==tClass and an2_class==0 and an1_class==1:
+            #                continue
+            #            elif an2_class==bClass and an2_class==1 and an1_class==2:
+            #                continue
+            #            elif an2_class==bClass and an2_class==0 and an1_class==1:
+            #                continue
+
+            #            inconsistent_edges+=1
+            #            is_consistent=False
+            #            break
+            if is_false_pos and is_consistent:
+                if tClass==0 and bClass==1:
+                    false_pos_consistent_header_rels+=1
+                elif tClass==1 and bClass==2:
+                    false_pos_consistent_question_rels+=1
+
+
+            #find the confidence value (keep or rel?)
+            lastBBs1 = set(finalBB2LastBB[bb] for bb in finalPredGroups[n1])
+            lastBBs2 = set(finalBB2LastBB[bb] for bb in finalPredGroups[n2])
+            #find most consistent last group
+            for lgi, bbs in enumerate(allPredGroups[-1]):
+                bbs=set(bbs)
+                same1 = len(bbs.intersection(lastBBs1))
+                if same1/max(len(bbs),len(lastBBs1))>0.5:
+                    lastNode1=lgi
+
+                same2 = len(bbs.intersection(lastBBs2))
+                if same2/max(len(bbs),len(lastBBs2))>0.5:
+                    lastNode2=lgi
+
+            try:
+                ei = allEdgeIndexes[-1].index((min(lastNode1,lastNode2),max(lastNode1,lastNode2)))
+                keep = allEdgeScores[-1][ei] #allEdgePred[-1][ei,0]
+                rel = allRelScores[-1][ei]
+                if is_false_pos:
+                    false_pos_keep_scores.append(keep)
+                    false_pos_rel_scores.append(rel)
+                else:
+                    true_pos_keep_scores.append(keep)
+                    true_pos_rel_scores.append(rel)
+            except ValueError:
+                pass
+                    
+                    
+
         missed_rels=gtGroupAdj.difference(set(gtEdge2Pred.keys()))
+
+
+        for gtGId1,gtGId2 in gtEdge2Pred.keys():
+            classIdx1 = targetBoxes[gtGroups[gtGId1][0],13:13+numClasses].argmax()
+            classIdx2 = targetBoxes[gtGroups[gtGId2][0],13:13+numClasses].argmax()
+            assert(classIdx1!=classIdx2)
+            minIdx = min(classIdx1,classIdx2)
+            maxIdx = max(classIdx1,classIdx2)
+            if minIdx==0 and maxIdx==1:
+                hit_header_rels+=1
+            elif minIdx==1 and maxIdx==2:
+                hit_question_rels+=1
+            else:
+                assert(False)
+        
 
         
         for gtGId1,gtGId2 in missed_rels:
+            classIdx1 = targetBoxes[gtGroups[gtGId1][0],13:13+numClasses].argmax()
+            classIdx2 = targetBoxes[gtGroups[gtGId2][0],13:13+numClasses].argmax()
+            assert(classIdx1!=classIdx2)
+            minIdx = min(classIdx1,classIdx2)
+            maxIdx = max(classIdx1,classIdx2)
+            if minIdx==0 and maxIdx==1:
+                missed_header_rels+=1
+            elif minIdx==1 and maxIdx==2:
+                missed_question_rels+=1
+            else:
+                assert(False)
+
             #is this a single/isolated relationship?
             is_single = True
             for (gn1,gn2) in gtGroupAdj:
@@ -2324,6 +2477,8 @@ class GraphPairTrainer(BaseTrainer):
                     break
             if is_single:
                 missed_rel_was_single+=1
+
+
             found1 = any([gtBBs2Pred[0][gtbb]!=-1 for gtbb in gtGroups[gtGId1]])
             found2 = any([gtBBs2Pred[0][gtbb]!=-1 for gtbb in gtGroups[gtGId2]])
             if not found1 or not found2:
@@ -2350,8 +2505,7 @@ class GraphPairTrainer(BaseTrainer):
                                 missed_rel_from_bad_merge+=1
                             else:
                                 #was it wrong class?
-                                if noClassFound1:
-                                    assert(found2 or noClassFound2)
+                                if noClassFound1 and (found2 or noClassFound2):
                                     missed_rel_from_misclass+=1
                                 else:
                                     missed_rel_from_poor_alignement+=1
@@ -2374,8 +2528,7 @@ class GraphPairTrainer(BaseTrainer):
                                 missed_rel_from_bad_merge+=1
                             else:
                                 #was it wrong class?
-                                if noClassFound2:
-                                    assert(found1 or noClassFound1)
+                                if noClassFound2 and (found1 or noClassFound1):
                                     missed_rel_from_misclass+=1
                                 else:
                                     missed_rel_from_poor_alignement+=1
@@ -2454,6 +2607,7 @@ class GraphPairTrainer(BaseTrainer):
             if is_single:
                 false_pos_is_single+=1
 
+
             impure_group=False
             if len(finalPredGroups[pn1])>1 or len(finalPredGroups[pn2])>1 or (gtGId1!=-1 and len(gtGroups[gtGId1])>1) or (gtGId2!=-1 and len(gtGroups[gtGId2])>1):
                 false_pos_group_involved+=1
@@ -2475,7 +2629,7 @@ class GraphPairTrainer(BaseTrainer):
                     false_pos_from_bad_class+=1
                 elif not impure_group and (new_gt1==-1 or new_gt2==-1):
                     false_pos_bad_node+=1
-                    print('fp group {} -- {}'.format(bb_centers[finalPredGroups[pn1][0]],bb_centers[finalPredGroups[pn2][0]]))
+                    #print('fp group {} -- {}'.format(bb_centers[finalPredGroups[pn1][0]],bb_centers[finalPredGroups[pn2][0]]))
                 elif not impure_group:
                     false_pos_with_misclassed_nodes+=1
             elif not impure_group:
@@ -2486,6 +2640,88 @@ class GraphPairTrainer(BaseTrainer):
         num_true_pos = len(true_pos_distances)
         num_false_pos = len(false_pos_distances)
         num_false_neg = len(missed_rels)
+        num_pos = num_true_pos+num_false_pos
+
+
+        self.characterization_sum['num_true_pos']+=num_true_pos 
+        self.characterization_sum['num_false_pos']+=num_false_pos
+        self.characterization_sum['num_false_neg']+=num_false_neg
+
+        self.characterization_sum['false_pos_is_single']+=false_pos_is_single
+        self.characterization_sum['false_pos_group_involved']+=false_pos_group_involved
+        self.characterization_sum['false_pos_inpure_group']+=false_pos_inpure_group
+        self.characterization_sum['false_pos_from_bad_class']+=false_pos_from_bad_class
+        self.characterization_sum['false_pos_bad_node']+=false_pos_bad_node
+        self.characterization_sum['false_pos_with_good_nodes']+=false_pos_with_good_nodes
+        self.characterization_sum['false_pos_with_misclassed_nodes']+=false_pos_with_misclassed_nodes
+
+        self.characterization_sum['inconsistent_edges']+=inconsistent_edges
+        self.characterization_sum['false_pos_consistent_header_rels']+=false_pos_consistent_header_rels
+        self.characterization_sum['false_pos_consistent_question_rels']+=false_pos_consistent_question_rels
+        self.characterization_sum['missed_header_rels']+=missed_header_rels
+        self.characterization_sum['missed_question_rels']+=missed_question_rels
+        self.characterization_sum['hit_header_rels']+=hit_header_rels
+        self.characterization_sum['hit_question_rels']+=hit_question_rels
+
+        self.characterization_sum['double_rel_pred']+=double_rel_pred
+        self.characterization_sum['missed_rel_was_single']+=missed_rel_was_single
+
+
+        self.characterization_sum['missed_rel_from_bad_detection']+=missed_rel_from_bad_detection
+        self.characterization_sum['missed_rel_from_bad_merge']+=missed_rel_from_bad_merge
+        self.characterization_sum['missed_rel_from_missed_prop']+=missed_rel_from_missed_prop
+        self.characterization_sum['missed_rel_from_bad_group']+=missed_rel_from_bad_group
+        self.characterization_sum['missed_rel_from_poor_alignement']+=missed_rel_from_poor_alignement
+        self.characterization_sum['missed_rel_from_misclass']+=missed_rel_from_misclass
+
+        
+        self.characterization_form['false_pos_is_single'].append(false_pos_is_single/num_false_pos if num_false_pos>0 else 0)
+        self.characterization_form['false_pos_group_involved'].append(false_pos_group_involved/num_false_pos if num_false_pos>0 else 0)
+        self.characterization_form['false_pos_inpure_group'].append(false_pos_inpure_group/num_false_pos if num_false_pos>0 else 0)
+        self.characterization_form['false_pos_from_bad_class'].append(false_pos_from_bad_class/num_false_pos if num_false_pos>0 else 0)
+        self.characterization_form['false_pos_bad_node'].append(false_pos_bad_node/num_false_pos if num_false_pos>0 else 0)
+        self.characterization_form['false_pos_with_good_nodes'].append(false_pos_with_good_nodes/num_false_pos if num_false_pos>0 else 0)
+        self.characterization_form['false_pos_with_misclassed_nodes'].append(false_pos_with_misclassed_nodes/num_false_pos if num_false_pos>0 else 0)
+
+        self.characterization_form['inconsistent_edges'].append(inconsistent_edges/(num_pos) if (num_pos)>0 else 0)
+        self.characterization_form['false_pos_consistent_header_rels'].append(false_pos_consistent_header_rels/num_false_pos if num_false_pos>0 else 0)
+        self.characterization_form['false_pos_consistent_question_rels'].append(false_pos_consistent_question_rels/num_false_pos if num_false_pos>0 else 0)
+        self.characterization_form['missed_header_rels'].append(missed_header_rels/num_false_neg if num_false_neg>0 else 0)
+        self.characterization_form['missed_question_rels'].append(missed_question_rels/num_false_neg if num_false_neg>0 else 0)
+        self.characterization_form['hit_header_rels'].append(hit_header_rels/num_true_pos if num_true_pos>0 else 0)
+        self.characterization_form['hit_question_rels'].append(hit_question_rels/num_true_pos if num_true_pos>0 else 0)
+
+        self.characterization_form['double_rel_pred'].append(double_rel_pred/num_pos if num_pos>0 else 0)
+        self.characterization_form['missed_rel_was_single'].append(missed_rel_was_single/num_false_neg if num_false_neg>0 else 0)
+
+
+        self.characterization_form['missed_rel_from_bad_detection'].append(missed_rel_from_bad_detection/num_false_neg if num_false_neg>0 else 0)
+        self.characterization_form['missed_rel_from_bad_merge'].append(missed_rel_from_bad_merge/num_false_neg if num_false_neg>0 else 0)
+        self.characterization_form['missed_rel_from_missed_prop'].append(missed_rel_from_missed_prop/num_false_neg if num_false_neg>0 else 0)
+        self.characterization_form['missed_rel_from_bad_group'].append(missed_rel_from_bad_group/num_false_neg if num_false_neg>0 else 0)
+        self.characterization_form['missed_rel_from_poor_alignement'].append(missed_rel_from_poor_alignement/num_false_neg if num_false_neg>0 else 0)
+        self.characterization_form['missed_rel_from_misclass'].append(missed_rel_from_misclass/num_false_neg if num_false_neg>0 else 0)
+
+        all_sum=0
+        for giter,missed in missed_rel_from_pruned_edge.items():
+            self.characterization_sum['missed_rel_from_pruned_edge_{}'.format(giter)]+=missed
+            self.characterization_form['missed_rel_from_pruned_edge_{}'.format(giter)].append(missed/num_false_neg)
+            all_sum+=missed
+        self.characterization_sum['missed_rel_from_pruned_edge_all']+=all_sum
+        self.characterization_form['missed_rel_from_pruned_edge_all'].append(all_sum/num_false_neg if num_false_neg>0 else 0)
+
+        self.characterization_hist['true_pos_distances']+=true_pos_distances
+        self.characterization_hist['false_pos_distances']+=false_pos_distances
+        self.characterization_hist['true_pos_all_densities']+=true_pos_all_densities
+        self.characterization_hist['false_pos_all_densities']+=false_pos_all_densities
+        self.characterization_hist['true_pos_keep_scores']+=true_pos_keep_scores
+        self.characterization_hist['false_pos_keep_scores']+=false_pos_keep_scores
+        self.characterization_hist['true_pos_rel_scores']+=true_pos_rel_scores
+        self.characterization_hist['false_pos_rel_scores']+=false_pos_rel_scores
+        #@#####
+        return
+        #######
+
         print('true positives = {}'.format(num_true_pos))
         print('false positives = {}'.format(num_false_pos))
         print('false negatives = {}'.format(num_false_neg))
@@ -2497,6 +2733,14 @@ class GraphPairTrainer(BaseTrainer):
         print('false_pos_bad_node={}'.format(false_pos_bad_node))
         print('false_pos_with_good_nodes={}'.format(false_pos_with_good_nodes))
         print('false_pos_with_misclassed_nodes={}'.format(false_pos_with_misclassed_nodes))
+
+        print('inconsistent_edges={}'.format(inconsistent_edges))
+        print('false_pos_consistent_header_rels={}'.format(false_pos_consistent_header_rels))
+        print('false_pos_consistent_question_rels={}'.format(false_pos_consistent_question_rels))
+        print('missed_header_rels={}'.format(missed_header_rels))
+        print('missed_question_rels={}'.format(missed_question_rels))
+        print('hit_header_rels={}'.format(hit_header_rels))
+        print('hit_question_rels={}'.format(hit_question_rels))
 
         print('double_rel_pred={}'.format(double_rel_pred))
         print('missed_rel_was_single={}'.format(missed_rel_was_single))
@@ -2523,7 +2767,7 @@ class GraphPairTrainer(BaseTrainer):
         plt.figure(1)
         #max_distance = max(true_pos_distances+false_pos_distances)
         #bins = np.linspace(0, max_distance, 10)
-        plt.hist([true_pos_distances,false_pos_distances],bins=10,label=['true_pos','false_pos'],alpha=0.5)
+        plt.hist([true_pos_distances,false_pos_distances],bins=10,label=['true_pos','false_pos'])
         plt.xlabel('distance')
         plt.ylabel('count')
         plt.title('rel_distances')
@@ -2532,10 +2776,108 @@ class GraphPairTrainer(BaseTrainer):
         plt.figure(2)
         #max_den = max(true_pos_all_densities+false_pos_all_densities)
         #bins = np.linspace(0, max_den, 5)
-        plt.hist([true_pos_all_densities,false_pos_all_densities],bins=5,label=['true_pos','false_pos'],alpha=0.5)
+        plt.hist([true_pos_all_densities,false_pos_all_densities],bins=5,label=['true_pos','false_pos'])
         plt.xlabel('density')
         plt.ylabel('count')
         plt.title('densities')
         plt.legend(loc='upper right')
 
+        plt.figure(3)
+        plt.hist([true_pos_keep_scores,false_pos_keep_scores],bins=5,label=['true_pos','false_pos'])
+        plt.xlabel('score')
+        plt.ylabel('count')
+        plt.title('keep edge')
+        plt.legend(loc='upper right')
+
+        plt.figure(4)
+        plt.hist([true_pos_rel_scores,false_pos_rel_scores],bins=5,label=['true_pos','false_pos'])
+        plt.xlabel('score')
+        plt.ylabel('count')
+        plt.title('rel edge')
+        plt.legend(loc='upper right')
+
+
         plt.show()
+
+
+    def displayCharacterization(self):
+        print('\n==============')
+        print('Avg by form')
+        print('==============')
+        for name,values in self.characterization_form.items():
+            print('{}:\t{:.3f}'.format(name,np.mean(values)))
+
+        print('\n==============')
+        print('Total portions')
+        print('==============')
+        num_true_pos = self.characterization_sum['num_true_pos']
+        num_false_pos = self.characterization_sum['num_false_pos']
+        num_false_neg = self.characterization_sum['num_false_neg']
+        num_pos = num_true_pos+num_false_pos
+        del self.characterization_sum['num_true_pos']
+        del self.characterization_sum['num_false_pos']
+        del self.characterization_sum['num_false_neg']
+        for name,value in self.characterization_sum.items():
+            if 'false_neg' in name or 'missed' in name:
+                divide = num_false_neg
+            elif 'false_pos' in name:
+                divide = num_false_pos
+            elif 'hit' in name:
+                divide = num_true_pos
+            else:
+                divide = num_pos
+
+            print('{}:\t{:.3f}'.format(name,value/divide))
+
+        plt.figure(1)
+        #max_distance = max(true_pos_distances+false_pos_distances)
+        #bins = np.linspace(0, max_distance, 10)
+        plt.hist([self.characterization_hist['true_pos_distances'],self.characterization_hist['false_pos_distances']],bins=15,label=['true_pos','false_pos'])
+        plt.xlabel('distance')
+        plt.ylabel('count')
+        plt.title('rel_distances')
+        plt.legend(loc='upper right')
+
+        plt.savefig('characterization_distance.png')
+
+        plt.figure(2)
+        #max_den = max(true_pos_all_densities+false_pos_all_densities)
+        #bins = np.linspace(0, max_den, 5)
+        plt.hist([self.characterization_hist['true_pos_all_densities'],self.characterization_hist['false_pos_all_densities']],bins=10,label=['true_pos','false_pos'])
+        plt.xlabel('density')
+        plt.ylabel('count')
+        plt.title('densities')
+        plt.legend(loc='upper right')
+
+        plt.savefig('characterization_density.png')
+
+        plt.figure(3)
+        plt.hist([self.characterization_hist['true_pos_keep_scores'],self.characterization_hist['false_pos_keep_scores']],bins=10,label=['true_pos','false_pos'])
+        plt.xlabel('score')
+        plt.ylabel('count')
+        plt.title('keep edge')
+        plt.legend(loc='upper right')
+
+        plt.savefig('characterization_keep_score.png')
+
+        plt.figure(4)
+        plt.hist([self.characterization_hist['true_pos_rel_scores'],self.characterization_hist['false_pos_rel_scores']],bins=10,label=['true_pos','false_pos'])
+        plt.xlabel('score')
+        plt.ylabel('count')
+        plt.title('rel edge')
+        plt.legend(loc='upper right')
+
+        fignum=5
+        for name,values in self.characterization_form.items():
+            plt.figure(fignum)
+            fignum+=1
+            plt.hist(values,bins=10)
+            plt.xlabel(name)
+            plt.ylabel('count')
+            plt.title(name)
+
+            plt.savefig('characterization_{}.png'.format(name))
+
+        #plt.show()
+
+
