@@ -174,6 +174,7 @@ class PairingGroupingGraph(BaseModel):
         self.confThresh = config['conf_thresh'] if 'conf_thresh' in config else 0.5
         self.useHardConfThresh = config['use_hard_conf_thresh'] if 'use_hard_conf_thresh' in config else True
         self.predNN = config['pred_nn'] if 'pred_nn' in config else False
+        assert(not self.predNN)
         self.predClass = config['pred_class'] if 'pred_class' in config else False
 
         self.merge_first = config['merge_first'] if 'merge_first' in config else False
@@ -884,6 +885,9 @@ class PairingGroupingGraph(BaseModel):
                                 #t#times.pop(0)   #t#
                                 #t#if len(times)>600:#t#
                                     #t#times.pop(0)#t#
+                        if not self.useCurvedBBs and self.detector.predNumNeighbors:
+                            #Discard NN prediction. We don't use it anymore
+                            allOutputBoxes = [ torch.cat([outBs[:,:6],outBs[:,7:]],dim=1) for outBs in allOutputBoxes]
                         return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, None, merge_prop_scores, None
 
                     if bbTrans is not None:
@@ -914,6 +918,10 @@ class PairingGroupingGraph(BaseModel):
                 #undirected
                 #edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
                 if graph is None:
+                    if not self.useCurvedBBs and self.detector.predNumNeighbors:
+                        #Discard NN prediction. We don't use it anymore
+                        bbPredictions = torch.cat([bbPredictions[:,:6],bbPredictions[:,7:]],dim=1)
+                        useBBs = torch.cat([useBBs[:,:6],useBBs[:,7:]],dim=1)
                     return [bbPredictions], offsetPredictions, None, None, None, None, rel_prop_scores, merge_prop_scores, (useBBs if self.useCurvedBBs else useBBs.cpu().detach(),None,None,transcriptions)
 
                 if self.reintroduce_visual_features=='map':
@@ -1001,6 +1009,7 @@ class PairingGroupingGraph(BaseModel):
                     allGroups.append(groups)
                     allEdgeIndexes.append(edgeIndexes)
 
+
                 ##Final state of the graph
                 #print('!D! F before edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(edgeFeats.size(),useBBs.size(),nodeFeats.size(),len(edgeIndexes)))
                 useBBs,graph,groups,edgeIndexes,bbTrans,same_node_map,keep_edges=self.mergeAndGroup(
@@ -1017,6 +1026,9 @@ class PairingGroupingGraph(BaseModel):
                         bbTrans,
                         image)
                 #print('!D! after  edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(graph[2].size(),useBBs.size(),graph[0].size(),len(edgeIndexes)))
+                if not self.useCurvedBBs and self.detector.predNumNeighbors:
+                    #Discard NN prediction. We don't use it anymore
+                    useBBs = torch.cat([useBBs[:,:6],useBBs[:,7:]],dim=1)
                 final=(useBBs if self.useCurvedBBs else useBBs.cpu().detach(),groups,edgeIndexes,bbTrans)
                 #print('all iters GCN')
                 #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
@@ -1038,8 +1050,15 @@ class PairingGroupingGraph(BaseModel):
                     #t#if len(times)>600:#t#
                         #t#times.pop(0)#t#
 
+            if not self.useCurvedBBs and self.detector.predNumNeighbors:
+                #Discard NN prediction. We don't use it anymore
+                allOutputBoxes = [ torch.cat([outBs[:,:6],outBs[:,7:]],dim=1) for outBs in allOutputBoxes]
             return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final
         else:
+            if not self.useCurvedBBs and self.detector.predNumNeighbors:
+                #Discard NN prediction. We don't use it anymore
+                bbPredictions = torch.cat([bbPredictions[:,:6],bbPredictions[:,7:]],dim=1)
+                useBBs = torch.cat([useBBs[:,:6],useBBs[:,7:]],dim=1)
             return [bbPredictions], offsetPredictions, None, None, None, None, None, None, (useBBs if self.useCurvedBBs else useBBs.cpu().detach(),None,None,transcriptions)
 
 

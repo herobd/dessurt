@@ -107,7 +107,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                         is_blank = bbs[j].getCls()[-1]>0.5
                 else:
                     conf = bbs[j,0]
-                    maxIndex =np.argmax(bbs[j,5:5+numClasses])
+                    maxIndex =np.argmax(bbs[j,6:6+numClasses])
                     if blank:
                         is_blank = bbs[j,-1]>0.5
                 shade = conf#(conf-bb_thresh)/(1-bb_thresh)
