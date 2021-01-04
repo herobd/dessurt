@@ -1788,11 +1788,11 @@ class GraphPairTrainer(BaseTrainer):
 
                 if 'bb_stats' in get:
 
-                    if self.model_ref.detector.predNumNeighbors:
-                        beforeCls=1
-                        #outputBoxesM=torch.cat((outputBoxes[:,0:6],outputBoxes[:,7:]),dim=1) #throw away NN pred
-                    else:
-                        beforeCls=0
+                    #if self.model_ref.detector.predNumNeighbors:
+                    #    beforeCls=1
+                    #    #outputBoxesM=torch.cat((outputBoxes[:,0:6],outputBoxes[:,7:]),dim=1) #throw away NN pred
+                    #else:
+                    #    beforeCls=0
                     #if targetBoxes is not None:
                     #    targetBoxes = targetBoxes.cpu()
                     if targetBoxes is not None:
@@ -1802,9 +1802,9 @@ class GraphPairTrainer(BaseTrainer):
                     if self.model_ref.useCurvedBBs:
                         ap_5, prec_5, recall_5, allPrec, allRecall =AP_textLines(target_for_b,outputBoxes,0.5,numClasses)
                     elif self.model_ref.rotation:
-                        ap_5, prec_5, recall_5 =AP_dist(target_for_b,outputBoxes,0.9,numClasses, beforeCls=beforeCls)
+                        ap_5, prec_5, recall_5 =AP_dist(target_for_b,outputBoxes,0.9,numClasses)
                     else:
-                        ap_5, prec_5, recall_5, allPrec, allRecall =AP_iou(target_for_b,outputBoxes,0.5,numClasses, beforeCls=beforeCls)
+                        ap_5, prec_5, recall_5, allPrec, allRecall =AP_iou(target_for_b,outputBoxes,0.5,numClasses)
                     prec_5 = np.array(prec_5)
                     recall_5 = np.array(recall_5)
                     log['bb_AP_{}'.format(graphIteration)]=ap_5
@@ -1820,7 +1820,7 @@ class GraphPairTrainer(BaseTrainer):
         ###
         gt_groups_adj = instance['gt_groups_adj']
         if final is not None:
-            finalLog, finalRelTypes, finalMissedRels = self.final_eval(targetBoxes.cpu() if targetBoxes is not None else None,gtGroups,gt_groups_adj,targetIndexToGroup,*final)
+            finalLog, finalRelTypes, finalMissedRels = self.finalEval(targetBoxes.cpu() if targetBoxes is not None else None,gtGroups,gt_groups_adj,targetIndexToGroup,*final)
             log.update(finalLog)
             if self.save_images_every>0 and self.iteration%self.save_images_every==0:
                 path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b','final'))#instance['name'],graphIteration))
@@ -1929,7 +1929,7 @@ class GraphPairTrainer(BaseTrainer):
 
 
 
-    def final_eval(self,targetBoxes,gtGroups,gt_groups_adj,targetIndexToGroup,outputBoxes,predGroups,predPairs,predTrans=None):
+    def finalEval(self,targetBoxes,gtGroups,gt_groups_adj,targetIndexToGroup,outputBoxes,predGroups,predPairs,predTrans=None):
         log={}
         numClasses = len(self.scoreClassMap)
 
@@ -1978,11 +1978,11 @@ class GraphPairTrainer(BaseTrainer):
         elif outputBoxes is not None:
             targIndex=torch.LongTensor(len(outputBoxes)).fill_(-1)
 
-        if self.model_ref.detector.predNumNeighbors:
-            beforeCls=1
-            #outputBoxesM=torch.cat((outputBoxes[:,0:6],outputBoxes[:,7:]),dim=1) #throw away NN pred
-        else:
-            beforeCls=0
+        #if self.model_ref.detector.predNumNeighbors:
+        #    beforeCls=1
+        #    #outputBoxesM=torch.cat((outputBoxes[:,0:6],outputBoxes[:,7:]),dim=1) #throw away NN pred
+        #else:
+        #    beforeCls=0
         #if targetBoxes is not None:
         #    targetBoxes = targetBoxes.cpu()
         if targetBoxes is not None:
@@ -1992,9 +1992,9 @@ class GraphPairTrainer(BaseTrainer):
         if self.model_ref.useCurvedBBs:
             ap_5, prec_5, recall_5, allPrec, allRecall =AP_textLines(target_for_b,outputBoxes,0.5,numClasses)
         elif self.model_ref.rotation:
-            ap_5, prec_5, recall_5, allPrec, allRecall =AP_dist(target_for_b,outputBoxes,0.9,numClasses, beforeCls=beforeCls)
+            ap_5, prec_5, recall_5, allPrec, allRecall =AP_dist(target_for_b,outputBoxes,0.9,numClasses)
         else:
-            ap_5, prec_5, recall_5, allPrec, allRecall =AP_iou(target_for_b,outputBoxes,0.5,numClasses, beforeCls=beforeCls)
+            ap_5, prec_5, recall_5, allPrec, allRecall =AP_iou(target_for_b,outputBoxes,0.5,numClasses)
         prec_5 = np.array(prec_5)
         recall_5 = np.array(recall_5)
         log['final_bb_AP']=ap_5
@@ -2261,12 +2261,13 @@ class GraphPairTrainer(BaseTrainer):
             bb_lefts = np.array([bb.pairPoints()[0] for bb in finalOutputBoxes]).mean(axis=1)
             bb_rights = np.array([bb.pairPoints()[1] for bb in finalOutputBoxes]).mean(axis=1)
         else:
-            bb_centers = finalOutputBoxes[:,0:2]
+            bb_centers = finalOutputBoxes[:,1:3]
             assert(not self.model_ref.rotation)
             bb_lefts = bb_centers.clone()
-            bb_lefts[:,0]-=finalOutputBoxes[:,4]
+            bb_lefts[:,0]-=finalOutputBoxes[:,5]
             bb_rights = bb_centers.clone()
-            bb_rights[:,0]+=finalOutputBoxes[:,4]
+            bb_rights[:,0]+=finalOutputBoxes[:,5]
+            
         dist_center_center = np.power(np.power(bb_centers[None,:,:]-bb_centers[:,None,:],2).sum(axis=2),0.5)
         dist_center_left = np.power(np.power(bb_centers[None,:,:]-bb_lefts[:,None,:],2).sum(axis=2),0.5)
         dist_center_right = np.power(np.power(bb_centers[None,:,:]-bb_rights[:,None,:],2).sum(axis=2),0.5)
@@ -2293,7 +2294,12 @@ class GraphPairTrainer(BaseTrainer):
             
             all_close_bbs = set()
             for bb in finalPredGroups[node]:
-                close_bbs = bb_close[bb].nonzero()[0]
+                nonzero = bb_close[bb].nonzero()
+                if type(nonzero) is tuple:
+                    close_bbs = bb_close[bb].nonzero()[0]
+                else:
+                    assert(bb_close[bb].nonzero().shape[1]==1)
+                    close_bbs = bb_close[bb].nonzero()[:,0]
                 all_close_bbs.update(obb for obb in close_bbs if obb not in finalPredGroups[node])
             final_density.append(len(all_close_bbs))
             final_node_center.append(bb_centers[finalPredGroups[node]].mean(axis=0))
@@ -2323,13 +2329,13 @@ class GraphPairTrainer(BaseTrainer):
             if self.model_ref.useCurvedBBs:
                 ppF = bbF.polyPoints()
             else:
-                ppF = bbF[:5]
+                ppF = bbF[1:6]
             for lastI, bbL in enumerate(allOutputBoxes[-1]):
                 
                 if self.model_ref.useCurvedBBs:
                     ppL = bbL.polyPoints()
                 else:
-                    ppL = bbL[:5]
+                    ppL = bbL[1:6]
                 if len(ppF)==len(ppL):
                     max_diff = np.abs(ppF-ppL).max()
                     if max_diff<0.01:
@@ -2367,8 +2373,8 @@ class GraphPairTrainer(BaseTrainer):
                 classIdx1 = finalOutputBoxes[finalPredGroups[n1][0]].getCls()[:numClasses].argmax()
                 classIdx2 = finalOutputBoxes[finalPredGroups[n2][0]].getCls()[:numClasses].argmax()
             else:
-                classIdx1 = finalOutputBoxes[finalPredGroups[n1][0],5:5+numClasses].argmax()
-                classIdx2 = finalOutputBoxes[finalPredGroups[n2][0],5:5+numClasses].argmax()
+                classIdx1 = finalOutputBoxes[finalPredGroups[n1][0],6:7+numClasses].argmax()
+                classIdx2 = finalOutputBoxes[finalPredGroups[n2][0],6:7+numClasses].argmax()
             tClass = min(classIdx1,classIdx2)
             bClass = max(classIdx1,classIdx2)
             is_consistent=True
@@ -2647,6 +2653,13 @@ class GraphPairTrainer(BaseTrainer):
         self.characterization_sum['num_false_pos']+=num_false_pos
         self.characterization_sum['num_false_neg']+=num_false_neg
 
+        self.characterization_sum['num_header_rel_true_pos']+=hit_header_rels
+        self.characterization_sum['num_header_rel_false_pos']+=false_pos_consistent_header_rels
+        self.characterization_sum['num_header_rel_false_neg']+=missed_header_rels
+        self.characterization_sum['num_question_rel_true_pos']+=hit_question_rels
+        self.characterization_sum['num_question_rel_false_pos']+=false_pos_consistent_question_rels
+        self.characterization_sum['num_question_rel_false_neg']+=missed_question_rels
+
         self.characterization_sum['false_pos_is_single']+=false_pos_is_single
         self.characterization_sum['false_pos_group_involved']+=false_pos_group_involved
         self.characterization_sum['false_pos_inpure_group']+=false_pos_inpure_group
@@ -2658,10 +2671,10 @@ class GraphPairTrainer(BaseTrainer):
         self.characterization_sum['inconsistent_edges']+=inconsistent_edges
         self.characterization_sum['false_pos_consistent_header_rels']+=false_pos_consistent_header_rels
         self.characterization_sum['false_pos_consistent_question_rels']+=false_pos_consistent_question_rels
-        self.characterization_sum['missed_header_rels']+=missed_header_rels
-        self.characterization_sum['missed_question_rels']+=missed_question_rels
-        self.characterization_sum['hit_header_rels']+=hit_header_rels
-        self.characterization_sum['hit_question_rels']+=hit_question_rels
+        #self.characterization_sum['missed_header_rels']+=missed_header_rels
+        #self.characterization_sum['missed_question_rels']+=missed_question_rels
+        #self.characterization_sum['hit_header_rels']+=hit_header_rels
+        #self.characterization_sum['hit_question_rels']+=hit_question_rels
 
         self.characterization_sum['double_rel_pred']+=double_rel_pred
         self.characterization_sum['missed_rel_was_single']+=missed_rel_was_single
@@ -2682,7 +2695,7 @@ class GraphPairTrainer(BaseTrainer):
         self.characterization_form['false_pos_bad_node'].append(false_pos_bad_node/num_false_pos if num_false_pos>0 else 0)
         self.characterization_form['false_pos_with_good_nodes'].append(false_pos_with_good_nodes/num_false_pos if num_false_pos>0 else 0)
         self.characterization_form['false_pos_with_misclassed_nodes'].append(false_pos_with_misclassed_nodes/num_false_pos if num_false_pos>0 else 0)
-
+        assert(inconsistent_edges<=num_pos)
         self.characterization_form['inconsistent_edges'].append(inconsistent_edges/(num_pos) if (num_pos)>0 else 0)
         self.characterization_form['false_pos_consistent_header_rels'].append(false_pos_consistent_header_rels/num_false_pos if num_false_pos>0 else 0)
         self.characterization_form['false_pos_consistent_question_rels'].append(false_pos_consistent_question_rels/num_false_pos if num_false_pos>0 else 0)
@@ -2814,9 +2827,21 @@ class GraphPairTrainer(BaseTrainer):
         num_false_pos = self.characterization_sum['num_false_pos']
         num_false_neg = self.characterization_sum['num_false_neg']
         num_pos = num_true_pos+num_false_pos
+        print('precision:\t{:.3f}'.format(num_true_pos/num_pos))
+        print('recall:\t{:.3f}'.format(num_true_pos/(num_true_pos+num_false_neg)))
         del self.characterization_sum['num_true_pos']
         del self.characterization_sum['num_false_pos']
         del self.characterization_sum['num_false_neg']
+        for a in ['header','question']:
+            a_num_true_pos = self.characterization_sum['num_{}_rel_true_pos'.format(a)]
+            a_num_false_pos = self.characterization_sum['num_{}_rel_false_pos'.format(a)]
+            a_num_false_neg = self.characterization_sum['num_{}_rel_false_neg'.format(a)]
+            a_num_pos = a_num_true_pos+a_num_false_pos
+            print('{}_rel_precision*:\t{:.3f}'.format(a,a_num_true_pos/a_num_pos))
+            print('{}_rel_recall:\t{:.3f}'.format(a, a_num_true_pos/(a_num_true_pos+a_num_false_neg)))
+            del self.characterization_sum['num_{}_rel_true_pos'.format(a)]
+            del self.characterization_sum['num_{}_rel_false_pos'.format(a)]
+            del self.characterization_sum['num_{}_rel_false_neg'.format(a)]
         for name,value in self.characterization_sum.items():
             if 'false_neg' in name or 'missed' in name:
                 divide = num_false_neg
@@ -2826,8 +2851,10 @@ class GraphPairTrainer(BaseTrainer):
                 divide = num_true_pos
             else:
                 divide = num_pos
-
-            print('{}:\t{:.3f}'.format(name,value/divide))
+            if divide!=0:
+                print('{}:\t{:.3f}'.format(name,value/divide))
+            else:
+                print('{}:\t{}/{}'.format(name,value,divide))
 
         plt.figure(1)
         #max_distance = max(true_pos_distances+false_pos_distances)
