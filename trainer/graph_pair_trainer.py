@@ -2244,8 +2244,8 @@ class GraphPairTrainer(BaseTrainer):
 
         #final, we'll count it as additional graph iteration
         if self.model_ref.useCurvedBBs:
-            targIndex = newGetTargIndexForPreds_textLines(targetBoxes,finalOutputBoxes,0.5,numClasses,False)
-            noClassTargIndex = newGetTargIndexForPreds_textLines(targetBoxes,finalOutputBoxes,0.5,0,False)
+            targIndex = newGetTargIndexForPreds_textLines(targetBoxes.cpu(),finalOutputBoxes,0.5,numClasses,False)
+            noClassTargIndex = newGetTargIndexForPreds_textLines(targetBoxes.cpu(),finalOutputBoxes,0.5,0,False)
         elif self.model_ref.rotation:
             assert(False and 'untested and should be changed to reflect new newGetTargIndexForPreds_s')
             targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes,outputBoxes,1.1,numClasses,hard_thresh=False)
