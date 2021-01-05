@@ -2198,7 +2198,7 @@ class GraphPairTrainer(BaseTrainer):
         num_giter = len(allOutputBoxes)
         for graphIteration,(outputBoxes,edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allOutputBoxes,allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
             if self.model_ref.useCurvedBBs:
-                targIndex = newGetTargIndexForPreds_textLines(targetBoxes,outputBoxes,self.gt_bb_align_IOcU_thresh,numClasses,True)
+                targIndex = newGetTargIndexForPreds_textLines(targetBoxes.cpu(),outputBoxes,self.gt_bb_align_IOcU_thresh,numClasses,True)
             elif self.model_ref.rotation:
                 assert(False and 'untested and should be changed to reflect new newGetTargIndexForPreds_s')
                 targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes,outputBoxes,1.1,numClasses,hard_thresh=False)
