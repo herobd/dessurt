@@ -2820,6 +2820,13 @@ class GraphPairTrainer(BaseTrainer):
         for name,values in self.characterization_form.items():
             print('{}:\t{:.3f}'.format(name,np.mean(values)))
 
+
+        print('\n==============')
+        print('Total count')
+        print('==============')
+        for name,value in self.characterization_sum.items():
+            print('{}:\t{:.3f}'.format(name,value))
+
         print('\n==============')
         print('Total portions')
         print('==============')
@@ -2837,7 +2844,7 @@ class GraphPairTrainer(BaseTrainer):
             a_num_false_pos = self.characterization_sum['num_{}_rel_false_pos'.format(a)]
             a_num_false_neg = self.characterization_sum['num_{}_rel_false_neg'.format(a)]
             a_num_pos = a_num_true_pos+a_num_false_pos
-            print('{}_rel_precision*:\t{:.3f}'.format(a,a_num_true_pos/a_num_pos))
+            print('{}_rel_precision:\t{:.3f}'.format(a,a_num_true_pos/a_num_pos))
             print('{}_rel_recall:\t{:.3f}'.format(a, a_num_true_pos/(a_num_true_pos+a_num_false_neg)))
             del self.characterization_sum['num_{}_rel_true_pos'.format(a)]
             del self.characterization_sum['num_{}_rel_false_pos'.format(a)]
