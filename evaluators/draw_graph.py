@@ -259,7 +259,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                 #if score>draw_rel_thresh:
                 x1,y1 = groupCenters[g1]
                 x2,y2 = groupCenters[g2]
-                if predTypes is not None and all([predType[i]=='TN' or predType[i]=='UN' for predType in predTypes]):
+                if predTypes is not None and len(predTypes[0])==len(edgeIndexes) and all([predType[i]=='TN' or predType[i]=='UN' for predType in predTypes]):
                     lineColor = (0,0,edgePred[i,-1,0].item()) #BLUE
                     img_f.line(image,(x1,y1),(x2,y2),lineColor,1)
                 else:
