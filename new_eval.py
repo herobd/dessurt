@@ -508,6 +508,9 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                 print('{} not found! (on {})'.format(index,instance['imgName']))
                 print('{} not found! (on {})'.format(index,instance['imgName']))
 
+    if trainer.do_characterization:
+        trainer.displayCharacterization()
+
 
 if __name__ == '__main__':
     logger = logging.getLogger()

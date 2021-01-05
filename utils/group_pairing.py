@@ -21,6 +21,7 @@ def getGTGroup(targetIndexes,targetIndexToGroup):
 
 def pure(targetIndexes,targetIndexToGroup):
     test=set()
+    gtId=None
     for t in targetIndexes:
         if gtId is None:
             gtId = targetIndexToGroup[t]
