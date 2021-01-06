@@ -1,5 +1,5 @@
 {
-    "name": "NAFGblank_pair_os100k2_graphNAtt333rv_sc_prop_nms_strictAlign_smooth",
+    "name": "NAFGblank_pair_os100k2_graphNAtt466rvCon4_sc_prop_nms_strictAlign_smooth",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -114,6 +114,7 @@
         "conf_thresh": 0.7,
         "start_frozen": true,
 
+        "graph_four_connected": true,
         "relationship_proposal": "feature_nn",
         "percent_rel_to_keep": 0.4,
         "max_rel_to_keep": 2000,

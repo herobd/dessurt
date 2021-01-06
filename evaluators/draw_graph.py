@@ -265,7 +265,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                 else:
                     edgesToDraw.append((i,x1,y1,x2,y2))
 
-        if predTypes is not None and len(predTypes[0])==len(edgeIndexes):
+        if predTypes is not None and predTypes[0] is not None and len(predTypes[0])==len(edgeIndexes):
             if edgePred is None:
                 edgePred = torch.FloatTensor(len(predTypes[0]),1,1).fill_(1)
             if edgePred.size(2)>=len(predTypes):
