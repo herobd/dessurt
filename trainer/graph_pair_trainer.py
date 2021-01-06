@@ -2361,14 +2361,17 @@ class GraphPairTrainer(BaseTrainer):
         allEdgeIndexes.append(finalEdgeIndexes)
 
         ###
-        assert(len(finalOutputBoxes) == len(allOutputBoxes[-1])) #I'm assuming no merges take place on final graph adjustment
+        num_final_merge = len(allOutputBoxes[-1]) - len(finalOutputBoxes)
         #map from final bbs to last bbs
         finalBB2LastBB={}
+        unmatched_finals=[]
+        last_used=[False]*len(allOutputBoxes[-1])
         for finalI, bbF in enumerate(finalOutputBoxes):
             if self.model_ref.useCurvedBBs:
                 ppF = bbF.polyPoints()
             else:
                 ppF = bbF[1:6]
+            match_found=False
             for lastI, bbL in enumerate(allOutputBoxes[-1]):
                 
                 if self.model_ref.useCurvedBBs:
@@ -2379,6 +2382,38 @@ class GraphPairTrainer(BaseTrainer):
                     max_diff = np.abs(ppF-ppL).max()
                     if max_diff<0.01:
                         finalBB2LastBB[finalI]=lastI
+                        match_found=True
+                        assert(not last_used[lastI])
+                        last_used[lastI]=True
+                        break
+            if not match_found:
+                unmatched_finals.append(finalI)
+        #if num_final_merge>0:
+        for finalI in unmatched_finals:
+            best_diff=99999999
+            best_lastI=None
+            bbF = finalOutputBoxes[finalI]
+            if self.model_ref.useCurvedBBs:
+                ppF = bbF.polyPoints()
+            else:
+                ppF = bbF[1:6]
+            match_found=False
+            for lastI, bbL in enumerate(allOutputBoxes[-1]):
+                if not last_used[lastI]:
+                    
+                    if self.model_ref.useCurvedBBs:
+                        ppL = bbL.polyPoints()
+                        diff = np.abs(ppF.mean(axis=0)-ppL.mean(axis=0)).sum()
+                    else:
+                        ppL = bbL[1:6]
+                        diff = p.abs(ppF-ppL).sum()
+
+                    if diff<best_diff:
+                        best_diff=diff
+                        best_lastI=lastI
+
+            finalBB2LastBB[finalI]=best_lastI
+
 
         gtEdge2Pred = {}
         badPredEdges = []
