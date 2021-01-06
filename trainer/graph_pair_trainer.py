@@ -549,6 +549,7 @@ class GraphPairTrainer(BaseTrainer):
             predsGTNo = torch.tensor([])
             matches=0
             predTypes = None
+            missed_rels = gtGroupAdj
         else:
 
             #decide which predicted boxes belong to which target boxes
