@@ -1938,7 +1938,25 @@ class GraphPairTrainer(BaseTrainer):
             blank_index = self.classMap['blank']
             if targetBoxes is not None:
                 gtNotBlanks = targetBoxes[0,:,blank_index]<0.5
-                targetBoxes=targetBoxes[:,gtNotBlanks]
+                if not gtNotBlanks.all():
+                    #rewrite all the GT to not include blanks
+                    targetBoxes=targetBoxes[:,gtNotBlanks]
+                    gtOldToNewBBs = {oi.item():ni for ni,oi in enumerate(torch.nonzero(gtNotBlanks)[:,0])}
+                    newGTGroups=[[gtOldToNewBBs[bb] for bb in group if bb in gtOldToNewBBs] for group in gtGroups]
+                    gtOldToNewGroups={}
+                    gtGroups=[]
+                    for i,group in enumerate(newGTGroups):
+                        if len(group)>0:
+                            gtOldToNewGroups[i]=len(gtGroups)
+                            gtGroups.append(group)
+                    newToOldGTGroups = {n:o for o,n in gtOldToNewGroups.items()}
+                    gt_groups_adj = set((gtOldToNewGroups[g1],gtOldToNewGroups[g2]) for g1,g2 in gt_groups_adj if g1 in gtOldToNewGroups and g2 in gtOldToNewGroups)
+                    targetIndexToGroup={}
+                    for groupId,bbIds in enumerate(gtGroups):
+                        targetIndexToGroup.update({bbId:groupId for bbId in bbIds})
+                else:
+                    newToOldGTGroups = list(range(len(gtGroups)))
+
             if outputBoxes is not None and len(outputBoxes)>0:
                 if self.model_ref.useCurvedBBs:
                     outputBoxesNotBlanks=torch.FloatTensor([box.getCls() for box in outputBoxes])
@@ -1958,7 +1976,12 @@ class GraphPairTrainer(BaseTrainer):
                             newGroups.append(group)
                             newToOldGroups.append(gId)
                     oldToNewGroups = {o:n for n,o in enumerate(newToOldGroups)}
-                    predPairs = [(oldToNewGroups[g1],oldToNewGroups[g2]) for g1,g2 in predPairs if g1 in oldToNewGroups and g2 in oldToNewGroups]
+                    num_pred_pairs_with_blanks = len(predPairs)
+                    predPairs = [(i,(oldToNewGroups[g1],oldToNewGroups[g2])) for i,(g1,g2) in enumerate(predPairs) if g1 in oldToNewGroups and g2 in oldToNewGroups]
+                    if len(predPairs)>0:
+                        newToOldPredPairs,predPairs = zip(*predPairs)
+                    else:
+                        newToOldPredPairs=[]
                     for a,b in predPairs:
                         assert(a < len(predGroups))
                         assert(b < len(predGroups))
@@ -2060,8 +2083,11 @@ class GraphPairTrainer(BaseTrainer):
         relPrec=0
         if predPairs is None:
             predPairs=[]
-        rel_types=[]
-        for n0,n1 in predPairs:
+        if 'blank' in self.classMap and predGroups is not None:
+            rel_types=['UP']*num_pred_pairs_with_blanks
+        else:
+            rel_types=[]
+        for pi,(n0,n1) in enumerate(predPairs):
             if n0 not in predToGTGroup or n1 not in predToGTGroup:
                 print('ERROR, pair ({},{}) not foundi n predToGTGroup'.format(n0,n1))
                 print('predToGTGroup {}: {}'.format(len(predToGTGroup),predToGTGroup))
@@ -2074,9 +2100,17 @@ class GraphPairTrainer(BaseTrainer):
                 if pair_id in gt_groups_adj:
                     relPrec+=1
                     gtRelHit.add((min(gtG0,gtG1),max(gtG0,gtG1)))
-                    rel_types.append('TP')
+                    if 'blank' in self.classMap:
+                        old_pi = newToOldPredPairs[pi]
+                        rel_types[old_pi] = 'TP'
+                    else:
+                        rel_types.append('TP')
                     continue
-            rel_types.append('FP')
+            if 'blank' in self.classMap:
+                old_pi = newToOldPredPairs[pi]
+                rel_types[old_pi] = 'FP'
+            else:
+                rel_types.append('FP')
 
         #print('DEBUG true positives={}'.format(len(gtRelHit)))
         #print('DEBUG false positives={}'.format(len(predPairs)-len(gtRelHit)))
@@ -2097,7 +2131,11 @@ class GraphPairTrainer(BaseTrainer):
         else:
             log['final_rel_Fm']=0
 
-        return log, [rel_types], gt_groups_adj.difference(gtRelHit)
+
+        missed_rels = gt_groups_adj.difference(gtRelHit)
+        if 'blank' in self.classMap:
+            missed_rels = set((newToOldGTGroups[g1],newToOldGTGroups[g2]) for g1,g2 in missed_rels)
+        return log, [rel_types], missed_rels
 
     def characterization_eval(self,
                         allOutputBoxes,

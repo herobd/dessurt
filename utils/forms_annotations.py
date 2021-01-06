@@ -797,7 +797,7 @@ def areFar(bb1,bb2):
     dist = math.sqrt(min( (lX1-rX2)**2 + (lY1-rY2)**2, (lX2-rX1)**2 + (lY2-rY1)**2 ))
     return dist>thresh
 
-def formGroups(annotations):
+def formGroups(annotations,group_only_same=False):
     #printTypes(annotations)
     groups={}
     groupMap={}
@@ -819,8 +819,20 @@ def formGroups(annotations):
             hasMinorNeighbor[pair[1]]=True
         elif annotations['byId'][pair[1]]['type']=='textMinor' and annotations['byId'][pair[0]]['type']=='field':
             hasMinorNeighbor[pair[0]]=True
-        if  ( #this is the rule that determines which bbs get grouped
-                (
+        #this is the rule that determines which bbs get grouped
+        if group_only_same:
+            should_be_grouped = (
+                    (annotations['byId'][pair[0]]['type'] == annotations['byId'][pair[1]]['type']) 
+                and (
+                    computeRotationDiff(annotations['byId'][pair[0]],annotations['byId'][pair[1]]) < rot_diff and
+                    (annotations['byId'][pair[0]]['type']!='textMinor' or horizontalOverlap(annotations['byId'][pair[0]],annotations['byId'][pair[1]]) > 0.2 )
+              ) and (
+                    #horz_overlapped
+                    horizontalOverlap(annotations['byId'][pair[0]],annotations['byId'][pair[1]]) > 0
+              ) )
+        else:
+            #if you have the same label, if your joined para, if you are a minor text or circle that's in para
+            should_be_grouped = ( (
                 (annotations['byId'][pair[0]]['type'] == annotations['byId'][pair[1]]['type']) or
                 ('P' in annotations['byId'][pair[0]]['type'] and 'P' in annotations['byId'][pair[1]]['type']) or
                 ( ('fieldP' in annotations['byId'][pair[0]]['type'] or 'fieldP' in annotations['byId'][pair[1]]['type']) and ('textMinor' in annotations['byId'][pair[0]]['type'] or 'textMinor' in annotations['byId'][pair[1]]['type']) )
@@ -829,9 +841,9 @@ def formGroups(annotations):
                     computeRotationDiff(annotations['byId'][pair[0]],annotations['byId'][pair[1]]) < rot_diff and
                     (annotations['byId'][pair[0]]['type']!='textMinor' or horizontalOverlap(annotations['byId'][pair[0]],annotations['byId'][pair[1]]) > 0.2 )
                     #(annotations['byId'][pair[0]]['type']!='textMinor' or connectionNotParallel(annotations['byId'][pair[0]],annotations['byId'][pair[1]]) )
-                )
-                ):
-            #if you have the same label, if your joined para, if you are a minor text or circle that's in para
+                ) )
+        if should_be_grouped:
+                
             #print('adding grouping between: {} and {}'.format(annotations['byId'][pair[0]]['type'],annotations['byId'][pair[1]]['type']))
 
             #add to appropriate group or form a new one

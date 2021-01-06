@@ -140,6 +140,14 @@ class FormsGraphPair(GraphPairDataset):
             self.no_print_fields = False
         self.no_graphics =  config['no_graphics'] if 'no_graphics' in config else False
         self.only_opposite_pairs = config['only_opposite_pairs'] if 'only_opposite_pairs' in config else False
+        
+        self.group_only_same = config['group_only_same'] if 'group_only_same' in config else False
+        if self.group_only_same and self.only_opposite_pairs:
+            print('Warning, you may want only_opposite_pairs off')
+        if self.group_only_same and not self.rotate:
+            print('Warning, you may want rotation on')
+
+
         self.onlyFormStuff = False
         self.errors=[]
 
@@ -185,7 +193,7 @@ class FormsGraphPair(GraphPairDataset):
         numClasses = len(self.classMap)
 
         #import pdb;pdb.set_trace()
-        idGroups=formGroups(annotations)
+        idGroups=formGroups(annotations,self.group_only_same)
         #revIds = {bbId:n for n,bbId in enumerate(ids)}
         #groups = [ [revIds[bbId] for bbId in group] for group in idGroups]
         groups = idGroups
