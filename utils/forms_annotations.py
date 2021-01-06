@@ -759,7 +759,7 @@ def horizontalOverlap(bb1,bb2):
         bY1=max(lY1,rY1)
         bY2=max(lY2,rY2)
         overlap = min(bY1,bY2)-max(aY1,aY2)
-        print(overlap)
+        #print(overlap)
         return max(0,overlap/(bY1-aY1),overlap/(bY2-aY2))
 def areFar(bb1,bb2):
     tlX1 = bb1['poly_points'][0][0]

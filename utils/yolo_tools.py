@@ -552,7 +552,7 @@ def getWidthWRT(inter,line):
     #print('line: {}'.format(line))
     #print('length: {}'.format(min(ds.max(),vd)-max(ds.min(),0)))
     #import pdb;pdb.set_trace()
-    return min(ds.max(),vd)-max(ds.min(),0)
+    return min(ds.max(),vd.item())-max(ds.min(),0)
 
 def getWidth(inter):
     #We'll find points spanning the length of the intersection using distances
