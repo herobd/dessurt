@@ -1,6 +1,6 @@
 {
     "name": "NAFGblank_pair_binary3P2_smallContext_prop",
-    "cuda": false,
+    "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
