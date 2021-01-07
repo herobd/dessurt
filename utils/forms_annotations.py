@@ -80,6 +80,7 @@ def convertBBs(bbs,rotate,numClasses):
 
     if (d==0).any():
         print('ERROR: zero length bb {}'.format(bbs[0][d[0]==0]))
+        d[d==0]=1
 
     hl = ((tlX-lX)*-(rY-lY) + (tlY-lY)*(rX-lX))/d #projection of half-left edge onto transpose horz run
     hr = ((brX-rX)*-(lY-rY) + (brY-rY)*(lX-rX))/d #projection of half-right edge onto transpose horz run
@@ -102,6 +103,8 @@ def convertBBs(bbs,rotate,numClasses):
     width = d/2.0 #and half width
 
 
+    height[ np.logical_or(np.isnan(height),height==0) ] =1
+    width[ np.logical_or(np.isnan(width),width==0) ] =1
     #topX = (tlX+trX)/2.0
     #topY = (tlY+trY)/2.0
     #botX = (blX+brX)/2.0
@@ -115,8 +118,6 @@ def convertBBs(bbs,rotate,numClasses):
     rightX = rX
     rightY = rY
 
-    height[ np.logical_or(np.isnan(height),height==0) ] =1
-    width[ np.logical_or(np.isnan(width),width==0) ] =1
 
     new_bbs[:,:,0]=cX
     new_bbs[:,:,1]=cY
