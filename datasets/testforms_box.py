@@ -7,6 +7,7 @@ from matplotlib import gridspec
 from matplotlib.patches import Polygon
 import numpy as np
 import torch
+from utils.forms_annotations import calcCorners
 
 from utils import img_f
 
@@ -58,11 +59,16 @@ def display(data):
                 color = (1,0,0)#'b-'
             else:
                 color = (0,1,0)#'r-'
-            tr = (int(math.cos(rot)*w-math.sin(rot)*h +xc), int(-math.sin(rot)*w-math.cos(rot)*h +yc))
-            tl = (int(-math.cos(rot)*w-math.sin(rot)*h +xc),int( math.sin(rot)*w-math.cos(rot)*h +yc))
-            br = (int(math.cos(rot)*w+math.sin(rot)*h +xc), int(-math.sin(rot)*w+math.cos(rot)*h +yc))
-            bl = (int(-math.cos(rot)*w+math.sin(rot)*h +xc),int( math.sin(rot)*w+math.cos(rot)*h +yc))
+            #tr = (int(math.cos(rot)*w-math.sin(rot)*h +xc), int(-math.sin(rot)*w-math.cos(rot)*h +yc))
+            #tl = (int(-math.cos(rot)*w-math.sin(rot)*h +xc),int( math.sin(rot)*w-math.cos(rot)*h +yc))
+            #br = (int(math.cos(rot)*w+math.sin(rot)*h +xc), int(-math.sin(rot)*w+math.cos(rot)*h +yc))
+            #bl = (int(-math.cos(rot)*w+math.sin(rot)*h +xc),int( math.sin(rot)*w+math.cos(rot)*h +yc))
             #print([tr,tl,br,bl])
+            tl,tr,br,bl = calcCorners(xc,yc,rot,h,w)
+            tl = [int(x) for x in tl]
+            tr = [int(x) for x in tr]
+            br = [int(x) for x in br]
+            bl = [int(x) for x in bl]
 
             #ax_im.plot([tr[0],tl[0],bl[0],br[0],tr[0]],[tr[1],tl[1],bl[1],br[1],tr[1]],color)
             img_f.polylines(img,np.array([tr,tl,bl,br]),'transparent',color)

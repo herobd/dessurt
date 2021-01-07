@@ -175,7 +175,7 @@ if __name__ == "__main__":
         "cache_resized_images": True,
         "rotation": True,
         "only_opposite_pairs": False,
-        "group_only_same": True
+        "no_groups": True
 })
 
     dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=forms_graph_pair.collate)
