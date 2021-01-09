@@ -146,6 +146,8 @@ def parseGT(directory,name,scale):
     #            groups[bb_i].append(other_bb_i)
     if True:
         #linking
+        def addPair(pairs,a,b):
+            pairs.add((min(a,b),max(a,b)))
         def linkTextBlock(bb_i,pairs):
             if len(owns[bb_i])==1:
                 return owns[bb_i][0], owns[bb_i][0]
@@ -173,21 +175,26 @@ def parseGT(directory,name,scale):
             for line in lines:
                 line.sort(key=lambda a:a[1])
                 if prev is not None:
-                    pairs.add((min(prev,line[0][0]),max(prev,line[0][0])))
+                    addPair(pairs,prev,line[0][0])
                 prev=line[0][0]
                 for o_bb_i,x in line[1:]:
-                    pairs.add((min(prev,o_bb_i),max(prev,o_bb_i)))
+                    addPair(pairs,prev,o_bb_i)
                     prev = o_bb_i
             return lines[0][0][0],prev   
 
         def linkField(bb_i,pairs,checkbox=False):
             #assert len(owns[bb_i])==2
             text_i=None
+            text_is=[]
             widget_is=[]
             for o_bb_i in owns[bb_i]:
                 if all_bbs[o_bb_i][0]=='TextBlock':
-                    assert(text_i is None)
-                    text_i = o_bb_i
+                    #assert(text_i is None)
+                    if text_i is None:
+                        text_i = o_bb_i
+                    else:
+                        assert(not checkbox)
+                        text_is+=[text_i,o_bb_i]
                 elif all_bbs[o_bb_i][0]=='Widget':
                     widget_is.append(o_bb_i)
             
@@ -202,8 +209,8 @@ def parseGT(directory,name,scale):
                             print('Reclaimed TextBlock {} for Field {}'.format(text_i,bb_i))
                             break
             assert(text_i is not None)
-            text_top, text_bot = linkTextBlock(text_i,pairs)
             if checkbox:
+                text_top, text_bot = linkTextBlock(text_i,pairs)
                 assert(len(widget_is)<=2)
 
                 if len(widget_is)==2:
@@ -213,25 +220,80 @@ def parseGT(directory,name,scale):
                     area0 = (x2s[widget_is[0]]-x1s[widget_is[0]])*(y2s[widget_is[0]]-y1s[widget_is[0]])
                     area1 = (x2s[widget_is[1]]-x1s[widget_is[1]])*(y2s[widget_is[1]]-y1s[widget_is[1]])
 
-                    pairs.add((min(widget_is[0],text_i),max(widget_is[0],text_i)))
-                    pairs.add((min(widget_is[1],text_i),max(widget_is[1],text_i)))
+                    addPair(pairs,widget_is[0],text_bot)
+                    addPair(pairs,widget_is[1],text_bot)
 
                     if area0<area1:
                         assert(x1s[widget_is[0]]<x1s[widget_is[1]])
-                        return widget_is[0]
+                        #return widget_is[0]
                     elif area1<area0:
                         assert(x1s[widget_is[1]]<x1s[widget_is[0]])
-                        return widget_is[1]
+                        #return widget_is[1]
                     else:
                         assert False
                 else:
-                    pairs.add((min(widget_is[0],text_i),max(widget_is[0],text_i)))
-                    return widget_is[0]
-            else:
-                assert(len(widget_is)==1)
-                assert(len(owns[widget_is[0]])==0)
-                pairs.add((min(text_bot,widget_is[0]),max(text_bot,widget_is[0])))
+                    addPair(pairs,widget_is[0],text_bot)
+                    #return widget_is[0]
                 return text_top
+            elif len(text_is)==0:
+                text_top, text_bot = linkTextBlock(text_i,pairs)
+                #assert(len(widget_is)==1)
+                if len(widget_is)==1:
+                    assert(len(owns[widget_is[0]])==0)
+                    addPair(pairs,text_bot,widget_is[0])
+                else:
+                    with_y = [(i,y1s[i]) for i in widget_is]
+                    with_y.sort(key=lambda a:a[1])
+                    prev=text_bot
+                    for w_i,y in with_y:
+                        assert(len(owns[w_i])==0)
+                        addPair(pairs,prev,w_i)
+                        prev=w_i
+                return text_top
+            else:
+                #Specail date exception
+                elements=[]
+                avg_h=0
+                for o_bb_i in text_is+widget_is:
+                    elements.append((o_bb_i,x1s[o_bb_i],y1s[o_bb_i]))
+                    avg_h += y2s[o_bb_i]-y1s[o_bb_i]
+                avg_h/=len(elements)
+                elements.sort(key=lambda a:a[2])
+                
+                lines=[]
+                cur_line=[elements[0][0:2]]
+                cur_y=elements[0][2]
+                for o_bb_i,x,y in elements[1:]:
+                    if y-cur_y>avg_h*0.6:
+                        lines.append(cur_line)
+                        cur_line=[]
+                    cur_line.append((o_bb_i,x))
+                    cur_y = y
+                lines.append(cur_line)
+
+                prev=None
+                toptop=None
+                for line in lines:
+                    line.sort(key=lambda a:a[1])
+                    if all_bbs[line[0][0]][0]=='TextBlock':
+                        top,bot = linkTextBlock(line[0][0],pairs)
+                    else:
+                        top=bot=line[0][0]
+                    if prev is not None:
+                        addPair(pairs,prev,top)
+                    else:
+                        assert(toptop is None)
+                        toptop=top
+                    prev=bot
+                    for o_bb_i,x in line[1:]:
+                        if all_bbs[o_bb_i][0]=='TextBlock':
+                            top,bot = linkTextBlock(o_bb_i,pairs)
+                        else:
+                            top=bot=o_bb_i
+                        addPair(pairs,prev,top)
+                        prev = bot
+                return toptop
+
 
         def linkChoiceField(bb_i,pairs):
             assert len(owns[bb_i])==1 and all_bbs[owns[bb_i][0]][0]=='Field'
@@ -287,22 +349,169 @@ def parseGT(directory,name,scale):
                             best_bb_i = bb_i
 
                 for bb_i in bb_is:
-                    pairs.add((min(bb_i,best_bb_i),max(bb_i,best_bb_i)))
+                    addPair(pairs,bb_i,best_bb_i)
 
             if title_i is not None:
                 for to_link_bb_i in to_link_post:
-                    pairs.add((min(title_i,to_link_bb_i),max(title_i,to_link_bb_i)))
+                    addPair(pairs,title_i,to_link_bb_i)
                 return [title_i]
             else:
                 return to_link_post
 
         def linkList(bb_i,pairing):
-            prev=owns[bb_i][0]
-            assert(all_bbs[prev][0]=='TextBlock')
-            for o_bb_i in owns[bb_i][1:]:
-                pairs.add((min(prev,o_bb_i),max(prev,o_bb_i)))
-                prev=o_bb_i
-                assert(all_bbs[prev][0]=='TextBlock')
+            #prev=owns[bb_i][0]
+            #assert(all_bbs[prev][0]=='TextBlock')
+            #for o_bb_i in owns[bb_i][1:]:
+            #    addPair(pairs,prev,o_bb_i)
+            #    prev=o_bb_i
+            #    assert(all_bbs[prev][0]=='TextBlock')
+            elements=[]
+            avg_h=0
+            for o_bb_i in owns[bb_i]:
+                #assert(all_bbs[o_bb_i][0]=='TextBlock')
+                elements.append((o_bb_i,x1s[o_bb_i],y1s[o_bb_i]))
+                avg_h += y2s[o_bb_i]-y1s[o_bb_i]
+            avg_h/=len(elements)
+            elements.sort(key=lambda a:a[2])
+
+            
+            lines=[]
+            cur_line=[elements[0][0:2]]
+            cur_y=elements[0][2]
+            for o_bb_i,x,y in elements[1:]:
+                if y-cur_y>avg_h*0.6:
+                    lines.append(cur_line)
+                    cur_line=[]
+                cur_line.append((o_bb_i,x))
+                cur_y = y
+            lines.append(cur_line)
+
+
+            prev=None
+            toptop=None
+            for line in lines:
+                line.sort(key=lambda a:a[1])
+                #top,bot = linkTextBlock(line[0][0],pairs)
+                top=bot = linkAll(line[0][0],pairs)
+                if prev is not None:
+                    addPair(pairs,prev,top)
+                else:
+                    assert(toptop is None)
+                    toptop=top
+                prev=bot
+                for o_bb_i,x in line[1:]:
+                    top,bot = linkTextBlock(o_bb_i,pairs)
+                    addPair(pairs,prev,top)
+                    prev = bot
+            return toptop
+
+        def linkTable(bb_i,pairs):
+            #ugh
+            #does it have headers for rows, cols, or both?
+
+            #First, put everything in read order
+            elements=[]
+            avg_h=0
+            for o_bb_i in owns[bb_i]:
+                elements.append((o_bb_i,x1s[o_bb_i],y1s[o_bb_i]))
+                avg_h += y2s[o_bb_i]-y1s[o_bb_i]
+            avg_h/=len(elements)
+            elements.sort(key=lambda a:a[2])
+
+            
+            lines=[]
+            cur_line=[elements[0][0:2]]
+            cur_y=elements[0][2]
+            for o_bb_i,x,y in elements[1:]:
+                if y-cur_y>avg_h*0.6:
+                    lines.append(cur_line)
+                    cur_line=[]
+                cur_line.append((o_bb_i,x))
+                cur_y = y
+            lines.append(cur_line)
+
+
+            prev=None
+            counts=[]
+            for line in lines:
+                line.sort(key=lambda a:a[1])
+                counts.append(len(line))
+            min_counts=min(counts)
+            max_counts=max(counts)
+            has_row_header = all([all_bbs[line[0][0]][0]=='TextBlock' for line in lines[1:]])
+            if min_counts==max_counts:
+                #perfect grid
+                has_col_header = all([all_bbs[i][0]=='TextBlock' for i,x in lines[0][1:]])
+                has_title =  has_row_header and has_col_header
+            else:
+                assert(len(lines[0])==min_counts and all(len(line)==max_counts for line in lines[1:])) #normal table
+                has_col_header = all([all_bbs[i][0]=='TextBlock' for i,x in lines[0]])
+                assert(has_col_header)
+                has_title=False
+            
+            if has_title:
+                if all_bbs[lines[0][0][0]][0]=='TextBlock':
+                    title_top,title_bot = linkTextBlock(lines[0][0][0],pairs)
+                else:
+                    title_owns = owns[lines[0][0][0]]
+                    assert(len(title_owns)==1 and all_bbs[title_owns[0]][0]=='TextBlock')
+                    title_top,title_bot = linkTextBlock(title_owns[0],pairs)
+            if has_col_header:
+                start_row=1
+                col_hs=[]
+                for h_i,x in lines[0][1:]:
+                    h_top,h_bot = linkTextBlock(h_i,pairs)
+                    col_hs.append(h_bot)
+                    if has_title:
+                        addPair(pairs,title_bot,h_top)
+            else:
+                start_row=0
+            if has_row_header:
+                start_col=1
+                row_hs=[]
+                for line in lines[1:]:
+                    h_i = line[0][0]
+                    h_top,h_bot = linkTextBlock(h_i,pairs)
+                    row_hs.append(h_bot)
+                    if has_title:
+                        addPair(pairs,title_bot,h_top)
+            else:
+                start_col=0
+
+
+            top_cell=None
+            for col in range(start_col,max_counts):
+                for row in range(start_row,len(lines)):
+                    cell_i = linkAll(lines[row][col][0],pairs)
+                    if has_col_header:
+                        addPair(pairs,col_hs[col-start_col],cell_i)
+                    if has_row_header:
+                        addPair(pairs,row_hs[row-start_row],cell_i)
+                    if top_cell is None:
+                        top_cell = cell_i
+            if has_title:
+                return title_top
+            elif has_col_header:
+                return col_hs[0]
+            elif has_row_header:
+                return row_hs[0]
+            else:
+                return top_cell
+
+        def linkAll(bb_i,pairs):
+            json_type = all_bbs[bb_i][0]
+            if json_type=='ChoiceGroup':
+                bb_is=linkChoiceGroup(bb_i,pairs)
+                bb_is.sort(key=lambda i:y1s[i])
+                return bb_is[0]
+            elif json_type=='Field':
+                return linkField(bb_i,pairs)
+            elif json_type=='TextBlock':
+                return linkTextBlock(bb_i,pairs)[0]
+            elif json_type=='Table':
+                return linkTable(bb_i,pairs)
+            elif json_type=='List':
+                return linkList(bb_i,pairs)
 
 
         pairs=set()
@@ -311,17 +520,7 @@ def parseGT(directory,name,scale):
         #        bb_i = all_bbs.index(('ChoiceGroup',i))
         for bb_i in range(len(all_bbs)):
             if bb_i not in belongs_to:
-                json_type = all_bbs[bb_i][0]
-                if json_type=='ChoiceGroup':
-                    linkChoiceGroup(bb_i,pairs)
-                elif json_type=='Field':
-                    linkField(bb_i,pairs)
-                elif json_type=='TextBlock':
-                    linkTextBlock(bb_i,pairs)
-                elif json_type=='Table':
-                    linkTable(bb_i,pairs)
-                elif json_type=='List':
-                    linkList(bb_i,pairs)
+                linkAll(bb_i,pairs)
 
             
 
@@ -370,6 +569,8 @@ def parseGT(directory,name,scale):
         #            bb[16:]=0
         #            bb[classMap[label]]=1
         #            bbs.append(bb)
+    else:
+        pairs=set()
 
 
     if True:
@@ -425,12 +626,15 @@ def parseGT(directory,name,scale):
             y2c = int(round((y1s[bb_i2]+y2s[bb_i2])/2))
             img_f.line(image,(x1c,y1c),(x2c,y2c),(0,200,0),2)
 
+            assert(len(owns[bb_i1])==0)
+            assert(len(owns[bb_i2])==0)
+
         img_f.imshow('image',image)
         img_f.show()
 
 directory = sys.argv[1]
 names = [f[:-5] for f in os.listdir(os.path.join(directory,'jsons')) if os.path.isfile(os.path.join(directory,'jsons',f))]
-for name in names[1:]:
+for name in names[3:]:
     print(name)
     parseGT(directory,name,1.0)
 
