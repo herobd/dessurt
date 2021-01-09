@@ -265,63 +265,63 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                 else:
                     edgesToDraw.append((i,x1,y1,x2,y2))
 
-        if predTypes is not None and predTypes[0] is not None and len(predTypes[0])==len(edgeIndexes):
-            if edgePred is None:
-                edgePred = torch.FloatTensor(len(predTypes[0]),1,1).fill_(1)
-            if edgePred.size(2)>=len(predTypes):
-                edgeClassification = [(predTypes[i],edgePred[:,-1,i]) for i in range(len(predTypes))]
-            else:
-                edgeClassification = [
-                        (predTypes[0],torch.ones_like(edgePred[:,-1,0])),
-                        (predTypes[1],edgePred[:,-1,0]),
-                        (predTypes[2],edgePred[:,-1,1]),
-                        (predTypes[3],edgePred[:,-1,2])
-                        ]
+            if predTypes is not None and predTypes[0] is not None and len(predTypes[0])==len(edgeIndexes):
+                if edgePred is None:
+                    edgePred = torch.FloatTensor(len(predTypes[0]),1,1).fill_(1)
+                if edgePred.size(2)>=len(predTypes):
+                    edgeClassification = [(predTypes[i],edgePred[:,-1,i]) for i in range(len(predTypes))]
+                else:
+                    edgeClassification = [
+                            (predTypes[0],torch.ones_like(edgePred[:,-1,0])),
+                            (predTypes[1],edgePred[:,-1,0]),
+                            (predTypes[2],edgePred[:,-1,1]),
+                            (predTypes[3],edgePred[:,-1,2])
+                            ]
 
-            for i,x1,y1,x2,y2 in edgesToDraw:
-                    if edgeClassification[0][0][i]=='TP':
-                        lineColor = (0,edgePred[i,-1,0].item(),0)
-                    elif edgeClassification[0][0][i]=='UP':
-                        lineColor = (edgePred[i,-1,0].item(),0,edgePred[i,-1,0].item())
-                    elif edgeClassification[0][0][i]=='FN':
-                        lineColor = (edgePred[i,-1,0].item(),0,0)
-                    else: #is false positive
-                        #assert(edgeClassification[0][0][i]=='FP')
-                        if edgeClassification[0][0][i]!='FP':
-                            print('ERROR, edge classsification is {}, but expected to be FP'.format(edgeClassification[0][0][i]))
-                            #import pdb;pdb.set_trace()
-                        lineColor = (edgePred[i,-1,0].item(),edgePred[i,-1,0].item(),0)
-                    boxColors=[]
-                    for predType,pred in edgeClassification:
-                        if predType[i]=='TP':
-                            color = (0,pred[i].item(),0) #Green
-                        elif predType[i]=='FP':
-                            color = (pred[i].item(),pred[i].item()*0.5,0) #Orange
-                        elif predType[i]=='TN':
-                            color = (0,0,1-pred[i].item()) #Blue
-                        elif predType[i]=='TN':
-                            color = (1-pred[i].item(),0,0) #Red
-                        else: #We don;t know the GT
-                            color = (pred[i].item(),pred[i].item(),pred[i].item())
-                        boxColors.append(color)
+                for i,x1,y1,x2,y2 in edgesToDraw:
+                        if edgeClassification[0][0][i]=='TP':
+                            lineColor = (0,edgePred[i,-1,0].item(),0)
+                        elif edgeClassification[0][0][i]=='UP':
+                            lineColor = (edgePred[i,-1,0].item(),0,edgePred[i,-1,0].item())
+                        elif edgeClassification[0][0][i]=='FN':
+                            lineColor = (edgePred[i,-1,0].item(),0,0)
+                        else: #is false positive
+                            #assert(edgeClassification[0][0][i]=='FP')
+                            if edgeClassification[0][0][i]!='FP':
+                                print('ERROR, edge classsification is {}, but expected to be FP'.format(edgeClassification[0][0][i]))
+                                #import pdb;pdb.set_trace()
+                            lineColor = (edgePred[i,-1,0].item(),edgePred[i,-1,0].item(),0)
+                        boxColors=[]
+                        for predType,pred in edgeClassification:
+                            if predType[i]=='TP':
+                                color = (0,pred[i].item(),0) #Green
+                            elif predType[i]=='FP':
+                                color = (pred[i].item(),pred[i].item()*0.5,0) #Orange
+                            elif predType[i]=='TN':
+                                color = (0,0,1-pred[i].item()) #Blue
+                            elif predType[i]=='TN':
+                                color = (1-pred[i].item(),0,0) #Red
+                            else: #We don;t know the GT
+                                color = (pred[i].item(),pred[i].item(),pred[i].item())
+                            boxColors.append(color)
+                        img_f.line(image,(x1,y1),(x2,y2),lineColor,2)
+                        cX = (x1+x2)//2
+                        cY = (y1+y2)//2
+                        #print('{} {},  {} {},  > {} {}'.format(x1,y1,x2,y2,cX,cY))
+                        for i,(offsetX,offsetY,s) in enumerate([(-2,-2,3),(1,-2,3),(1,1,3),(-2,1,3)]):
+                            if i>=len(boxColors):
+                                break
+                            tX=cX+offsetX
+                            tY=cY+offsetY
+                            image[tY:tY+s,tX:tX+s]=boxColors[i]
+                        #error
+                        if len(boxColors)==5 and cY-3>=0 and cY+4<image.shape[0] and cX-3>=0 and cX+4<image.shape[1]:
+                            image[cY-3,cX-2:cX+4]=boxColors[4]
+                            image[cY-2:cY+4,cX-3]=boxColors[4]
+            else:
+                lineColor = (0,0.8,0)
+                for i,x1,y1,x2,y2 in edgesToDraw:
                     img_f.line(image,(x1,y1),(x2,y2),lineColor,2)
-                    cX = (x1+x2)//2
-                    cY = (y1+y2)//2
-                    #print('{} {},  {} {},  > {} {}'.format(x1,y1,x2,y2,cX,cY))
-                    for i,(offsetX,offsetY,s) in enumerate([(-2,-2,3),(1,-2,3),(1,1,3),(-2,1,3)]):
-                        if i>=len(boxColors):
-                            break
-                        tX=cX+offsetX
-                        tY=cY+offsetY
-                        image[tY:tY+s,tX:tX+s]=boxColors[i]
-                    #error
-                    if len(boxColors)==5 and cY-3>=0 and cY+4<image.shape[0] and cX-3>=0 and cX+4<image.shape[1]:
-                        image[cY-3,cX-2:cX+4]=boxColors[4]
-                        image[cY-2:cY+4,cX-3]=boxColors[4]
-        else:
-            lineColor = (0,0.8,0)
-            for i,x1,y1,x2,y2 in edgesToDraw:
-                img_f.line(image,(x1,y1),(x2,y2),lineColor,2)
 
 
         #Draw alginment between gt and pred bbs
