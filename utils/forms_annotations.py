@@ -80,6 +80,7 @@ def convertBBs(bbs,rotate,numClasses):
 
     if (d==0).any():
         print('ERROR: zero length bb {}'.format(bbs[0][d[0]==0]))
+        d[d==0]=1
 
     hl = ((tlX-lX)*-(rY-lY) + (tlY-lY)*(rX-lX))/d #projection of half-left edge onto transpose horz run
     hr = ((brX-rX)*-(lY-rY) + (brY-rY)*(lX-rX))/d #projection of half-right edge onto transpose horz run
@@ -102,6 +103,8 @@ def convertBBs(bbs,rotate,numClasses):
     width = d/2.0 #and half width
 
 
+    height[ np.logical_or(np.isnan(height),height==0) ] =1
+    width[ np.logical_or(np.isnan(width),width==0) ] =1
     #topX = (tlX+trX)/2.0
     #topY = (tlY+trY)/2.0
     #botX = (blX+brX)/2.0
@@ -115,8 +118,6 @@ def convertBBs(bbs,rotate,numClasses):
     rightX = rX
     rightY = rY
 
-    height[ np.logical_or(np.isnan(height),height==0) ] =1
-    width[ np.logical_or(np.isnan(width),width==0) ] =1
 
     new_bbs[:,:,0]=cX
     new_bbs[:,:,1]=cY
@@ -759,7 +760,7 @@ def horizontalOverlap(bb1,bb2):
         bY1=max(lY1,rY1)
         bY2=max(lY2,rY2)
         overlap = min(bY1,bY2)-max(aY1,aY2)
-        print(overlap)
+        #print(overlap)
         return max(0,overlap/(bY1-aY1),overlap/(bY2-aY2))
 def areFar(bb1,bb2):
     tlX1 = bb1['poly_points'][0][0]
@@ -797,7 +798,7 @@ def areFar(bb1,bb2):
     dist = math.sqrt(min( (lX1-rX2)**2 + (lY1-rY2)**2, (lX2-rX1)**2 + (lY2-rY1)**2 ))
     return dist>thresh
 
-def formGroups(annotations):
+def formGroups(annotations,group_only_same=False):
     #printTypes(annotations)
     groups={}
     groupMap={}
@@ -819,8 +820,20 @@ def formGroups(annotations):
             hasMinorNeighbor[pair[1]]=True
         elif annotations['byId'][pair[1]]['type']=='textMinor' and annotations['byId'][pair[0]]['type']=='field':
             hasMinorNeighbor[pair[0]]=True
-        if  ( #this is the rule that determines which bbs get grouped
-                (
+        #this is the rule that determines which bbs get grouped
+        if group_only_same:
+            should_be_grouped = (
+                    (annotations['byId'][pair[0]]['type'] == annotations['byId'][pair[1]]['type']) 
+                and (
+                    computeRotationDiff(annotations['byId'][pair[0]],annotations['byId'][pair[1]]) < rot_diff and
+                    (annotations['byId'][pair[0]]['type']!='textMinor' or horizontalOverlap(annotations['byId'][pair[0]],annotations['byId'][pair[1]]) > 0.2 )
+              ) and (
+                    #horz_overlapped
+                    horizontalOverlap(annotations['byId'][pair[0]],annotations['byId'][pair[1]]) > 0
+              ) )
+        else:
+            #if you have the same label, if your joined para, if you are a minor text or circle that's in para
+            should_be_grouped = ( (
                 (annotations['byId'][pair[0]]['type'] == annotations['byId'][pair[1]]['type']) or
                 ('P' in annotations['byId'][pair[0]]['type'] and 'P' in annotations['byId'][pair[1]]['type']) or
                 ( ('fieldP' in annotations['byId'][pair[0]]['type'] or 'fieldP' in annotations['byId'][pair[1]]['type']) and ('textMinor' in annotations['byId'][pair[0]]['type'] or 'textMinor' in annotations['byId'][pair[1]]['type']) )
@@ -829,9 +842,9 @@ def formGroups(annotations):
                     computeRotationDiff(annotations['byId'][pair[0]],annotations['byId'][pair[1]]) < rot_diff and
                     (annotations['byId'][pair[0]]['type']!='textMinor' or horizontalOverlap(annotations['byId'][pair[0]],annotations['byId'][pair[1]]) > 0.2 )
                     #(annotations['byId'][pair[0]]['type']!='textMinor' or connectionNotParallel(annotations['byId'][pair[0]],annotations['byId'][pair[1]]) )
-                )
-                ):
-            #if you have the same label, if your joined para, if you are a minor text or circle that's in para
+                ) )
+        if should_be_grouped:
+                
             #print('adding grouping between: {} and {}'.format(annotations['byId'][pair[0]]['type'],annotations['byId'][pair[1]]['type']))
 
             #add to appropriate group or form a new one

@@ -509,7 +509,7 @@ class SimpleFullGradMod():
         
         info = {
                 'num_giters':num_giters,
-                'edge_indexes':edge_indexes,
+                'edge_indexes':[[(int(a),int(b)) for a,b in edge_indexes_i] for edge_indexes_i in edge_indexes],
                 'node_info':node_bb_info
                 }
         filename = path_prefix+'info.json'

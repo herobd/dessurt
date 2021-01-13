@@ -1,10 +1,10 @@
 {
-    "name": "NAFGblank_pair_os100k2_graphNAtt333rv_sc_prop_nms_strictAlign_smooth",
+    "name": "NAFGSblank_pair_os100k2_graphNAtt543rv_sc_prop_nms_strictAlign_smooth",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
-    "super_computer":true,
+    "super_computer":false,
     "data_loader": {
         "data_set_name": "FormsGraphPair",
         "special_dataset": null,
@@ -23,8 +23,9 @@
         "swap_circle":true,
         "no_graphics":true,
         "cache_resized_images": true,
-        "rotation": false,
-        "only_opposite_pairs": true
+        "rotation": true,
+        "only_opposite_pairs": false,
+        "group_only_same": true
 
 
     },
@@ -116,7 +117,7 @@
 
         "relationship_proposal": "feature_nn",
         "percent_rel_to_keep": 0.4,
-        "max_rel_to_keep": 2000,
+        "max_rel_to_keep": 500,
         "max_merge_rel_to_keep": 5000,
         "roi_batch_size": 600,
 
@@ -134,9 +135,9 @@
         "merge_first": true,
         "merge_use_mask": false,
         "expand_merge_context": [10,20],
-        "merge_featurizer_start_h": 5,
-        "merge_featurizer_start_w": 5,
-        "merge_featurizer_conv": ["sep256","sep128","sep128",100],
+        "merge_featurizer_start_h": 6,
+        "merge_featurizer_start_w": 6,
+        "merge_featurizer_conv": ["sep256","sep128","M", "sep128"],
         "init_merge_thresh": 0.9,
 
         "expand_rel_context": 20,
@@ -162,7 +163,7 @@
             "in_channels": 512,
             "node_out": 4,
             "edge_out": 5,
-            "num_layers": 3,
+            "num_layers": 5,
             "num_heads": 4,
             "repetitions": 1,
             "use_repetition_res": false,
@@ -171,7 +172,7 @@
             "better_norm_edge": true,
 	    "merge_thresh": 0.8,
             "group_thresh": 0.95,
-            "keep_edge_thresh": 0.25,
+            "keep_edge_thresh": 0.1,
             "debug_check_input": false
         },
         {
@@ -179,7 +180,7 @@
             "in_channels": 512,
             "node_out": 4,
             "edge_out": 5,
-            "num_layers": 3,
+            "num_layers": 4,
             "num_heads": 4,
             "repetitions": 1,
             "use_repetition_res": false,
@@ -188,7 +189,7 @@
             "better_norm_edge": true,
 	    "merge_thresh": 0.9,
             "group_thresh": 0.9,
-            "keep_edge_thresh": 0.3,
+            "keep_edge_thresh": 0.2,
             "debug_check_input": false
         },
         {
