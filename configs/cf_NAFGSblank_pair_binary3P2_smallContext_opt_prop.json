@@ -1,10 +1,10 @@
 {
-    "name": "NAFGblank_pair_binary3P2_smallContext_prop",
+    "name": "NAFGSblank_pair_binary3P2_smallContext_opt_prop",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
-    "super_computer":true,
+    "super_computer":false,
     "data_loader": {
         "data_set_name": "FormsGraphPair",
         "special_dataset": null,
@@ -24,7 +24,8 @@
         "no_graphics":true,
         "cache_resized_images": true,
         "rotation": false,
-        "only_opposite_pairs": true
+        "only_opposite_pairs": false,
+        "group_only_same": true
 
 
     },
@@ -41,7 +42,7 @@
     "optimizer_type": "Adam",
     "optimizer": {
         "lr": 0.001,
-        "weight_decay": 0.0000001
+        "weight_decay": 0
     },
     "loss": {
         "box": "YoloLoss",
@@ -68,6 +69,7 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
+        "#iterations": 12365,
         "iterations": 400000,
         "swa": true,
         "swa_start": 300000,
@@ -77,6 +79,7 @@
         "save_step": 20000,
         "save_step_minor": 250,
         "log_step": 250,
+        "save_images_every": -1,
         "verbosity": 1,
         "monitor": "loss",
         "monitor_mode": "none",
@@ -114,17 +117,17 @@
         "no_grad_feats": true,
 
         "expand_rel_context": 20,
-        "featurizer_start_h": 32,
-        "featurizer_start_w": 32,
+        "featurizer_start_h": 24,
+        "featurizer_start_w": 24,
         "featurizer_conv": ["sep128","M","sep128","sep128","M","sep256","sep256","M",238],
         "featurizer_fc": null,
 
         "pred_nn": false,
         "pred_class": true,
         "expand_bb_context": 20,
-        "featurizer_bb_start_h": 32,
-        "featurizer_bb_start_w": 32,
-        "bb_featurizer_conv": ["sep64","M","sep64","sep64","M","sep128","sep128","M",250],
+        "featurizer_bb_start_h": 12,
+        "featurizer_bb_start_w": 12,
+        "bb_featurizer_conv": ["sep64","M","sep64","sep64","M","sep128","sep256",250],
 
         "fix_bi_dir": true,
         "graph_config": [{

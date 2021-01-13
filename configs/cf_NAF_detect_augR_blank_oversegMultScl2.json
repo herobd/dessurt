@@ -1,26 +1,31 @@
 {
-    "name": "FUNSDLines_detect_augRFh_oversegMultScl_resnetPure",
+    "name": "NAF_detect_augR_blank_oversegMultScl2",
     "cuda": true,
     "gpu": 0,
     "super_computer":false,
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
-        "data_set_name": "FUNSDBoxDetect",
-        "data_dir": "../data/FUNSD",
-        "split_to_lines": true,
-        "batch_size": 4,
+        "data_set_name": "FormsBoxDetect",
+        "data_dir": "../data/forms",
+        "batch_size": 6,
         "shuffle": true,
-        "num_workers": 0,
+        "num_workers": 3,
         "crop_to_page":false,
         "color":false,
-        "rescale_range": [0.8,1.2],
+        "rescale_range": [0.4,0.65],
         "crop_params": {
             "crop_size":[700,1100],
-            "pad":50,
-            "flip_horz_ISBROKEN": false,
-            "rot_degree_std_dev": 1,
-            "rot_freq": 0.5
+            "pad":0,
+            "rot_degree_std_dev": 1.2,
+            "rot_freq": 0.7
+        },
+        "no_blanks": false,
+        "swap_circle":true,
+        "no_graphics":true,
+        "cache_resized_images": true,
+        "only_types": {
+            "boxes":true
         },
         "rotation": true
 
@@ -28,9 +33,9 @@
     },
     "validation": {
         "shuffle": false,
-        "color":false,
-        "rescale_range": [1,1],
-        "rotation": false
+        "rescale_range": [0.52,0.52],
+        "batch_size": 1,
+        "crop_params": null
     },
 
     
@@ -55,12 +60,12 @@
     "metrics": [],
     "trainer": {
         "class": "BoxDetectTrainer",
-        "iterations": 400000,
+        "iterations": 200000,
         "save_dir": "saved/",
         "val_step": 10000,
-        "save_step": 20000,
+        "save_step": 50000,
         "save_step_minor": 500,
-        "log_step": 100,
+        "log_step": 500,
         "verbosity": 1,
         "monitor": "loss",
         "monitor_mode": "none",
@@ -73,15 +78,16 @@
     "arch": "OverSegBoxDetector", 
     "model": {
         "color":false,
-        "number_of_box_types": 4,
+        "number_of_box_types": 3,
         "number_of_pixel_types": 0,
         "norm_type": "group_norm",
         "dropout": true,
-        "down_layers_cfg": [["$7-64",
-                                "D128",  "R128", "R128", "R128",
-                                "D256", "R256", "R256", "R256",
-                                "D256", "R256", "R256", "R256"],
-                                ["D512","R512"]],
+        "down_layers_cfg": [["k5-32", "M", 
+                                64, 64,  "M", 
+                                128, "d2-128", 128, 128,  "M", 
+                                128, "d2-128", 128, 128, 
+                                "M",256,"d2-256",256,"d4-256", 256],
+                                ["M",256,"d2-256", 256]],
         "up_layers_cfg":[]
     }
 }

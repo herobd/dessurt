@@ -121,13 +121,17 @@ def display(data):
             xc=data['bb_gt'][b,i,0]
             yc=data['bb_gt'][b,i,1]
             rot=data['bb_gt'][b,i,2]
-            assert(rot==0)
             h=data['bb_gt'][b,i,3]
             w=data['bb_gt'][b,i,4]
-            maxX=max(maxX,xc+w)
-            maxY=max(maxY,yc+h)
-            minX=min(minX,xc-w)
-            minY=min(minY,yc-h)
+            tr = (math.cos(rot)*w-math.sin(rot)*h +xc, math.sin(rot)*w+math.cos(rot)*h +yc)
+            tl = (math.cos(rot)*-w-math.sin(rot)*h +xc, math.sin(rot)*-w+math.cos(rot)*h +yc)
+            br = (math.cos(rot)*w-math.sin(rot)*-h +xc, math.sin(rot)*w+math.cos(rot)*-h +yc)
+            bl = (math.cos(rot)*-w-math.sin(rot)*-h +xc, math.sin(rot)*-w+math.cos(rot)*-h +yc)
+            maxX=max(maxX,tr[0],tl[0],br[0],bl[0])
+            minX=min(minX,tr[0],tl[0],br[0],bl[0])
+            maxY=max(maxY,tr[1],tl[1],br[1],bl[1])
+            minY=min(minY,tr[1],tl[1],br[1],bl[1])
+
         if len(group)>1:
             ax_im.plot([minX,maxX,maxX,minX,minX],[minY,minY,maxY,maxY,minY],'c:')
         groupCenters.append(((minX+maxX)//2, (minY+minY)//2,len(group)>1 ))
@@ -150,7 +154,7 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=FormsGraphPair(dirPath=dirPath,split='valid',config={
+    data=FormsGraphPair(dirPath=dirPath,split='train',config={
 	"data_set_name": "FormsGraphPair",
         "special_dataset": None,
         "data_dir": "../data/forms",
@@ -160,8 +164,8 @@ if __name__ == "__main__":
         "crop_to_page":False,
         "color":False,
         "rescale_range": [0.4,0.65],
-        "#crop_params": None,
-        "crop_params": {
+        "crop_params": None,
+        "#crop_params": {
             "crop_size":[600,1200],
             "pad":0
         },
@@ -169,8 +173,9 @@ if __name__ == "__main__":
         "swap_circle":True,
         "no_graphics":True,
         "cache_resized_images": True,
-        "rotation": False,
-        "only_opposite_pairs": True
+        "rotation": True,
+        "only_opposite_pairs": False,
+        "no_groups": True
 })
 
     dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=forms_graph_pair.collate)
