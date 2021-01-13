@@ -523,11 +523,13 @@ class GraphPairTrainer(BaseTrainer):
                 ap=1
                 recall=1
                 targIndex = -torch.ones(len(outputBoxes)).int()
+                missed_rels = set()
             else:
                 recall=0
                 ap=0
                 prec=1
                 targIndex = None
+                missed_rels = gtGroupAdj
             Fm=2*recall*prec/(recall+prec) if recall+prec>0 else 0
             log = {
                 'recallRel' : recall,
