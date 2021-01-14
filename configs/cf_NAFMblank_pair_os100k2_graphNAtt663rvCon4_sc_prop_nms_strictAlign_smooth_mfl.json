@@ -1,35 +1,40 @@
 {
-    "name": "FUNSDLines_pair_os98k_binary333rv_mc_prop_nms_strictAlign_smooth_mfl",
+    "name": "NAFMblank_pair_os100k2_graphNAtt663rvCon4_sc_prop_nms_strictAlign_smooth_mfl",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
     "super_computer":true,
     "data_loader": {
-        "data_set_name": "FUNSDGraphPair",
-        "data_dir": "../data/FUNSD",
+        "data_set_name": "FormsGraphPair",
+        "special_dataset": null,
+        "data_dir": "../data/forms",
         "batch_size": 1,
         "shuffle": true,
-        "num_workers": 3,
-        "split_to_lines": true,
+        "num_workers": 2,
         "crop_to_page":false,
         "color":false,
-        "rescale_range": [0.8,1.2],
+        "rescale_range": [0.4,0.65],
         "crop_params": {
-            "SMALLcrop_size":[200,400],
-            "crop_size":[600,800],
-	    "pad":50
-        }
+            "crop_size":[600,1400],
+            "pad":0
+        },
+        "no_blanks": false,
+        "swap_circle":true,
+        "no_graphics":true,
+        "cache_resized_images": true,
+        "rotation": true,
+        "only_opposite_pairs": false,
+        "no_groups": true
 
 
     },
     "validation": {
         "shuffle": false,
-        "rescale_range": [1,1],
+        "rescale_range": [0.52,0.52],
         "crop_params": null,
         "batch_size": 1
     },
-
     
     "lr_scheduler_type": "none",
  
@@ -102,12 +107,13 @@
     },
     "arch": "PairingGroupingGraph", 
     "model": {
-        "detector_checkpoint": "saved/FUNSDLines_detect_augRFh_oversegMultScl/checkpoint-iteration98042.pth",
+        "detector_checkpoint": "saved/NAF_detect_augR_blank_oversegMultScl2/checkpoint-iteration100000.pth",
         "overseg_non_max_sup": true,
         "text_line_smoothness": 200,
         "conf_thresh": 0.7,
         "start_frozen": true,
 
+        "graph_four_connected": true,
         "relationship_proposal": "feature_nn",
         "percent_rel_to_keep": 0.4,
         "max_rel_to_keep": 3000,
@@ -133,58 +139,69 @@
         "merge_featurizer_conv": ["sep256","sep128","sep128",100],
         "init_merge_thresh": 0.95,
 
-        "expand_rel_context": [75,150],
-        "featurizer_start_h": 24,
-        "featurizer_start_w": 24,
-        "featurizer_conv": ["sep128","M","sep128","sep128","M","sep256","sep256","M"],
+        "expand_rel_context": 20,
+        "featurizer_start_h": 16,
+        "featurizer_start_w": 16,
+        "featurizer_conv": ["sep128","M","sep128","sep256","sep256","M"],
         "featurizer_conv_auto": true,
         "featurizer_fc": null,
 
         "pred_nn": false,
         "pred_class": true,
-        "expand_bb_context": [50,100],
-        "featurizer_bb_start_h": 12,
-        "featurizer_bb_start_w": 12,
-        "bb_featurizer_conv": ["sep64","M","sep64","sep128","M",256],
+        "expand_bb_context": 20,
+        "featurizer_bb_start_h": 10,
+        "featurizer_bb_start_w": 10,
+        "bb_featurizer_conv": ["sep64","M","sep128","sep128"],
 
 
         "fix_bi_dir": true,
         "reintroduce_visual_features": "fixed map",
         "graph_config": [
         {
-            "arch": "BinaryPairReal",
-            "in_channels": 512,
+            "arch": "MetaGraphNet",
+            "in_channels": 256,
             "node_out": 5,
             "edge_out": 5,
-            "layers": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
-            "layers_bb": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
+            "num_layers": 6,
+            "num_heads": 4,
+            "repetitions": 1,
+            "use_repetition_res": false,
+            "encode_type": "attention",
+            "better_norm_attention": true,
 	    "merge_thresh": 0.8,
             "group_thresh": 0.95,
             "keep_edge_thresh": 0.1
         },
         {
-            "arch": "BinaryPairReal",
-            "in_channels": 512,
+            "arch": "MetaGraphNet",
+            "in_channels": 256,
             "node_out": 5,
             "edge_out": 5,
-            "layers": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
-            "layers_bb": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
+            "num_layers": 6,
+            "num_heads": 4,
+            "repetitions": 1,
+            "use_repetition_res": false,
+            "encode_type": "attention",
+            "better_norm_attention": true,
 	    "merge_thresh": 0.9,
             "group_thresh": 0.9,
             "keep_edge_thresh": 0.2
         },
         {
-            "arch": "BinaryPairReal",
-            "in_channels": 512,
+            "arch": "MetaGraphNet",
+            "in_channels": 256,
             "node_out": 5,
             "edge_out": 5,
-            "layers": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
-            "layers_bb": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
+            "num_layers": 3,
+            "num_heads": 4,
+            "repetitions": 1,
+            "use_repetition_res": false,
+            "encode_type": "attention",
+            "better_norm_attention": true,
 	    "merge_thresh": 0.9,
             "group_thresh": 0.6,
             "keep_edge_thresh": 0.5
-        }
-        ]
+        }]
 
 
     }
