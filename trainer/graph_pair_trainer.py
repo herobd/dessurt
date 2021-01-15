@@ -2672,7 +2672,7 @@ class GraphPairTrainer(BaseTrainer):
                                         prevEdgePred.append(allEdgeScores[giter-1][ei]>self.model.keepEdgeThresh[giter-1])
                                         #prevRelPred.append(allRelScores[giter-1][ei]>self.model.keepRelThresh)
                                 assert(len(prevEdgePred)>0)
-                                assert(not any(prevEdgePred))
+                                #assert(not any(prevEdgePred))
                                 missed_rel_from_pruned_edge[giter-1]+=1
 
                             break
