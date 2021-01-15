@@ -111,6 +111,11 @@ class GraphPairTrainer(BaseTrainer):
         self.save_images_dir = 'train_out'
         util.ensure_dir(self.save_images_dir)
 
+
+        self.amp = config['trainer']['AMP'] if 'AMP' in config['trainer'] else False
+        if self.amp:
+            self.scaler = torch.cuda.amp.GradScaler()
+
         #Name change
         if 'edge' in self.lossWeights:
             self.lossWeights['rel'] = self.lossWeights['edge']
@@ -218,10 +223,17 @@ class GraphPairTrainer(BaseTrainer):
         else:
             threshIntur = None
         useGT = self.useGT(iteration)
-        if self.mergeAndGroup:
-            losses, run_log, out = self.newRun(thisInstance,useGT,threshIntur)
+        if self.amp:
+            with torch.cuda.amp.autocast():
+                if self.mergeAndGroup:
+                    losses, run_log, out = self.newRun(thisInstance,useGT,threshIntur)
+                else:
+                    losses, run_log, out = self.run(thisInstance,useGT,threshIntur)
         else:
-            losses, run_log, out = self.run(thisInstance,useGT,threshIntur)
+            if self.mergeAndGroup:
+                losses, run_log, out = self.newRun(thisInstance,useGT,threshIntur)
+            else:
+                losses, run_log, out = self.run(thisInstance,useGT,threshIntur)
         #t#self.opt_history['full run'].append(timeit.default_timer()-tic)#t#
 
         #t#tic=timeit.default_timer()#t##t#
@@ -231,10 +243,17 @@ class GraphPairTrainer(BaseTrainer):
             loss += losses[name]
             losses[name] = losses[name].item()
         if len(losses)>0:
-            loss.backward()
+            if self.amp:
+                self.scaler.scale(loss).backward()
+            else:
+                loss.backward()
 
         torch.nn.utils.clip_grad_value_(self.model.parameters(),1)
-        self.optimizer.step()
+        if self.amp:
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+        else:
+            self.optimizer.step()
         #t#self.opt_history['backprop'].append(timeit.default_timer()-tic)#t#
         meangrad=0
         count=0
@@ -523,11 +542,13 @@ class GraphPairTrainer(BaseTrainer):
                 ap=1
                 recall=1
                 targIndex = -torch.ones(len(outputBoxes)).int()
+                missed_rels = set()
             else:
                 recall=0
                 ap=0
                 prec=1
                 targIndex = None
+                missed_rels = gtGroupAdj
             Fm=2*recall*prec/(recall+prec) if recall+prec>0 else 0
             log = {
                 'recallRel' : recall,
@@ -2493,6 +2514,7 @@ class GraphPairTrainer(BaseTrainer):
             lastBBs1 = set(finalBB2LastBB[bb] for bb in finalPredGroups[n1])
             lastBBs2 = set(finalBB2LastBB[bb] for bb in finalPredGroups[n2])
             #find most consistent last group
+            lastNode1=lastNode2=None
             for lgi, bbs in enumerate(allPredGroups[-1]):
                 bbs=set(bbs)
                 same1 = len(bbs.intersection(lastBBs1))
@@ -2502,19 +2524,20 @@ class GraphPairTrainer(BaseTrainer):
                 same2 = len(bbs.intersection(lastBBs2))
                 if same2/max(len(bbs),len(lastBBs2))>0.5:
                     lastNode2=lgi
-
-            try:
-                ei = allEdgeIndexes[-1].index((min(lastNode1,lastNode2),max(lastNode1,lastNode2)))
-                keep = allEdgeScores[-1][ei] #allEdgePred[-1][ei,0]
-                rel = allRelScores[-1][ei]
-                if is_false_pos:
-                    false_pos_keep_scores.append(keep)
-                    false_pos_rel_scores.append(rel)
-                else:
-                    true_pos_keep_scores.append(keep)
-                    true_pos_rel_scores.append(rel)
-            except ValueError:
-                pass
+            
+            if lastNode1 is not None and lastNode2 is not None:
+                try:
+                    ei = allEdgeIndexes[-1].index((min(lastNode1,lastNode2),max(lastNode1,lastNode2)))
+                    keep = allEdgeScores[-1][ei] #allEdgePred[-1][ei,0]
+                    rel = allRelScores[-1][ei]
+                    if is_false_pos:
+                        false_pos_keep_scores.append(keep)
+                        false_pos_rel_scores.append(rel)
+                    else:
+                        true_pos_keep_scores.append(keep)
+                        true_pos_rel_scores.append(rel)
+                except ValueError:
+                    pass
                     
                     
 
