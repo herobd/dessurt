@@ -115,7 +115,10 @@ def attention(query, key, value, mask=None, dropout=None):
     #scores.fill_(0.1)
     ###
     if mask is not None:
-        scores = scores.masked_fill(mask == 0, -1e9)
+        if torch.is_autocast_enabled():
+            scores = scores.masked_fill(mask == 0, -1e4)
+        else:
+            scores = scores.masked_fill(mask == 0, -1e9)
     p_attn = F.softmax(scores, dim = -1)
     if dropout is not None:
         p_attn = dropout(p_attn)
