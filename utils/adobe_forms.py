@@ -7,6 +7,8 @@ from collections import defaultdict
 INSIDE_THRESH=0.92
 DISPLAY=False
 LINKING=True
+SKIP_LIST=False
+LINK_LIST=False
 
 class TableError(Exception):
     pass
@@ -18,6 +20,7 @@ def parseGT(directory,name,scale):
 
 
     image = img_f.imread(os.path.join(directory,'imgs',name+'.png'))
+    bbs={}
     all_bbs=[]
     x1s=[]
     x2s=[]
@@ -35,17 +38,20 @@ def parseGT(directory,name,scale):
             x2=round(bb['x']+bb['w'])-1
             y2=round(bb['y']+bb['h'])-1
 
-            assert(bb['w']>0 and bb['h']>0)
+            assert(bb['w']>=0 and bb['h']>=0)
 
             
 
             if x>=0 and x<image.shape[1] and y>=0 and y<image.shape[0] and x2>x and y2>y:
+                if t=='Widget' or t=='TextRun':
+                    bbs[len(all_bbs)] = bb
                 all_bbs.append((section,i))
                 x1s.append(x)
                 x2s.append(x2)
                 y1s.append(y)
                 y2s.append(y2)
                 #all_areas.append(bb['h']*bb['w'])
+
 
     x1s=np.array(x1s)
     x2s=np.array(x2s)
@@ -97,7 +103,7 @@ def parseGT(directory,name,scale):
 
     belongs_to = {}
     owns = defaultdict(list)
-    bbs=[]
+    #bbs=[]
     bb_i_groups=[]
 
     done=set()
@@ -151,9 +157,9 @@ def parseGT(directory,name,scale):
                             area>=areas[i_bb_i] and
                             (json_type,all_bbs[i_bb_i][0]) not in illegal
                             ):
-                        if json_type=='List' and 'Text' not in all_bbs[i_bb_i][0]:
+                        if json_type=='List' and 'Text' not in all_bbs[i_bb_i][0] and SKIP_LIST:
                             print('skipping image, List present')
-                            return 
+                            return 'hard_list'
                         if (not (json_type=='TextBlock' and all_bbs[i_bb_i][0]=='ChoiceField')) or area>areas[i_bb_i]:
                             if json_type=='TextBlock' and all_bbs[i_bb_i][0]=='ChoiceField':
                                 print('Hey! {} TextBlock is claiming {} ChoiceField. inside: {}'.format(bb_i,i_bb_i,inside_amounts[bb_i,i_bb_i]))
@@ -218,9 +224,29 @@ def parseGT(directory,name,scale):
 
         
         def checkFix(bb_i):
-            for o_i in list(owns[bb_i]):
+            old_owns = set(owns[bb_i])
+            for o_i in old_owns:
                 checkFix(o_i)
             #print('check {} {} -> {}'.format(bb_i,all_bbs[bb_i],owns[bb_i]))
+            
+            if all_bbs[bb_i][0]=='ChoiceGroup' and len(owns[bb_i])==0:
+                #find my misaligned Fields and title
+                threshold = 0.8
+                while len(owns[bb_i])==0:
+                    for o_bb_i in range(len(all_bbs)):
+                        if (all_bbs[o_bb_i][0]=='ChoiceField' or all_bbs[o_bb_i][0]=='ChoiceGroupTitle') and inside_amounts[bb_i,o_bb_i]>threshold:
+                            if o_bb_i in belongs_to:
+                                owns[belongs_to[o_bb_i]].remove(o_bb_i)
+                                print('Stole {} {} for ChoiceGroup {}'.format(o_bb_i,all_bbs[o_bb_i][0],bb_i))
+                            else:
+                                print('Assigned {} {} to ChoiceGroup {}'.format(o_bb_i,all_bbs[o_bb_i][0],bb_i))
+                            owns[bb_i].append(o_bb_i)
+                            belongs_to[o_bb_i]=bb_i
+                    threshold-=0.1
+
+                                
+
+
             if all_bbs[bb_i][0]=='ChoiceGroupTitle' and (bb_i not in belongs_to or all_bbs[belongs_to[bb_i]][0]!='ChoiceGroup'):
                 #import pdb;pdb.set_trace()
                 assert(len(owns[bb_i])==1 and all_bbs[owns[bb_i][0]][0]=='TextBlock')
@@ -300,6 +326,8 @@ def parseGT(directory,name,scale):
                         
 
             if all_bbs[bb_i][0]=='Field':
+                #if bb_i==141:
+                #    import pdb;pdb.set_trace()
                 has_text=False
                 has_widget=False
                 for o_i in owns[bb_i]:
@@ -345,9 +373,12 @@ def parseGT(directory,name,scale):
                 if not has_text:
                     #perhaps it was claimed by something else
                     possiblities=[]
-                    for o_bb_i in range(len(all_bbs)):
-                        if insides[bb_i,o_bb_i] and all_bbs[o_bb_i][0]=='TextBlock':
-                            possiblities.append(o_bb_i)
+                    threshold=0.9
+                    while len(possiblities)==0 and threshold>0:
+                        for o_bb_i in range(len(all_bbs)):
+                            if inside_amounts[bb_i,o_bb_i]>threshold and all_bbs[o_bb_i][0]=='TextBlock':
+                                possiblities.append(o_bb_i)
+                        threshold-=0.09
                     if len(possiblities)>0:
                         if len(possiblities)==1:
                             text_bb_i = possiblities[0]
@@ -370,9 +401,12 @@ def parseGT(directory,name,scale):
 
                         
                         owns[bb_i].append(text_bb_i)
-                        owns[belongs_to[text_bb_i]].remove(text_bb_i)
+                        if text_bb_i in belongs_to:
+                            owns[belongs_to[text_bb_i]].remove(text_bb_i)
+                            print('Fix stole TextBlock {} for Field {}'.format(text_bb_i,bb_i))
+                        else:
+                            print('Fix assigned TextBlock {} to Field {}'.format(text_bb_i,bb_i))
                         belongs_to[text_bb_i]=bb_i
-                        print('Fix stole TextBlock {} for Field {}'.format(text_bb_i,bb_i))
                     else:
                         print('Field {} has no text'.format(bb_i))
 
@@ -408,6 +442,9 @@ def parseGT(directory,name,scale):
                     belongs_to[widget_bb_i]=bb_i
                     print('Fix stole Widget {} for Field {}'.format(widget_bb_i,bb_i))
 
+            new_owns = set(owns[bb_i])
+            for o_i in new_owns.difference(old_owns):
+                checkFix(o_i)
 
 
         for bb_i in range(len(all_bbs)):
@@ -442,12 +479,16 @@ def parseGT(directory,name,scale):
             #linking
             def putInReadOrder(bb_is):
                 elements=[]
-                avg_h=0
+                hs=[]
                 for o_bb_i in bb_is:
                     elements.append((o_bb_i,(x1s[o_bb_i]+x2s[o_bb_i])/2,(y1s[o_bb_i]+y2s[o_bb_i])/2))
-                    avg_h += y2s[o_bb_i]-y1s[o_bb_i]
-                avg_h/=len(elements)
+                    #avg_h += y2s[o_bb_i]-y1s[o_bb_i]
+                    hs.append(y2s[o_bb_i]-y1s[o_bb_i])
+                #avg_h/=len(elements)
+                hs=np.array(hs)
+                avg_h = hs.mean()-hs.std()
                 elements.sort(key=lambda a:a[2])
+
 
                 
                 lines=[]
@@ -466,6 +507,10 @@ def parseGT(directory,name,scale):
                     line.sort(key=lambda a:a[1])
                     in_order+=[a[0] for a in line]
                 return in_order
+
+            def checkGroups():
+                for group in bb_i_groups:
+                    assert all(all_bbs[i][0]=='TextRun' for i in group)
                 
             def addPair(pairs,a,b):
                 pairs.add((min(a,b),max(a,b)))
@@ -483,48 +528,61 @@ def parseGT(directory,name,scale):
                 avg_h=0
                 with_y=[]
                 new_owns=[]
-                group=[]
                 for o_bb_i in owns[bb_i]:
                     if all_bbs[o_bb_i][0]=='TextBlock':
                         new_owns+=owns[o_bb_i]
                         for o_i in owns[o_bb_i]:
                             if all_bbs[o_i][0]=='TextRun':
-                                group.append(o_i)
+                                pass
                             elif all_bbs[o_i][0]=='Widget':
-                                if len(group)>0:
-                                    bb_i_groups.append(group)
-                                    group=[]
+                                pass
                             else:
                                 assert False
                     elif all_bbs[o_bb_i][0]=='ChoiceGroup':
-                        assert all(all_bbs[cf][0]=='ChoiceField' for cf in owns[o_bb_i])
+                        #assert all(all_bbs[cf][0]=='ChoiceField' for cf in owns[o_bb_i])
                         for cf in owns[o_bb_i]:
-                            new_owns.append(linkChoiceField(cf,pairs))
-                        if len(group)>0:
-                            bb_i_groups.append(group)
-                            group=[]
+                            if all_bbs[cf][0]=='ChoiceField':
+                                new_owns.append(linkChoiceField(cf,pairs))
+                            elif all_bbs[cf][0]=='ChoiceGroupTitle':
+                                #new_owns.linkTitle(cf,pairs))
+                                assert len(owns[cf])==1 and all_bbs[owns[cf][0]][0]=='TextBlock'
+                                new_owns+=owns[owns[cf][0]]
+                            elif all_bbs[cf][0]=='Field':
+                                new_owns.append(linkField(cf,pairs))
+                            else:
+                                assert False
+                            #elif all_bbs[cf][0]=='TextBlock'::
                     else:
                         if all_bbs[o_bb_i][0]=='TextRun':
-                            group.append(o_bb_i)
+                            pass
                         elif all_bbs[o_bb_i][0]=='Widget':
-                            if len(group)>0:
-                                bb_i_groups.append(group)
-                                group=[]
+                            pass
                         elif all_bbs[o_bb_i][0]=='List' and len(owns[o_bb_i])==0:
                             pass
                         else:
                             assert False
                         new_owns.append(o_bb_i)
-                if len(group)>0:
-                    bb_i_groups.append(group)
-                    group=[]
 
                 ordered_owns = putInReadOrder(new_owns)
                 prev=None
+                group=[]
                 for o_i in ordered_owns:
+                    if all_bbs[o_i][0]=='TextRun':
+                        group.append(o_i)
+                    elif all_bbs[o_i][0]=='Widget':
+                        if len(group)>0:
+                            bb_i_groups.append(group)
+                            group=[]
+                    elif len(owns[o_i])==0:
+                        continue
+                    else:
+                        assert False
                     if prev is not None:
                         addPair(pairs,prev,o_i)
                     prev=o_i
+                if len(group)>0:
+                    bb_i_groups.append(group)
+                checkGroups()
                 return ordered_owns[0],prev
                     
 
@@ -672,12 +730,15 @@ def parseGT(directory,name,scale):
                     prev=all_bbs[other_bb_i][0]
 
                 to_link_to_ChoiceField=[]
+                to_link_to_ChoiceField_has_title=[]
                 to_link_post=[]
                 to_link_pre = putInReadOrder(to_link_pre)
                 texts=[]
+                num_fields=0
                 prev=None
                 for other_bb_i in to_link_pre:
                     if 'ChoiceField' == all_bbs[other_bb_i][0]:
+                        num_fields+=1
                         to_link_bb_i = linkChoiceField(other_bb_i,pairs)
                         to_link_post.append(to_link_bb_i)
                     elif 'ChoiceGroup' == all_bbs[other_bb_i][0]:
@@ -687,7 +748,7 @@ def parseGT(directory,name,scale):
                             #closest to top-and-left?
                             to_link_to_ChoiceField.append(to_link_bb_is)
                         else:
-                             to_link_post.append(to_link_bb_is)
+                             to_link_to_ChoiceField_has_title.append(to_link_bb_is)
                     elif 'TextBlock' == all_bbs[other_bb_i][0]:
                         #This is generally just a comment or instructions. We won't link it to anything
                         texts.append(linkTextBlock(other_bb_i,pairs))
@@ -714,12 +775,17 @@ def parseGT(directory,name,scale):
                 if len(texts)==len(to_link_to_ChoiceField):
                     for top,bot in texts:
                         to_link_post.append(top)
+                if len(to_link_to_ChoiceField)==0 and len(to_link_to_ChoiceField_has_title)==num_fields:
+                    to_link_to_ChoiceField=[[i] for i in to_link_to_ChoiceField_has_title]
+                else:
+                    to_link_post+=to_link_to_ChoiceField_has_title
+
                 for bb_is in to_link_to_ChoiceField:
                     xs=[]
                     ys=[]
-                    for bb_i in bb_is:
-                        xs.append(x1s[bb_i])
-                        ys.append(y1s[bb_i])
+                    for b_i in bb_is:
+                        xs.append(x1s[b_i])
+                        ys.append(y1s[b_i])
                     xs=np.array(xs)
                     ys=np.array(ys)
                     xg = xs.min()
@@ -792,12 +858,16 @@ def parseGT(directory,name,scale):
                     #prev = bot
                     tops_and_bottoms.append((top,bot))
 
+                prevX2=prevY1=None
                 for top,bot in tops_and_bottoms:
-                    if prev is not None:
+                    X2=x2s[top[0]]
+                    Y1=y1s[top[0]]
+                    X1=x1s[top[0]]
+                    if prev is not None and (LINK_LIST or (abs(Y1-prevY1)<20 and abs(X1-prevX2)<X2-X1)):
                         for p in prev:
                             for t in top:
                                 addPair(pairs,p,t)
-                    else:
+                    elif prev is None:
                         assert(toptop is None)
                         toptop=top
 
@@ -805,6 +875,8 @@ def parseGT(directory,name,scale):
                         prev=bot
                     else:
                         prev=top
+                    prevX2=X2
+                    prevY1=Y1
                 return toptop
 
             def linkTable(bb_i,pairs):
@@ -965,7 +1037,7 @@ def parseGT(directory,name,scale):
                         linkAll(bb_i,pairs)
                     except TableError:
                         print('odd table, skipping')
-                        return
+                        return 'bad_table'
 
                 
 
@@ -1041,13 +1113,13 @@ def parseGT(directory,name,scale):
                 if x>=0 and x2<image.shape[1] and y>=0 and y2<image.shape[0]:
 
                     if t=='Field':
-                        img_f.rectangle(image,(x,y),(x2,y2),(255,0,0),2)
+                        img_f.rectangle(image,(x,y),(x2,y2),(150,0,0),2)
                     elif t=='Widget':
                         image[y:y2,x+1:x2,1]=0
                     elif t=='TextRun':
                         image[y+1:y2,x+1:x2,2]=0
                     elif t=='SectionTitle':
-                        img_f.rectangle(image,(x,y),(x2,y2),(255,0,255),2)
+                        img_f.rectangle(image,(x,y),(x2,y2),(150,0,255),2)
                     elif t=='TextBlock':
                         img_f.rectangle(image,(x,y),(x2,y2),(0,255,255),2)
                     elif t=='HeaderTitle':
@@ -1057,9 +1129,9 @@ def parseGT(directory,name,scale):
                     elif t=='ChoiceGroup':
                         img_f.rectangle(image,(x,y),(x2,y2),(0,255,0),2)
                     elif t=='ChoiceField':
-                        img_f.rectangle(image,(x,y),(x2,y2),(255,255,0),2)
+                        img_f.rectangle(image,(x,y),(x2,y2),(155,255,0),2)
                     elif t=='ChoiceGroupTitle':
-                        img_f.rectangle(image,(x,y),(x2,y2),(255,150,150),2)
+                        img_f.rectangle(image,(x,y),(x2,y2),(155,150,150),2)
                     elif t=='TableTitle':
                         img_f.rectangle(image,(x,y),(x2,y2),(150,255,150),2)
                     elif t=='Table':
@@ -1079,7 +1151,17 @@ def parseGT(directory,name,scale):
             assert(len(owns[bb_i1])==0)
             assert(len(owns[bb_i2])==0)
 
-        #for group in bb_i_groups:
+        for group in bb_i_groups:
+            minX=99999999
+            minY=99999999
+            maxX=-1
+            maxY=-1
+            for bb_i in group:
+                minX=min(minX,x1s[bb_i])
+                minY=min(minY,y1s[bb_i])
+                maxX=max(maxX,x2s[bb_i])
+                maxY=max(maxY,y2s[bb_i])
+            img_f.rectangle(image,(minX,minY),(maxX,maxY),(255,0,0),3)
 
 
         img_f.imshow('image',image)
@@ -1089,26 +1171,62 @@ def parseGT(directory,name,scale):
         for bb_i1,bb_i2 in pairs:
             assert(len(owns[bb_i1])==0)
             assert(len(owns[bb_i2])==0)
-    return True
+
+    with open(os.path.join(directory,'pairing',name+'.json'),'w') as out:
+        json.dump({
+            'pairs':[(int(a),int(b)) for a,b in pairs],
+            'groups': [ [int(a) for a in group] for group in bb_i_groups],
+            'bb': bbs
+            },out)
+    return 'good'
 
 directory = sys.argv[1]
 names = [f[:-5] for f in os.listdir(os.path.join(directory,'jsons')) if os.path.isfile(os.path.join(directory,'jsons',f))]
 
-if len(sys.argv)==3:
+if len(sys.argv)>=4:
+    start = int(sys.argv[3])
+else:
+    start=0
+if len(sys.argv)>=3:
     if sys.argv[2][0]=='D':
         DISPLAY=True
         LINKING=False
     elif sys.argv[2][0]=='S':
         DISPLAY=True
+    elif sys.argv[2][0]=='T':
+        DISPLAY=True
+        SKIP_LIST=False
+    elif sys.argv[2][0]=='L' or sys.argv[2][0]=='l':
+        LINK_LIST=False
+        SKIP_LIST=False
+        if sys.argv[2][0]=='l':
+            DISPLAY=True
+        name_is=[3, 4, 9, 10, 11, 19, 20, 26, 27, 30, 32, 33, 37, 39, 42, 44, 46, 47, 48, 52, 57, 60, 62, 63, 64, 66, 68, 71, 72, 73, 78, 81, 85, 86, 90, 99, 100, 101, 107, 108, 116, 122, 127, 134, 135, 138, 139, 141, 142, 147, 148, 153, 155, 158, 167, 168, 170, 172, 175, 184, 185, 187, 190, 192, 195, 198, 200, 204, 205, 215, 216, 218, 219, 222, 227, 229, 231, 234, 239, 242, 246, 250, 251, 253, 255, 256, 258, 260, 262, 263, 270, 273, 275, 278, 280, 286, 288, 291, 295, 299, 301, 308, 313, 314, 315, 318, 321, 323, 325, 326, 327, 328, 334, 343, 345, 346, 347, 356, 357, 359, 364, 366, 371, 382, 385, 386, 391, 394, 399, 401, 403, 418, 419, 426, 428, 429, 430, 431, 436, 441, 448, 449, 450, 457, 458, 461, 469, 472, 473, 474, 478, 481, 482, 483, 486, 487, 489, 493, 500, 505, 514, 516, 517, 519, 521, 524, 525, 530, 535, 536, 537, 541, 547, 551, 557, 560, 563, 567, 569, 571, 573, 578, 580, 581, 584, 586, 587, 589, 591, 603, 608, 609, 612, 621, 622, 629, 631, 634, 637, 641, 642, 643, 645, 649, 650, 651, 652, 653, 654, 659, 664, 671, 677, 679, 680, 688, 690, 691, 694, 699, 707, 709, 711, 720, 721, 722, 733, 738, 743, 744, 745, 746, 749, 750, 753, 754, 757, 760, 766, 767, 772, 777, 779, 782, 783, 784, 785, 787, 805, 806, 812, 823, 827, 833, 836, 840, 842, 847, 852, 854, 856, 861, 862, 864, 868, 869, 870, 871, 876, 879, 881, 883, 887, 889, 890, 894, 895, 898, 902, 905, 907, 909, 914, 917, 919]
+        names = [names[i] for i in name_is]
+    else:
+        start=int(sys.argv[2])
 
-start=442
 i=start
 good=0
+bad_table=0
+hard_list=0
+skipped_lists=[]
 for name in names[start:]: #53? 54 are identicle but annotated differently
     print('{}  <<< {}'.format(name,i))
     ret=parseGT(directory,name,1.0)
-    if ret is True:
+    if ret=='good':
         good+=1
+    elif ret=='bad_table':
+        bad_table+=1
+    elif ret=='hard_list':
+        hard_list+=1
+        skipped_lists.append(i)
+    else:
+        print('unknown {}'.format(ret))
+        import pdb;pdb.set_trace()
     i+=1
 
+
 print('good {}/{}'.format(good,i))
+print('list {}   table {}'.format(hard_list, bad_table))
+print(skipped_lists)

@@ -116,7 +116,8 @@ def collate(batch):
             if bb_sizes[i] == 0:
                 continue
             bbs[i, :bb_sizes[i]] = gt
-            numNeighbors[i, :bb_sizes[i]] = b['num_neighbors']
+            if  b['num_neighbors'] is not None:
+                numNeighbors[i, :bb_sizes[i]] = b['num_neighbors']
     else:
         bbs=None
         numNeighbors=None
