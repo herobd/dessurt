@@ -27,7 +27,7 @@
     "validation": {
         "shuffle": false,
         "color":false,
-        "rescale_range": [1,1],
+        "rescale_range": [0.52,0.52],
         "rotation": false,
         "crop_params": null,
         "batch_size": 8
