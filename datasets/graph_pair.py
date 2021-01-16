@@ -171,6 +171,7 @@ class GraphPairDataset(torch.utils.data.Dataset):
             newGroup=[ids.index(bbId) for bbId in group if bbId in ids]
             if len(newGroup)>0:
                 newGroups.append(newGroup)
+                #print(len(newGroups)-1,newGroup)
         groups=newGroups
         ##print('transfrm: {}  [{}, {}]'.format(timeit.default_timer()-ticTr,org_img.shape[0],org_img.shape[1]))
         pairs=set()
