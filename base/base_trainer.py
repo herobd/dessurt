@@ -91,7 +91,7 @@ class BaseTrainer:
             slope = (1-start_lr)/self.iterations
             lr_lambda = lambda step_num: start_lr + slope*step_num
             self.lr_schedule = torch.optim.lr_scheduler.LambdaLR(self.optimizer,lr_lambda)
-        elif self.useLearningSchedule=='cyclic':
+        elif self.useLearningSchedule=='cyclic': #only decreasing
             min_lr_mul = config['trainer']['min_lr_mul'] if 'min_lr_mul' in config['trainer'] else 0.001
             cycle_size = config['trainer']['cycle_size'] if 'cycle_size' in config['trainer'] else 500
             lr_lambda = lambda step_num: (1-(1-min_lr_mul)*((step_num-1)%cycle_size)/(cycle_size-1))
@@ -188,6 +188,7 @@ class BaseTrainer:
             assert(self.val_step>=self.swa_c_iters) #otherwise we'll start evaluating more than the (swa)model is updated
         self.iteration=999999999999999
         self.side_process=False
+        self.reset_iteration = config['trainer']['reset_resume_iteration'] if 'reset_resume_iteration' in config['trainer'] else False
         if resume:
             self._resume_checkpoint(resume)
 
@@ -418,7 +419,8 @@ class BaseTrainer:
         checkpoint = torch.load(resume_path, map_location=lambda storage, location: storage)
         if 'override' not in self.config or not self.config['override']:
             self.config = checkpoint['config']
-        self.start_iteration = checkpoint['iteration'] + 1
+        if not self.reset_iteration:
+            self.start_iteration = checkpoint['iteration'] + 1
         self.monitor_best = checkpoint['monitor_best']
         #print(checkpoint['state_dict'].keys())
         if ('save_mode' not in self.config or self.config['save_mode']=='state_dict') and 'state_dict' in checkpoint:
