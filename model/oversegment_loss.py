@@ -655,6 +655,10 @@ def build_oversegmented_targets_multiscale(
                             s_perp = float('inf')
                         if not math.isinf(s_perp) and not math.isinf(s_len):
                             s_len= (s_len-1/s_perp)/2
+                        if  math.isinf(s_len):
+                            print('ERROR s_len is inf. Horx. {}',format(target[b, t]))
+                            print('s_perp={}'.format(s_perp))
+                            s_len=1
                             s_prep= -1/s_len
 
                         s_t=s_b=s_len
@@ -698,6 +702,11 @@ def build_oversegmented_targets_multiscale(
                         if not math.isinf(s_perp) and not math.isinf(s_len):
                             s_len= (s_len-1/s_perp)/2
                             s_prep= -1/s_len
+                        if  math.isinf(s_len):
+                            print('ERROR s_len is inf. Vert. {}',format(target[b, t]))
+                            print('s_perp={}'.format(s_perp))
+                            s_len=1
+
                         s_t=s_b=s_len
                         s_l=s_r=s_perp
                         if gr<0 or gr>np.pi:
