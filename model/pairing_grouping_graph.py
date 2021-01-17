@@ -2333,7 +2333,10 @@ class PairingGroupingGraph(BaseModel):
                 padX = self.expandedMergeContextX
                 padY = self.expandedMergeContextY
             else:
-                padX=padY=  self.expandedRelContext
+                if type(self.expandedRelContext) is list:
+                    padY,padX = self.expandedRelContext
+                else:
+                    padX=padY=  self.expandedRelContext
 
             D_xs = min_X<=max_X
             D_ys = min_Y<=max_Y
@@ -2794,11 +2797,14 @@ class PairingGroupingGraph(BaseModel):
                 #min_X = torch.max(min_X-self.expandedBBContext,torch.IntTensor([0]))
                 #max_Y = torch.min(max_Y+self.expandedBBContext,torch.IntTensor([imageHeight-1]))
                 #min_Y = torch.max(min_Y-self.expandedBBContext,torch.IntTensor([0]))
-
-                max_X = torch.max(torch.min(max_X+self.expandedBBContext,torch.IntTensor([imageWidth-1])),torch.IntTensor([1]))
-                min_X = torch.max(torch.min(min_X-self.expandedBBContext,torch.IntTensor([imageWidth-2])),torch.IntTensor([0]))
-                max_Y = torch.max(torch.min(max_Y+self.expandedBBContext,torch.IntTensor([imageHeight-1])),torch.IntTensor([1]))
-                min_Y = torch.max(torch.min(min_Y-self.expandedBBContext,torch.IntTensor([imageHeight-2])),torch.IntTensor([0]))
+                if type(self.expandedBBContext) is list:
+                    padY,padX=self.expandedBBContext
+                else:
+                    padY=padX=self.expandedBBContext
+                max_X = torch.max(torch.min(max_X+padX,torch.IntTensor([imageWidth-1])),torch.IntTensor([1]))
+                min_X = torch.max(torch.min(min_X-padX,torch.IntTensor([imageWidth-2])),torch.IntTensor([0]))
+                max_Y = torch.max(torch.min(max_Y+padY,torch.IntTensor([imageHeight-1])),torch.IntTensor([1]))
+                min_Y = torch.max(torch.min(min_Y-padY,torch.IntTensor([imageHeight-2])),torch.IntTensor([0]))
             rois[:,1]=min_X
             rois[:,2]=min_Y
             rois[:,3]=max_X
