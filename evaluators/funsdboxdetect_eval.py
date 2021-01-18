@@ -62,6 +62,8 @@ def plotRectAndAngle(img,color,x1y1x2y2r,lineW=1):
 
 def FormsBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startIndex=None, lossFunc=None, toEval=None):
     return FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir, startIndex, lossFunc, toEval)
+def AdobeBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startIndex=None, lossFunc=None, toEval=None):
+    return FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir, startIndex, lossFunc, toEval)
 def FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startIndex=None, lossFunc=None, toEval=None):
     def __eval_metrics(data,target):
         acc_metrics = np.zeros((output.shape[0],len(metrics)))
@@ -133,7 +135,7 @@ def FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startInd
     if 'bbs' in out:
         outputBBs = out['bbs']
         #threshConf = maxConf*THRESH
-        if axis_aligned_prediction:
+        if axis_aligned_prediction: #overseg
             threshed_outputBBs = []
             for b in range(batchSize):
                 maxConf = outputBBs[b,:,0].max().item()
@@ -157,6 +159,8 @@ def FUNSDBoxDetect_eval(config,instance, trainer, metrics, outDir=None, startInd
         elif trainer.model.rotation:
             outputBBs = non_max_sup_dist(outputBBs.cpu(),threshConf,3)
         else:
+            maxConf = outputBBs[:,:,0].max().item()
+            threshConf = maxConf*THRESH
             outputBBs = non_max_sup_iou(outputBBs.cpu(),threshConf,0.4)
 
     numClasses = trainer.model.numBBTypes
