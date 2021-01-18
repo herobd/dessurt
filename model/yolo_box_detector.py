@@ -27,6 +27,7 @@ class YoloBoxDetector(nn.Module): #BaseModel
             print("Detecting number of neighbors!")
         else:
             self.predNumNeighbors=False
+        self.discard_first_class_pred = config['discard_first_class'] if 'discard_first_class' in config else False #hack to fix bad parameterization
 
         self.predPointCount = config['number_of_point_types'] if 'number_of_point_types' in config else 0
         self.predPixelCount = config['number_of_pixel_types'] if 'number_of_pixel_types' in config else 0
@@ -91,9 +92,20 @@ class YoloBoxDetector(nn.Module): #BaseModel
         if 'DEBUG' in config:
             self.setDEBUG()
 
+        if self.discard_first_class_pred:
+            self.numBBTypes-=1
+
     def forward(self, img):
         #import pdb; pdb.set_trace()
         y = self._hack_down(img)
+        if self.discard_first_class_pred:
+            to_cat = []
+            for a in range(self.numAnchors):
+                start_of_a = (self.numBBParams+self.numBBTypes+1)*a
+                end_of_a = (self.numBBParams+self.numBBTypes+1)*(a+1)
+                to_cat.append(y[:,start_of_a:start_of_a+self.numBBParams])
+                to_cat.append(y[:,start_of_a+self.numBBParams+1:end_of_a])
+            y = torch.cat(to_cat,dim=1)
         if self.forPairing:
             return y[:,:(self.numBBParams+self.numBBTypes)*self.numAnchors,:,:]
         #levels=[img]

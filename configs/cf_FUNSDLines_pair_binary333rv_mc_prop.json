@@ -1,6 +1,6 @@
 {
     "name": "FUNSDLines_pair_binary3P3rv_moreContext_prop",
-    "cuda": false,
+    "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,

@@ -16,7 +16,7 @@ from evaluators.randomdiffusion_printer import RandomDiffusionDataset_printer
 from evaluators.randommaxpairs_printer import RandomMaxPairsDataset_printer
 
 
-from evaluators.funsdboxdetect_eval import FUNSDBoxDetect_eval, FormsBoxDetect_eval
+from evaluators.funsdboxdetect_eval import FUNSDBoxDetect_eval, FormsBoxDetect_eval, AdobeBoxDetect_eval
 from evaluators.funsdgraphpair_eval import FUNSDGraphPair_eval
 from evaluators.formsgraphpair_eval import FormsGraphPair_eval
 #def FormsPair_printer(config,instance, model, gpu, metrics, outDir=None, startIndex=None):

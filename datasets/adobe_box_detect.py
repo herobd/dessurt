@@ -161,7 +161,7 @@ class AdobeBoxDetect(BoxDetectDataset):
             trans[bb_id]='$UNKNOWN$'
         rev_bb_ids = {bb_id:index for index,bb_id in enumerate(bb_ids)}
         pairs=[(min(rev_bb_ids[a],rev_bb_ids[b]),max(rev_bb_ids[a],rev_bb_ids[b])) for a,b in annotations['pairs']]
-        return bbs,None,None,None, numClasses, [],pairs
+        return bbs,None,None,None, numClasses, None,pairs
 
 
 

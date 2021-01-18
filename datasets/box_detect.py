@@ -118,6 +118,8 @@ def collate(batch):
             bbs[i, :bb_sizes[i]] = gt
             if  b['num_neighbors'] is not None:
                 numNeighbors[i, :bb_sizes[i]] = b['num_neighbors']
+            else:
+                numNeighbors=None
     else:
         bbs=None
         numNeighbors=None
@@ -346,7 +348,7 @@ class BoxDetectDataset(torch.utils.data.Dataset):
         
         #bbs = None if bbs.shape[1] == 0 else torch.from_numpy(bbs)
         bbs = convertBBs(bbs,self.rotate,numClasses)
-        if len(numNeighbors)>0:
+        if numNeighbors is not None and len(numNeighbors)>0:
             numNeighbors = torch.tensor(numNeighbors)[None,:] #add batch dim
         else:
             numNeighbors=None
