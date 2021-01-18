@@ -105,6 +105,8 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
     print('{}: {} x {}'.format(imageName,data.shape[2],data.shape[3]))
     if useDetections=='gt':
         losses, log, out = trainer.newRun(instance,True,get=toEval)
+    if useDetections=='gtSpaceOnly':
+        losses, log, out = trainer.newRun(instance,False,useOnlyGTSpace=True,get=toEval)
     elif type(useDetections) is str:
         raise NotImplementedError('using saved detections not adjusted for new eval')
         dataset=config['DATASET']
