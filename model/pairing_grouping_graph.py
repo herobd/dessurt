@@ -17,7 +17,7 @@ from model.word2vec_adapter import Word2VecAdapter, Word2VecAdapterShallow, BPEm
 from model.hand_code_emb import HandCodeEmb
 from skimage import draw
 from model.net_builder import make_layers, getGroupSize
-from utils.yolo_tools import non_max_sup_iou, non_max_sup_dist, non_max_sup_overseg
+from utils.yolo_tools import non_max_sup_iou, non_max_sup_dist, non_max_sup_overseg, allIOU
 from utils.util import decode_handwriting
 from utils.bb_merging import TextLine, xyrwh_TextLine
 #from utils.string_utils import correctTrans
@@ -679,7 +679,7 @@ class PairingGroupingGraph(BaseModel):
             print('Unfroze detector')
         
 
-    def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=5000, debug=False,old_nn=False,gtTrans=None,merge_first_only=False):
+    def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=5000, debug=False,old_nn=False,gtTrans=None,merge_first_only=False, useOnlyGTSpace=False):
         assert(image.size(0)==1) #implementation designed for batch size of 1. Should work to do data parallelism, since each copy of the model will get a batch size of 1
         #t###tic=timeit.default_timer()#t#
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
@@ -728,7 +728,12 @@ class PairingGroupingGraph(BaseModel):
         #t###print('   process boxes: {}'.format(timeit.default_timer()-tic))#t#
         #bbPredictions should be switched for GT for training? Then we can easily use BCE loss. 
         #Otherwise we have to to alignment first
+
+
+
         if not useGTBBs:
+            if useOnlyGTSpace:
+                self.used_threshConf*=0.9
             if self.useCurvedBBs:
                 #TODO make this actually check for overseg...
                 threshed_bbPredictions = [bbPredictions[0,bbPredictions[0,:,0]>self.used_threshConf].cpu()]
@@ -743,12 +748,59 @@ class PairingGroupingGraph(BaseModel):
             if self.no_grad_feats:
                 bbPredictions=bbPredictions.detach()
 
-            if bbPredictions.size(0)==0:
-                return [bbPredictions], offsetPredictions, None, None, None, None, None, None, (None,None,None,None)
-            if self.include_bb_conf or self.useCurvedBBs: 
-                useBBs = bbPredictions
+            if useOnlyGTSpace:
+                #We'll correct the box predictions using the GT BBs, but no class/other GT
+                useBBs = []
+                gtBBs=gtBBs[0]
+
+                #perform greedy alignment of gt and predicted. Only keep aligned predictions
+                ious = allIOU(gtBBs,bbPredictions[:,1:]) #iou calculation
+                #ious[ious<0.3]=0
+                ious=ious.cpu()
+                bbPredictions=bbPredictions.cpu()
+                gtBBs=gtBBs.cpu()
+                #sort, do highest ious first
+                gt_used = [False]*gtBBs.size(0)
+                num_gt_used = 0
+                pred_used = [False]*bbPredictions.size(0)
+                num_pred_used = 0
+                print('ious size {}'.format(ious.size()))
+                ious_list = [(ious[gt_i,p_i],gt_i,p_i) for gt_i,p_i in ious.nonzero(as_tuple=False).triu(1)]
+                ious=None
+                ious_list.sort(key=lambda a:a[0], reverse=True)
+                print('ious list size {}'.format(len(ious_list)))
+                for iou,gt_i,p_i in ious_list:
+                    if not gt_used[gt_i] and not pred_used[p_i]:
+                        useBBs.append(torch.cat((bbPredictions[p_i,0:1],gtBBs[gt_i,0:5],bbPredictions[p_i,6:]), dim=0))
+                        num_gt_used+=1
+                        if num_gt_used>=gtBBs.size(0):
+                            break
+                        gt_used[gt_i]=True
+                        num_pred_used+=1
+                        if num_pred_used>=bbPredictions.size(0):
+                            break
+                        pred_used[p_i]=True
+                ious_list=None
+
+                #Add any undetected boxes.
+                for gt_i,used in enumerate(gt_used):
+                    if not used:
+                        conf = torch.FloatTensor([1])
+                        cls = torch.FloatTensor(self.numBBTypes).fill_(0.5)
+                        useBBs.append(torch.cat((conf,gtBBs[gt_i,0:5],cls),dim=0))
+
+
+                useBBs = torch.stack(useBBs,dim=0)
+                assert self.include_bb_conf or self.useCurvedBBs
             else:
-                useBBs = bbPredictions[:,1:] #remove confidence score
+
+
+                if bbPredictions.size(0)==0:
+                    return [bbPredictions], offsetPredictions, None, None, None, None, None, None, (None,None,None,None)
+                if self.include_bb_conf or self.useCurvedBBs: 
+                    useBBs = bbPredictions
+                else:
+                    useBBs = bbPredictions[:,1:] #remove confidence score
         elif useGTBBs=='saved':
             if self.include_bb_conf or self.useCurvedBBs:
                 useBBs = gtBBs

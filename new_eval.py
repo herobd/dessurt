@@ -103,7 +103,7 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
             addTo[add[-2]] = value
             printM+=add[-2]+']={}'.format(value)
             print(printM)
-            if (add[-2]=='useDetections' or add[-2]=='useDetect') and value!='gt':
+            if (add[-2]=='useDetections' or add[-2]=='useDetect') and 'gt' not in value:
                 addDATASET=True
 
         

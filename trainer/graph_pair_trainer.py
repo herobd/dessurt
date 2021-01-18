@@ -1459,7 +1459,7 @@ class GraphPairTrainer(BaseTrainer):
 
 
 
-    def newRun(self,instance,useGT,threshIntur=None,get=[]):
+    def newRun(self,instance,useGT,threshIntur=None,get=[],useOnlyGTSpace=False):
         assert(not self.model_ref.predNN)
         numClasses = len(self.classMap)
         image, targetBoxes, adj, target_num_neighbors = self._to_tensor(instance)
@@ -1474,7 +1474,7 @@ class GraphPairTrainer(BaseTrainer):
         else:
             gtTrans = None
         #t#tic=timeit.default_timer()#t##t#
-        if useGT and targetBoxes is not None:
+        if (useGT or useOnlyGTSpace) and targetBoxes is not None:
             if self.model_ref.useCurvedBBs:
                 #build targets of GT to pass as detections
                 ph_boxes = [torch.zeros(1,1,1,1,1)]*3
@@ -1495,12 +1495,13 @@ class GraphPairTrainer(BaseTrainer):
                     assert((t_Ls[i]<=t_Rs[i]).all() and (t_Ts[i]<=t_Bs[i]).all())
 
                 #add some jitter
-                jitter_std=0.001
-                t_Ls = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Ls]
-                t_Ts = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Ts]
-                t_Rs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Rs]
-                t_Bs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Bs]
-                t_rs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_rs]
+                if not useOnlyGTSpace:
+                    jitter_std=0.001
+                    t_Ls = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Ls]
+                    t_Ts = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Ts]
+                    t_Rs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Rs]
+                    t_Bs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Bs]
+                    t_rs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_rs]
 
                 tconf_scales = [t.type(torch.FloatTensor) for t in tconf_scales]
                 tcls_scales = [t.type(torch.FloatTensor) for t in tcls_scales]
@@ -1517,7 +1518,8 @@ class GraphPairTrainer(BaseTrainer):
                                 image,
                                 targetBoxes_changed,
                                 target_num_neighbors,
-                                True,
+                                useGT,
+                                useOnlyGTSpace=useOnlyGTSpace,
                                 otherThresh=self.conf_thresh_init, 
                                 otherThreshIntur=threshIntur, 
                                 hard_detect_limit=self.train_hard_detect_limit,
