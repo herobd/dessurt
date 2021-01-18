@@ -8,6 +8,9 @@ from matplotlib.patches import Polygon
 import numpy as np
 import torch
 
+hs=[]
+ws=[]
+
 def display(data):
     b=0
 
@@ -17,6 +20,10 @@ def display(data):
     #print(img.shape)
     #print(data['pixel_gt']['table_pixels'].shape)
     print(data['imgName'])
+
+    #hs.append(img.shape[0])
+    #ws.append(img.shape[1])
+    #return
 
 
 
@@ -106,9 +113,9 @@ if __name__ == "__main__":
     data=FUNSDGraphPair(dirPath=dirPath,split='train',config={
         'color':False,
         'rescale_range':[0.8,1.2],
-        'Xrescale_range':[0.4,0.65],
+        '#rescale_range':[0.4,0.65],
         'crop_params':{
-            "crop_size":[600,800],
+            "crop_size":[1000,700],
             "pad":70,
             "xxrot_degree_std_dev": 0.7}, 
         'split_to_lines': True,
@@ -129,3 +136,7 @@ if __name__ == "__main__":
             display(dataLoaderIter.next())
     except StopIteration:
         print('done')
+
+    hs=np.array(hs)
+    ws=np.array(ws)
+    print('mean: {},{}   min: {},{}   max: {},{}'.format(hs.mean(),ws.mean(),hs.min(),ws.min,hs.max(),ws.max()))

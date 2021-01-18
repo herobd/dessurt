@@ -1,22 +1,22 @@
 {
-    "name": "FUNSDLines_pair_binary333rv_mc_prop",
+    "name": "Adobe_pair_binary333rv_mc_prop",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
-    "super_computer":true,
+    "super_computer":false,
     "data_loader": {
-        "data_set_name": "FUNSDGraphPair",
-        "data_dir": "../data/FUNSD",
+        "data_set_name": "AdobeGraphPair",
+        "data_dir": "../data/AdobeFormData",
         "batch_size": 1,
         "shuffle": true,
         "num_workers": 2,
         "split_to_lines": true,
         "crop_to_page":false,
         "color":false,
-        "rescale_range": [0.8,1.2],
+        "rescale_range": [0.4,0.65],
         "crop_params": {
-            "crop_size":[800,800],
+            "crop_size":[700,1100],
 	    "pad":50
         }
 
@@ -24,7 +24,7 @@
     },
     "validation": {
         "shuffle": false,
-        "rescale_range": [1,1],
+        "rescale_range": [0.52,0.52],
         "crop_params": null,
         "batch_size": 1
     },
@@ -95,7 +95,7 @@
     },
     "arch": "PairingGroupingGraph", 
     "model": {
-        "detector_checkpoint": "saved/FUNSDLines_detect_augRFh_staggerLighter_NN/checkpoint-latest.pth",
+        "detector_checkpoint": "saved/Adobe_detect_augR/checkpoint-USE.pth",
         "conf_thresh": 0.5,
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
@@ -130,7 +130,7 @@
             {
             "arch": "BinaryPairReal",
             "in_channels": 512,
-            "node_out": 5,
+            "node_out": 3,
             "edge_out": 5,
             "layers": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
             "layers_bb": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
@@ -141,7 +141,7 @@
         {
             "arch": "BinaryPairReal",
             "in_channels": 512,
-            "node_out": 5,
+            "node_out": 3,
             "edge_out": 5,
             "layers": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
             "layers_bb": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
@@ -152,7 +152,7 @@
         {
             "arch": "BinaryPairReal",
             "in_channels": 512,
-            "node_out": 5,
+            "node_out": 3,
             "edge_out": 5,
             "layers": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
             "layers_bb": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
