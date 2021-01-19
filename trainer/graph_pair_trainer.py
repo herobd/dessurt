@@ -1514,6 +1514,9 @@ class GraphPairTrainer(BaseTrainer):
             else:
                 targetBoxes_changed=targetBoxes
 
+            if useOnlyGTSpace:
+                targetBoxes_changed[5:]=0 #zero out other information to ensure results aren't contaminated
+
             allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred,merge_prop_scores, final = self.model(
                                 image,
                                 targetBoxes_changed,

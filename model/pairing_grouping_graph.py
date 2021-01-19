@@ -792,6 +792,8 @@ class PairingGroupingGraph(BaseModel):
 
                 useBBs = torch.stack(useBBs,dim=0)
                 assert self.include_bb_conf or self.useCurvedBBs
+                if self.useCurvedBBs and self.use_overseg_non_max_sup:
+                    useBBs = non_max_sup_overseg(useBBs)
             else:
 
 
