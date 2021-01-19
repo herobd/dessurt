@@ -786,7 +786,7 @@ class PairingGroupingGraph(BaseModel):
                 for gt_i,used in enumerate(gt_used):
                     if not used:
                         conf = torch.FloatTensor([1])
-                        cls = torch.FloatTensor(self.numBBTypes).fill_(0.5)
+                        cls = torch.FloatTensor(self.numBBTypes+(1 if self.detector.predNumNeighbors else 0)).fill_(0.5)
                         useBBs.append(torch.cat((conf,gtBBs[gt_i,0:5],cls),dim=0))
 
 
