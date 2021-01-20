@@ -6,7 +6,7 @@ from utils import util
 from collections import defaultdict
 from evaluators.draw_graph import draw_graph
 import matplotlib.pyplot as plt
-from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist, AP_textLines, getTargIndexForPreds_iou, newGetTargIndexForPreds_iou, getTargIndexForPreds_dist, newGetTargIndexForPreds_textLines, computeAP
+from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist, AP_textLines, getTargIndexForPreds_iou, newGetTargIndexForPreds_iou, getTargIndexForPreds_dist, newGetTargIndexForPreds_textLines, computeAP, non_max_sup_overseg
 from utils.group_pairing import getGTGroup, pure, purity
 from datasets.testforms_graph_pair import display
 import random, os, math
@@ -1475,7 +1475,7 @@ class GraphPairTrainer(BaseTrainer):
             gtTrans = None
         #t#tic=timeit.default_timer()#t##t#
         if (useGT or useOnlyGTSpace) and targetBoxes is not None:
-            if self.model_ref.useCurvedBBs:
+            if self.model_ref.useCurvedBBs and not useOnlyGTSpace:
                 #build targets of GT to pass as detections
                 ph_boxes = [torch.zeros(1,1,1,1,1)]*3
                 ph_cls = [torch.zeros(1,1,1,1,1)]*3
@@ -1509,13 +1509,32 @@ class GraphPairTrainer(BaseTrainer):
                 ys = []
                 for level in range(len(t_Ls)):
                     level_y = torch.cat([ torch.stack([2*tconf_scales[level]-1,t_Ls[level],t_Ts[level],t_Rs[level], t_Bs[level],t_rs[level]],dim=2), 2*tcls_scales[level].permute(0,1,4,2,3)-1], dim=2)
+                    ###
+                    #for r in range(level_y.size(3)):
+                    #    for c in range(level_y.size(4)):
+                    #        for bo in range(level_y.size(1)):
+                    #            conf = level_y[0,bo,0,r,c]
+                    #            x = level_y[0,bo,1,r,c]
+                    #            y = level_y[0,bo,2,r,c]
+                    #            if x<46 and x<95 and y>102 and y<130 and conf>0.5:
+                    #                print('{} level_y[0,{},:,{},{}] = {}'.format(level,bo,r,c,level_y[0,bo,:,r,c]))
                     ys.append(level_y.view(level_y.size(0),level_y.size(1)*level_y.size(2),level_y.size(3),level_y.size(4)))
                 targetBoxes_changed = build_box_predictions(ys,scale,ys[0].device,numAnchors,numBBParams,numBBTypes)
+                targetBoxes_changed = targetBoxes_changed[:,targetBoxes_changed[0,:,0]>0.5]
+            elif self.model_ref.useCurvedBBs and useOnlyGTSpace:
+                #convert target boxes to x1y1x2y2r, as that's what TextLine expects
+                x1 = targetBoxes[:,:,0]-targetBoxes[:,:,4]
+                x2 = targetBoxes[:,:,0]+targetBoxes[:,:,4]
+                y1 = targetBoxes[:,:,1]-targetBoxes[:,:,3]
+                y2 = targetBoxes[:,:,1]+targetBoxes[:,:,3]
+                r = targetBoxes[:,:,2]
+                targetBoxes_changed = torch.stack((x1,y1,x2,y2,r),dim=2) #leave out class information
             else:
                 targetBoxes_changed=targetBoxes
 
-            if useOnlyGTSpace:
-                targetBoxes_changed[5:]=0 #zero out other information to ensure results aren't contaminated
+            if useOnlyGTSpace and not self.model_ref.useCurvedBBs:
+                targetBoxes_changed[:,:,-numBBTypes:]=0 #zero out other information to ensure results aren't contaminated
+                #useCurved doesnt include class
 
             allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred,merge_prop_scores, final = self.model(
                                 image,
@@ -1568,8 +1587,13 @@ class GraphPairTrainer(BaseTrainer):
         allMissedRels=[]
         proposedInfo=None
         mergeProposedInfo=None
+
+        merged_first = self.model_ref.merge_first and not useOnlyGTSpace
         if allEdgePred is not None:
             for graphIteration,(outputBoxes,edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allOutputBoxes,allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
+
+                if self.model_ref.merge_first and useOnlyGTSpace:
+                    graphIteration+=1
 
                 #t#tic2=timeit.default_timer()#t##t#
                 predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, proposedInfoI, logIter, edgePredTypes, missedRels = self.simplerAlignEdgePred(
@@ -1580,20 +1604,20 @@ class GraphPairTrainer(BaseTrainer):
                         edgePred,
                         edgeIndexes,
                         predGroups, 
-                        rel_prop_pred if (graphIteration==0 and not self.model_ref.merge_first) or (graphIteration==1 and self.model_ref.merge_first) else (merge_prop_scores if graphIteration==0 and self.model_ref.merge_first else None),
+                        rel_prop_pred if (graphIteration==0 and not merged_first) or (graphIteration==1 and merged_first) else (merge_prop_scores if graphIteration==0 and merged_first else None),
                         self.thresh_edge[graphIteration],
                         self.thresh_rel[graphIteration],
                         self.thresh_overSeg[graphIteration],
                         self.thresh_group[graphIteration],
                         self.thresh_error[graphIteration],
-                        merge_only= graphIteration==0 and self.model_ref.merge_first
+                        merge_only= graphIteration==0 and merged_first
                         )
                 #t#self.opt_history['newAlignEdgePred gI{}'.format(graphIteration)].append(timeit.default_timer()-tic2)#t#
                 allEdgePredTypes.append(edgePredTypes)
                 allMissedRels.append(missedRels)
-                if graphIteration==0 and self.model_ref.merge_first:
+                if graphIteration==0 and merged_first:
                     mergeProposedInfo=proposedInfoI
-                elif (graphIteration==0 and not self.model_ref.merge_first) or (graphIteration==1 and self.model_ref.merge_first):
+                elif (graphIteration==0 and not merged_first) or (graphIteration==1 and merged_first):
                     proposedInfo=proposedInfoI
 
                 if self.model_ref.predClass and nodePred is not None:
@@ -2407,10 +2431,10 @@ class GraphPairTrainer(BaseTrainer):
                 if len(ppF)==len(ppL):
                     max_diff = np.abs(ppF-ppL).max()
                     if max_diff<0.01:
-                        finalBB2LastBB[finalI]=lastI
                         match_found=True
-                        assert(not last_used[lastI])
+                        #assert(not last_used[lastI]) #this actually occurs with gt (perfect overlap)
                         last_used[lastI]=True
+                        finalBB2LastBB[finalI]=lastI
                         break
             if not match_found:
                 unmatched_finals.append(finalI)
