@@ -732,8 +732,8 @@ class PairingGroupingGraph(BaseModel):
 
 
         if not useGTBBs:
-            if useOnlyGTSpace:
-                self.used_threshConf*=0.9
+            #if useOnlyGTSpace:
+            #    self.used_threshConf*=0.9
             if self.useCurvedBBs:
                 #TODO make this actually check for overseg...
                 threshed_bbPredictions = [bbPredictions[0,bbPredictions[0,:,0]>self.used_threshConf].cpu()]
@@ -742,11 +742,14 @@ class PairingGroupingGraph(BaseModel):
                 bbPredictions = threshed_bbPredictions
             else:
                 bbPredictions = non_max_sup_iou(bbPredictions.cpu(),self.used_threshConf,0.4,hard_detect_limit)
+            
+
             #I'm assuming batch size of one
             assert(len(bbPredictions)==1)
             bbPredictions=bbPredictions[0]
             if self.no_grad_feats:
                 bbPredictions=bbPredictions.detach()
+
 
             if useOnlyGTSpace:
                 #We'll correct the box predictions using the GT BBs, but no class/other GT
@@ -754,7 +757,11 @@ class PairingGroupingGraph(BaseModel):
                 gtBBs=gtBBs[0]
 
                 #perform greedy alignment of gt and predicted. Only keep aligned predictions
-                ious = allIOU(gtBBs,bbPredictions[:,1:]) #iou calculation
+                ious = allIOU(gtBBs,bbPredictions[:,1:],x1y1x2y2=self.useCurvedBBs) #iou calculation
+                #if self.useCurvedBBs:
+                #    ious = allIO_clipU(
+                #else:
+                #    ious = allIOU(gtBBs,bbPredictions[:,1:])
                 #ious[ious<0.3]=0
                 ious=ious.cpu()
                 bbPredictions=bbPredictions.cpu()
@@ -764,23 +771,39 @@ class PairingGroupingGraph(BaseModel):
                 num_gt_used = 0
                 pred_used = [False]*bbPredictions.size(0)
                 num_pred_used = 0
-                print('ious size {}'.format(ious.size()))
-                ious_list = [(ious[gt_i,p_i],gt_i,p_i) for gt_i,p_i in ious.nonzero(as_tuple=False).triu(1)]
+                ious_list = [(ious[gt_i,p_i],gt_i,p_i) for gt_i,p_i in ious.triu(1).nonzero(as_tuple=False)]
                 ious=None
                 ious_list.sort(key=lambda a:a[0], reverse=True)
-                print('ious list size {}'.format(len(ious_list)))
+                gt_parts=defaultdict(list)
                 for iou,gt_i,p_i in ious_list:
-                    if not gt_used[gt_i] and not pred_used[p_i]:
+                    if self.useCurvedBBs:
+                        gt_used[gt_i]=True
+                        gt_parts[gt_i].append((iou,bbPredictions[p_i,0:1],bbPredictions[p_i,6:]))
+                    elif not gt_used[gt_i] and not pred_used[p_i]:
                         useBBs.append(torch.cat((bbPredictions[p_i,0:1],gtBBs[gt_i,0:5],bbPredictions[p_i,6:]), dim=0))
                         num_gt_used+=1
                         if num_gt_used>=gtBBs.size(0):
                             break
                         gt_used[gt_i]=True
-                        num_pred_used+=1
-                        if num_pred_used>=bbPredictions.size(0):
-                            break
-                        pred_used[p_i]=True
+
+                        if not pred_used[p_i]:
+                            num_pred_used+=1
+                            if num_pred_used>=bbPredictions.size(0) and not self.useCurvedBBs:
+                                break
+                            pred_used[p_i]=True
                 ious_list=None
+
+                if self.useCurvedBBs:
+                    for gt_i,parts in gt_parts.items():
+                        ious,confs,clses = zip(*parts)
+                        ious = torch.FloatTensor(ious)
+                        confs = torch.cat(confs)
+                        clses = torch.stack(clses,dim=0)
+                        total_iou = ious.sum()
+                        conf = (confs*ious).sum()/total_iou
+                        cls = (clses*ious).sum(dim=0)/total_iou
+                        useBBs.append(torch.cat((conf[None],gtBBs[gt_i,0:5],cls),dim=0))
+
 
                 #Add any undetected boxes.
                 for gt_i,used in enumerate(gt_used):
@@ -789,11 +812,10 @@ class PairingGroupingGraph(BaseModel):
                         cls = torch.FloatTensor(self.numBBTypes+(1 if self.detector.predNumNeighbors else 0)).fill_(0.5)
                         useBBs.append(torch.cat((conf,gtBBs[gt_i,0:5],cls),dim=0))
 
-
                 useBBs = torch.stack(useBBs,dim=0)
                 assert self.include_bb_conf or self.useCurvedBBs
-                if self.useCurvedBBs and self.use_overseg_non_max_sup:
-                    useBBs = non_max_sup_overseg(useBBs)
+                #if self.useCurvedBBs and self.use_overseg_non_max_sup:
+                #    useBBs = non_max_sup_overseg(useBBs)
             else:
 
 
@@ -816,7 +838,8 @@ class PairingGroupingGraph(BaseModel):
             #        transcriptions=None
             #    return [bbPredictions], offsetPredictions, None, None, None, None, None, (useBBs.cpu().detach(),None,None,transcriptions)
             if self.useCurvedBBs:
-                useBBs = gtBBs[0,gtBBs[0,:,0]>0.5] #get rid of batch channel and select true boxes (by conf)
+                #useBBs = gtBBs[0,gtBBs[0,:,0]>0.5] #get rid of batch channel and select true boxes (by conf)
+                useBBs = gtBBs[0]
             else:
                 useBBs = gtBBs[0,:,0:5]
             if self.useShapeFeats or self.relationshipProposal=='feature_nn':
@@ -884,7 +907,7 @@ class PairingGroupingGraph(BaseModel):
                 groups=[[i] for i in range(len(useBBs))]
                 bbTrans = transcriptions
 
-                if self.merge_first:
+                if self.merge_first and not useOnlyGTSpace:
                     #t#tic=timeit.default_timer()#t#
                     #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
                     #We don't build a full graph, just propose edges and extract the edge features
