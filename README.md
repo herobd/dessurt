@@ -14,9 +14,9 @@ If upgrading cuda, remove the old version first either with apt-get or uninstall
     (Be sure CUDA_HOME and PATH are right after installation)
 
 `conda install $`
-* `ipython`
 * `pytorch torchvision -c pytorch` or what ever the command is on pytorch.org given cuda version, etc
 * `scikit-image`
+* `shapely`
 No `opencv` any more
 
 `pytorch-geometric`: https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html
@@ -28,14 +28,12 @@ No `opencv` any more
 `pip install editdistance`
 
 
-for cvxpy (optimization), you must have python 3.7 or later:
+for cvxpy (optimization, not used now), you must have python 3.7 or later:
 
 clone github: https://github.com/cvxgrp/cvxpy
 
 `python setup.py install` in the cvxpy repo
 
-# Install
-`python setup.py build develop`
 
 ## Reproducability instructions
 
