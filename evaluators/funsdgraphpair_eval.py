@@ -105,7 +105,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
     print('{}: {} x {}'.format(imageName,data.shape[2],data.shape[3]))
     if useDetections=='gt':
         losses, log, out = trainer.newRun(instance,True,get=toEval)
-    if useDetections=='gtSpaceOnly':
+    elif useDetections=='gtSpaceOnly':
         losses, log, out = trainer.newRun(instance,False,useOnlyGTSpace=True,get=toEval)
     elif type(useDetections) is str:
         raise NotImplementedError('using saved detections not adjusted for new eval')
@@ -167,8 +167,11 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         targetSize=0
 
     toRet={}#log
+    missing_iter_0 = not any('_0' in k for k in log.keys())
     if allEdgePred is not None:
         for gIter,(edgePred, relIndexes, bbPred, outputBoxes, predGroups, edgePredTypes, missedRels) in enumerate(zip(allEdgePred,allEdgeIndexes,allNodePred,allOutputBoxes,allPredGroups,allEdgePredTypes,allMissedRels)):
+            if missing_iter_0:
+                gIter+=1
 
 
 
