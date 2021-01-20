@@ -31,7 +31,7 @@ import utils.img_f as img_f
 import timeit
 import torch.autograd.profiler as profiler
 
-MAX_CANDIDATES=2000
+MAX_CANDIDATES=2000 #these are only used for line-of-sight selection
 MAX_GRAPH_SIZE=4000
 
 def minAndMaxXY(boundingRects):
@@ -3360,11 +3360,16 @@ class PairingGroupingGraph(BaseModel):
 
         keep = math.ceil(self.percent_rel_to_keep*len(rels_ordered))
         if merge_only:
-            keep = min(keep,self.max_merge_rel_to_keep)
+            max_rel_to_keep = self.max_merge_rel_to_keep
         else:
-            keep = min(keep,self.max_rel_to_keep)
+            max_rel_to_keep = self.max_rel_to_keep
+        if not self.training:
+            max_rel_to_keep *= 3
+        keep = min(keep,self.max_rel_to_keep)
         #print('keeping {} of {}'.format(keep,len(rels_ordered)))
         keep_rels = [r[1] for r in rels_ordered[:keep]]
+        #if merge_only:
+            #print('total rels:{}, keeping:{}, max:{}'.format(len(rels_ordered),keep,max_rel_to_keep))
         if keep<len(rels_ordered):
             implicit_threshold = rels_ordered[keep][0]
         else:
