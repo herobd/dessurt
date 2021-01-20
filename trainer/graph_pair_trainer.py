@@ -223,7 +223,8 @@ class GraphPairTrainer(BaseTrainer):
         else:
             threshIntur = None
         useGT = self.useGT(iteration)
-        print('\t\t\t\t{} {}'.format(iteration,thisInstance['imgName']))
+
+        #print('\t\t\t\t{} {}'.format(iteration,thisInstance['imgName']))
         if self.amp:
             with torch.cuda.amp.autocast():
                 if self.mergeAndGroup:
