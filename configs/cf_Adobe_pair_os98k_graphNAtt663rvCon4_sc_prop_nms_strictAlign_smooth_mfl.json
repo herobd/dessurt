@@ -1,31 +1,29 @@
 {
-    "name": "FUNSDLines_pair_os98k_graphNAtt763rv_sc_prop_nms_strictAlign_smooth_adamW",
+    "name": "Adobe_pair_os98k_graphNAtt663rvCon4_sc_prop_nms_strictAlign_smooth_mfl",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
     "super_computer":false,
     "data_loader": {
-        "data_set_name": "FUNSDGraphPair",
-        "data_dir": "../data/FUNSD",
+        "data_set_name": "AdobeGraphPair",
+        "data_dir": "../data/AdobeFormData",
         "batch_size": 1,
         "shuffle": true,
         "num_workers": 3,
-        "split_to_lines": true,
         "crop_to_page":false,
         "color":false,
-        "rescale_range": [0.8,1.2],
+        "rescale_range": [0.4,0.65],
         "crop_params": {
-            "SMALLcrop_size":[200,400],
-            "crop_size":[600,800],
-	    "pad":50
+            "crop_size":[700,1100],
+            "pad":50
         }
 
 
     },
     "validation": {
         "shuffle": false,
-        "rescale_range": [1,1],
+        "rescale_range": [0.52,0.52],
         "crop_params": null,
         "batch_size": 1
     },
@@ -33,10 +31,10 @@
     
     "lr_scheduler_type": "none",
  
-    "optimizer_type": "AdamW",
+    "optimizer_type": "Adam",
     "optimizer": {
         "lr": 0.001,
-        "weight_decay": 0.01
+        "weight_decay": 0
     },
     "loss": {
         "overseg": "MultiScaleOversegmentLoss",
@@ -64,9 +62,9 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 400000,
+        "iterations": 700000,
         "swa": true,
-        "swa_start": 300000,
+        "swa_start": 600000,
         "swa_c_iters": 10000,
         "save_dir": "saved/",
         "val_step": 20000,
@@ -102,16 +100,17 @@
     },
     "arch": "PairingGroupingGraph", 
     "model": {
-        "detector_checkpoint": "saved/FUNSDLines_detect_augRFh_oversegMultScl/checkpoint-iteration98042.pth",
+        "detector_checkpoint": "saved/Adobe_detect_augR_oversegMultScl/checkpoint-iteration100000.pth",
         "overseg_non_max_sup": true,
         "text_line_smoothness": 200,
         "conf_thresh": 0.7,
         "start_frozen": true,
 
+        "graph_four_connected": true,
         "relationship_proposal": "feature_nn",
         "percent_rel_to_keep": 0.4,
-        "max_rel_to_keep": 3000,
-        "max_merge_rel_to_keep": 6000,
+        "max_rel_to_keep": 2500,
+        "max_merge_rel_to_keep": 5000,
         "roi_batch_size": 600,
 
 	"use_rel_shape_feats": "corner",
@@ -131,7 +130,7 @@
         "merge_featurizer_start_h": 5,
         "merge_featurizer_start_w": 5,
         "merge_featurizer_conv": ["sep256","sep128","sep128",100],
-        "init_merge_thresh": 0.9,
+        "init_merge_thresh": 0.95,
 
         "expand_rel_context": 20,
         "featurizer_start_h": 16,
@@ -154,9 +153,9 @@
         {
             "arch": "MetaGraphNet",
             "in_channels": 256,
-            "node_out": 5,
+            "node_out": 3,
             "edge_out": 5,
-            "num_layers": 7,
+            "num_layers": 6,
             "num_heads": 4,
             "repetitions": 1,
             "use_repetition_res": false,
@@ -169,7 +168,7 @@
         {
             "arch": "MetaGraphNet",
             "in_channels": 256,
-            "node_out": 5,
+            "node_out": 3,
             "edge_out": 5,
             "num_layers": 6,
             "num_heads": 4,
@@ -184,7 +183,7 @@
         {
             "arch": "MetaGraphNet",
             "in_channels": 256,
-            "node_out": 5,
+            "node_out": 3,
             "edge_out": 5,
             "num_layers": 3,
             "num_heads": 4,
