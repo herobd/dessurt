@@ -14,6 +14,7 @@ from torchvision.ops import RoIAlign
 from model.cnn_lstm import CRNN, SmallCRNN
 from model.tesseract_wrap import TesseractWrap
 from model.word2vec_adapter import Word2VecAdapter, Word2VecAdapterShallow, BPEmbAdapter
+from model.distilbert_adapter import DistilBertAdapter
 from model.hand_code_emb import HandCodeEmb
 from skimage import draw
 from model.net_builder import make_layers, getGroupSize
@@ -426,6 +427,7 @@ class PairingGroupingGraph(BaseModel):
                     convOut=graph_in_channels-(self.numShapeFeatsBB+self.numTextFeats)
                 else:
                     convOut=featurizer_fc[0]-(self.numShapeFeatsBB+self.numTextFeats)
+                assert convOut>100
                 if featurizer is None:
                     convlayers = [ nn.Conv2d(detectorSavedFeatSize+bbMasks_bb,convOut,kernel_size=(2,3)) ]
                     if featurizer_fc is not None:
@@ -644,6 +646,8 @@ class PairingGroupingGraph(BaseModel):
                     self.embedding_model = BPEmbAdapter(self.numTextFeats)
                 elif 'hand' in config['text_rec']['embedding']:
                     self.embedding_model = HandCodeEmb(self.numTextFeats)
+                elif 'DistilBert' in config['text_rec']['embedding']:
+                    self.embedding_model = DistilBertAdapter(self.numTextFeats)
                 else:
                     raise NotImplementedError('Unknown text embedding method: {}'.format(config['text_rec']['embedding']))
             else:
@@ -970,6 +974,12 @@ class PairingGroupingGraph(BaseModel):
                         return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, None, merge_prop_scores, None
 
                     if bbTrans is not None:
+                        if gtTrans is not None:
+                            if self.include_bb_conf:
+                                justBBs = useBBs[:,1:]
+                            else:
+                                justBBs = useBBs
+                            bbTrans=correctTrans(bbTrans,justBBs,gtTrans,gtBBs)
                         embeddings = self.embedding_model(bbTrans)
                         if self.add_noise_to_word_embeddings:
                             embeddings += torch.randn_like(embeddings).to(embeddings.device)*self.add_noise_to_word_embeddings*embeddings.mean()
