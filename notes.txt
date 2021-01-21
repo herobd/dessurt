@@ -1,50 +1,15 @@
--a validation=eval=True,data_loader=num_workers=0,validation=batch_size=1,data_loader=eval=True,data_loader=batch_size=1,optimize=True
-
-python eval.py -c saved/Mix18_staggerLight_NN/checkpoint-iteration200000.pth.tar -g 0 -n 10000 -a save_json=out_json/Mix18_staggerLight_NN,data_loader=batch_size=1,data_loader=num_workers=0,data_loader=rescale_range=0.52,data_loader=crop_params=,validation=rescale_range=0.52,validation=crop_params=
-
-
-
-Toy maxpairs
-1,fe,rcr,hal    0.69
-    step at 10  0.76
-    step 15     0.85
-    step 20 @40 0.86
-    step 30 @40 0.88
-
-Step sch, #40,000
-1,fe,rcr,learnedQ           0.94
-1,fe,rcr,half               0.80
-1,fe,rcr                    0.76
-1,fe,rcr,learnedQ,avgE      0.92, 0.89
-1,fe,rcr,learnedQ,avgE,rr   0.88, 0.91
-1,fe,rcr,learnedQ,rr        0.86, 0.88
-1,fe,rcr,lrn1,avgE,rr       0.94, 0.90 *
-1,fe,rcr,lrn1,avgE,rr,none0 0.47, 0.68
-1,fe,lrn1,avgE,rr           0.83, 0.82
-1,fe,rcr,lrn1,avgE,rr,relu  0.91, 0.89
-1,fe,rcr,lrn1               0.89, 0.85, 0.87
-1,fe,lrn1                   0.69, 0.64
-1,fe,rcr,lrn1,avgE,rr,none1 0.66
-1,fe,gru,lrn1,avgE,rr       0.90,0.88
-1,fe,rcr,lrn1,avgE,rr,prune 0.84,0.82,0.86
-1,fe,rcr,lrn4,avgE,rr,prune 0.90,0.86
-1,fe,rcr,lrn4,avgE,rr       0.91,0.90,0.92,0.84
-1,fe,rcr,tree,avgE,rr       0.93,1.0,0.93,0.99,0.92
-1,fe,rcr,tree,avgE          0.97,0.97,0.96,0.97   +.02,-.01,-.03,-.01 using 20 reps
-
-step only 30000
-1,fe,gru,lrn1,avgE,rr       0.94,0.88
-
-
-
- File "train.py", line 113, in <module>
-    main(config, args.resume)
-  File "train.py", line 65, in main
-    trainer.train()
-  File "/home/ubuntu/brian/pairing/base/base_trainer.py", line 159, in train
-    result = self._train_iteration(self.iteration)
-  File "/home/ubuntu/brian/pairing/trainer/graph_pair_trainer.py", line 176, in _train_iteration
-    losses, run_log = self.run(thisInstance,useGT,threshIntur)
-  File "/home/ubuntu/brian/pairing/trainer/graph_pair_trainer.py", line 1052, in run
-    nn_loss_final = self.loss['nnFinal'](bbPredNN_use,alignedNN_use)
-KeyError: 'nnFinal'
+JOBS
+                                                 NAFMblank_pair_binary333rv_mc_prop  39659391  2-05:51:53
+                                                FUNSDLines_pair_binary333rv_mc_prop  39659388  2-05:53:23
+ NAFMblank_pair_os100k2_graphNAtt663rvCon4_sc_prop_nms_strictAlign_smooth_mfl_small  39674892       13:19
+              NAFMblank_pair_os100k2_binary333rv_mc_prop_nms_strictAlign_smooth_mfl  39670246    19:51:15
+               FUNSDLines_pair_os98k_binary333rv_mc_prop_nms_strictAlign_smooth_mfl  39670245    19:51:28
+                                    NAFMblank_pair_graph663rvCon4_smallContext_prop  39670213    20:52:48
+                                   FUNSDLines_pair_graph663rvCon4_smallContext_prop  39670208    20:55:46
+        FUNSDLines_pair_os98k_graphNAtt663rvCon4_sc_prop_nms_strictAlign_smooth_mfl  39670207    20:55:57
+           FUNSDLines_pair_os98k_graphTree664rvCon4_sc_prop_nms_stctAln_smooth_long  39664156  1-16:15:37
+              NAFGSblank_pair_os100k2_graphNAtt543rv_sc_prop_nms_strictAlign_smooth  39641608  1-21:51:30
+    NAFMb_pair_os100k2_graphNAtt663rvCon4_sc_prop_nms_stctAln_smooth_mfl_small_FAST  39674936       12:21
+           FUNSDLines_pair_os98k_graphNAtt333rv_sc_prop_nms_strictAlign_smooth_tess  39564458     7:15:20
+          FUNSDLines_pair_os98k_graphNAtt763rv_sc_prop_nms_strictAlign_smooth_adamW  39666105     7:15:20
+       NAFMblank_pair_os100k2_graphNAtt663rvCon4_sc_prop_nms_strictAlign_smooth_mfl  39674891       13:19
