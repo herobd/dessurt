@@ -3335,9 +3335,10 @@ class PairingGroupingGraph(BaseModel):
             #could_merge=could_merge.cpu()
         else:
             rel_pred = self.rel_prop_nn(features.to(device))
-        
+
         if self.rel_hard_thresh is not None:
             rel_pred = torch.sigmoid(rel_pred)
+
 
         rel_pred2d = rel_pred.view(len(bbs),len(bbs)) #unflatten
         rel_pred2d_comb = (torch.triu(rel_pred2d,diagonal=1)+torch.tril(rel_pred2d,diagonal=-1).permute(1,0))/2
@@ -3375,9 +3376,7 @@ class PairingGroupingGraph(BaseModel):
                 keep_rels = keep_rels[:max_rel_to_keep]
             implicit_threshold = rel_hard_thresh
         else:
-
             rels_ordered.sort(key=lambda x: x[0], reverse=True)
-
             #t#time=timeit.default_timer()-tic#t#
             #t#self.opt_history['candidates sort{}'.format(' m1st' if merge_only else '')].append(time) #t#
 
