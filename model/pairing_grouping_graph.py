@@ -586,6 +586,8 @@ class PairingGroupingGraph(BaseModel):
                                     nn.ReLU(True),
                                     nn.Linear(64,1)
                                     )
+            self.rel_merge_hard_thresh = config['rel_merge_hard_thresh'] if 'rel_merge_hard_thresh' in config else None
+            self.rel_hard_thresh = config['rel_hard_thresh'] if 'rel_hard_thresh' in config else None
             self.percent_rel_to_keep = config['percent_rel_to_keep'] if 'percent_rel_to_keep' in config else 0.2
             self.max_rel_to_keep = config['max_rel_to_keep'] if 'max_rel_to_keep' in config else 3000
             self.max_merge_rel_to_keep = config['max_merge_rel_to_keep'] if 'max_merge_rel_to_keep' in config else 5000
@@ -3334,6 +3336,9 @@ class PairingGroupingGraph(BaseModel):
         else:
             rel_pred = self.rel_prop_nn(features.to(device))
 
+        if self.rel_hard_thresh is not None:
+            rel_pred = torch.sigmoid(rel_pred)
+
 
         rel_pred2d = rel_pred.view(len(bbs),len(bbs)) #unflatten
         rel_pred2d_comb = (torch.triu(rel_pred2d,diagonal=1)+torch.tril(rel_pred2d,diagonal=-1).permute(1,0))/2
@@ -3353,27 +3358,46 @@ class PairingGroupingGraph(BaseModel):
 
         #t#tic=timeit.default_timer()#t#
 
-        rels_ordered.sort(key=lambda x: x[0], reverse=True)
-
-        #t#time=timeit.default_timer()-tic#t#
-        #t#self.opt_history['candidates sort{}'.format(' m1st' if merge_only else '')].append(time) #t#
-
-        keep = math.ceil(self.percent_rel_to_keep*len(rels_ordered))
+        
         if merge_only:
-            max_rel_to_keep = self.max_merge_rel_to_keep
+            rel_hard_thresh = self.rel_merge_hard_thresh
         else:
-            max_rel_to_keep = self.max_rel_to_keep
-        if not self.training:
-            max_rel_to_keep *= 3
-        keep = min(keep,self.max_rel_to_keep)
-        #print('keeping {} of {}'.format(keep,len(rels_ordered)))
-        keep_rels = [r[1] for r in rels_ordered[:keep]]
-        #if merge_only:
-            #print('total rels:{}, keeping:{}, max:{}'.format(len(rels_ordered),keep,max_rel_to_keep))
-        if keep<len(rels_ordered):
-            implicit_threshold = rels_ordered[keep][0]
+            rel_hard_thresh = self.rel_hard_thresh
+
+
+        if rel_hard_thresh is not None:
+            if self.training:
+                rels_ordered.sort(key=lambda x: x[0], reverse=True)
+            keep_rels = [r[1] for r in rels_ordered if r[0]>rel_hard_thresh]
+            if self.training:
+                if merge_only:
+                    max_rel_to_keep = self.max_merge_rel_to_keep
+                else:
+                    max_rel_to_keep = self.max_rel_to_keep
+                keep_rels = keep_rels[:max_rel_to_keep]
+            implicit_threshold = rel_hard_thresh
         else:
-            implicit_threshold = rels_ordered[-1][0]-0.1 #We're taking everything
+            rels_ordered.sort(key=lambda x: x[0], reverse=True)
+            #t#time=timeit.default_timer()-tic#t#
+            #t#self.opt_history['candidates sort{}'.format(' m1st' if merge_only else '')].append(time) #t#
+
+            keep = math.ceil(self.percent_rel_to_keep*len(rels_ordered))
+            if merge_only:
+                max_rel_to_keep = self.max_merge_rel_to_keep
+            else:
+                max_rel_to_keep = self.max_rel_to_keep
+            if not self.training:
+                max_rel_to_keep *= 3
+            keep = min(keep,max_rel_to_keep)
+            #print('keeping {} of {}'.format(keep,len(rels_ordered)))
+            keep_rels = [r[1] for r in rels_ordered[:keep]]
+            if keep<len(rels_ordered):
+                implicit_threshold = rels_ordered[keep][0]
+            else:
+                implicit_threshold = rels_ordered[-1][0]-0.1 #We're taking everything
+            if not merge_only:
+                print('total rels:{}, keeping:{}, max:{}'.format(len(rels_ordered),keep,max_rel_to_keep))
+                print('  thresh: {}'.format(implicit_threshold))
 
 
         #t###print('   candidates net and thresh: {}'.format(timeit.default_timer()-tic))#t#
