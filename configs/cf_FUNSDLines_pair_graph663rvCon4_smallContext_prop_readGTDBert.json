@@ -1,10 +1,10 @@
 {
-    "name": "FUNSDLines_pair_graph663rvCon4_smallContext_prop",
+    "name": "FUNSDLines_pair_graph663rvCon4_smallContext_prop_readGTDBert",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
-    "super_computer":true,
+    "super_computer":false,
     "data_loader": {
         "data_set_name": "FUNSDGraphPair",
         "data_dir": "../data/FUNSD",
@@ -86,6 +86,8 @@
         "stop_from_gt": 20000,
         "max_use_pred": 0.5,
         "use_all_bb_pred_for_rel_loss": true,
+
+	"freeze_param_names": ["text_rec","languagemodel"],
 
         "use_learning_schedule": true,
         "adapt_lr": false,

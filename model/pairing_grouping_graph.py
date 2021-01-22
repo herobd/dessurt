@@ -901,7 +901,7 @@ class PairingGroupingGraph(BaseModel):
 
         if len(useBBs):#useBBs.size(0)>1:
             if transcriptions is not None:
-                embeddings = self.embedding_model(transcriptions)
+                embeddings = self.embedding_model(transcriptions,saved_features.device)
                 if self.add_noise_to_word_embeddings:
                     embeddings += torch.randn_like(embeddings).to(embeddings.device)*self.add_noise_to_word_embeddings*embeddings.mean()
             else:
@@ -980,7 +980,7 @@ class PairingGroupingGraph(BaseModel):
                             else:
                                 justBBs = useBBs
                             bbTrans=correctTrans(bbTrans,justBBs,gtTrans,gtBBs)
-                        embeddings = self.embedding_model(bbTrans)
+                        embeddings = self.embedding_model(bbTrans,saved_features.device)
                         if self.add_noise_to_word_embeddings:
                             embeddings += torch.randn_like(embeddings).to(embeddings.device)*self.add_noise_to_word_embeddings*embeddings.mean()
                     else:
@@ -1450,10 +1450,11 @@ class PairingGroupingGraph(BaseModel):
                     doTransIndexes = [idx for idx in bbs] #everything, since we skip recognition for speed
                 else:
                     doTransIndexes = [idx for idx in mergedTo if idx in bbs]
-                doBBs = [bbs[idx] for idx in doTransIndexes]
-                newTrans = self.getTranscriptions(doBBs,image)
-                for i,idx in enumerate(doTransIndexes):
-                    bbTrans[idx] = newTrans[i]
+                if len(doTransIndexes)>0:
+                    doBBs = [bbs[idx] for idx in doTransIndexes]
+                    newTrans = self.getTranscriptions(doBBs,image)
+                    for i,idx in enumerate(doTransIndexes):
+                        bbTrans[idx] = newTrans[i]
             if merge_only:
                 newBBs=[]
                 newBBTrans=[] if self.text_rec is not None else None
@@ -1664,7 +1665,7 @@ class PairingGroupingGraph(BaseModel):
 
 
         if self.text_rec is not None and oldNodeFeats is not None:
-            newNodeEmbeddings = self.embedding_model(groupNodeTrans)
+            newNodeEmbeddings = self.embedding_model(groupNodeTrans,oldNodeFeats.device)
             if self.add_noise_to_word_embeddings>0:
                 newNodeEmbeddings += torch.randn_like(newNodeEmbeddings).to(newNodeEmbeddings.device)*self.add_noise_to_word_embeddings
             newNodeFeats = self.merge_embedding_layer(torch.cat((newNodeFeats,newNodeEmbeddings),dim=1))
@@ -2071,7 +2072,7 @@ class PairingGroupingGraph(BaseModel):
         if oldNodeFeats is not None:
             newNodeFeats = torch.stack(newNodeFeats,dim=0)
             if self.text_rec is not None:
-                newNodeEmbeddings = self.embedding_model(newNodeTrans)
+                newNodeEmbeddings = self.embedding_model(newNodeTrans,oldNodeFeats.device)
                 if self.add_noise_to_word_embeddings>0:
                     newNodeEmbeddings += torch.randn_like(newNodeEmbeddings).to(newNodeEmbeddings.device)*self.add_noise_to_word_embeddings
                 newNodeFeats = self.merge_embedding_layer(torch.cat((newNodeFeats,newNodeEmbeddings),dim=1))
