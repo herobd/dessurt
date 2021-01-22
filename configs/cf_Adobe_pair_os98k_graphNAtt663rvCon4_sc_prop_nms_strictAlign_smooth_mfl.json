@@ -15,7 +15,7 @@
         "color":false,
         "rescale_range": [0.4,0.65],
         "crop_params": {
-            "crop_size":[700,1100],
+            "crop_size":[500,700],
             "pad":50
         }
 
@@ -109,8 +109,8 @@
         "graph_four_connected": true,
         "relationship_proposal": "feature_nn",
         "percent_rel_to_keep": 0.4,
-        "max_rel_to_keep": 2500,
-        "max_merge_rel_to_keep": 5000,
+        "max_rel_to_keep": 1500,
+        "max_merge_rel_to_keep": 3500,
         "roi_batch_size": 600,
 
 	"use_rel_shape_feats": "corner",
