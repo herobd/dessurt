@@ -18,22 +18,10 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel
 
+from knockknock import slack_sender
+
 webhook_url = 'https://hooks.slack.com/services/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'
 
-def update_status(name,message,supercomputer):
-    if supercomputer:
-        return
-    name = '{}: {}'.format(socket.gethostname(),name)
-    try:
-        proxies = {
-                  "http": None,
-                    "https": None,
-                    }
-        #print('http://sensei-status.herokuapp.com/sensei-update/{}?message={}'.format(name,message))
-        r = requests.get('http://sensei-status.herokuapp.com/sensei-update/{}?message={}'.format(name,message),proxies=proxies)
-    except requests.exceptions.ConnectionError:
-        pass
-    pass
 
 logging.basicConfig(level=logging.INFO, format='')
 logging.getLogger('shapely.geos').setLevel(logging.ERROR)
@@ -52,9 +40,15 @@ def main_wraper(rank,config,resume,world_size):
     else:
         config['gpu']=config['gpus'][rank]
     with torch.cuda.device(config['gpu']):
-        main(rank,config,resume,world_size)
+        if rank==0 and not config['super_computer']:
+            notify_main(rank,config,resume,world_size)
+        else:
+            main(rank,config,resume,world_size)
 
 @slack_sender(webhook_url=webhook_url, channel="herding-neural-networks")
+def notify_main(rank,config, resume,world_size=None):
+    main(rank,config, resume,world_size)
+
 def main(rank,config, resume,world_size=None):
     if rank is not None: #multiprocessing
         #print('Process {} can see these GPUs:'.format(rank,os.environ['CUDA_VISIBLE_DEVICES']))
@@ -115,7 +109,6 @@ def main(rank,config, resume,world_size=None):
         signal.signal(signal.SIGINT, handleSIGINT)
 
     print("Begin training")
-    update_status(name,'started',supercomputer)
     #warnings.filterwarnings("error")
     trainer.train()
 
@@ -178,29 +171,27 @@ if __name__ == '__main__':
         print('override gpu to '+str(config['gpu']))
     set_procname(config['name'])
 
-    try:
-        if args.rank is not None:
-            config['distributed']=True
-            with torch.cuda.device(config['gpu']):
-                main(args.rank,config, args.resume, args.worldsize)
-        elif 'multiprocess' in config:
-            assert(config['cuda'])
-            num_gpu_processes=config['multiprocess']
-            os.environ['MASTER_ADDR'] = '127.0.0.1'
-            os.environ['MASTER_PORT'] = '8888'
-            mp.spawn(main_wraper,
-                    args=(config,args.resume,num_gpu_processes),
-                    nprocs=num_gpu_processes,
-                    join=True)
-        elif config['cuda']:
-            with torch.cuda.device(config['gpu']):
+    if args.rank is not None:
+        config['distributed']=True
+        with torch.cuda.device(config['gpu']):
+            main(args.rank,config, args.resume, args.worldsize)
+    elif 'multiprocess' in config:
+        assert(config['cuda'])
+        num_gpu_processes=config['multiprocess']
+        os.environ['MASTER_ADDR'] = '127.0.0.1'
+        os.environ['MASTER_PORT'] = '8888'
+        mp.spawn(main_wraper,
+                args=(config,args.resume,num_gpu_processes),
+                nprocs=num_gpu_processes,
+                join=True)
+    elif config['cuda']:
+        with torch.cuda.device(config['gpu']):
+            if not supercomputer:
+                notify_main(None,config, args.resume)
+            else:
                 main(None,config, args.resume)
+    else:
+        if not supercomputer:
+            notify_main(None,config, args.resume)
         else:
             main(None,config, args.resume)
-    except Exception as er:
-
-        #urllib.request.urlopen(url
-        update_status(name,er,supercomputer)
-        raise er
-    else:
-        update_status(name,'DONE!',supercomputer)
