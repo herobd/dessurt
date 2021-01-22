@@ -14,6 +14,7 @@ from torchvision.ops import RoIAlign
 from model.cnn_lstm import CRNN, SmallCRNN
 from model.tesseract_wrap import TesseractWrap
 from model.word2vec_adapter import Word2VecAdapter, Word2VecAdapterShallow, BPEmbAdapter
+from model.distilbert_adapter import DistilBertAdapter
 from model.hand_code_emb import HandCodeEmb
 from skimage import draw
 from model.net_builder import make_layers, getGroupSize
@@ -31,7 +32,7 @@ import utils.img_f as img_f
 import timeit
 import torch.autograd.profiler as profiler
 
-MAX_CANDIDATES=2000
+MAX_CANDIDATES=2000 #these are only used for line-of-sight selection
 MAX_GRAPH_SIZE=4000
 
 def minAndMaxXY(boundingRects):
@@ -426,6 +427,7 @@ class PairingGroupingGraph(BaseModel):
                     convOut=graph_in_channels-(self.numShapeFeatsBB+self.numTextFeats)
                 else:
                     convOut=featurizer_fc[0]-(self.numShapeFeatsBB+self.numTextFeats)
+                assert convOut>100
                 if featurizer is None:
                     convlayers = [ nn.Conv2d(detectorSavedFeatSize+bbMasks_bb,convOut,kernel_size=(2,3)) ]
                     if featurizer_fc is not None:
@@ -586,6 +588,8 @@ class PairingGroupingGraph(BaseModel):
                                     nn.ReLU(True),
                                     nn.Linear(64,1)
                                     )
+            self.rel_merge_hard_thresh = config['rel_merge_hard_thresh'] if 'rel_merge_hard_thresh' in config else None
+            self.rel_hard_thresh = config['rel_hard_thresh'] if 'rel_hard_thresh' in config else None
             self.percent_rel_to_keep = config['percent_rel_to_keep'] if 'percent_rel_to_keep' in config else 0.2
             self.max_rel_to_keep = config['max_rel_to_keep'] if 'max_rel_to_keep' in config else 3000
             self.max_merge_rel_to_keep = config['max_merge_rel_to_keep'] if 'max_merge_rel_to_keep' in config else 5000
@@ -642,6 +646,8 @@ class PairingGroupingGraph(BaseModel):
                     self.embedding_model = BPEmbAdapter(self.numTextFeats)
                 elif 'hand' in config['text_rec']['embedding']:
                     self.embedding_model = HandCodeEmb(self.numTextFeats)
+                elif 'DistilBert' in config['text_rec']['embedding']:
+                    self.embedding_model = DistilBertAdapter(self.numTextFeats)
                 else:
                     raise NotImplementedError('Unknown text embedding method: {}'.format(config['text_rec']['embedding']))
             else:
@@ -898,7 +904,7 @@ class PairingGroupingGraph(BaseModel):
 
         if len(useBBs):#useBBs.size(0)>1:
             if transcriptions is not None:
-                embeddings = self.embedding_model(transcriptions)
+                embeddings = self.embedding_model(transcriptions,saved_features.device)
                 if self.add_noise_to_word_embeddings:
                     embeddings += torch.randn_like(embeddings).to(embeddings.device)*self.add_noise_to_word_embeddings*embeddings.mean()
             else:
@@ -971,7 +977,13 @@ class PairingGroupingGraph(BaseModel):
                         return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, None, merge_prop_scores, None
 
                     if bbTrans is not None:
-                        embeddings = self.embedding_model(bbTrans)
+                        if gtTrans is not None:
+                            if self.include_bb_conf:
+                                justBBs = useBBs[:,1:]
+                            else:
+                                justBBs = useBBs
+                            bbTrans=correctTrans(bbTrans,justBBs,gtTrans,gtBBs)
+                        embeddings = self.embedding_model(bbTrans,saved_features.device)
                         if self.add_noise_to_word_embeddings:
                             embeddings += torch.randn_like(embeddings).to(embeddings.device)*self.add_noise_to_word_embeddings*embeddings.mean()
                     else:
@@ -1443,10 +1455,11 @@ class PairingGroupingGraph(BaseModel):
                     doTransIndexes = [idx for idx in bbs] #everything, since we skip recognition for speed
                 else:
                     doTransIndexes = [idx for idx in mergedTo if idx in bbs]
-                doBBs = [bbs[idx] for idx in doTransIndexes]
-                newTrans = self.getTranscriptions(doBBs,image)
-                for i,idx in enumerate(doTransIndexes):
-                    bbTrans[idx] = newTrans[i]
+                if len(doTransIndexes)>0:
+                    doBBs = [bbs[idx] for idx in doTransIndexes]
+                    newTrans = self.getTranscriptions(doBBs,image)
+                    for i,idx in enumerate(doTransIndexes):
+                        bbTrans[idx] = newTrans[i]
             if merge_only:
                 newBBs=[]
                 newBBTrans=[] if self.text_rec is not None else None
@@ -1657,7 +1670,7 @@ class PairingGroupingGraph(BaseModel):
 
 
         if self.text_rec is not None and oldNodeFeats is not None:
-            newNodeEmbeddings = self.embedding_model(groupNodeTrans)
+            newNodeEmbeddings = self.embedding_model(groupNodeTrans,oldNodeFeats.device)
             if self.add_noise_to_word_embeddings>0:
                 newNodeEmbeddings += torch.randn_like(newNodeEmbeddings).to(newNodeEmbeddings.device)*self.add_noise_to_word_embeddings
             newNodeFeats = self.merge_embedding_layer(torch.cat((newNodeFeats,newNodeEmbeddings),dim=1))
@@ -2064,7 +2077,7 @@ class PairingGroupingGraph(BaseModel):
         if oldNodeFeats is not None:
             newNodeFeats = torch.stack(newNodeFeats,dim=0)
             if self.text_rec is not None:
-                newNodeEmbeddings = self.embedding_model(newNodeTrans)
+                newNodeEmbeddings = self.embedding_model(newNodeTrans,oldNodeFeats.device)
                 if self.add_noise_to_word_embeddings>0:
                     newNodeEmbeddings += torch.randn_like(newNodeEmbeddings).to(newNodeEmbeddings.device)*self.add_noise_to_word_embeddings
                 newNodeFeats = self.merge_embedding_layer(torch.cat((newNodeFeats,newNodeEmbeddings),dim=1))
@@ -3339,6 +3352,9 @@ class PairingGroupingGraph(BaseModel):
         else:
             rel_pred = self.rel_prop_nn(features.to(device))
 
+        if self.rel_hard_thresh is not None:
+            rel_pred = torch.sigmoid(rel_pred)
+
 
         rel_pred2d = rel_pred.view(len(bbs),len(bbs)) #unflatten
         rel_pred2d_comb = (torch.triu(rel_pred2d,diagonal=1)+torch.tril(rel_pred2d,diagonal=-1).permute(1,0))/2
@@ -3358,22 +3374,44 @@ class PairingGroupingGraph(BaseModel):
 
         #t#tic=timeit.default_timer()#t#
 
-        rels_ordered.sort(key=lambda x: x[0], reverse=True)
-
-        #t#time=timeit.default_timer()-tic#t#
-        #t#self.opt_history['candidates sort{}'.format(' m1st' if merge_only else '')].append(time) #t#
-
-        keep = math.ceil(self.percent_rel_to_keep*len(rels_ordered))
         if merge_only:
-            keep = min(keep,self.max_merge_rel_to_keep)
+            rel_hard_thresh = self.rel_merge_hard_thresh
         else:
+            rel_hard_thresh = self.rel_hard_thresh
+
+
+        if rel_hard_thresh is not None:
+            if self.training:
+                rels_ordered.sort(key=lambda x: x[0], reverse=True)
+            keep_rels = [r[1] for r in rels_ordered if r[0]>rel_hard_thresh]
+            if self.training:
+                if merge_only:
+                    max_rel_to_keep = self.max_merge_rel_to_keep
+                else:
+                    max_rel_to_keep = self.max_rel_to_keep
+                keep_rels = keep_rels[:max_rel_to_keep]
+            implicit_threshold = rel_hard_thresh
+        else:
+            rels_ordered.sort(key=lambda x: x[0], reverse=True)
+            #t#time=timeit.default_timer()-tic#t#
+            #t#self.opt_history['candidates sort{}'.format(' m1st' if merge_only else '')].append(time) #t#
+
+            keep = math.ceil(self.percent_rel_to_keep*len(rels_ordered))
+            if merge_only:
+                max_rel_to_keep = self.max_merge_rel_to_keep
+            else:
+                max_rel_to_keep = self.max_rel_to_keep
+            if not self.training:
+                max_rel_to_keep *= 3
             keep = min(keep,self.max_rel_to_keep)
-        #print('keeping {} of {}'.format(keep,len(rels_ordered)))
-        keep_rels = [r[1] for r in rels_ordered[:keep]]
-        if keep<len(rels_ordered):
-            implicit_threshold = rels_ordered[keep][0]
-        else:
-            implicit_threshold = rels_ordered[-1][0]-0.1 #We're taking everything
+            #print('keeping {} of {}'.format(keep,len(rels_ordered)))
+            keep_rels = [r[1] for r in rels_ordered[:keep]]
+            #if merge_only:
+                #print('total rels:{}, keeping:{}, max:{}'.format(len(rels_ordered),keep,max_rel_to_keep))
+            if keep<len(rels_ordered):
+                implicit_threshold = rels_ordered[keep][0]
+            else:
+                implicit_threshold = rels_ordered[-1][0]-0.1 #We're taking everything
 
 
         #t###print('   candidates net and thresh: {}'.format(timeit.default_timer()-tic))#t#
