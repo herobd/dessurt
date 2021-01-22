@@ -458,7 +458,7 @@ class BaseTrainer:
             keys=checkpoint['state_dict'].keys()
             init_state_dict = self.model.state_dict()
             for key in keys:
-                if init_state_dict[key].size(0)>checkpoint['state_dict'][key].size(0):
+                if len(init_state_dict[key].size())>0 and init_state_dict[key].size(0)>checkpoint['state_dict'][key].size(0):
                     orig_size = checkpoint['state_dict'][key].size(0)
                     init_state_dict[key][:orig_size] = checkpoint['state_dict'][key]
                     checkpoint['state_dict'][key] = init_state_dict[key]
