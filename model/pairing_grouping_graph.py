@@ -1407,7 +1407,7 @@ class PairingGroupingGraph(BaseModel):
                 #mergePred = edgePreds[i,-1,1]
                 
                 if mergePreds[i]>mergeThresh: #TODO condition this on whether it is correct. and GT?:
-                    if self.train and random.random()<0.001: #randomly don't merge for robustness in training
+                    if self.training and random.random()<0.001: #randomly don't merge for robustness in training
                         continue
                     if len(oldGroups[n0])==1 and len(oldGroups[n1])==1: #can only merge ungrouped nodes. This assumption is used later in the code WXS
                         #changedNodeIds.add(n0)
