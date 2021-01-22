@@ -18,6 +18,8 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel
 
+webhook_url = 'https://hooks.slack.com/services/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'
+
 def update_status(name,message,supercomputer):
     if supercomputer:
         return
@@ -52,6 +54,7 @@ def main_wraper(rank,config,resume,world_size):
     with torch.cuda.device(config['gpu']):
         main(rank,config,resume,world_size)
 
+@slack_sender(webhook_url=webhook_url, channel="herding-neural-networks")
 def main(rank,config, resume,world_size=None):
     if rank is not None: #multiprocessing
         #print('Process {} can see these GPUs:'.format(rank,os.environ['CUDA_VISIBLE_DEVICES']))
