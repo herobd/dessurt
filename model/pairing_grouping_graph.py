@@ -14,6 +14,7 @@ from torchvision.ops import RoIAlign
 from model.cnn_lstm import CRNN, SmallCRNN
 from model.tesseract_wrap import TesseractWrap
 from model.word2vec_adapter import Word2VecAdapter, Word2VecAdapterShallow, BPEmbAdapter
+from model.distilbert_adapter import DistilBertAdapter
 from model.hand_code_emb import HandCodeEmb
 from skimage import draw
 from model.net_builder import make_layers, getGroupSize
@@ -426,6 +427,7 @@ class PairingGroupingGraph(BaseModel):
                     convOut=graph_in_channels-(self.numShapeFeatsBB+self.numTextFeats)
                 else:
                     convOut=featurizer_fc[0]-(self.numShapeFeatsBB+self.numTextFeats)
+                assert convOut>100
                 if featurizer is None:
                     convlayers = [ nn.Conv2d(detectorSavedFeatSize+bbMasks_bb,convOut,kernel_size=(2,3)) ]
                     if featurizer_fc is not None:
@@ -644,6 +646,8 @@ class PairingGroupingGraph(BaseModel):
                     self.embedding_model = BPEmbAdapter(self.numTextFeats)
                 elif 'hand' in config['text_rec']['embedding']:
                     self.embedding_model = HandCodeEmb(self.numTextFeats)
+                elif 'DistilBert' in config['text_rec']['embedding']:
+                    self.embedding_model = DistilBertAdapter(self.numTextFeats)
                 else:
                     raise NotImplementedError('Unknown text embedding method: {}'.format(config['text_rec']['embedding']))
             else:
@@ -758,6 +762,7 @@ class PairingGroupingGraph(BaseModel):
                 useBBs = []
                 gtBBs=gtBBs[0]
 
+
                 #perform greedy alignment of gt and predicted. Only keep aligned predictions
                 ious = allIOU(gtBBs,bbPredictions[:,1:],x1y1x2y2=self.useCurvedBBs) #iou calculation
                 #if self.useCurvedBBs:
@@ -778,6 +783,7 @@ class PairingGroupingGraph(BaseModel):
                 ious_list.sort(key=lambda a:a[0], reverse=True)
                 gt_parts=defaultdict(list)
                 for iou,gt_i,p_i in ious_list:
+                    gt_i=gt_i.item()
                     if self.useCurvedBBs:
                         gt_used[gt_i]=True
                         gt_parts[gt_i].append((iou,bbPredictions[p_i,0:1],bbPredictions[p_i,6:]))
@@ -803,7 +809,7 @@ class PairingGroupingGraph(BaseModel):
                         clses = torch.stack(clses,dim=0)
                         total_iou = ious.sum()
                         conf = (confs*ious).sum()/total_iou
-                        cls = (clses*ious).sum(dim=0)/total_iou
+                        cls = (clses*ious[:,None]).sum(dim=0)/total_iou
                         useBBs.append(torch.cat((conf[None],gtBBs[gt_i,0:5],cls),dim=0))
 
 
@@ -815,6 +821,7 @@ class PairingGroupingGraph(BaseModel):
                         useBBs.append(torch.cat((conf,gtBBs[gt_i,0:5],cls),dim=0))
 
                 useBBs = torch.stack(useBBs,dim=0)
+                assert(useBBs.size(0) == gtBBs.size(0))
                 assert self.include_bb_conf or self.useCurvedBBs
                 #if self.useCurvedBBs and self.use_overseg_non_max_sup:
                 #    useBBs = non_max_sup_overseg(useBBs)
@@ -897,7 +904,7 @@ class PairingGroupingGraph(BaseModel):
 
         if len(useBBs):#useBBs.size(0)>1:
             if transcriptions is not None:
-                embeddings = self.embedding_model(transcriptions)
+                embeddings = self.embedding_model(transcriptions,saved_features.device)
                 if self.add_noise_to_word_embeddings:
                     embeddings += torch.randn_like(embeddings).to(embeddings.device)*self.add_noise_to_word_embeddings*embeddings.mean()
             else:
@@ -970,7 +977,13 @@ class PairingGroupingGraph(BaseModel):
                         return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, None, merge_prop_scores, None
 
                     if bbTrans is not None:
-                        embeddings = self.embedding_model(bbTrans)
+                        if gtTrans is not None:
+                            if self.include_bb_conf:
+                                justBBs = useBBs[:,1:]
+                            else:
+                                justBBs = useBBs
+                            bbTrans=correctTrans(bbTrans,justBBs,gtTrans,gtBBs)
+                        embeddings = self.embedding_model(bbTrans,saved_features.device)
                         if self.add_noise_to_word_embeddings:
                             embeddings += torch.randn_like(embeddings).to(embeddings.device)*self.add_noise_to_word_embeddings*embeddings.mean()
                     else:
@@ -1406,6 +1419,8 @@ class PairingGroupingGraph(BaseModel):
                 #mergePred = edgePreds[i,-1,1]
                 
                 if mergePreds[i]>mergeThresh: #TODO condition this on whether it is correct. and GT?:
+                    if self.training and random.random()<0.001: #randomly don't merge for robustness in training
+                        continue
                     if len(oldGroups[n0])==1 and len(oldGroups[n1])==1: #can only merge ungrouped nodes. This assumption is used later in the code WXS
                         #changedNodeIds.add(n0)
                         #changedNodeIds.add(n1)
@@ -1440,10 +1455,11 @@ class PairingGroupingGraph(BaseModel):
                     doTransIndexes = [idx for idx in bbs] #everything, since we skip recognition for speed
                 else:
                     doTransIndexes = [idx for idx in mergedTo if idx in bbs]
-                doBBs = [bbs[idx] for idx in doTransIndexes]
-                newTrans = self.getTranscriptions(doBBs,image)
-                for i,idx in enumerate(doTransIndexes):
-                    bbTrans[idx] = newTrans[i]
+                if len(doTransIndexes)>0:
+                    doBBs = [bbs[idx] for idx in doTransIndexes]
+                    newTrans = self.getTranscriptions(doBBs,image)
+                    for i,idx in enumerate(doTransIndexes):
+                        bbTrans[idx] = newTrans[i]
             if merge_only:
                 newBBs=[]
                 newBBTrans=[] if self.text_rec is not None else None
@@ -1654,7 +1670,7 @@ class PairingGroupingGraph(BaseModel):
 
 
         if self.text_rec is not None and oldNodeFeats is not None:
-            newNodeEmbeddings = self.embedding_model(groupNodeTrans)
+            newNodeEmbeddings = self.embedding_model(groupNodeTrans,oldNodeFeats.device)
             if self.add_noise_to_word_embeddings>0:
                 newNodeEmbeddings += torch.randn_like(newNodeEmbeddings).to(newNodeEmbeddings.device)*self.add_noise_to_word_embeddings
             newNodeFeats = self.merge_embedding_layer(torch.cat((newNodeFeats,newNodeEmbeddings),dim=1))
@@ -2061,7 +2077,7 @@ class PairingGroupingGraph(BaseModel):
         if oldNodeFeats is not None:
             newNodeFeats = torch.stack(newNodeFeats,dim=0)
             if self.text_rec is not None:
-                newNodeEmbeddings = self.embedding_model(newNodeTrans)
+                newNodeEmbeddings = self.embedding_model(newNodeTrans,oldNodeFeats.device)
                 if self.add_noise_to_word_embeddings>0:
                     newNodeEmbeddings += torch.randn_like(newNodeEmbeddings).to(newNodeEmbeddings.device)*self.add_noise_to_word_embeddings
                 newNodeFeats = self.merge_embedding_layer(torch.cat((newNodeFeats,newNodeEmbeddings),dim=1))
@@ -3806,20 +3822,20 @@ class PairingGroupingGraph(BaseModel):
             brX = brX.cpu()
             brY = brY.cpu()
 
-            x1 = torch.min(torch.min(tlX,trX),torch.min(brX,blX)).astype(int)
-            x2 = torch.max(torch.max(tlX,trX),torch.max(brX,blX)).astype(int)
-            y1 = torch.min(torch.min(tlY,trY),torch.min(brY,blY)).astype(int)
-            y2 = torch.max(torch.max(tlY,trY),torch.max(brY,blY)).astype(int)
+            x1 = torch.min(torch.min(tlX,trX),torch.min(brX,blX)).int()
+            x2 = torch.max(torch.max(tlX,trX),torch.max(brX,blX)).int()
+            y1 = torch.min(torch.min(tlY,trY),torch.min(brY,blY)).int()
+            y2 = torch.max(torch.max(tlY,trY),torch.max(brY,blY)).int()
 
             x1-=self.padATRx
             x2+=self.padATRx
             y1-=self.padATRy
             y2+=self.padATRy
 
-            x1 = torch.max(x1,torch.tensor(0).astype(int))
-            x2 = torch.max(torch.min(x2,torch.tensor(image.size(3)-1).astype(int)),torch.tensor(0).astype(int))
-            y1 = torch.max(y1,torch.tensor(0).astype(int))
-            y2 = torch.max(torch.min(y2,torch.tensor(image.size(2)-1).astype(int)),torch.tensor(0).astype(int))
+            x1 = torch.max(x1,torch.tensor(0).int())
+            x2 = torch.max(torch.min(x2,torch.tensor(image.size(3)-1).int()),torch.tensor(0).int())
+            y1 = torch.max(y1,torch.tensor(0).int())
+            y2 = torch.max(torch.min(y2,torch.tensor(image.size(2)-1).int()),torch.tensor(0).int())
 
             #h *=2
             #w *=2
