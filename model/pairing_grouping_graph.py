@@ -3817,20 +3817,20 @@ class PairingGroupingGraph(BaseModel):
             brX = brX.cpu()
             brY = brY.cpu()
 
-            x1 = torch.min(torch.min(tlX,trX),torch.min(brX,blX)).astype(int)
-            x2 = torch.max(torch.max(tlX,trX),torch.max(brX,blX)).astype(int)
-            y1 = torch.min(torch.min(tlY,trY),torch.min(brY,blY)).astype(int)
-            y2 = torch.max(torch.max(tlY,trY),torch.max(brY,blY)).astype(int)
+            x1 = torch.min(torch.min(tlX,trX),torch.min(brX,blX)).int()
+            x2 = torch.max(torch.max(tlX,trX),torch.max(brX,blX)).int()
+            y1 = torch.min(torch.min(tlY,trY),torch.min(brY,blY)).int()
+            y2 = torch.max(torch.max(tlY,trY),torch.max(brY,blY)).int()
 
             x1-=self.padATRx
             x2+=self.padATRx
             y1-=self.padATRy
             y2+=self.padATRy
 
-            x1 = torch.max(x1,torch.tensor(0).astype(int))
-            x2 = torch.max(torch.min(x2,torch.tensor(image.size(3)-1).astype(int)),torch.tensor(0).astype(int))
-            y1 = torch.max(y1,torch.tensor(0).astype(int))
-            y2 = torch.max(torch.min(y2,torch.tensor(image.size(2)-1).astype(int)),torch.tensor(0).astype(int))
+            x1 = torch.max(x1,torch.tensor(0).int())
+            x2 = torch.max(torch.min(x2,torch.tensor(image.size(3)-1).int()),torch.tensor(0).int())
+            y1 = torch.max(y1,torch.tensor(0).int())
+            y2 = torch.max(torch.min(y2,torch.tensor(image.size(2)-1).int()),torch.tensor(0).int())
 
             #h *=2
             #w *=2
