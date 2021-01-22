@@ -762,6 +762,7 @@ class PairingGroupingGraph(BaseModel):
                 useBBs = []
                 gtBBs=gtBBs[0]
 
+
                 #perform greedy alignment of gt and predicted. Only keep aligned predictions
                 ious = allIOU(gtBBs,bbPredictions[:,1:],x1y1x2y2=self.useCurvedBBs) #iou calculation
                 #if self.useCurvedBBs:
@@ -782,6 +783,7 @@ class PairingGroupingGraph(BaseModel):
                 ious_list.sort(key=lambda a:a[0], reverse=True)
                 gt_parts=defaultdict(list)
                 for iou,gt_i,p_i in ious_list:
+                    gt_i=gt_i.item()
                     if self.useCurvedBBs:
                         gt_used[gt_i]=True
                         gt_parts[gt_i].append((iou,bbPredictions[p_i,0:1],bbPredictions[p_i,6:]))
@@ -807,7 +809,7 @@ class PairingGroupingGraph(BaseModel):
                         clses = torch.stack(clses,dim=0)
                         total_iou = ious.sum()
                         conf = (confs*ious).sum()/total_iou
-                        cls = (clses*ious).sum(dim=0)/total_iou
+                        cls = (clses*ious[:,None]).sum(dim=0)/total_iou
                         useBBs.append(torch.cat((conf[None],gtBBs[gt_i,0:5],cls),dim=0))
 
 
@@ -819,6 +821,7 @@ class PairingGroupingGraph(BaseModel):
                         useBBs.append(torch.cat((conf,gtBBs[gt_i,0:5],cls),dim=0))
 
                 useBBs = torch.stack(useBBs,dim=0)
+                assert(useBBs.size(0) == gtBBs.size(0))
                 assert self.include_bb_conf or self.useCurvedBBs
                 #if self.useCurvedBBs and self.use_overseg_non_max_sup:
                 #    useBBs = non_max_sup_overseg(useBBs)
@@ -1416,6 +1419,8 @@ class PairingGroupingGraph(BaseModel):
                 #mergePred = edgePreds[i,-1,1]
                 
                 if mergePreds[i]>mergeThresh: #TODO condition this on whether it is correct. and GT?:
+                    if self.training and random.random()<0.001: #randomly don't merge for robustness in training
+                        continue
                     if len(oldGroups[n0])==1 and len(oldGroups[n1])==1: #can only merge ungrouped nodes. This assumption is used later in the code WXS
                         #changedNodeIds.add(n0)
                         #changedNodeIds.add(n1)
