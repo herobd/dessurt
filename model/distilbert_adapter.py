@@ -77,3 +77,39 @@ class DistilBertAdapter(nn.Module):
         
 
 
+#rather than processing each node/text at a time, this processes all the text at once, just putting seperators between them
+#W
+class DistilBertWholeAdapter(nn.Module):
+    def __init__(self,out_size):
+        super(DistilBertWholeAdapter, self).__init__()
+        self.languagemodel_tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+        self.languagemodel = DistilBertModel.from_pretrained('distilbert-base-uncased')
+        self.hidden_size = 768
+        mid_size = (out_size+self.hidden_size)//2
+        self.adaption = nn.Sequential(
+                nn.Linear(self.hidden_size,mid_size),
+                nn.ReLU(True),
+                nn.Linear(mid_size,out_size),
+                nn.ReLU(True),
+        )
+
+
+
+    def forward(self,transcriptions,device):
+        transcriptions = [t.strip() for t in transcriptions]
+        alltrans = transcriptions[0]
+        for t in transcriptions:
+            alltrans+=self.languagemodel_tokenizer.sep_token+t
+        inputs = self.languagemodel_tokenizer(alltrans, return_tensors="pt", padding=True)
+        text_ends = (inputs['input_ids']==102).nonzero(as_tuple=True)[1] #102 is the [SEP] encoding
+        text_ends-=1
+
+        inputs = {k:i.to(device) for k,i in inputs.items()}
+        outputs = self.languagemodel(**inputs)
+        outputs = outputs.last_hidden_state[0,text_ends] #we'll use the last token of each text as the location. It should be able to figure this out. Right?
+        #we got rid of the batch, so text_ends creates the new batch dim
+        emb = self.adaption(outputs)
+        return emb
+        
+
+
