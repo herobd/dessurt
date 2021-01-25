@@ -102,11 +102,11 @@ class DistilBertWholeAdapter(nn.Module):
             alltrans+=self.languagemodel_tokenizer.sep_token+t
         inputs = self.languagemodel_tokenizer(alltrans, return_tensors="pt", padding=True)
         text_ends = (inputs['input_ids']==102).nonzero(as_tuple=True)[1] #102 is the [SEP] encoding
-        text_ends-=1
+        #text_ends-=1
 
         inputs = {k:i.to(device) for k,i in inputs.items()}
         outputs = self.languagemodel(**inputs)
-        outputs = outputs.last_hidden_state[0,text_ends] #we'll use the last token of each text as the location. It should be able to figure this out. Right?
+        outputs = outputs.last_hidden_state[0,text_ends] #we'll use the SEP token after each text as the location. It should be able to figure this out. Right?
         #we got rid of the batch, so text_ends creates the new batch dim
         emb = self.adaption(outputs)
         return emb

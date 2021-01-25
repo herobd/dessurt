@@ -14,7 +14,7 @@ from torchvision.ops import RoIAlign
 from model.cnn_lstm import CRNN, SmallCRNN
 from model.tesseract_wrap import TesseractWrap
 from model.word2vec_adapter import Word2VecAdapter, Word2VecAdapterShallow, BPEmbAdapter
-from model.distilbert_adapter import DistilBertAdapter
+from model.distilbert_adapter import DistilBertAdapter, DistilBertWholeAdapter
 from model.hand_code_emb import HandCodeEmb
 from skimage import draw
 from model.net_builder import make_layers, getGroupSize
@@ -646,6 +646,8 @@ class PairingGroupingGraph(BaseModel):
                     self.embedding_model = BPEmbAdapter(self.numTextFeats)
                 elif 'hand' in config['text_rec']['embedding']:
                     self.embedding_model = HandCodeEmb(self.numTextFeats)
+                elif 'DistilBertWhole' in config['text_rec']['embedding']:
+                    self.embedding_model = DistilBertWholeAdapter(self.numTextFeats)
                 elif 'DistilBert' in config['text_rec']['embedding']:
                     self.embedding_model = DistilBertAdapter(self.numTextFeats)
                 else:
