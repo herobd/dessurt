@@ -56,13 +56,27 @@ class BaseTrainer:
         if config['optimizer_type']!="none":
             main_params=[]
             slow_params=[]
+            slower_params=[]
+            not_as_slow_params=[]
             slow_param_names = config['trainer']['slow_param_names'] if 'slow_param_names' in config['trainer'] else []
+            slower_param_names = config['trainer']['slow_param_names'] if 'slow_param_names' in config['trainer'] else []
+            not_as_slow_param_names = config['trainer']['not_as_slow_param_names'] if 'not_as_slow_param_names' in config['trainer'] else []
             freeze_param_names = config['trainer']['freeze_param_names'] if 'freeze_param_names' in config['trainer'] else []
             only_params = config['trainer']['only_params'] if 'only_params' in config['trainer'] else None
             for name,param in model.named_parameters():
                 if only_params is None or any([p in name for p in only_params]):
                     goSlow=False
+                    goSlower=False
+                    goNotAsSlow=False
                     freeze=False
+                    for sp in slower_param_names:
+                        if sp in name:
+                            goSlower=True
+                            break
+                    for sp in not_as_slow_param_names:
+                        if sp in name:
+                            goNotAsSlow=True
+                            break
                     for sp in slow_param_names:
                         if sp in name:
                             goSlow=True
@@ -73,6 +87,10 @@ class BaseTrainer:
                             break
                     if freeze:
                         pass
+                    elif goNotAsSlow:
+                        not_as_slow_params.append(param)
+                    elif goSlower:
+                        slower_params.append(param)
                     elif goSlow:
                         slow_params.append(param)
                     elif ('hwr' in name and self.hwr_frozen) or ('style_extractor' in name and self.style_frozen):
@@ -81,7 +99,12 @@ class BaseTrainer:
                         discriminator_params.append(param)
                     else:
                         main_params.append(param)
-            to_opt = [{'params': main_params}, {'params': slow_params, 'lr': config['optimizer']['lr']*0.1}]
+            to_opt = [
+                    {'params': main_params}, 
+                    {'params': slow_params, 'lr': config['optimizer']['lr']*0.1}, 
+                    {'params': not_as_slow_params, 'lr': config['optimizer']['lr']*0.5}, 
+                    {'params': slower_params, 'lr': config['optimizer']['lr']*0.01}
+                    ]
             self.optimizer = getattr(optim, config['optimizer_type'])(to_opt,
                                                                       **config['optimizer'])
                     #self.optimizer = getattr(optim, config['optimizer_type'])(model.parameters(),
