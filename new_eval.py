@@ -47,7 +47,7 @@ def save_style(location,volume,styles,authors,ids=None,doIds=False, spaced=None,
 
 
 
-def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=None, config=None, thresh=None, addToConfig=None, test=False, toEval=None,verbosity=2, do_train=False):
+def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=None, config=None, thresh=None, addToConfig=None, test=False, toEval=None,verbosity=2, do_train=False, use_train_model=False):
     np.random.seed(1234)
     torch.manual_seed(1234)
     if resume is not None:
@@ -170,7 +170,11 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
             model = checkpoint['model']
     else:
         model = eval(config['arch'])(config['model'])
-    model.eval()
+
+    if use_train_model:
+        model.train()
+    else:
+        model.eval()
     if verbosity>1:
         model.summary()
 
@@ -542,6 +546,8 @@ if __name__ == '__main__':
                         help='Run test set')
     parser.add_argument('-D', '--do_train', default=False, action='store_const', const=True,
                         help='Run train set')
+    parser.add_argument('-M', '--use_train_model', default=False, action='store_const', const=True,
+                        help='Put model in train mode')
     parser.add_argument('-N', '--notify', default='', type=str,
                         help='send messages to server, name')
     parser.add_argument('-v', '--verbosity', default=2, type=int,
@@ -583,9 +589,9 @@ if __name__ == '__main__':
     try:
         if args.gpu is not None:
             with torch.cuda.device(args.gpu):
-                main(args.checkpoint, args.savedir, args.number, index, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,toEval=toEval,verbosity=args.verbosity,do_train=args.do_train)
+                main(args.checkpoint, args.savedir, args.number, index, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,toEval=toEval,verbosity=args.verbosity,do_train=args.do_train,use_train_model=args.use_train_model)
         else:
-            main(args.checkpoint, args.savedir, args.number, index, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,toEval=toEval,verbosity=args.verbosity,do_train=args.do_train)
+            main(args.checkpoint, args.savedir, args.number, index, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,toEval=toEval,verbosity=args.verbosity,do_train=args.do_train,use_train_model=args.use_train_model)
     except Exception as er:
         if len(args.notify)>0:
             update_status(name,er)

@@ -109,8 +109,9 @@
         "start_frozen": true,
 
         "relationship_proposal": "feature_nn",
-        "percent_rel_to_keep": 0.4,
-        "max_rel_to_keep": 3000,
+        "rel_hard_thresh": 0.1,
+        "rel_merge_hard_thresh": 0.3,
+        "max_rel_to_keep": 1000,
         "max_merge_rel_to_keep": 6000,
         "roi_batch_size": 600,
 
