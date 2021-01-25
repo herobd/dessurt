@@ -1457,6 +1457,8 @@ class PairingGroupingGraph(BaseModel):
                     doTransIndexes = [idx for idx in mergedTo if idx in bbs]
                 if len(doTransIndexes)>0:
                     doBBs = [bbs[idx] for idx in doTransIndexes]
+                    if not self.useCurvedBBs:
+                        doBBs = torch.stack(doBBs,dim=0)
                     newTrans = self.getTranscriptions(doBBs,image)
                     for i,idx in enumerate(doTransIndexes):
                         bbTrans[idx] = newTrans[i]
