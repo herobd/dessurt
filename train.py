@@ -18,7 +18,10 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel
 
-from knockknock import slack_sender
+try: 
+    from knockknock import slack_sender
+except:
+    pass
 
 webhook_url = 'https://hooks.slack.com/services/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'
 
