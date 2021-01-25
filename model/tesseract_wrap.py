@@ -19,19 +19,19 @@ class TesseractWrap(nn.Module):
         self.height=config['height']
         psm = config['psm'] if 'psm' in config else 7
         self.custom_oem_psm_config = r'--psm {}'.format(psm) #or 13
-        self.threads = config['threads'] if 'threads' in config else 0
+        #self.threads = config['threads'] if 'threads' in config else 0
 
-        def read(task):
-            i,image = task
-            image = Image.fromarray(image)
-            try:
-                text = pytesseract.image_to_string(image,config=self.custom_oem_psm_config)
-            except:
-                #Assume local installation of tesseract
-                self.custom_oem_psm_config += r' --tessdata-dir "$HOME/local/share/tessdata"'
-                text = pytesseract.image_to_string(image,config=self.custom_oem_psm_config)
-            return i,text[:-2] #not sure what they are, but there are a couple extrac chars
-        self.read = read
+        #def read(task):
+        #    i,image = task
+        #    image = Image.fromarray(image)
+        #    try:
+        #        text = pytesseract.image_to_string(image,config=self.custom_oem_psm_config)
+        #    except:
+        #        #Assume local installation of tesseract
+        #        self.custom_oem_psm_config += r' --tessdata-dir "$HOME/local/share/tessdata"'
+        #        text = pytesseract.image_to_string(image,config=self.custom_oem_psm_config)
+        #    return i,text[:-2] #not sure what they are, but there are a couple extrac chars
+        #self.read = read
 
     def forward(self, input, style=None):
         if input.size(2) != self.height:
@@ -41,24 +41,28 @@ class TesseractWrap(nn.Module):
         input = input.permute(0,2,3,1).cpu().numpy().astype(np.uint8) #move color channel to back
         if input.shape[-1] == 1:
             input = input[:,:,:,0]
-        if self.threads <= 1:
-            toRet=[]
-            for b in range(input.shape[0]):
-                toRet.append(self.read.__call__((b,input[b]))[1])
-                #image = Image.fromarray(input[b])
-                #try:
-                #    text = pytesseract.image_to_string(image,config=self.custom_oem_psm_config)
-                #except pytesseract.pytesseract.TesseractError:
-                #    #Assume local installation of tesseract
-                #    self.custom_oem_psm_config += r' --tessdata-dir "$HOME/local/share/tessdata"'
-                #    text = pytesseract.image_to_string(image,config=self.custom_oem_psm_config)
-                #toRet.append(text[:-2]) #not sure what they are, but there are a couple extrac chars
-        else:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-                res = excecutor.map(self.read,zip(range(input.shape[0],input))
-            toRet=[None]*input.shape[0]
-            for i,text in res:
-                toRet[i]=text
+        toRet=[]
+        for b in range(input.shape[0]):
+            image = Image.fromarray(input[b])
+            try:
+                text = pytesseract.image_to_string(image,config=self.custom_oem_psm_config)
+            except pytesseract.pytesseract.TesseractError:
+                #Assume local installation of tesseract
+                self.custom_oem_psm_config += r' --tessdata-dir "$HOME/local/share/tessdata"'
+                text = pytesseract.image_to_string(image,config=self.custom_oem_psm_config)
+            toRet.append(text[:-2]) #not sure what they are, but there are a couple extrac chars
+        #if self.threads <= 1:
+        #    toRet=[]
+        #    for b in range(input.shape[0]):
+        #        toRet.append(self.read.__call__((b,input[b]))[1])
+        #else:
+        #    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        #        res = excecutor.map(self.read,zip(range(input.shape[0],input)))
+        #    toRet=[None]*input.shape[0]
+        #    for i,text in res:
+        #        toRet[i]=text
+
+        #import pdb;pdb.set_trace()
         return toRet
 
     #def eval(self):
