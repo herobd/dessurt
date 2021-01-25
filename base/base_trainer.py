@@ -101,10 +101,11 @@ class BaseTrainer:
                         main_params.append(param)
             to_opt = [
                     {'params': main_params}, 
-                    {'params': slow_params, 'lr': config['optimizer']['lr']*0.1}, 
-                    {'params': not_as_slow_params, 'lr': config['optimizer']['lr']*0.5}, 
-                    {'params': slower_params, 'lr': config['optimizer']['lr']*0.01}
-                    ]
+                    {'params': slow_params, 'lr': config['optimizer']['lr']*0.1}]
+            if len(not_as_slow_params)>0:
+                to_opt.append({'params': not_as_slow_params, 'lr': config['optimizer']['lr']*0.5})
+            if len(slower_params)>0:
+                to_opt.append({'params': slower_params, 'lr': config['optimizer']['lr']*0.01})
             self.optimizer = getattr(optim, config['optimizer_type'])(to_opt,
                                                                       **config['optimizer'])
                     #self.optimizer = getattr(optim, config['optimizer_type'])(model.parameters(),
