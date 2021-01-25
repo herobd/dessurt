@@ -203,7 +203,8 @@
             "height": 20,
             "embedding": "BP",
             "num_feats": 256,
-            "batch_size": 1
+            "batch_size": 1,
+            "trans_threads": 5
         }
 
     }
