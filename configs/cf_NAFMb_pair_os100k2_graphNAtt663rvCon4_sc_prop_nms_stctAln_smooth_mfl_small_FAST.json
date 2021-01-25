@@ -114,7 +114,7 @@
         "detector_checkpoint": "saved/NAF_detect_augR_blank_oversegMultScl2/checkpoint-iteration100000.pth",
         "overseg_non_max_sup": true,
         "text_line_smoothness": 200,
-        "conf_thresh": 0.7,
+        "conf_thresh": 0.4,
         "start_frozen": true,
 
         "graph_four_connected": true,
