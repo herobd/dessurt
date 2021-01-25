@@ -27,6 +27,10 @@ No `opencv` any more
 
 `pip install editdistance`
 
+`pip install knockknock`
+
+pip install gensim bpemb editdistance knockknock
+
 
 for cvxpy (optimization, not used now), you must have python 3.7 or later:
 
