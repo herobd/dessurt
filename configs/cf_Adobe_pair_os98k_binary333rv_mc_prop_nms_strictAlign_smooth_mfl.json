@@ -108,7 +108,7 @@
 
         "relationship_proposal": "feature_nn",
         "percent_rel_to_keep": 0.4,
-        "max_rel_to_keep": 1500,
+        "max_rel_to_keep": 500,
         "max_merge_rel_to_keep": 3000,
         "roi_batch_size": 600,
 
