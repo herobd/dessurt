@@ -71,6 +71,7 @@
         "save_step": 20000,
         "save_step_minor": 200,
         "log_step": 250,
+        "save_images_every": 250,
         "verbosity": 1,
         "monitor": "loss",
         "monitor_mode": "none",
