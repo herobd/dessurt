@@ -13,8 +13,9 @@ from model.binary_pair_real import BinaryPairReal
 from torchvision.ops import RoIAlign
 from model.cnn_lstm import CRNN, SmallCRNN
 from model.tesseract_wrap import TesseractWrap
+import concurrent.futures
 from model.word2vec_adapter import Word2VecAdapter, Word2VecAdapterShallow, BPEmbAdapter
-from model.distilbert_adapter import DistilBertAdapter
+from model.distilbert_adapter import DistilBertAdapter, DistilBertWholeAdapter
 from model.hand_code_emb import HandCodeEmb
 from skimage import draw
 from model.net_builder import make_layers, getGroupSize
@@ -611,9 +612,11 @@ class PairingGroupingGraph(BaseModel):
 
         #HWR stuff
         if 'text_rec' in config:
+            self.use_tesseract=False
             self.padATRy=3
             self.padATRx=10
             self.atr_batch_size = config['text_rec']['batch_size']
+            self.pad_text_height = config['text_rec']['pad_text_height'] if 'pad_text_height' in config['text_rec'] else False
             if 'CRNN' in config['text_rec']['model']:
                 self.hw_channels = config['text_rec']['num_channels'] if 'num_channels' in config['text_rec'] else 1
                 norm = config['text_rec']['norm'] if 'norm' in config['text_rec'] else 'batch'
@@ -623,7 +626,6 @@ class PairingGroupingGraph(BaseModel):
                 else:
                     self.text_rec = CRNN(config['text_rec']['num_char'],self.hw_channels,norm=norm,use_softmax=use_softmax)
                     
-                self.pad_text_height = config['text_rec']['pad_text_height'] if 'pad_text_height' in config['text_rec'] else False
                 print('WARNING, is text_rec set to frozen?')
                 self.text_rec.eval()
                 #self.text_rec = self.text_rec.cuda()
@@ -647,6 +649,8 @@ class PairingGroupingGraph(BaseModel):
             elif 'esseract' in config['text_rec']['model']:
                 self.text_rec = TesseractWrap(config['text_rec'])
                 self.hw_input_height = config['text_rec']['height']
+                self.use_tesseract=True
+                self.trans_threads = config['text_rec']['trans_threads'] if 'trans_threads' in config['text_rec'] else 3
             else:
                 raise NotImplementedError('Unknown ATR model: {}'.format(config['text_rec']['model']))
             
@@ -660,6 +664,8 @@ class PairingGroupingGraph(BaseModel):
                     self.embedding_model = BPEmbAdapter(self.numTextFeats)
                 elif 'hand' in config['text_rec']['embedding']:
                     self.embedding_model = HandCodeEmb(self.numTextFeats)
+                elif 'DistilBertWhole' in config['text_rec']['embedding']:
+                    self.embedding_model = DistilBertWholeAdapter(self.numTextFeats)
                 elif 'DistilBert' in config['text_rec']['embedding']:
                     self.embedding_model = DistilBertAdapter(self.numTextFeats)
                 else:
@@ -1474,6 +1480,8 @@ class PairingGroupingGraph(BaseModel):
                     doTransIndexes = [idx for idx in mergedTo if idx in bbs]
                 if len(doTransIndexes)>0:
                     doBBs = [bbs[idx] for idx in doTransIndexes]
+                    if not self.useCurvedBBs:
+                        doBBs = torch.stack(doBBs,dim=0)
                     newTrans = self.getTranscriptions(doBBs,image)
                     for i,idx in enumerate(doTransIndexes):
                         bbTrans[idx] = newTrans[i]
@@ -3767,6 +3775,11 @@ class PairingGroupingGraph(BaseModel):
         print("ERROR: could not prune number of candidates down: {} (should be {})".format(len(candidates),MAX_GRAPH_SIZE-numBoxes))
         return list(candidates)[:MAX_GRAPH_SIZE-numBoxes]
 
+    #def textRecWrap(task):
+    #    i,image = task
+    #    if image.size(3)>0:
+    #        return i,self.text_rec
+
     def getTranscriptions(self,bbs,image):
         if self.useCurvedBBs:
             assert(image.size(0)==1) #single imag
@@ -3785,40 +3798,61 @@ class PairingGroupingGraph(BaseModel):
                 grids = [F.pad(g,(0,0,0,p)) for g,p in zip(grids,to_pad)]
 
 
-            output_strings=[]
             num_batch = math.ceil(len(grids)/self.atr_batch_size)
-            for b in range(num_batch):
-                start=b*self.atr_batch_size
-                end=min((b+1)*self.atr_batch_size,len(grids))
-                b_grids = torch.stack(grids[start:end],dim=0)#.to(image.device)
-                b_grids[:,:,:,1]=2*b_grids[:,:,:,1]/image.size(2) -1 #normalize y
-                b_grids[:,:,:,0]=2*b_grids[:,:,:,0]/image.size(3) -1 #normalize x
-                batch_lines = F.grid_sample(image.expand(b_grids.size(0),-1,-1,-1),b_grids)
-    
-                ##DEBUG
-                #d_lines = (1-batch_lines)/2
-                #for i in range(batch_lines.size(0)):
-                #    img_f.imshow('hwr {}'.format(i),(255*(1-d_lines[i,0])/2).cpu().numpy())
-                #img_f.show()
-                ##DEBUG
-                if batch_lines.size(3)>0:
-                    with torch.no_grad():
-                        resBatch = self.text_rec(batch_lines)
-                else:
-                    resBatch = ['']*batch_lines.size(0)
-                if type(resBatch) is list:
-                    batch_strings = resBatch
-                else:
-                    resBatch = resBatch.cpu().detach().numpy().transpose(1,0,2)
-                    batch_strings, decoded_raw_hw = decode_handwriting(resBatch, self.idx_to_char)
-                ##debug
-                #out_im = batch_lines.cpu().numpy().transpose([0,2,3,1])
-                #out_im = 256*(2-out_im)/2
-                #for i in range(batch_lines.size(0)):
-                #    img_f.imwrite('out2/line{}-{}.png'.format(i+index,batch_strings[i]),out_im[i])
-                #    print('DEBUG saved hwr image: out2/line{}-{}.png'.format(i+start,batch_strings[i]))
-                ##
-                output_strings += batch_strings
+            if self.use_tesseract:
+                assert self.atr_batch_size==1
+                lines = []
+                for b in range(num_batch):
+                    start=b*self.atr_batch_size
+                    end=min((b+1)*self.atr_batch_size,len(grids))
+                    b_grids = torch.stack(grids[start:end],dim=0)#.to(image.device)
+                    b_grids[:,:,:,1]=2*b_grids[:,:,:,1]/image.size(2) -1 #normalize y
+                    b_grids[:,:,:,0]=2*b_grids[:,:,:,0]/image.size(3) -1 #normalize x
+                    batch_lines = F.grid_sample(image.expand(b_grids.size(0),-1,-1,-1),b_grids)
+                    lines.append((b,batch_lines.cpu()))
+
+                process = lambda a: (a[0],self.text_rec(a[1])) if a[1].size(3)>0 else (a[0],'')
+                with concurrent.futures.ThreadPoolExecutor(max_workers=self.trans_threads) as executor:
+                    res = executor.map(process,lines)
+                output_strings=[None]*num_batch
+                for i,text in res:
+                    output_strings[i]=text[0]
+                
+
+            else:
+                output_strings=[]
+                for b in range(num_batch):
+                    start=b*self.atr_batch_size
+                    end=min((b+1)*self.atr_batch_size,len(grids))
+                    b_grids = torch.stack(grids[start:end],dim=0)#.to(image.device)
+                    b_grids[:,:,:,1]=2*b_grids[:,:,:,1]/image.size(2) -1 #normalize y
+                    b_grids[:,:,:,0]=2*b_grids[:,:,:,0]/image.size(3) -1 #normalize x
+                    batch_lines = F.grid_sample(image.expand(b_grids.size(0),-1,-1,-1),b_grids)
+        
+                    ##DEBUG
+                    #d_lines = (1-batch_lines)/2
+                    #for i in range(batch_lines.size(0)):
+                    #    img_f.imshow('hwr {}'.format(i),(255*(1-d_lines[i,0])/2).cpu().numpy())
+                    #img_f.show()
+                    ##DEBUG
+                    if batch_lines.size(3)>0:
+                        with torch.no_grad():
+                            resBatch = self.text_rec(batch_lines)
+                    else:
+                        resBatch = ['']*batch_lines.size(0)
+                    if type(resBatch) is list:
+                        batch_strings = resBatch
+                    else:
+                        resBatch = resBatch.cpu().detach().numpy().transpose(1,0,2)
+                        batch_strings, decoded_raw_hw = decode_handwriting(resBatch, self.idx_to_char)
+                    ##debug
+                    #out_im = batch_lines.cpu().numpy().transpose([0,2,3,1])
+                    #out_im = 256*(2-out_im)/2
+                    #for i in range(batch_lines.size(0)):
+                    #    img_f.imwrite('out2/line{}-{}.png'.format(i+index,batch_strings[i]),out_im[i])
+                    #    print('DEBUG saved hwr image: out2/line{}-{}.png'.format(i+start,batch_strings[i]))
+                    ##
+                    output_strings += batch_strings
 
         else:
             assert(self.include_bb_conf)
@@ -3873,16 +3907,10 @@ class PairingGroupingGraph(BaseModel):
             all_scaled_w = (((x2-x1).float()+1)*scale).cpu()#.astype(int)
             scale=None
 
-            output_strings=[]
-            for index in range(0,bbs.size(0),self.atr_batch_size):
-                num = min(self.atr_batch_size,bbs.size(0)-index)
-                max_w = math.ceil(all_scaled_w[index:index+num].max().item())
 
-            
-                lines = torch.FloatTensor(num,image.size(1),self.hw_input_height,max_w).fill_(-1).to(image.device)
-                #imm = [None]*num
-                for i in range(index,index+num):
-                    
+            if self.use_tesseract:
+                image=image.cpu()
+                def process(i):
                     if self.rotation:
                         crop = rotate(image[0,:,y1[i]:y2[i]+1,x1[i]:x2[i]+1],r[i],(h[i],w[i]))
                     else:
@@ -3897,31 +3925,70 @@ class PairingGroupingGraph(BaseModel):
                         elif y2[i]==image.size(2)-1:
                             crop = F.pad(crop,(0,0,diff,0),"constant",-1)
                         else:
-                            assert(False and 'why is it short if not getting cropped by image boundary?')
+                            assert(False and 'why is it short if not getting cropped by image boundary?')               
                     scale = self.hw_input_height/crop.size(2)
                     scaled_w = math.ceil(crop.size(3)*scale)
-                    lines[i-index,:,:,0:scaled_w] = F.interpolate(crop, size=(self.hw_input_height,scaled_w), mode='bilinear',align_corners=False)[0]#.to(crop.device)
-                    #imm[i-index] = lines[i-index].cpu().numpy().transpose([1,2,0])
-                    #imm[i-index] = 256*(2-imm[i-index])/2
+                    crop = F.interpolate(crop, size=(self.hw_input_height,scaled_w), mode='bilinear',align_corners=False)
+                    return i,self.text_rec(crop)
 
+                assert self.atr_batch_size==1
+                with concurrent.futures.ThreadPoolExecutor(max_workers=self.trans_threads) as executor:
+                    res = executor.map(process,range(bbs.size(0)))
+                output_strings=[None]*bbs.size(0)
+                for i,text in res:
+                    output_strings[i]=text[0] #text is a list (of len 1)
 
+            else:
+                output_strings=[]
+                for index in range(0,bbs.size(0),self.atr_batch_size):
+                    num = min(self.atr_batch_size,bbs.size(0)-index)
+                    max_w = math.ceil(all_scaled_w[index:index+num].max().item())
 
-                if lines.size(1)==1 and self.hw_channels==3:
-                    lines = lines.expand(-1,3,-1,-1)
                 
-                with torch.no_grad():
-                    self.text_rec.eval()
-                    resBatch = self.text_rec(lines).cpu().detach().numpy().transpose(1,0,2)
-                if type(resBatch) is list:
-                    batch_strings = resBatch
-                else:
-                    batch_strings, decoded_raw_hw = decode_handwriting(resBatch, self.idx_to_char)
-                ###debug
-                #for i in range(num):
-                #    img_f.imwrite('out2/line{}-{}.png'.format(i+index,batch_strings[i]),imm[i])
-                ###
-                output_strings += batch_strings
-                #res.append(resBatch)
+                    lines = torch.FloatTensor(num,image.size(1),self.hw_input_height,max_w).fill_(-1).to(image.device)
+                    #imm = [None]*num
+                    for i in range(index,index+num):
+                        
+                        if self.rotation:
+                            crop = rotate(image[0,:,y1[i]:y2[i]+1,x1[i]:x2[i]+1],r[i],(h[i],w[i]))
+                        else:
+                            crop = image[...,y1[i]:y2[i]+1,x1[i]:x2[i]+1]
+                        if self.pad_text_height and crop.size(2)<self.hw_input_height:
+                            diff = self.hw_input_height-crop.size(2)
+                            crop = F.pad(crop,(0,0,diff//2,diff//2+diff%2),"constant",-1)
+                        elif crop.size(2)<h[i]:
+                            diff = int(h[i])-crop.size(2)
+                            if y1[i]==0:
+                                crop = F.pad(crop,(0,0,0,diff),"constant",-1)
+                            elif y2[i]==image.size(2)-1:
+                                crop = F.pad(crop,(0,0,diff,0),"constant",-1)
+                            else:
+                                assert(False and 'why is it short if not getting cropped by image boundary?')
+                        scale = self.hw_input_height/crop.size(2)
+                        scaled_w = math.ceil(crop.size(3)*scale)
+                        lines[i-index,:,:,0:scaled_w] = F.interpolate(crop, size=(self.hw_input_height,scaled_w), mode='bilinear',align_corners=False)[0]#.to(crop.device)
+                        #imm[i-index] = lines[i-index].cpu().numpy().transpose([1,2,0])
+                        #imm[i-index] = 256*(2-imm[i-index])/2
+
+
+
+                    if lines.size(1)==1 and self.hw_channels==3:
+                        lines = lines.expand(-1,3,-1,-1)
+                    
+                    with torch.no_grad():
+                        self.text_rec.eval()
+                        resBatch = self.text_rec(lines)
+                    if type(resBatch) is list:
+                        batch_strings = resBatch
+                    else:
+                        resBatch = resBatch.cpu().detach().numpy().transpose(1,0,2)
+                        batch_strings, decoded_raw_hw = decode_handwriting(resBatch, self.idx_to_char)
+                    ###debug
+                    #for i in range(num):
+                    #    img_f.imwrite('out2/line{}-{}.png'.format(i+index,batch_strings[i]),imm[i])
+                    ###
+                    output_strings += batch_strings
+                    #res.append(resBatch)
             #res = torch.cat(res,dim=1)
 
             ### Debug ###
@@ -3930,7 +3997,7 @@ class PairingGroupingGraph(BaseModel):
                 #img_f.imshow('line',imm)
                 #img_f.waitKey()
             ###
-
+        import pdb;pdb.set_trace()
         return output_strings
 
 

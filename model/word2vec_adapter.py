@@ -31,7 +31,7 @@ class Word2VecAdapter(nn.Module):
                 nn.ReLU(True),
                 )
 
-    def forward(self,transcriptions):
+    def forward(self,transcriptions,device):
 
         words = [t.strip().split(' ') for t in transcriptions]
         wordCounts = [len(w) for w in words]
@@ -45,7 +45,7 @@ class Word2VecAdapter(nn.Module):
                 emb.append(self.wv[w])
             except KeyError:
                 pass
-        emb = torch.from_numpy(np.concatenate(emb)).to(self.adaption1.device)
+        emb = torch.from_numpy(np.concatenate(emb)).to(device)
         emb = self.adaption1(emb)
         c=0
         for count in wordCounts:
@@ -71,9 +71,9 @@ class Word2VecAdapterShallow(nn.Module):
                 nn.ReLU(True),
                 )
 
-    def forward(self,transcriptions):
+    def forward(self,transcriptions,device):
         if len(transcriptions)==0:
-            return torch.FloatTensor(0).to(self.adaption[0].weight.device)
+            return torch.FloatTensor(0).to(device)
         if self.wv is None:
             self.wv = api.load(wordmodel) #lazy
         emb=[]
@@ -96,7 +96,7 @@ class Word2VecAdapterShallow(nn.Module):
             if count>0:
                 vector/=count
             emb.append(vector)
-        emb = torch.from_numpy(np.stack(emb,axis=0)).float().to(self.adaption[0].weight.device)
+        emb = torch.from_numpy(np.stack(emb,axis=0)).float().to(device)
         assert(not torch.isnan(emb).any())
         return self.adaption(emb)
 
@@ -122,7 +122,7 @@ class BPEmbAdapter(nn.Module):
                 nn.ReLU(True)
                 )
 
-    def forward(self,transcriptions):
+    def forward(self,transcriptions,device):
         if self.embedder is None:
             self.embedder = BPEmb(lang="en",vs=100000)
         emb=[]
@@ -150,10 +150,10 @@ class BPEmbAdapter(nn.Module):
                 diff = max_len-emb[i].shape[0]
                 emb[i] = np.pad(emb[i],((0,diff),(0,0)))
         if len(emb)>0:
-            emb = torch.from_numpy(np.stack(emb,axis=1)).float().to(self.rnn._flat_weights[0].device)
+            emb = torch.from_numpy(np.stack(emb,axis=1)).float().to(device)
         else:
             #emb = torch.FloatTensor(0,1,self.vecsize).to(self.rnn._flat_weights[0].device)
-            return torch.FloatTensor(256).fill_(0).to(self.rnn._flat_weights[0].device)
+            return torch.FloatTensor(256).fill_(0).to(device)
         assert(not torch.isnan(emb).any())
         emb,_ = self.rnn(emb)
         emb = emb.mean(dim=0) #ehh, just average
