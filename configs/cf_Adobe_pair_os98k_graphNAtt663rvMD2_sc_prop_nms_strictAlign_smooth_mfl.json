@@ -1,10 +1,10 @@
 {
-    "name": "Adobe_pair_os98k_binary333rv_mc_prop_nms_strictAlign_smooth_mfl",
+    "name": "Adobe_pair_os98k_graphNAtt663rvMD2_sc_prop_nms_strictAlign_smooth_mfl",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
-    "super_computer":false,
+    "super_computer":true,
     "data_loader": {
         "data_set_name": "AdobeGraphPair",
         "data_dir": "../data/AdobeFormData",
@@ -15,7 +15,7 @@
         "color":false,
         "rescale_range": [0.4,0.65],
         "crop_params": {
-            "crop_size":[550,700],
+            "crop_size":[500,700],
             "pad":50
         }
 
@@ -106,10 +106,13 @@
         "conf_thresh": 0.7,
         "start_frozen": true,
 
+        "graph_min_degree": 2,
+        "graph_four_connected": false,
         "relationship_proposal": "feature_nn",
-        "percent_rel_to_keep": 0.4,
+        "rel_hard_thresh": 0.1,
+        "rel_merge_hard_thresh": 0.3,
         "max_rel_to_keep": 500,
-        "max_merge_rel_to_keep": 3000,
+        "max_merge_rel_to_keep": 6000,
         "roi_batch_size": 600,
 
 	"use_rel_shape_feats": "corner",
@@ -131,58 +134,69 @@
         "merge_featurizer_conv": ["sep256","sep128","sep128",100],
         "init_merge_thresh": 0.95,
 
-        "expand_rel_context": [75,150],
-        "featurizer_start_h": 24,
-        "featurizer_start_w": 24,
-        "featurizer_conv": ["sep128","M","sep128","sep128","M","sep256","sep256","M"],
+        "expand_rel_context": 20,
+        "featurizer_start_h": 16,
+        "featurizer_start_w": 16,
+        "featurizer_conv": ["sep128","M","sep128","sep256","sep256","M"],
         "featurizer_conv_auto": true,
         "featurizer_fc": null,
 
         "pred_nn": false,
         "pred_class": true,
-        "expand_bb_context": [50,100],
-        "featurizer_bb_start_h": 12,
-        "featurizer_bb_start_w": 12,
-        "bb_featurizer_conv": ["sep64","M","sep64","sep128","M",256],
+        "expand_bb_context": 20,
+        "featurizer_bb_start_h": 10,
+        "featurizer_bb_start_w": 10,
+        "bb_featurizer_conv": ["sep64","M","sep128","sep128"],
 
 
         "fix_bi_dir": true,
         "reintroduce_visual_features": "fixed map",
         "graph_config": [
         {
-            "arch": "BinaryPairReal",
-            "in_channels": 512,
+            "arch": "MetaGraphNet",
+            "in_channels": 256,
             "node_out": 3,
             "edge_out": 5,
-            "layers": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
-            "layers_bb": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
+            "num_layers": 6,
+            "num_heads": 4,
+            "repetitions": 1,
+            "use_repetition_res": false,
+            "encode_type": "attention",
+            "better_norm_attention": true,
 	    "merge_thresh": 0.8,
             "group_thresh": 0.95,
             "keep_edge_thresh": 0.1
         },
         {
-            "arch": "BinaryPairReal",
-            "in_channels": 512,
+            "arch": "MetaGraphNet",
+            "in_channels": 256,
             "node_out": 3,
             "edge_out": 5,
-            "layers": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
-            "layers_bb": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
+            "num_layers": 6,
+            "num_heads": 4,
+            "repetitions": 1,
+            "use_repetition_res": false,
+            "encode_type": "attention",
+            "better_norm_attention": true,
 	    "merge_thresh": 0.9,
             "group_thresh": 0.9,
             "keep_edge_thresh": 0.2
         },
         {
-            "arch": "BinaryPairReal",
-            "in_channels": 512,
+            "arch": "MetaGraphNet",
+            "in_channels": 256,
             "node_out": 3,
             "edge_out": 5,
-            "layers": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
-            "layers_bb": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
+            "num_layers": 3,
+            "num_heads": 4,
+            "repetitions": 1,
+            "use_repetition_res": false,
+            "encode_type": "attention",
+            "better_norm_attention": true,
 	    "merge_thresh": 0.9,
             "group_thresh": 0.6,
             "keep_edge_thresh": 0.5
-        }
-        ]
+        }]
 
 
     }
