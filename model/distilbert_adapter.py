@@ -5,7 +5,7 @@ import torch.nn as nn
 import numpy as np
 import re
 try:
-    from transformers import DistilBertTokenizer, DistilBertModel
+    from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
 except:
     pass
 
@@ -83,7 +83,8 @@ class DistilBertWholeAdapter(nn.Module):
     def __init__(self,out_size):
         super(DistilBertWholeAdapter, self).__init__()
         self.languagemodel_tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-        self.languagemodel = DistilBertModel.from_pretrained('distilbert-base-uncased')
+        configuration = DistilBertConfig(max_position_embeddings=2048)
+        self.languagemodel = DistilBertModel(configuration).from_pretrained('distilbert-base-uncased')
         self.hidden_size = 768
         mid_size = (out_size+self.hidden_size)//2
         self.adaption = nn.Sequential(
