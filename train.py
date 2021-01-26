@@ -104,12 +104,6 @@ def main(rank,config, resume,world_size=None):
 
     if rank is not None and rank!=0:
         trainer.side_process=True #this tells the trainer not to log or validate on this thread
-    else:
-        def handleSIGINT(sig, frame):
-            trainer.save()
-            update_status(name,'stopped!',supercomputer)
-            sys.exit(0)
-        signal.signal(signal.SIGINT, handleSIGINT)
 
     print("Begin training")
     #warnings.filterwarnings("error")

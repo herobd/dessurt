@@ -175,7 +175,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                     color2 = min(abs(pred_nn-gtNN),1)#*0.5
                     img_f.putText(image,'{:.2}/{}'.format(pred_nn,gtNN),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(color2,0,0),2,cv2.LINE_AA)
                 if bbTrans is not None:
-                    to_write_text.append(('{}'.format(j),(x,y),(round(color[0]*255),round(color[1]*255),round(color[2]*255))))
+                    to_write_text.append(('{}'.format(j),(int(x),int(y)),(int(round(color[0]*255)),int(round(color[1]*255)),int(round(color[2]*255)))))
                     #img_f.putText(image,'{}'.format(j),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,color,2,cv2.LINE_AA)
                     transOut.write('{}: {}\n'.format(j,bbTrans[j]))
         if bbTrans is not None:

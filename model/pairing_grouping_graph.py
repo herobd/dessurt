@@ -3997,7 +3997,6 @@ class PairingGroupingGraph(BaseModel):
                 #img_f.imshow('line',imm)
                 #img_f.waitKey()
             ###
-        import pdb;pdb.set_trace()
         return output_strings
 
 
