@@ -768,7 +768,7 @@ class PairingGroupingGraph(BaseModel):
                 bbPredictions = threshed_bbPredictions
             else:
                 bbPredictions = non_max_sup_iou(bbPredictions.cpu(),self.used_threshConf,0.4,hard_detect_limit)
-            
+            #print(bbPredictions[0].size())
 
             #I'm assuming batch size of one
             assert(len(bbPredictions)==1)
