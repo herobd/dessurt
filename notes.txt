@@ -14,3 +14,4 @@ JOBS
        NAFMblank_pair_os100k2_graphNAtt663rvCon4_sc_prop_nms_strictAlign_smooth_mfl  39674891       13:19
  FUNSDLines_pair_graph663rvCon4_smallContext_prop_readGTDBertTune 454 4545
  FUNSDLines_bigCrop_pair_os98k_graphNAtt663rvCon4_sc_prop_nms_strictAlign_smooth_mfl 343 343
+Adobe_pair_os98k_graphNAtt663rvMD2_sc_prop_nms_strictAlign_smooth_mfl 344 344

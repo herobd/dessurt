@@ -2225,6 +2225,7 @@ class GraphPairTrainer(BaseTrainer):
                     finalOutputBoxes = finalOutputBoxes[finalOutputBoxesNotBlanks]
                 newToOldOutputBoxes = torch.arange(0,len(finalOutputBoxesNotBlanks),dtype=torch.int64)[finalOutputBoxesNotBlanks]
                 oldToNewOutputBoxes = {o.item():n for n,o in enumerate(newToOldOutputBoxes)}
+                predGroups = finalPredGroups
                 if predGroups is not None:
                     predGroups = [[oldToNewOutputBoxes[bId] for bId in group if bId in oldToNewOutputBoxes] for group in predGroups]
                     newToOldGroups = []
@@ -2238,8 +2239,6 @@ class GraphPairTrainer(BaseTrainer):
                     for a,b in finalEdgeIndexes:
                         assert(a < len(predGroups))
                         assert(b < len(predGroups))
-                if predTrans is not None:
-                    predTrans = [predTrans[newToOldOutputBoxes[n]] for n in range(len(newToOldOutputBoxes))]
         targetBoxes=targetBoxes[0]
 
         #go to last
