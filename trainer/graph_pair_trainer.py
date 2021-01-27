@@ -2010,9 +2010,6 @@ class GraphPairTrainer(BaseTrainer):
                         targetIndexToGroup.update({bbId:groupId for bbId in bbIds})
                 else:
                     newToOldGTGroups = list(range(len(gtGroups)))
-                    gt_groups_adj = []
-                    gtGroups =[]
-                    targetBoxes=None
 
             if outputBoxes is not None and len(outputBoxes)>0:
                 if self.model_ref.useCurvedBBs:
