@@ -1,6 +1,6 @@
 {
     "name": "FUNSDLines_pair_graph663rvCon4_smallContext_prop_readGTDBertTune",
-    "cuda": true,
+    "cuda": false,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,

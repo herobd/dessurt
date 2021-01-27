@@ -768,7 +768,7 @@ class PairingGroupingGraph(BaseModel):
                 bbPredictions = threshed_bbPredictions
             else:
                 bbPredictions = non_max_sup_iou(bbPredictions.cpu(),self.used_threshConf,0.4,hard_detect_limit)
-            
+            #print(bbPredictions[0].size())
 
             #I'm assuming batch size of one
             assert(len(bbPredictions)==1)
@@ -3811,7 +3811,7 @@ class PairingGroupingGraph(BaseModel):
                     batch_lines = F.grid_sample(image.expand(b_grids.size(0),-1,-1,-1),b_grids)
                     lines.append((b,batch_lines.cpu()))
 
-                process = lambda a: (a[0],self.text_rec(a[1])) if a[1].size(3)>0 else (a[0],'')
+                process = lambda a: (a[0],self.text_rec(a[1])) if a[1].size(3)>0 else (a[0],[''])
                 with concurrent.futures.ThreadPoolExecutor(max_workers=self.trans_threads) as executor:
                     res = executor.map(process,lines)
                 output_strings=[None]*num_batch
