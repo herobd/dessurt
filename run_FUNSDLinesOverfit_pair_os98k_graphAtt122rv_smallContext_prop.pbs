@@ -31,6 +31,6 @@ module load cudnn/7.6
 #module load opencv/3/2
 cd ~/pairing
 #source pairing/bin/activate
-source activate new
+source activate /fslhome/brianld/miniconda3/envs/new
 
 python  train.py -c configs/cf_FUNSDLinesOverfit_pair_os98k_graphAtt122rv_smallContext_prop.json -s saved/FUNSDLinesOverfit_pair_os98k_graphAtt122rv_smallContext_prop/checkpoint-latest.pth
