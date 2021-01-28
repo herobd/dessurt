@@ -211,7 +211,7 @@ class BaseTrainer:
             assert(type(steps) is list)
             steps=[0]+steps
             def riseLR(step_num):
-                if step_num>self.swa_start:
+                if step_num<self.swa_start:
                     for i,step in enumerate(steps[1:]):
                         if step_num<step:
                             return warmup_cap*((step_num-steps[i])*(0.99/(step-steps[i]))+.01)
