@@ -74,6 +74,7 @@ class GraphPairTrainer(BaseTrainer):
         self.thresh_error = config['trainer']['thresh_error'] if 'thresh_error' in config['trainer'] else [0.5]*len(self.thresh_group)
 
         self.gt_bb_align_IOcU_thresh = 0.4 if 'gt_bb_align_IOcU_thresh' not in config['trainer'] else config['trainer']['gt_bb_align_IOcU_thresh']
+        self.final_bb_iou_thresh = config['trainer']['final_bb_iou_thresh'] if 'final_bb_iou_thresh' in config['trainer'] else (config['final_bb_iou_thresh'] if 'final_bb_iou_thresh' in config else 0.5)
 
         #we iniailly train the pairing using GT BBs, but eventually need to fine-tune the pairing using the networks performance
         self.stop_from_gt = config['trainer']['stop_from_gt'] if 'stop_from_gt' in config['trainer'] else None
@@ -1873,7 +1874,7 @@ class GraphPairTrainer(BaseTrainer):
         ###
         gt_groups_adj = instance['gt_groups_adj']
         if final is not None:
-            finalLog, finalRelTypes, finalMissedRels = self.finalEval(targetBoxes.cpu() if targetBoxes is not None else None,gtGroups,gt_groups_adj,targetIndexToGroup,*final)
+            finalLog, finalRelTypes, finalMissedRels = self.finalEval(targetBoxes.cpu() if targetBoxes is not None else None,gtGroups,gt_groups_adj,targetIndexToGroup,*final,bb_iou_thresh=self.final_bb_iou_thresh)
             log.update(finalLog)
             if self.save_images_every>0 and self.iteration%self.save_images_every==0:
                 path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b','final'))#instance['name'],graphIteration))
@@ -1982,7 +1983,7 @@ class GraphPairTrainer(BaseTrainer):
 
 
 
-    def finalEval(self,targetBoxes,gtGroups,gt_groups_adj,targetIndexToGroup,outputBoxes,predGroups,predPairs,predTrans=None):
+    def finalEval(self,targetBoxes,gtGroups,gt_groups_adj,targetIndexToGroup,outputBoxes,predGroups,predPairs,predTrans=None, bb_iou_thresh=0.5):
         log={}
         numClasses = len(self.scoreClassMap)
 
@@ -2028,6 +2029,7 @@ class GraphPairTrainer(BaseTrainer):
                         if len(group)>0:
                             newGroups.append(group)
                             newToOldGroups.append(gId)
+                    predGroups = newGroups
                     oldToNewGroups = {o:n for n,o in enumerate(newToOldGroups)}
                     num_pred_pairs_with_blanks = len(predPairs)
                     predPairs = [(i,(oldToNewGroups[g1],oldToNewGroups[g2])) for i,(g1,g2) in enumerate(predPairs) if g1 in oldToNewGroups and g2 in oldToNewGroups]
@@ -2044,12 +2046,12 @@ class GraphPairTrainer(BaseTrainer):
         if targetBoxes is not None:
             targetBoxes = targetBoxes.cpu()
             if self.model_ref.useCurvedBBs:
-                targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,0.5,numClasses,False)
+                targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,bb_iou_thresh,numClasses,False)
             elif self.model_ref.rotation:
                 raise NotImplementedError('newGetTargIndexForPreds_dist should be modified to reflect the behavoir or newGetTargIndexForPreds_textLines')
                 targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
             else:
-                targIndex = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.5,numClasses,False)
+                targIndex = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,bb_iou_thresh,numClasses,False)
                 
         elif outputBoxes is not None:
             targIndex=torch.LongTensor(len(outputBoxes)).fill_(-1)
@@ -2066,11 +2068,11 @@ class GraphPairTrainer(BaseTrainer):
         else:
             target_for_b = torch.empty(0)
         if self.model_ref.useCurvedBBs:
-            ap_5, prec_5, recall_5, allPrec, allRecall =AP_textLines(target_for_b,outputBoxes,0.5,numClasses)
+            ap_5, prec_5, recall_5, allPrec, allRecall =AP_textLines(target_for_b,outputBoxes,bb_iou_thresh,numClasses)
         elif self.model_ref.rotation:
             ap_5, prec_5, recall_5, allPrec, allRecall =AP_dist(target_for_b,outputBoxes,0.9,numClasses)
         else:
-            ap_5, prec_5, recall_5, allPrec, allRecall =AP_iou(target_for_b,outputBoxes,0.5,numClasses)
+            ap_5, prec_5, recall_5, allPrec, allRecall =AP_iou(target_for_b,outputBoxes,bb_iou_thresh,numClasses)
         prec_5 = np.array(prec_5)
         recall_5 = np.array(recall_5)
         log['final_bb_AP']=ap_5
@@ -2213,7 +2215,18 @@ class GraphPairTrainer(BaseTrainer):
             blank_index = self.classMap['blank']
             if targetBoxes is not None:
                 gtNotBlanks = targetBoxes[0,:,blank_index]<0.5
+                newToOldBBs = [i for i in range(targetBoxes.size(1)) if gtNotBlanks[i]]
+                oldToNewBBs = {o:n for n,o in newToOldBBs}
                 targetBoxes=targetBoxes[:,gtNotBlanks]
+                gtGroups = [ [oldToNewBBs[bb] for bb in group] for group in gtGroups ]
+                newGroups=[]
+                for gId,group in enumerate(gtGroups):
+                    if len(group)>0:
+                        newGroups.append(group)
+                        newToOldGroups.append(gId)
+                gtGroups=newGroups
+                oldToNewGroups = {o:n for n,o in enumerate(newToOldGroups)}
+                gtGroupAdj = [(oldToNewGroups[g1],oldToNewGroups[g2]) for g1,g2 in gtGroupAdj if g1 in oldToNewGroups and g2 in oldToNewGroups]
             if finalOutputBoxes is not None and len(finalOutputBoxes)>0:
                 if self.model_ref.useCurvedBBs:
                     finalOutputBoxesNotBlanks=torch.FloatTensor([box.getCls() for box in finalOutputBoxes])
@@ -2224,21 +2237,22 @@ class GraphPairTrainer(BaseTrainer):
                     finalOutputBoxes = finalOutputBoxes[finalOutputBoxesNotBlanks]
                 newToOldOutputBoxes = torch.arange(0,len(finalOutputBoxesNotBlanks),dtype=torch.int64)[finalOutputBoxesNotBlanks]
                 oldToNewOutputBoxes = {o.item():n for n,o in enumerate(newToOldOutputBoxes)}
-                if predGroups is not None:
-                    predGroups = [[oldToNewOutputBoxes[bId] for bId in group if bId in oldToNewOutputBoxes] for group in predGroups]
+                
+                if finalPredGroups is not None:
+                    finalPredGroups = [[oldToNewOutputBoxes[bId] for bId in group if bId in oldToNewOutputBoxes] for group in finalPredGroups]
                     newToOldGroups = []
                     newGroups = []
-                    for gId,group in enumerate(predGroups):
+                    for gId,group in enumerate(finalPredGroups):
                         if len(group)>0:
                             newGroups.append(group)
                             newToOldGroups.append(gId)
                     oldToNewGroups = {o:n for n,o in enumerate(newToOldGroups)}
                     finalEdgeIndexes = [(oldToNewGroups[g1],oldToNewGroups[g2]) for g1,g2 in finalEdgeIndexes if g1 in oldToNewGroups and g2 in oldToNewGroups]
+                    finalPredGroups = newGroups
+
                     for a,b in finalEdgeIndexes:
-                        assert(a < len(predGroups))
-                        assert(b < len(predGroups))
-                if predTrans is not None:
-                    predTrans = [predTrans[newToOldOutputBoxes[n]] for n in range(len(newToOldOutputBoxes))]
+                        assert(a < len(finalPredGroups))
+                        assert(b < len(finalPredGroups))
         targetBoxes=targetBoxes[0]
 
         #go to last

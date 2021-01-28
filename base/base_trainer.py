@@ -59,7 +59,7 @@ class BaseTrainer:
             slower_params=[]
             not_as_slow_params=[]
             slow_param_names = config['trainer']['slow_param_names'] if 'slow_param_names' in config['trainer'] else []
-            slower_param_names = config['trainer']['slow_param_names'] if 'slow_param_names' in config['trainer'] else []
+            slower_param_names = config['trainer']['slower_param_names'] if 'slower_param_names' in config['trainer'] else []
             not_as_slow_param_names = config['trainer']['not_as_slow_param_names'] if 'not_as_slow_param_names' in config['trainer'] else []
             freeze_param_names = config['trainer']['freeze_param_names'] if 'freeze_param_names' in config['trainer'] else []
             only_params = config['trainer']['only_params'] if 'only_params' in config['trainer'] else None
@@ -507,12 +507,15 @@ class BaseTrainer:
         #if self.swa:
         #    self.swa_n = checkpoint['swa_n']
         if not did_brain_surgery:
-            self.optimizer.load_state_dict(checkpoint['optimizer'])
-            if self.with_cuda:
-                for state in self.optimizer.state.values():
-                    for k, v in state.items():
-                        if isinstance(v, torch.Tensor):
-                            state[k] = v.cuda(self.gpu)
+            try:
+                self.optimizer.load_state_dict(checkpoint['optimizer'])
+                if self.with_cuda:
+                    for state in self.optimizer.state.values():
+                        for k, v in state.items():
+                            if isinstance(v, torch.Tensor):
+                                state[k] = v.cuda(self.gpu)
+            except ValueError as e:
+                print('WARNING did not load optimizer state_dict. {}'.format(e))
         if self.useLearningSchedule:
             self.lr_schedule.load_state_dict(checkpoint['lr_schedule'])
         self.train_logger = checkpoint['logger']
