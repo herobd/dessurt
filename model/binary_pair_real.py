@@ -22,12 +22,21 @@ class BinaryPairReal(nn.Module):
         norm = config['norm'] if 'norm' in config else 'group_norm'
         dropout = config['dropout'] if 'dropout' in config else True
 
+        self.use_node_for_rel_pred = config['use_node_for_rel_pred'] if 'use_node_for_rel_pred' in config else False
+        self.in_ch=in_ch
+        if self.use_node_for_rel_pred:
+            rel_in_ch = in_ch*3
+        else:
+            rel_in_ch = in_ch
+
         layer_desc = config['layers'] if 'layers' in config else ['FC256','FC256','FC256']
-        if 'Norm' in layer_desc[0]:
+        if 'FCnR' in layer_desc[-1]: #no ReLU
+            assert 'Norm' in layer_desc[0]
             act= ['GroupNorm','ReLU']
         else:
+            assert 'Norm' not in layer_desc[0]
             act =[]
-        layer_desc = [in_ch]+layer_desc#+['FCnR{}'.format(numRelOut)]
+        layer_desc = [rel_in_ch]+layer_desc#+['FCnR{}'.format(numRelOut)]
         layers, last_ch_relC = make_layers(layer_desc,norm=norm,dropout=dropout)
         self.layersRel = nn.Sequential(*layers)
         final, fin_ch_iout = make_layers([last_ch_relC,*act,'FCnR{}'.format(numRelOut)],norm=norm,dropout=dropout)
@@ -77,30 +86,39 @@ class BinaryPairReal(nn.Module):
 
 
 
-    def forward(self, node_features, adjacencyMatrix=None, numBBs=None):
+    def forward(self, features, adjacencyMatrix=None, numBBs=None):
         if adjacencyMatrix is None and numBBs is None:
-            node_features, edge_indexes, edge_features, u_features = node_features #graph input
-            node_featuresR = edge_features
-            node_featuresB = node_features
+            node_features, edge_indexes, edge_features, u_features = features #graph input
         else:
-            node_featuresR = node_features[numBBs:]
+            edge_features = features[numBBs:]
             if numBBs>0:
-                node_featuresB = node_features[:numBBs]
+                node_features = features[:numBBs]
             else:
-                node_featuresB = None
-        featsRel = self.layersRel(node_featuresR)
+                node_features = None
+        if self.use_node_for_rel_pred:
+            #set up both directions of relationships, appending node features to edge features
+            #node_feats_for_edges = edge_features.new_empty(edge_features.size(0),self.in_ch*2)
+            #for i,(n1,n2) in enumerate(edge_indexes):
+            #    node_feats_for_edges[i,0:self.in_ch] = node_features[n1]
+            #    node_feats_for_edges[i,self.in_ch:] = node_features[n2]
+            #    node_feats_for_edges[i+len(edge_indexes),0:self.in_ch] = node_features[n2]
+            #    node_feats_for_edges[i+len(edge_indexes),self.in_ch:] = node_features[n1]
+            #edge_features = torch.cat([edge_features.repeat(2,1),node_feats_for_edges],dim=1)
+            edge_features = torch.cat([edge_features,node_features[edge_indexes[0]],node_features[edge_indexes[1]]],dim=1)
+        featsRel = self.layersRel(edge_features)
         res = self.finalRel(featsRel)
+
         if self.shape_layers is not None:
             if self.frozen_shape_layers:
                 self.shape_layers.eval()
-            res2 = self.shape_layers(node_featuresR[:,-self.numShapeFeats:])
+            res2 = self.shape_layers(edge_features[:,-self.numShapeFeats:])
             if self.split_weighting is None:
                 res = (res+res2)/2
             else:
                 weight = self.split_weighting.clamp(0,1)
                 res = weight*res + (1-weight)*res2
-        if node_featuresB is not None:
-            featsB = self.layersBB(node_featuresB)
+        if node_features is not None:
+            featsB = self.layersBB(node_features)
             resB = self.finalBB(featsB)
         else:
             featsB=None
