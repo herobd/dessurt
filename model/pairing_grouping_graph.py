@@ -2201,7 +2201,7 @@ class PairingGroupingGraph(BaseModel):
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
         node_vis_features = self.computeNodeVisualFeatures(features,features2,imageHeight,imageWidth,bbs,groups,text_emb,allMasks,merge_only,debug_image)
         if self.reintroduce_node_visual_maps is not None:
-            print('node_vis_features: {}'.format(node_vis_features.size()))
+            #print('node_vis_features: {}'.format(node_vis_features.size()))
             bb_features = self.reintroduce_node_visual_maps[0](node_vis_features) #this is an extra linear layer to prep the features for the graph (which expects non-activated values)
         else:
             bb_features = node_vis_features
