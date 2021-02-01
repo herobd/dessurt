@@ -1,6 +1,6 @@
 {
     "name": "FUNSDLines_pair_graph663rvCon4_noViz_prop_readGTDBert",
-    "cuda": false,
+    "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
@@ -67,8 +67,8 @@
         "swa_start": 600000,
         "swa_c_iters": 10000,
         "save_dir": "saved/",
-        "val_step": 20000,
-        "save_step": 20000,
+        "val_step": 10000,
+        "save_step": 10000,
         "save_step_minor": 200,
         "log_step": 250,
         "verbosity": 1,

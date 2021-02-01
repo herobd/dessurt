@@ -83,7 +83,7 @@
         "monitor_mode": "none",
         "conf_thresh_init": 0.5,
         "conf_thresh_change_iters": 0,
-        "retry_count":1,
+        "retry_count":2,
 
         "gt_bb_align_IOcU_thresh": 0.55,
 

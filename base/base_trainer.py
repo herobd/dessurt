@@ -106,6 +106,8 @@ class BaseTrainer:
                 to_opt.append({'params': not_as_slow_params, 'lr': config['optimizer']['lr']*0.5})
             if len(slower_params)>0:
                 to_opt.append({'params': slower_params, 'lr': config['optimizer']['lr']*0.01})
+            should_be_in_to_opt = 2 + (1 if len(slower_param_names)>0 else 0) + (1 if len(not_as_slow_param_names)>0 else 0)
+            assert should_be_in_to_opt + len(to_opt) #help catch errors in param names
             self.optimizer = getattr(optim, config['optimizer_type'])(to_opt,
                                                                       **config['optimizer'])
                     #self.optimizer = getattr(optim, config['optimizer_type'])(model.parameters(),
@@ -264,12 +266,12 @@ class BaseTrainer:
             if self.useLearningSchedule:
                 self.lr_schedule.step()
             for attempt in range(self.retry_count):
-                #try:
-                result = self._train_iteration(self.iteration)
-                #    break
-                #except RuntimeError as err:
-                #    torch.cuda.empty_cache() #this is primarily to catch rare CUDA out of memory errors
-                #    lastErr = err
+                try:
+                    result = self._train_iteration(self.iteration)
+                    break
+                except RuntimeError as err:
+                    torch.cuda.empty_cache() #this is primarily to catch rare CUDA out of memory errors
+                    lastErr = err
             if result is None:
                 if self.retry_count>1:
                     print('Failed all {} times!'.format(self.retry_count))
