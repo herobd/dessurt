@@ -264,12 +264,12 @@ class BaseTrainer:
             if self.useLearningSchedule:
                 self.lr_schedule.step()
             for attempt in range(self.retry_count):
-                #try:
-                result = self._train_iteration(self.iteration)
-                #    break
-                #except RuntimeError as err:
-                #    torch.cuda.empty_cache() #this is primarily to catch rare CUDA out of memory errors
-                #    lastErr = err
+                try:
+                    result = self._train_iteration(self.iteration)
+                    break
+                except RuntimeError as err:
+                    torch.cuda.empty_cache() #this is primarily to catch rare CUDA out of memory errors
+                    lastErr = err
             if result is None:
                 if self.retry_count>1:
                     print('Failed all {} times!'.format(self.retry_count))
