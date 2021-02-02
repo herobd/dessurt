@@ -1,10 +1,10 @@
 {
     "name": "FUNSD_pair_os100k2_graphNAtt663rvCon4_sc_prop_nms_stctAln_smooth_mfl_small_FAST",
     "cuda": true,
-    "gpu": 1,
+    "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
-    "super_computer":false,
+    "super_computer":true,
     "lr_scheduler_type": "none",
     "data_loader": {
         "data_set_name": "FUNSDGraphPair",
@@ -32,7 +32,7 @@
  
     "optimizer_type": "AdamW",
     "optimizer": {
-        "lr": 0.9,
+        "lr": 0.5,
         "weight_decay": 0.01
     },
     "loss": {
