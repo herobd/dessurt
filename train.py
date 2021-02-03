@@ -126,8 +126,8 @@ if __name__ == '__main__':
                         help='Set rank for process in distributed training')
     parser.add_argument('-W', '--worldsize', default=None, type=int,
                         help='Set worldsize (num tasks) in distributed training')
-    #parser.add_argument('-m', '--merged', default=False, action='store_const', const=True,
-    #                    help='Use combine train and valid sets.')
+    parser.add_argument('-S', '--supercomputer', default=False, action='store_const', const=True,
+                        help='This is on the supercomputer')
 
     args = parser.parse_args()
 
@@ -153,7 +153,8 @@ if __name__ == '__main__':
                 filename = os.fsdecode(file)
                 if filename!='config.json': 
                     assert False, "Path {} already used!".format(path)
-
+    if args.supercomputer:
+        config['super_computer']=True
     supercomputer = config['super_computer'] if 'super_computer' in config else False
     name=config['name']
     if args.config is not None:
