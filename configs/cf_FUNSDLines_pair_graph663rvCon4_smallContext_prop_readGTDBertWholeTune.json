@@ -90,8 +90,6 @@
 
 	"freeze_param_names": ["text_rec"],
         "slow_param_names": ["languagemodel"],
-        "slower_param_names": ["languagemodel.transformer.layer.0","languagemodel.transformer.layer.1","languagemodel.transformer.layer.3"],
-        "not_as_slow_param_names": ["languagemodel.transformer.layer.5"],
 
         "use_learning_schedule": true,
         "adapt_lr": false,
