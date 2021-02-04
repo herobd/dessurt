@@ -59,7 +59,7 @@
         "iterations": 400000,
         "save_dir": "saved/",
         "val_step": 10000,
-        "save_step": 10000,
+        "save_step": 25000,
         "save_step_minor": 500,
         "log_step": 100,
         "verbosity": 1,
