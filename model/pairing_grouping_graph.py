@@ -2202,7 +2202,13 @@ class PairingGroupingGraph(BaseModel):
         node_vis_features = self.computeNodeVisualFeatures(features,features2,imageHeight,imageWidth,bbs,groups,text_emb,allMasks,merge_only,debug_image)
         if self.reintroduce_node_visual_maps is not None:
             #print('node_vis_features: {}'.format(node_vis_features.size()))
-            bb_features = self.reintroduce_node_visual_maps[0](node_vis_features) #this is an extra linear layer to prep the features for the graph (which expects non-activated values)
+            if node_vis_features.size(0)==0:
+                print(node_vis_features.size())
+            try:
+                bb_features = self.reintroduce_node_visual_maps[0](node_vis_features) #this is an extra linear layer to prep the features for the graph (which expects non-activated values)
+            except RuntimeError as e:
+                print('node_vis_features: {}, layer: {}'.format(node_vis_features.size(),self.reintroduce_node_visual_maps[0]))
+                raise e
         else:
             bb_features = node_vis_features
         #rint('node features built')
