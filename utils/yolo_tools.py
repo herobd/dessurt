@@ -1312,7 +1312,16 @@ def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_ta
                     bidir_groups = {}
                     bidir_map = {}
                     bidir_group_index=0
+                    unused_pis = set(sharing)
                     for p1i,p2i in bidirectional_wants:
+                        try:
+                            unused_pis.remove(p1i)
+                        except ValueError:
+                            pass
+                        try:
+                            unused_pis.remove(p2i)
+                        except ValueError:
+                            pass
                         if p1i in bidir_map and p2i in bidir_map:
                             group1 = bidir_map[p1i]
                             group2 = bidir_map[p2i]
@@ -1331,11 +1340,36 @@ def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_ta
                             bidir_map[p1i] = bidir_group_index
                             bidir_map[p2i] = bidir_group_index
                             bidir_group_index+=1
-                if len(bidir_groups)>1:
-                    #remove worse
-                    #who is worse?
-                    #TODO
-                    pass
+
+                    bidir_groups = list(bidir_groups.values())
+                    if pi in unused_pis:
+                        bidir_groups.append(set([pi]))
+
+                    if len(bidir_groups)>1:
+                        #find the best group
+                        
+                        final_IOUs={}
+                        best_IOU=0
+                        best_IOU_i=0
+                        for gi,group in enumerate(bidir_groups):
+                            if len(group)==1:
+                                if IOUs[group[0]] > best_IOU:
+                                    best_IOU=IOUs[group[0]]
+                                    best_IOU_i=gi
+                            else:
+                                merged=TextLine(pred[group[0]],pred[group[1]])
+                                for pi in group[2:]:
+                                    merged.merge(TextLine(pred[pi]))
+                                IOU = classPolyIOU(target[ti:ti+1],[merged],numClasses=0)
+                                if IOU>best_IOU:
+                                    best_IOU=IOU
+                                    best_IOU_i=gi
+        
+                        #clear ti as target for all except best
+                        for gi,group in enumerate(bidir_groups):
+                            if gi!=best_IOU_i:
+                                for pi in group:
+                                    targIndex[pi]=-1
 
                 #else it's just 1
                 
