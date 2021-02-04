@@ -1222,7 +1222,7 @@ def newGetTargIndexForPreds_iou(target,pred,iou_thresh,numClasses,train_targs):
     allIOUs, allIO_clippedU = getLoc(target[:,0:],pred[:,1:]) #clippedUnion, target is clipped horizontally to match pred
 
 #This also returns which pred BBs are oversegmentations of targets (horizontall)
-def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_targs):
+def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_targs,discard_bad_overlaps=False):
     if pred is None: 
         return None
 
@@ -1249,6 +1249,96 @@ def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_ta
     if allIOUs.size(0)>0 and allIOUs.size(1)>0:
         val,targIndex = torch.max(allIOUs,dim=0)
         targIndex[val==0]=-1 #These don't have a match
+
+        if discard_bad_overlaps:
+            #Some pred bbs may claim the same target, but some may be better aligned that others
+            #We'll simulate merging them and determine which help improve IOU
+            #merge adjacent preds. Measure change in IclipU, bad merges should cause it to significantly incease
+            # good merges should cause IclipU to stay about the same
+            #For each pred in shared group
+            #  calc IclipU for merging it's N neighbors
+            #new groups based on the bi-direction maintence of IclipU
+            #the group with best average individual IclipU is the right one
+            #the other groups are not a match
+
+            #for each pred in shared grou
+            #  calc IOU
+            #  calc IOU for mering it's N neighbors
+            #new groups based on the bi-directionally improved IOU from merging
+            for ti in range(len(target.size(0))):
+                sharing = (targIndex==ti).nonzero(as_tuple=False)[:,0]
+                if len(sharing)==2:
+                    merged=TextLine(pred[sharing[0]],pred[sharing[1]])
+                    IOUs = classPolyIOU(target[ti:ti+1],[pred[sharing[0]],pred[sharing[1]],merged],numClasses=0)
+                    IOU_0 = IOUs[0,0]
+                    IOU_1 = IOUs[0,1]
+                    IOU_merged = IOUs[0,2]
+                    if IOU_0>IOU_merged or IOU_1>IOU_merged:
+                        if IOU_0>IOU_1:
+                            targIndex[sharing[1]]=-1 #clear ti as a target
+                        elif IOU_1>IOU_0:
+                            targIndex[sharing[0]]=-1
+
+                elif len(sharing)>2:
+                    #merged_IOU = torch.FloatTensor(len(sharing)).fill_(-1)
+                    center_points = np.array([pred[pi].getCenterPoint() for pi in sharing])
+                    sq_distances = np.power(center_points[None,:]-center_points[:,None],2).sum(axis=2)
+                    to_IOU = [pred[pi] for pi in sharing]
+                    to_IOU_index=[]
+                    pi_dists=[]
+                    for pi in sharing:
+                        pi_dist = [(i,d) for i,d in enumerate(sq_distances[pi]) if i!=pi]
+                        pi_dist.sort(key=lambda a:a[1])
+                        for neighbor_i,d in pi_dist[:N]:
+                            merged=TextLine(pred[pi],pred[neighbor_i])
+                            to_IOU_index.append(len(to_IOU))
+                            to_IOU.append(merged)
+                        pi_dists.append(pi_dist)
+                    IOUs = classPolyIOU(target[ti:ti+1],to_IOU,numClasses=0)
+                    i_want = defautdict(list)
+                    for pi,pi_dist in zip(sharing,pi_dists):
+                        for neighbor_i,d in pi_dist[:N]:
+                            merged_IOU = IOUs[to_IOU_index[0]]
+                            to_IOU_index=to_IOU_index[1:]
+
+                            if merged_IOU>IOUs[pi]:
+                                i_want[pi].append(neighbor_i)
+
+                    bidirectional_wants = set()
+                    for pi,want_i in i_want.items():
+                        for w_i in want_i:
+                            if pi in i_want[w_i]:
+                                bidirectional_wants.add((min(pi,w_i),max(p_i,w_i)))
+                    bidir_groups = {}
+                    bidir_map = {}
+                    bidir_group_index=0
+                    for p1i,p2i in bidirectional_wants:
+                        if p1i in bidir_map and p2i in bidir_map:
+                            group1 = bidir_map[p1i]
+                            group2 = bidir_map[p2i]
+                            bidir_groups[group1].update(bidir_groups[group2])
+                            for pi in bidir_groups[group2]:
+                                bidir_map[pi] = group1
+                            del bidir_groups[group2]
+                        elif p1i in bidir_map:
+                            bidir_groups[bidir_map[p1i]].add(p2i)
+                            bidir_map[p2i] = bidir_map[p1i]
+                        elif p2i in bidir_map:
+                            bidir_groups[bidir_map[p2i]].add(p1i)
+                            bidir_map[p1i] = bidir_map[p2i]
+                        else:
+                            bidir_groups[bidir_group_index]=set([p1i,p2i])
+                            bidir_map[p1i] = bidir_group_index
+                            bidir_map[p2i] = bidir_group_index
+                            bidir_group_index+=1
+                if len(bidir_groups)>1:
+                    #remove worse
+                    #who is worse?
+                    #TODO
+                    pass
+
+                #else it's just 1
+                
     else:
         targIndex=torch.IntTensor(0)
 
