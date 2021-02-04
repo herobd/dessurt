@@ -1,5 +1,5 @@
 {
-    "name": "FUNSDLines_pair_graph663rvCon4_smallContext_prop_readGTDBertWholeTune",
+    "name": "FUNSDLines_pair_graph663rv_noViz_prop_readGTDBertWholePartTune",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -71,7 +71,6 @@
         "save_step": 20000,
         "save_step_minor": 200,
         "log_step": 250,
-        "save_images_every": 250,
         "verbosity": 1,
         "monitor": "loss",
         "monitor_mode": "none",
@@ -88,8 +87,9 @@
         "max_use_pred": 0.5,
         "use_all_bb_pred_for_rel_loss": true,
 
-	"freeze_param_names": ["text_rec"],
-        "slow_param_names": ["languagemodel"],
+	"freeze_param_names": ["text_rec","languagemodel.transformer.layer.0","languagemodel.transformer.layer.1","languagemodel.transformer.layer.2","languagemodel.transformer.layer.3"],
+	"slow_param_names": ["languagemodel.transformer.layer.5"],
+        "slower_param_names": ["languagemodel.transformer.layer.4"],
 
         "use_learning_schedule": true,
         "adapt_lr": false,
@@ -106,28 +106,15 @@
         "max_rel_to_keep": 400,
         "roi_batch_size": 400,
 
-	"use_rel_shape_feats": "corner",
-        "use_detect_layer_feats": 16,
-        "use_2nd_detect_layer_feats": 0,
-        "use_2nd_detect_scale_feats": 2,
-        "use_2nd_detect_feats_size": 64,
-        "use_fixed_masks": true,
+	"use_rel_shape_feats": "only",
         "no_grad_feats": true,
         "feat_norm": "group_norm",
 
-        "expand_rel_context": 20,
-        "featurizer_start_h": 16,
-        "featurizer_start_w": 16,
-        "featurizer_conv": ["sep128","sep128","M","sep256","sep256","M"],
-        "featurizer_conv_auto": true,
-        "featurizer_fc": null,
+        "featurizer_fc": [],
 
         "pred_nn": false,
         "pred_class": true,
-        "expand_bb_context": 20,
-        "featurizer_bb_start_h": 10,
-        "featurizer_bb_start_w": 10,
-        "bb_featurizer_conv": ["sep64","sep64","M","sep128"],
+        "bb_featurizer_fc": [],
 
         "fix_bi_dir": true,
         "reintroduce_visual_features": "fixed map",
@@ -190,7 +177,7 @@
             "input_height": 24,
             "char_set": "../data/english_char_set.json",
             "embedding": "DistilBertWhole",
-            "num_feats": 256
+            "num_feats": 512
         }
     }
 }
