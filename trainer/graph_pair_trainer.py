@@ -742,7 +742,7 @@ class GraphPairTrainer(BaseTrainer):
             wasOverSeg = bothTarged*(g_len_R==1)*(g_len_L==1)*same_ts_0
             if not merge_only or self.init_merge_rule is None:
                 pass
-            elif self.init_merge_rule=='adjacent':
+            elif 'adjacent' in self.init_merge_rule:
                 tx,ty,bx,by = zip(* [outputBoxes[n].boundingRect() for n in nodes_with_edges])
                 tx = torch.FloatTensor(tx).to(edge_loss_device)
                 ty = torch.FloatTensor(ty).to(edge_loss_device)
@@ -788,8 +788,15 @@ class GraphPairTrainer(BaseTrainer):
 
                 wasOverSeg *= overlapping+close_ends.to(edge_loss_device) #refine candidates by rule
 
+                if 'match-height' in self.init_merge_rule:
+                    h_L = by_L-ty_L
+                    h_R = by_R-ty_R
+                    h_ratio = torch.min(h_L,h_R)/torch.max(h_L,h_R)
+                    matching_height = h_ratio>0.8#self.height_ratio_thresh
+                    wasOverSeg *= matching_height
+
             else:
-                raise NotImplementedError('Unknown merge rule: {}'.format(self.merge_rule))
+                raise NotImplementedError('Unknown init merge rule: {}'.format(self.init_merge_rule))
             
             wasGroup = bothTarged*((g_len_L>1)+(g_len_R>1)+~same_ts_0)*bothPure*same_GTGroups
             wasNoGroup = badTarged+(bothTarged*((g_len_L>1)+(g_len_R>1)+~same_ts_0)*bothPure*~same_GTGroups)
