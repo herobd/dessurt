@@ -1,8 +1,15 @@
-from util.yolo_tools import newGetTargIndexForPreds_textLines
-from util.bb_merging import TextLine
+from utils.yolo_tools import newGetTargIndexForPreds_textLines
+from utils.bb_merging import TextLine
 import torch
 import utils.img_f as img_f
-from evaluators.draw_graph import plotRect
+from utils.forms_annotations import calcCorners
+def plotRect(img,color,xyrhw,lineWidth=1):
+    tl,tr,br,bl=getCorners(xyrhw)
+
+    img_f.line(img,tl,tr,color,lineWidth)
+    img_f.line(img,tr,br,color,lineWidth)
+    img_f.line(img,br,bl,color,lineWidth)
+    img_f.line(img,bl,tl,color,lineWidth)
 
 gt = [
         [50,15,0,15,50,1,0], #0
