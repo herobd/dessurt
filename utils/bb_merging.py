@@ -565,7 +565,7 @@ class TextLine:
             if i>=0:
                 horz_sum += math.sqrt((top[0]-top_points[i-1][0])**2 +(top[1]-top_points[i-1][1])**2)
                 horz_sum += math.sqrt((bot[0]-bot_points[i-1][0])**2 +(bot[1]-bot_points[i-1][1])**2)
-            vert_sum += math.sqrt((top[0]-bot[0])**2 + (top[0]- bot[0])**2)
+            vert_sum += math.sqrt((top[0]-bot[0])**2 + (top[1]- bot[1])**2)
         self.height = vert_sum/len(self.point_pairs)
         self.width = horz_sum/2
 
