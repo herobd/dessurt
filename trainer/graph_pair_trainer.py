@@ -1596,6 +1596,7 @@ class GraphPairTrainer(BaseTrainer):
         #for graphIteration in range(len(allEdgePred)):
         allEdgePredTypes=[]
         allMissedRels=[]
+        allBBAlignment=[]
         proposedInfo=None
         mergeProposedInfo=None
 
@@ -1626,6 +1627,7 @@ class GraphPairTrainer(BaseTrainer):
                 #t#self.opt_history['newAlignEdgePred gI{}'.format(graphIteration)].append(timeit.default_timer()-tic2)#t#
                 allEdgePredTypes.append(edgePredTypes)
                 allMissedRels.append(missedRels)
+                allBBAlignment.append(bbAlignment)
                 if graphIteration==0 and merged_first:
                     mergeProposedInfo=proposedInfoI
                 elif (graphIteration==0 and not merged_first) or (graphIteration==1 and merged_first):
@@ -1979,6 +1981,8 @@ class GraphPairTrainer(BaseTrainer):
                  got[name] = allEdgePredTypes
             elif name=='allMissedRels':
                  got[name] = allMissedRels
+            elif name=='allBBAlignment':
+                 got[name] = allBBAlignment
             elif name=='final':
                  got[name] = final
             elif name=='final_edgePredTypes':

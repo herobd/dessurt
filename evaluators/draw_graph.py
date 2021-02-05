@@ -33,7 +33,7 @@ def plotRect(img,color,xyrhw,lineWidth=1):
     img_f.line(img,bl,tl,color,lineWidth)
 
 
-def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,image,predTypes,missedRels,targetBoxes,classMap,path,verbosity=2,bbTrans=None,useTextLines=False,targetGroups=None,targetPairs=None):
+def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,image,predTypes,missedRels,targetBoxes,classMap,path,verbosity=2,bbTrans=None,useTextLines=False,targetGroups=None,targetPairs=None,bbAlignment=None):
     #for graphIteration,(outputBoxes,nodePred,edgePred,edgeIndexes,predGroups) in zip(allOutputBoxes,allNodePred,allEdgePred,allEdgeIndexes,allPredGroups):
         if bbTrans is not None:
             transPath = path[:-3]+'txt'
@@ -326,16 +326,13 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
 
         #Draw alginment between gt and pred bbs
         if verbosity>3:
-            raise NotImplementedError('alginment lines not implemented')
-            for predI in range(bbs.shape[0]):
-                targI=bbAlignment[predI].item()
+            for bbI,bb in enumerate(outputBoxes):
                 if useTextLines:
-                    x1,y1 = bbs[predI].getCenterPoint()
-                    x1 = int(round(x1))
-                    y1 = int(round(y1))
+                    x1,y1 = bb.getCenterPoint()
                 else:
-                    x1 = int(round(bbs[predI,1]))
-                    y1 = int(round(bbs[predI,2]))
+                    x1=bb[1]
+                    y1=bb[2]
+                targI=bbAlignment[bbI].item()
                 if targI>0:
 
                     x2 = round(targetBoxes[0,targI,0].item())
