@@ -1383,6 +1383,9 @@ def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_ta
 
                     #divide matched predicitions into two groups based on size
                     heights = [pred[pi].getHeight() for pi in sharing]
+                    widths = [pred[pi].getWidth() for pi in sharing]
+                    print('t{}: heights={}'.format(ti,heights))
+                    print('t{}: widths={}'.format(ti,widths))
                     heights.sort()
                     min_h = heights[0]
                     max_h = heights[-1]
@@ -1393,6 +1396,7 @@ def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_ta
                         diff_max = max_h-pred[pi].getHeight()
                         if diff_min<diff_max:
                             small_group.append(pi)
+                            print('t{}: {} sent to small ({})'.format(ti,pi,pred[pi].getHeight()))
                         else:
                             big_group.append(pi)
                     
@@ -1424,7 +1428,7 @@ def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_ta
                     #    pass
                     #else:
 
-                    print('t{}: small:{}={}, big:{}={}, all={}'.format(small_group,
+                    print('t{}: small:{}={}, big:{}={}, all={}'.format(ti,small_group,IOUs[0],big_group,IOUs[1],IOUs[2]))
 
 
 

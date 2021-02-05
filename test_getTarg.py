@@ -50,7 +50,7 @@ pred = [
 pred_corners=[]
 for p in pred:
     tl,tr,br,bl=calcCorners(*p[1:6])#getCorners(p[1:])
-    pred_corners.append([0.9,tl[0],tl[1],br[0],br[1],1,0])
+    pred_corners.append([0.9,tl[0],tl[1],br[0],br[1],0,1,0])
 pred_corners = torch.FloatTensor(pred_corners)
 pred_lines=[]
 for p in pred_corners:
