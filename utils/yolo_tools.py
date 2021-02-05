@@ -1276,7 +1276,6 @@ def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_ta
                     IOU_0 = IOUs[0,0]
                     IOU_1 = IOUs[0,1]
                     IOU_merged = IOUs[0,2]
-                    print('t{}: 0={}, 1={}, m={}'.format(ti,IOU_0,IOU_1,IOU_merged))
                     if IOU_0>IOU_merged or IOU_1>IOU_merged:
                         if IOU_0>IOU_1:
                             targIndex[sharing[1]]=-1 #clear ti as a target
@@ -1384,8 +1383,6 @@ def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_ta
                     #divide matched predicitions into two groups based on size
                     heights = [pred[pi].getHeight() for pi in sharing]
                     widths = [pred[pi].getWidth() for pi in sharing]
-                    print('t{}: heights={}'.format(ti,heights))
-                    print('t{}: widths={}'.format(ti,widths))
                     heights.sort()
                     min_h = heights[0]
                     max_h = heights[-1]
@@ -1396,7 +1393,6 @@ def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_ta
                         diff_max = max_h-pred[pi].getHeight()
                         if diff_min<diff_max:
                             small_group.append(pi)
-                            print('t{}: {} sent to small ({})'.format(ti,pi,pred[pi].getHeight()))
                         else:
                             big_group.append(pi)
                     
@@ -1405,14 +1401,14 @@ def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_ta
                     else:
                         merged_small=TextLine(pred[small_group[0]],pred[small_group[1]])
                         for pi in small_group[2:]:
-                            merged.merge(pred[pi])
+                            merged_small.merge(pred[pi])
 
                     if len(big_group)==1:
                         merged_big = pred[big_group[0]]
                     else:
                         merged_big=TextLine(pred[big_group[0]],pred[big_group[1]])
                         for pi in big_group[2:]:
-                            merged.merge(pred[pi])
+                            merged_big.merge(pred[pi])
 
                     merged_all = TextLine(merged_small,merged_big)
 
@@ -1428,7 +1424,6 @@ def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_ta
                     #    pass
                     #else:
 
-                    print('t{}: small:{}={}, big:{}={}, all={}'.format(ti,small_group,IOUs[0],big_group,IOUs[1],IOUs[2]))
 
 
 

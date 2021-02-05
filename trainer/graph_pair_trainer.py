@@ -101,6 +101,7 @@ class GraphPairTrainer(BaseTrainer):
 
         self.merge_first_only_until = config['trainer']['merge_first_only_until'] if 'merge_first_only_until' in config['trainer'] else 100
         self.init_merge_rule = config['trainer']['init_merge_rule'] if 'init_merge_rule' in config['trainer'] else None
+        self.picky_merging = 'picky' in self.init_merge_rule if self.init_merge_rule is not None else False
 
         self.num_node_error_class = 0
         self.final_class_bad_alignment = False
@@ -588,7 +589,7 @@ class GraphPairTrainer(BaseTrainer):
                 # alignment from pred to target (-1 if none), each GT has only one pred
                 # targIndex = alginment from pred to target (-1 if none) based on IO_clippedU thresh, not class
                 if self.model_ref.useCurvedBBs:
-                    targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,self.gt_bb_align_IOcU_thresh,numClasses,True)
+                    targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,self.gt_bb_align_IOcU_thresh,numClasses,True,self.picky_merging)
                 elif self.model_ref.rotation:
                     assert(False and 'untested and should be changed to reflect new newGetTargIndexForPreds_s')
                     targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
@@ -742,7 +743,7 @@ class GraphPairTrainer(BaseTrainer):
             wasOverSeg = bothTarged*(g_len_R==1)*(g_len_L==1)*same_ts_0
             if not merge_only or self.init_merge_rule is None:
                 pass
-            elif 'adjacent' in self.init_merge_rule:
+            elif 'adjacent' in self.init_merge_rule or self.picky_merging:
                 tx,ty,bx,by = zip(* [outputBoxes[n].boundingRect() for n in nodes_with_edges])
                 tx = torch.FloatTensor(tx).to(edge_loss_device)
                 ty = torch.FloatTensor(ty).to(edge_loss_device)
@@ -788,7 +789,7 @@ class GraphPairTrainer(BaseTrainer):
 
                 wasOverSeg *= overlapping+close_ends.to(edge_loss_device) #refine candidates by rule
 
-                if 'match-height' in self.init_merge_rule:
+                if self.picky_merging:
                     h_L = by_L-ty_L
                     h_R = by_R-ty_R
                     h_ratio = torch.min(h_L,h_R)/torch.max(h_L,h_R)
@@ -2310,7 +2311,7 @@ class GraphPairTrainer(BaseTrainer):
         num_giter = len(allOutputBoxes)
         for graphIteration,(outputBoxes,edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allOutputBoxes,allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
             if self.model_ref.useCurvedBBs:
-                targIndex = newGetTargIndexForPreds_textLines(targetBoxes.cpu(),outputBoxes,self.gt_bb_align_IOcU_thresh,numClasses,True)
+                targIndex = newGetTargIndexForPreds_textLines(targetBoxes.cpu(),outputBoxes,self.gt_bb_align_IOcU_thresh,numClasses,True,self.picky_merging)
             elif self.model_ref.rotation:
                 assert(False and 'untested and should be changed to reflect new newGetTargIndexForPreds_s')
                 targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes,outputBoxes,1.1,numClasses,hard_thresh=False)
