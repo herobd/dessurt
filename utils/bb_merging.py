@@ -57,7 +57,10 @@ class TextLine:
             self.point_pairs = list(clone.point_pairs) if clone.point_pairs is not None else None
         elif other is None:
             self.step_size = step_size
+            pred_bb_info_orig = pred_bb_info
             pred_bb_info = pred_bb_info.cpu().detach()
+            if pred_bb_info is pred_bb_info_orig:
+                pred_bb_info = pred_bb_info_orig.clone()
             self.all_conf = [pred_bb_info[0].item()]
             self.all_cls = [pred_bb_info[6:].numpy()]
             #assert(self.all_cls[0].shape[0]==4)
