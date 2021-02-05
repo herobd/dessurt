@@ -224,7 +224,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
                     #for j in range(metricsOut.shape[1]):
                 #    saveName+='_m:{0:.3f}'.format(metricsOut[i,j])
                 path = os.path.join(outDir,saveName+'.png')
-                draw_graph(outputBoxes,trainer.model.used_threshConf,bbPred.cpu().detach() if bbPred is not None else None,torch.sigmoid(edgePred).cpu().detach(),relIndexes,predGroups,data,edgePredTypes,missedRels,targetBoxes,trainer.classMap,path,useTextLines=trainer.model.useCurvedBBs,targetGroups=instance['gt_groups'],targetPairs=instance['gt_groups_adj'],verbosity=draw_verbosity,bbAlignment=log['allBBAlignment'][gIter])
+                draw_graph(outputBoxes,trainer.model.used_threshConf,bbPred.cpu().detach() if bbPred is not None else None,torch.sigmoid(edgePred).cpu().detach(),relIndexes,predGroups,data,edgePredTypes,missedRels,targetBoxes,trainer.classMap,path,useTextLines=trainer.model.useCurvedBBs,targetGroups=instance['gt_groups'],targetPairs=instance['gt_groups_adj'],verbosity=draw_verbosity,bbAlignment=out['allBBAlignment'][gIter])
                 #io.imsave(os.path.join(outDir,saveName),image)
                 #print('saved: '+os.path.join(outDir,saveName))
 
