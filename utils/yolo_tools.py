@@ -6,6 +6,8 @@ import numpy as np
 from utils.forms_annotations import calcCornersTorch
 from shapely.geometry import Polygon, LineString
 import shapely
+from utils.bb_merging import TextLine
+from collections import defaultdict
 
 def distancePoints(a,b):
     return math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2)
@@ -1265,14 +1267,16 @@ def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_ta
             #  calc IOU
             #  calc IOU for mering it's N neighbors
             #new groups based on the bi-directionally improved IOU from merging
-            for ti in range(len(target.size(0))):
+            for ti in range(target.size(0)):
                 sharing = (targIndex==ti).nonzero(as_tuple=False)[:,0]
+                sharing = sharing.tolist()
                 if len(sharing)==2:
                     merged=TextLine(pred[sharing[0]],pred[sharing[1]])
-                    IOUs = classPolyIOU(target[ti:ti+1],[pred[sharing[0]],pred[sharing[1]],merged],numClasses=0)
+                    IOUs = classPolyIOU(target[ti:ti+1],[pred[sharing[0]],pred[sharing[1]],merged],num_classes=0)
                     IOU_0 = IOUs[0,0]
                     IOU_1 = IOUs[0,1]
                     IOU_merged = IOUs[0,2]
+                    print('t{}: 0={}, 1={}, m={}'.format(ti,IOU_0,IOU_1,IOU_merged))
                     if IOU_0>IOU_merged or IOU_1>IOU_merged:
                         if IOU_0>IOU_1:
                             targIndex[sharing[1]]=-1 #clear ti as a target
@@ -1280,96 +1284,149 @@ def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_ta
                             targIndex[sharing[0]]=-1
 
                 elif len(sharing)>2:
-                    #merged_IOU = torch.FloatTensor(len(sharing)).fill_(-1)
-                    center_points = np.array([pred[pi].getCenterPoint() for pi in sharing])
-                    sq_distances = np.power(center_points[None,:]-center_points[:,None],2).sum(axis=2)
-                    to_IOU = [pred[pi] for pi in sharing]
-                    to_IOU_index=[]
-                    pi_dists=[]
-                    for pi in sharing:
-                        pi_dist = [(i,d) for i,d in enumerate(sq_distances[pi]) if i!=pi]
-                        pi_dist.sort(key=lambda a:a[1])
-                        for neighbor_i,d in pi_dist[:N]:
-                            merged=TextLine(pred[pi],pred[neighbor_i])
-                            to_IOU_index.append(len(to_IOU))
-                            to_IOU.append(merged)
-                        pi_dists.append(pi_dist)
-                    IOUs = classPolyIOU(target[ti:ti+1],to_IOU,numClasses=0)
-                    i_want = defautdict(list)
-                    for pi,pi_dist in zip(sharing,pi_dists):
-                        for neighbor_i,d in pi_dist[:N]:
-                            merged_IOU = IOUs[to_IOU_index[0]]
-                            to_IOU_index=to_IOU_index[1:]
+                    #N=3
+                    #center_points = np.array([pred[pi].getCenterPoint() for pi in sharing])
+                    #sq_distances = np.power(center_points[None,:]-center_points[:,None],2).sum(axis=2)
+                    #to_IOU = [pred[pi] for pi in sharing]
+                    #to_IOU_index={}
+                    #pi_dists=[]
+                    #for pi_i,pi in enumerate(sharing):
+                    #    pi_dist = [(i,d) for i,d in enumerate(sq_distances[pi_i]) if i!=pi_i]
+                    #    pi_dist.sort(key=lambda a:a[1])
+                    #    for neighbor_i,d in pi_dist[:N]:
+                    #        merged=TextLine(pred[pi],pred[sharing[neighbor_i]])
+                    #        to_IOU_index[(pi,neighbor_i)]=len(to_IOU)
+                    #        to_IOU.append(merged)
+                    #    pi_dists.append(pi_dist)
+                    #IOUs = classPolyIOU(target[ti:ti+1],to_IOU,num_classes=0)[0]
 
-                            if merged_IOU>IOUs[pi]:
-                                i_want[pi].append(neighbor_i)
+                    #i_want = defaultdict(list)
+                    #for pi,pi_dist in zip(sharing,pi_dists):
+                    #    for neighbor_i,d in pi_dist[:N]:
+                    #        merged_IOU = IOUs[to_IOU_index[(pi,neighbor_i)]]
+                    #        print('t{}: {} <m {} = {} >? {}'.format(ti,pi,sharing[neighbor_i],merged_IOU,IOUs[pi_i]))
 
-                    bidirectional_wants = set()
-                    for pi,want_i in i_want.items():
-                        for w_i in want_i:
-                            if pi in i_want[w_i]:
-                                bidirectional_wants.add((min(pi,w_i),max(p_i,w_i)))
-                    bidir_groups = {}
-                    bidir_map = {}
-                    bidir_group_index=0
-                    unused_pis = set(sharing)
-                    for p1i,p2i in bidirectional_wants:
-                        try:
-                            unused_pis.remove(p1i)
-                        except ValueError:
-                            pass
-                        try:
-                            unused_pis.remove(p2i)
-                        except ValueError:
-                            pass
-                        if p1i in bidir_map and p2i in bidir_map:
-                            group1 = bidir_map[p1i]
-                            group2 = bidir_map[p2i]
-                            bidir_groups[group1].update(bidir_groups[group2])
-                            for pi in bidir_groups[group2]:
-                                bidir_map[pi] = group1
-                            del bidir_groups[group2]
-                        elif p1i in bidir_map:
-                            bidir_groups[bidir_map[p1i]].add(p2i)
-                            bidir_map[p2i] = bidir_map[p1i]
-                        elif p2i in bidir_map:
-                            bidir_groups[bidir_map[p2i]].add(p1i)
-                            bidir_map[p1i] = bidir_map[p2i]
-                        else:
-                            bidir_groups[bidir_group_index]=set([p1i,p2i])
-                            bidir_map[p1i] = bidir_group_index
-                            bidir_map[p2i] = bidir_group_index
-                            bidir_group_index+=1
+                    #        if merged_IOU>IOUs[pi_i]:
+                    #            i_want[pi].append(sharing[neighbor_i])
 
-                    bidir_groups = list(bidir_groups.values())
-                    if pi in unused_pis:
-                        bidir_groups.append(set([pi]))
+                    #bidirectional_wants = set()
+                    #for pi,want_i in i_want.items():
+                    #    for w_i in want_i:
+                    #        if pi in i_want[w_i]:
+                    #            bidirectional_wants.add((min(pi,w_i),max(pi,w_i)))
+                    #print('t{}: bidirectional_wants = {}'.format(ti,bidirectional_wants))
+                    #bidir_groups = {}
+                    #bidir_map = {}
+                    #bidir_group_index=0
+                    #unused_pis = set(sharing)
+                    #for p1i,p2i in bidirectional_wants:
+                    #    try:
+                    #        unused_pis.remove(p1i)
+                    #    except KeyError:
+                    #        pass
+                    #    try:
+                    #        unused_pis.remove(p2i)
+                    #    except KeyError:
+                    #        pass
+                    #    if p1i in bidir_map and p2i in bidir_map:
+                    #        group1 = bidir_map[p1i]
+                    #        group2 = bidir_map[p2i]
+                    #        if group1!=group2:
+                    #            bidir_groups[group1]+=bidir_groups[group2]
+                    #            for pi in bidir_groups[group2]:
+                    #                bidir_map[pi] = group1
+                    #            del bidir_groups[group2]
+                    #    elif p1i in bidir_map:
+                    #        bidir_groups[bidir_map[p1i]].append(p2i)
+                    #        bidir_map[p2i] = bidir_map[p1i]
+                    #    elif p2i in bidir_map:
+                    #        bidir_groups[bidir_map[p2i]].append(p1i)
+                    #        bidir_map[p1i] = bidir_map[p2i]
+                    #    else:
+                    #        bidir_groups[bidir_group_index]=[p1i,p2i]
+                    #        bidir_map[p1i] = bidir_group_index
+                    #        bidir_map[p2i] = bidir_group_index
+                    #        bidir_group_index+=1
+                    #    #print('t{}:   bidir_groups={}'.format(ti,bidir_groups))
 
-                    if len(bidir_groups)>1:
-                        #find the best group
-                        
-                        final_IOUs={}
-                        best_IOU=0
-                        best_IOU_i=0
-                        for gi,group in enumerate(bidir_groups):
-                            if len(group)==1:
-                                if IOUs[group[0]] > best_IOU:
-                                    best_IOU=IOUs[group[0]]
-                                    best_IOU_i=gi
-                            else:
-                                merged=TextLine(pred[group[0]],pred[group[1]])
-                                for pi in group[2:]:
-                                    merged.merge(TextLine(pred[pi]))
-                                IOU = classPolyIOU(target[ti:ti+1],[merged],numClasses=0)
-                                if IOU>best_IOU:
-                                    best_IOU=IOU
-                                    best_IOU_i=gi
+                    #bidir_groups = list(bidir_groups.values())
+                    #for pi in unused_pis:
+                    #    bidir_groups.append([pi])
+                    #print('t{}: bidir_groups = {}'.format(ti,bidir_groups))
+                    #candidate_groups=bidir_groups
+                    #if len(candidate_groups)>1:
+                    #    #find the best group
+                    #    
+                    #    final_IOUs={}
+                    #    best_IOU=0
+                    #    best_IOU_i=0
+                    #    for gi,group in enumerate(candidate_groups):
+                    #        if len(group)==1:
+                    #            index = sharing.index(group[0])
+                    #            if IOUs[index] > best_IOU:
+                    #                best_IOU=IOUs[index]
+                    #                best_IOU_i=gi
+                    #        else:
+                    #            merged=TextLine(pred[group[0]],pred[group[1]])
+                    #            for pi in group[2:]:
+                    #                merged.merge(TextLine(pred[pi]))
+                    #            IOU = classPolyIOU(target[ti:ti+1],[merged],num_classes=0)
+                    #            if IOU>best_IOU:
+                    #                best_IOU=IOU
+                    #                best_IOU_i=gi
         
-                        #clear ti as target for all except best
-                        for gi,group in enumerate(bidir_groups):
-                            if gi!=best_IOU_i:
-                                for pi in group:
-                                    targIndex[pi]=-1
+                    #    #clear ti as target for all except best
+                    #    for gi,group in enumerate(candidate_groups):
+                    #        if gi!=best_IOU_i:
+                    #            for pi in group:
+                    #                targIndex[pi]=-1
+
+                    #divide matched predicitions into two groups based on size
+                    heights = [pred[pi].getHeight() for pi in sharing]
+                    heights.sort()
+                    min_h = heights[0]
+                    max_h = heights[-1]
+                    small_group = []
+                    big_group = []
+                    for pi in sharing:
+                        diff_min = pred[pi].getHeight()-min_h
+                        diff_max = max_h-pred[pi].getHeight()
+                        if diff_min<diff_max:
+                            small_group.append(pi)
+                        else:
+                            big_group.append(pi)
+                    
+                    if len(small_group)==1:
+                        merged_small = pred[small_group[0]]
+                    else:
+                        merged_small=TextLine(pred[small_group[0]],pred[small_group[1]])
+                        for pi in small_group[2:]:
+                            merged.merge(pred[pi])
+
+                    if len(big_group)==1:
+                        merged_big = pred[big_group[0]]
+                    else:
+                        merged_big=TextLine(pred[big_group[0]],pred[big_group[1]])
+                        for pi in big_group[2:]:
+                            merged.merge(pred[pi])
+
+                    merged_all = TextLine(merged_small,merged_big)
+
+                    IOUs = classPolyIOU(target[ti:ti+1],[merged_small,merged_big,merged_all],num_classes=0)[0]
+
+                    if IOUs[0]>IOUs[1] and IOUs[0]>IOUs[2]: #small is best
+                        for pi in big_group:
+                            targIndex[pi]=-1
+                    elif IOUs[1]>IOUs[0] and IOUs[1]>IOUs[2]: #big is best
+                        for pi in small_group:
+                            targIndex[pi]=-1
+                    #elif IOUs[2]>IOUs[0] and IOUs[2]>IOUs[1]: #all is best
+                    #    pass
+                    #else:
+
+                    print('t{}: small:{}={}, big:{}={}, all={}'.format(small_group,
+
+
 
                 #else it's just 1
                 
