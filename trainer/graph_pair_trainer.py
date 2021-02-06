@@ -589,7 +589,7 @@ class GraphPairTrainer(BaseTrainer):
                 # alignment from pred to target (-1 if none), each GT has only one pred
                 # targIndex = alginment from pred to target (-1 if none) based on IO_clippedU thresh, not class
                 if self.model_ref.useCurvedBBs:
-                    targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,self.gt_bb_align_IOcU_thresh,numClasses,True,self.picky_merging)
+                    targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,self.gt_bb_align_IOcU_thresh,numClasses,True,self.picky_merging and not merge_only)
                 elif self.model_ref.rotation:
                     assert(False and 'untested and should be changed to reflect new newGetTargIndexForPreds_s')
                     targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
@@ -2315,7 +2315,7 @@ class GraphPairTrainer(BaseTrainer):
         num_giter = len(allOutputBoxes)
         for graphIteration,(outputBoxes,edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allOutputBoxes,allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
             if self.model_ref.useCurvedBBs:
-                targIndex = newGetTargIndexForPreds_textLines(targetBoxes.cpu(),outputBoxes,self.gt_bb_align_IOcU_thresh,numClasses,True,self.picky_merging)
+                targIndex = newGetTargIndexForPreds_textLines(targetBoxes.cpu(),outputBoxes,self.gt_bb_align_IOcU_thresh,numClasses,True,self.picky_merging and (graphIteration>0 or not self.model.merge_first))
             elif self.model_ref.rotation:
                 assert(False and 'untested and should be changed to reflect new newGetTargIndexForPreds_s')
                 targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes,outputBoxes,1.1,numClasses,hard_thresh=False)
