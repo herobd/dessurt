@@ -133,7 +133,11 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                 if useTextLines:
                     pts = bbs[j].polyPoints()
                     pts = pts.reshape((-1,1,2))
-                    img_f.polylines(image,pts.astype(np.int),'transparent',color,lineWidth)
+                    if verbosity<3 or bbAlignment[j].item()!=-1:
+                        fill = 'transparent'
+                    else:
+                        fill = False
+                    img_f.polylines(image,pts.astype(np.int),fill,color,lineWidth)
                     x,y = bbs[j].getCenterPoint()
                     x=int(x)
                     y=int(y)
