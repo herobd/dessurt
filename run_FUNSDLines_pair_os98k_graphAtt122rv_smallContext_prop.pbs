@@ -33,4 +33,4 @@ cd ~/pairing
 #source pairing/bin/activate
 source activate /fslhome/brianld/miniconda3/envs/new
 
-python  train.py -c configs/cf_FUNSDLines_pair_os98k_graphAtt122rv_smallContext_prop.json -s saved/FUNSDLines_pair_os98k_graphAtt122rv_smallContext_prop/checkpoint-latest.pth
+python  train.py --supercomputer -c configs/cf_FUNSDLines_pair_os98k_graphAtt122rv_smallContext_prop.json -s saved/FUNSDLines_pair_os98k_graphAtt122rv_smallContext_prop/checkpoint-latest.pth

@@ -1,11 +1,9 @@
 {
-    "name": "FUNSD_pair_os100k2_graphNAtt663rvCon4_sc_prop_nms_stctAln_smooth_mfl_small_FAST",
+    "name": "FUNSDLines_pair_os98k_graphNAtt663rvCon4_sc_prop_nms_pickyAlign_smooth_mfl",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
-    "super_computer":true,
-    "lr_scheduler_type": "none",
     "data_loader": {
         "data_set_name": "FUNSDGraphPair",
         "data_dir": "../data/FUNSD",
@@ -17,8 +15,9 @@
         "color":false,
         "rescale_range": [0.8,1.2],
         "crop_params": {
+            "SMALLcrop_size":[200,400],
             "crop_size":[600,800],
-            "pad":50
+	    "pad":50
         }
 
 
@@ -29,11 +28,14 @@
         "crop_params": null,
         "batch_size": 1
     },
+
+    
+    "lr_scheduler_type": "none",
  
-    "optimizer_type": "AdamW",
+    "optimizer_type": "Adam",
     "optimizer": {
-        "lr": 0.5,
-        "weight_decay": 0.01
+        "lr": 0.001,
+        "weight_decay": 0
     },
     "loss": {
         "overseg": "MultiScaleOversegmentLoss",
@@ -61,13 +63,13 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 250000,
+        "iterations": 800000,
         "swa": true,
-        "swa_start": 200000,
-        "swa_c_iters": 5000,
+        "swa_start": 600000,
+        "swa_c_iters": 10000,
         "save_dir": "saved/",
-        "val_step": 5000,
-        "save_step": 25000,
+        "val_step": 20000,
+        "save_step": 20000,
         "save_step_minor": 250,
         "log_step": 250,
         "verbosity": 1,
@@ -83,7 +85,7 @@
         "train_hard_detect_limit": 2000,
 
         "merge_first_only_until": 1000,
-        "init_merge_rule": "adjacent",
+        "init_merge_rule": "picky",
 
         "unfreeze_detector": 2000,
         "partial_from_gt": 0,
@@ -93,12 +95,8 @@
 
         "freeze_param_names": ["text_rec"],
 
-        "use_learning_schedule": "multi_rise with cyclic_full then swa",
+        "use_learning_schedule": "multi_rise",
         "warmup_steps": [1000,2000],
-        "warmup_cap": 0.1,
-        "min_lr_mul": 0.005,
-        "cycle_size": 50000,
-        "swa_lr_mul": 0.001,
         "adapt_lr": false
     },
     "arch": "PairingGroupingGraph", 
@@ -111,7 +109,7 @@
 
         "graph_four_connected": true,
         "relationship_proposal": "feature_nn",
-	"rel_hard_thresh": 0.1,
+        "rel_hard_thresh": 0.1,
         "rel_merge_hard_thresh": 0.3,
         "max_rel_to_keep": 1000,
         "max_merge_rel_to_keep": 6000,

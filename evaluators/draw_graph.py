@@ -33,7 +33,7 @@ def plotRect(img,color,xyrhw,lineWidth=1):
     img_f.line(img,bl,tl,color,lineWidth)
 
 
-def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,image,predTypes,missedRels,targetBoxes,classMap,path,verbosity=2,bbTrans=None,useTextLines=False,targetGroups=None,targetPairs=None):
+def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,image,predTypes,missedRels,targetBoxes,classMap,path,verbosity=2,bbTrans=None,useTextLines=False,targetGroups=None,targetPairs=None,bbAlignment=None):
     #for graphIteration,(outputBoxes,nodePred,edgePred,edgeIndexes,predGroups) in zip(allOutputBoxes,allNodePred,allEdgePred,allEdgeIndexes,allPredGroups):
         if bbTrans is not None:
             transPath = path[:-3]+'txt'
@@ -133,7 +133,11 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                 if useTextLines:
                     pts = bbs[j].polyPoints()
                     pts = pts.reshape((-1,1,2))
-                    img_f.polylines(image,pts.astype(np.int),'transparent',color,lineWidth)
+                    if verbosity<3 or bbAlignment[j].item()!=-1:
+                        fill = 'transparent'
+                    else:
+                        fill = False
+                    img_f.polylines(image,pts.astype(np.int),fill,color,lineWidth)
                     x,y = bbs[j].getCenterPoint()
                     x=int(x)
                     y=int(y)
@@ -165,19 +169,19 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                     image[y+4,x-4:x+5]=color
 
 
-                if verbosity>3 and predNN is not None:
-                    targ_j = bbAlignment[j].item()
-                    if targ_j>=0:
-                        gtNN = target_num_neighbors[0,targ_j].item()
-                    else:
-                        gtNN = 0
-                    pred_nn = predNN[j].item()
-                    color2 = min(abs(pred_nn-gtNN),1)#*0.5
-                    img_f.putText(image,'{:.2}/{}'.format(pred_nn,gtNN),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(color2,0,0),2,cv2.LINE_AA)
-                if bbTrans is not None:
-                    to_write_text.append(('{}'.format(j),(int(x),int(y)),(int(round(color[0]*255)),int(round(color[1]*255)),int(round(color[2]*255)))))
-                    #img_f.putText(image,'{}'.format(j),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,color,2,cv2.LINE_AA)
-                    transOut.write('{}: {}\n'.format(j,bbTrans[j]))
+                #if verbosity>3 and predNN is not None:
+                #    targ_j = bbAlignment[j].item()
+                #    if targ_j>=0:
+                #        gtNN = target_num_neighbors[0,targ_j].item()
+                #    else:
+                #        gtNN = 0
+                #    pred_nn = predNN[j].item()
+                #    color2 = min(abs(pred_nn-gtNN),1)#*0.5
+                #    img_f.putText(image,'{:.2}/{}'.format(pred_nn,gtNN),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(color2,0,0),2,cv2.LINE_AA)
+                #if bbTrans is not None:
+                #    to_write_text.append(('{}'.format(j),(int(x),int(y)),(int(round(color[0]*255)),int(round(color[1]*255)),int(round(color[2]*255)))))
+                #    #img_f.putText(image,'{}'.format(j),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,color,2,cv2.LINE_AA)
+                #    transOut.write('{}: {}\n'.format(j,bbTrans[j]))
         if bbTrans is not None:
             transOut.close()
             if len(to_write_text)>0:
@@ -326,16 +330,15 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
 
         #Draw alginment between gt and pred bbs
         if verbosity>3:
-            raise NotImplementedError('alginment lines not implemented')
-            for predI in range(bbs.shape[0]):
-                targI=bbAlignment[predI].item()
+            for bbI,bb in enumerate(outputBoxes):
                 if useTextLines:
-                    x1,y1 = bbs[predI].getCenterPoint()
-                    x1 = int(round(x1))
-                    y1 = int(round(y1))
+                    x1,y1 = bb.getCenterPoint()
                 else:
-                    x1 = int(round(bbs[predI,1]))
-                    y1 = int(round(bbs[predI,2]))
+                    x1=bb[1]
+                    y1=bb[2]
+                x1=int(x1)
+                y1=int(y1)
+                targI=bbAlignment[bbI].item()
                 if targI>0:
 
                     x2 = round(targetBoxes[0,targI,0].item())
