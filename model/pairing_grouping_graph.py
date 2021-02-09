@@ -2207,6 +2207,7 @@ class PairingGroupingGraph(BaseModel):
             try:
                 bb_features = self.reintroduce_node_visual_maps[0](node_vis_features) #this is an extra linear layer to prep the features for the graph (which expects non-activated values)
             except RuntimeError as e:
+                print('text_emb = {}'.format(text_emb))
                 print('node_vis_features: {}, layer: {}'.format(node_vis_features.size(),self.reintroduce_node_visual_maps[0]))
                 raise e
         else:

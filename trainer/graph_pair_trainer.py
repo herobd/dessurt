@@ -118,6 +118,8 @@ class GraphPairTrainer(BaseTrainer):
         if self.amp:
             self.scaler = torch.cuda.amp.GradScaler()
 
+        self.accum_grad_steps = config['trainer']['accum_grad_steps'] if 'accum_grad_steps' in config['trainer'] else 1
+
         #Name change
         if 'edge' in self.lossWeights:
             self.lossWeights['rel'] = self.lossWeights['edge']
@@ -204,8 +206,8 @@ class GraphPairTrainer(BaseTrainer):
         #t#self.opt_history['get data'].append(timeit.default_timer()-ticAll)#t#
         
         #t#tic=timeit.default_timer()#t##t#
-
-        self.optimizer.zero_grad()
+        if self.accum_grad_steps<2 or iteration%self.accum_grad_steps==1:
+            self.optimizer.zero_grad()
 
         ##toc=timeit.default_timer()
         ##print('for: '+str(toc-tic))
@@ -247,17 +249,20 @@ class GraphPairTrainer(BaseTrainer):
             loss += losses[name]
             losses[name] = losses[name].item()
         if len(losses)>0:
+            if self.accum_grad_steps>1:
+                loss /= self.accum_grad_steps
             if self.amp:
                 self.scaler.scale(loss).backward()
             else:
                 loss.backward()
 
-        torch.nn.utils.clip_grad_value_(self.model.parameters(),1)
-        if self.amp:
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
-        else:
-            self.optimizer.step()
+        if self.accum_grad_steps<2 or iteration%self.accum_grad_steps==0:
+            torch.nn.utils.clip_grad_value_(self.model.parameters(),1)
+            if self.amp:
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+            else:
+                self.optimizer.step()
         #t#self.opt_history['backprop'].append(timeit.default_timer()-tic)#t#
         meangrad=0
         count=0
