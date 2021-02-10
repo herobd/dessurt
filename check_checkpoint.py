@@ -13,5 +13,7 @@ if __name__ == '__main__':
     saved = torch.load(args.checkpoint,map_location=lambda storage, loc: storage)
 
     print(saved.keys())
+    #print(type(saved['logger'].entries))
+    print(saved['swa_state_dict']['n_averaged'])
     print(saved['iteration'])
 
