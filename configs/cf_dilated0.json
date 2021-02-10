@@ -32,7 +32,7 @@
         "iterations": 1000000,
         "save_dir": "saved/",
         "val_step": 2500,
-        "save_step": 10000,
+        "save_step": 25000,
         "log_step": 250,
         "verbosity": 2,
         "monitor": "val_meanIOU",

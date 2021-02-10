@@ -101,6 +101,7 @@ class GraphPairTrainer(BaseTrainer):
 
         self.merge_first_only_until = config['trainer']['merge_first_only_until'] if 'merge_first_only_until' in config['trainer'] else 100
         self.init_merge_rule = config['trainer']['init_merge_rule'] if 'init_merge_rule' in config['trainer'] else None
+        self.picky_merging = 'picky' in self.init_merge_rule if self.init_merge_rule is not None else False
 
         self.num_node_error_class = 0
         self.final_class_bad_alignment = False
@@ -116,6 +117,8 @@ class GraphPairTrainer(BaseTrainer):
         self.amp = config['trainer']['AMP'] if 'AMP' in config['trainer'] else False
         if self.amp:
             self.scaler = torch.cuda.amp.GradScaler()
+
+        self.accum_grad_steps = config['trainer']['accum_grad_steps'] if 'accum_grad_steps' in config['trainer'] else 1
 
         #Name change
         if 'edge' in self.lossWeights:
@@ -203,8 +206,8 @@ class GraphPairTrainer(BaseTrainer):
         #t#self.opt_history['get data'].append(timeit.default_timer()-ticAll)#t#
         
         #t#tic=timeit.default_timer()#t##t#
-
-        self.optimizer.zero_grad()
+        if self.accum_grad_steps<2 or iteration%self.accum_grad_steps==1:
+            self.optimizer.zero_grad()
 
         ##toc=timeit.default_timer()
         ##print('for: '+str(toc-tic))
@@ -246,17 +249,20 @@ class GraphPairTrainer(BaseTrainer):
             loss += losses[name]
             losses[name] = losses[name].item()
         if len(losses)>0:
+            if self.accum_grad_steps>1:
+                loss /= self.accum_grad_steps
             if self.amp:
                 self.scaler.scale(loss).backward()
             else:
                 loss.backward()
 
-        torch.nn.utils.clip_grad_value_(self.model.parameters(),1)
-        if self.amp:
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
-        else:
-            self.optimizer.step()
+        if self.accum_grad_steps<2 or iteration%self.accum_grad_steps==0:
+            torch.nn.utils.clip_grad_value_(self.model.parameters(),1)
+            if self.amp:
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+            else:
+                self.optimizer.step()
         #t#self.opt_history['backprop'].append(timeit.default_timer()-tic)#t#
         meangrad=0
         count=0
@@ -588,7 +594,7 @@ class GraphPairTrainer(BaseTrainer):
                 # alignment from pred to target (-1 if none), each GT has only one pred
                 # targIndex = alginment from pred to target (-1 if none) based on IO_clippedU thresh, not class
                 if self.model_ref.useCurvedBBs:
-                    targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,self.gt_bb_align_IOcU_thresh,numClasses,True)
+                    targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,self.gt_bb_align_IOcU_thresh,numClasses,True,self.picky_merging and not merge_only)
                 elif self.model_ref.rotation:
                     assert(False and 'untested and should be changed to reflect new newGetTargIndexForPreds_s')
                     targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
@@ -742,7 +748,7 @@ class GraphPairTrainer(BaseTrainer):
             wasOverSeg = bothTarged*(g_len_R==1)*(g_len_L==1)*same_ts_0
             if not merge_only or self.init_merge_rule is None:
                 pass
-            elif self.init_merge_rule=='adjacent':
+            elif 'adjacent' in self.init_merge_rule or self.picky_merging:
                 tx,ty,bx,by = zip(* [outputBoxes[n].boundingRect() for n in nodes_with_edges])
                 tx = torch.FloatTensor(tx).to(edge_loss_device)
                 ty = torch.FloatTensor(ty).to(edge_loss_device)
@@ -788,8 +794,15 @@ class GraphPairTrainer(BaseTrainer):
 
                 wasOverSeg *= overlapping+close_ends.to(edge_loss_device) #refine candidates by rule
 
+                if self.picky_merging:
+                    h_L = by_L-ty_L
+                    h_R = by_R-ty_R
+                    h_ratio = torch.min(h_L,h_R)/torch.max(h_L,h_R)
+                    matching_height = h_ratio>0.8#self.height_ratio_thresh
+                    wasOverSeg *= matching_height
+
             else:
-                raise NotImplementedError('Unknown merge rule: {}'.format(self.merge_rule))
+                raise NotImplementedError('Unknown init merge rule: {}'.format(self.init_merge_rule))
             
             wasGroup = bothTarged*((g_len_L>1)+(g_len_R>1)+~same_ts_0)*bothPure*same_GTGroups
             wasNoGroup = badTarged+(bothTarged*((g_len_L>1)+(g_len_R>1)+~same_ts_0)*bothPure*~same_GTGroups)
@@ -1588,6 +1601,7 @@ class GraphPairTrainer(BaseTrainer):
         #for graphIteration in range(len(allEdgePred)):
         allEdgePredTypes=[]
         allMissedRels=[]
+        allBBAlignment=[]
         proposedInfo=None
         mergeProposedInfo=None
 
@@ -1618,6 +1632,7 @@ class GraphPairTrainer(BaseTrainer):
                 #t#self.opt_history['newAlignEdgePred gI{}'.format(graphIteration)].append(timeit.default_timer()-tic2)#t#
                 allEdgePredTypes.append(edgePredTypes)
                 allMissedRels.append(missedRels)
+                allBBAlignment.append(bbAlignment)
                 if graphIteration==0 and merged_first:
                     mergeProposedInfo=proposedInfoI
                 elif (graphIteration==0 and not merged_first) or (graphIteration==1 and merged_first):
@@ -1971,6 +1986,8 @@ class GraphPairTrainer(BaseTrainer):
                  got[name] = allEdgePredTypes
             elif name=='allMissedRels':
                  got[name] = allMissedRels
+            elif name=='allBBAlignment':
+                 got[name] = allBBAlignment
             elif name=='final':
                  got[name] = final
             elif name=='final_edgePredTypes':
@@ -2303,7 +2320,7 @@ class GraphPairTrainer(BaseTrainer):
         num_giter = len(allOutputBoxes)
         for graphIteration,(outputBoxes,edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allOutputBoxes,allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
             if self.model_ref.useCurvedBBs:
-                targIndex = newGetTargIndexForPreds_textLines(targetBoxes.cpu(),outputBoxes,self.gt_bb_align_IOcU_thresh,numClasses,True)
+                targIndex = newGetTargIndexForPreds_textLines(targetBoxes.cpu(),outputBoxes,self.gt_bb_align_IOcU_thresh,numClasses,True,self.picky_merging and (graphIteration>0 or not self.model.merge_first))
             elif self.model_ref.rotation:
                 assert(False and 'untested and should be changed to reflect new newGetTargIndexForPreds_s')
                 targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes,outputBoxes,1.1,numClasses,hard_thresh=False)

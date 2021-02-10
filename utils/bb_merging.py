@@ -57,7 +57,10 @@ class TextLine:
             self.point_pairs = list(clone.point_pairs) if clone.point_pairs is not None else None
         elif other is None:
             self.step_size = step_size
+            pred_bb_info_orig = pred_bb_info
             pred_bb_info = pred_bb_info.cpu().detach()
+            if pred_bb_info is pred_bb_info_orig:
+                pred_bb_info = pred_bb_info_orig.clone()
             self.all_conf = [pred_bb_info[0].item()]
             self.all_cls = [pred_bb_info[6:].numpy()]
             #assert(self.all_cls[0].shape[0]==4)
@@ -562,7 +565,7 @@ class TextLine:
             if i>=0:
                 horz_sum += math.sqrt((top[0]-top_points[i-1][0])**2 +(top[1]-top_points[i-1][1])**2)
                 horz_sum += math.sqrt((bot[0]-bot_points[i-1][0])**2 +(bot[1]-bot_points[i-1][1])**2)
-            vert_sum += math.sqrt((top[0]-bot[0])**2 + (top[0]- bot[0])**2)
+            vert_sum += math.sqrt((top[0]-bot[0])**2 + (top[1]- bot[1])**2)
         self.height = vert_sum/len(self.point_pairs)
         self.width = horz_sum/2
 

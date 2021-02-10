@@ -111,17 +111,19 @@ class PairingGroupingGraph(BaseModel):
         if 'detector_checkpoint' in config:
             if os.path.exists(config['detector_checkpoint']):
                 checkpoint = torch.load(config['detector_checkpoint'], map_location=lambda storage, location: storage)
+                checkpoint['config']['model']['arch'] = checkpoint['config']['arch']
             else:
                 checkpoint = None
                 print('Warning: unable to load {}'.format(config['detector_checkpoint']))
             detector_config = json.load(open(config['detector_config']))['model'] if 'detector_config' in config else checkpoint['config']['model']
             if checkpoint is None:
-                self.detector = eval(checkpoint['config']['arch'])(detector_config)
+                self.detector = eval(detector_config['arch'])(detector_config)
                 for p in self.detector.parameters():
                     import pdb;pdb.set_trace()
                     p.something = float('nan') #ensure this gets changed
             elif 'state_dict' in checkpoint:
-                self.detector = eval(checkpoint['config']['arch'])(detector_config)
+                #self.detector = eval(checkpoint['config']['arch'])(detector_config)
+                self.detector = eval(detector_config['arch'])(detector_config)
                 self.detector.load_state_dict(checkpoint['state_dict'])
                 #config['detector_config'] = checkpoint['config']['model']
             else:
@@ -129,6 +131,19 @@ class PairingGroupingGraph(BaseModel):
         else:
             detector_config = config['detector_config']
             self.detector = eval(detector_config['arch'])(detector_config)
+
+        if 'pretrained_backbone_checkpoint' in config:
+            if os.path.exists(config['pretrained_backbone_checkpoint']):
+                checkpoint = torch.load(config['pretrained_backbone_checkpoint'], map_location=lambda storage, location: storage)
+                detector_state_dict={}
+                for name,data in checkpoint['state_dict'].items():
+                    if name.startswith('detector.'):
+                        detector_state_dict[name[9:]]=data
+                self.detector.load_state_dict(detector_state_dict)
+            elif 'DONT_NEED_TO_LOAD_PRETRAINED' not in config or not config['DONT_NEED_TO_LOAD_PRETRAINED']:
+                raise FileNotFoundError('Could not find pretrained backbone: {}'.format(config['pretrained_backbone_checkpoint']))
+
+
 
         self.useCurvedBBs = 'OverSeg' in checkpoint['config']['arch']
         self.text_line_smoothness = config['text_line_smoothness'] if 'text_line_smoothness' in config else 'original' #200
@@ -2216,7 +2231,14 @@ class PairingGroupingGraph(BaseModel):
         node_vis_features = self.computeNodeVisualFeatures(features,features2,imageHeight,imageWidth,bbs,groups,text_emb,allMasks,merge_only,debug_image)
         if self.reintroduce_node_visual_maps is not None:
             #print('node_vis_features: {}'.format(node_vis_features.size()))
-            bb_features = self.reintroduce_node_visual_maps[0](node_vis_features) #this is an extra linear layer to prep the features for the graph (which expects non-activated values)
+            if node_vis_features.size(0)==0:
+                print(node_vis_features.size())
+            try:
+                bb_features = self.reintroduce_node_visual_maps[0](node_vis_features) #this is an extra linear layer to prep the features for the graph (which expects non-activated values)
+            except RuntimeError as e:
+                print('text_emb = {}'.format(text_emb))
+                print('node_vis_features: {}, layer: {}'.format(node_vis_features.size(),self.reintroduce_node_visual_maps[0]))
+                raise e
         else:
             bb_features = node_vis_features
         #rint('node features built')
