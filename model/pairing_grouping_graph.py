@@ -1479,7 +1479,9 @@ class PairingGroupingGraph(BaseModel):
                             r1 = bb1ToMerge.getReadPosition()
                             
                             #if they are horz (read orientation) offset too much (half height), don't merge
-                            #print('h0={}, h1={}, r0={}, r1={}, D: {}'.format(h0,h1,r0,r1,abs(r0-r1)<(h0+h1)/4))
+                            x,y = bb0ToMerge.getCenterPoint()
+                            if y>520 and y<575 and x>409 and x<709:
+                                print('h0={}, h1={}, r0={}, r1={}, D: {}'.format(h0,h1,r0,r1,abs(r0-r1)<(h0+h1)/4))
                             if abs(r0-r1)<(h0+h1)/4:
                                 continue
 
