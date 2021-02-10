@@ -1,10 +1,9 @@
 {
-    "name": "FUNSDLines_pair_binaryN333rv_noViz_prop_readGTDBert",
+    "name": "FUNSDLines_pair_graph663rv_noViz_prop_readGTHand",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
-    "super_computer":true,
     "data_loader": {
         "data_set_name": "FUNSDGraphPair",
         "data_dir": "../data/FUNSD",
@@ -117,38 +116,47 @@
         "fix_bi_dir": true,
         "reintroduce_visual_features": "fixed map",
         "graph_config": [
-            {
-            "arch": "BinaryPairReal",
+	    {
+            "arch": "MetaGraphNet",
             "in_channels": 512,
             "node_out": 5,
             "edge_out": 5,
-            "use_node_for_rel_pred": true,
-            "layers": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
-            "layers_bb": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
+            "num_layers": 6,
+            "num_heads": 4,
+            "repetitions": 1,
+            "use_repetition_res": false,
+            "encode_type": "attention",
+            "better_norm_attention": true,
             "merge_thresh": 0.8,
             "group_thresh": 0.95,
             "keep_edge_thresh": 0.1
         },
         {
-            "arch": "BinaryPairReal",
+            "arch": "MetaGraphNet",
             "in_channels": 512,
             "node_out": 5,
             "edge_out": 5,
-            "use_node_for_rel_pred": true,
-            "layers": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
-            "layers_bb": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
+            "num_layers": 6,
+            "num_heads": 4,
+            "repetitions": 1,
+            "use_repetition_res": false,
+            "encode_type": "attention",
+            "better_norm_attention": true,
             "merge_thresh": 0.9,
             "group_thresh": 0.9,
-            "keep_edge_thresh": 0.1
+            "keep_edge_thresh": 0.2
         },
         {
-            "arch": "BinaryPairReal",
+            "arch": "MetaGraphNet",
             "in_channels": 512,
             "node_out": 5,
             "edge_out": 5,
-            "use_node_for_rel_pred": true,
-            "layers": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
-            "layers_bb": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
+            "num_layers": 3,
+            "num_heads": 4,
+            "repetitions": 1,
+            "use_repetition_res": false,
+            "encode_type": "attention",
+            "better_norm_attention": true,
             "merge_thresh": 0.9,
             "group_thresh": 0.6,
             "keep_edge_thresh": 0.5
@@ -165,8 +173,8 @@
             "hw_with_style_file": "saved/allfontSmall_ocr_softmax/checkpoint-latest.pth",
             "input_height": 24,
             "char_set": "../data/english_char_set.json",
-            "embedding": "DistilBert",
-            "num_feats": 512
+            "embedding": "hand",
+            "num_feats": 256
         }
     }
 }

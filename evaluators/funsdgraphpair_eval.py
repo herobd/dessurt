@@ -27,7 +27,9 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         return acc_metrics
 
     if toEval is None:
-        toEval = ['allEdgePred','allEdgeIndexes','allNodePred','allOutputBoxes', 'allPredGroups', 'allEdgePredTypes','allMissedRels','final','final_edgePredTypes','final_missedRels']
+        toEval = ['allEdgePred','allEdgeIndexes','allNodePred','allOutputBoxes', 'allPredGroups', 'allEdgePredTypes','allMissedRels','final','final_edgePredTypes','final_missedRels','allBBAlignment']
+
+    draw_verbosity = config['draw_verbosity'] if 'draw_verbosity' in config else 2
 
     rel_thresholds = [config['THRESH']] if 'THRESH' in config else [0.5]
     if ('sweep_threshold' in config and config['sweep_threshold']) or ('sweep_thresholds' in config and config['sweep_thresholds']):
@@ -222,7 +224,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
                     #for j in range(metricsOut.shape[1]):
                 #    saveName+='_m:{0:.3f}'.format(metricsOut[i,j])
                 path = os.path.join(outDir,saveName+'.png')
-                draw_graph(outputBoxes,trainer.model.used_threshConf,bbPred.cpu().detach() if bbPred is not None else None,torch.sigmoid(edgePred).cpu().detach(),relIndexes,predGroups,data,edgePredTypes,missedRels,targetBoxes,trainer.classMap,path,useTextLines=trainer.model.useCurvedBBs,targetGroups=instance['gt_groups'],targetPairs=instance['gt_groups_adj'])
+                draw_graph(outputBoxes,trainer.model.used_threshConf,bbPred.cpu().detach() if bbPred is not None else None,torch.sigmoid(edgePred).cpu().detach(),relIndexes,predGroups,data,edgePredTypes,missedRels,targetBoxes,trainer.classMap,path,useTextLines=trainer.model.useCurvedBBs,targetGroups=instance['gt_groups'],targetPairs=instance['gt_groups_adj'],verbosity=draw_verbosity,bbAlignment=out['allBBAlignment'][gIter])
                 #io.imsave(os.path.join(outDir,saveName),image)
                 #print('saved: '+os.path.join(outDir,saveName))
 

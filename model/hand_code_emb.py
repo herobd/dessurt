@@ -134,14 +134,14 @@ class HandCodeEmb(nn.Module):
 
 
     
-    def forward(self,transcriptions):
+    def forward(self,transcriptions,device):
         features = torch.FloatTensor(len(transcriptions),self.num_feats).zero_()
         for i, trans in enumerate(transcriptions):
             trans = trans.strip()
             for j, check in enumerate(self.feature_checks):
                 features[i,j] = check(self,trans)
 
-        features = features.to(self.emb_layers[0].weight.device)
+        features = features.to(device)
         return self.emb_layers(features)
 
 
