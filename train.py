@@ -165,8 +165,12 @@ if __name__ == '__main__':
     assert config is not None
 
     if args.gpu is not None:
-        config['gpu']=args.gpu
-        print('override gpu to '+str(config['gpu']))
+        if args.gpu>=0:
+            config['gpu']=args.gpu
+            print('override gpu to '+str(config['gpu']))
+        else:
+            config['cuda']=False
+            print('turned off CUDA')
     set_procname(config['name'])
 
     if args.rank is not None:
