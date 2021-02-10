@@ -120,7 +120,8 @@ class BaseTrainer:
             #if config['cuda']:
             #    self.swa_model = self.swa_model.to(self.gpu)
             self.swa_start = config['trainer']['swa_start'] if 'swa_start' in config['trainer'] else config['trainer']['weight_averaging_start']
-            self.swa_c_iters = config['trainer']['swa_c_iters'] if 'swa_c_iters' in config['trainer'] else config['trainer']['weight_averaging_c_iters']
+            #self.swa_c_iters = config['trainer']['swa_c_iters'] if 'swa_c_iters' in config['trainer'] else config['trainer']['weight_averaging_c_iters']
+            self.swa_avg_every = config['trainer']['swa_avg_every'] if 'swa_avg_every' in config['trainer'] else 0
             assert(self.val_step>=self.swa_c_iters) #otherwise we'll start evaluating more than the (swa)model is updated
 
 
@@ -282,12 +283,13 @@ class BaseTrainer:
             #print('iter: '+str(elapsed_time))
 
             #Stochastic Weight Averaging    https://github.com/timgaripov/swa/blob/master/train.py
-            if self.swa and self.iteration>=self.swa_start and (self.iterations-self.swa_start)%self.swa_c_iters==0:
+            if self.swa and self.iteration>=self.swa_start and (self.swa_avg_every==0 or (self.iteration-self.swa_start)%self.swa_avg_every==0):
                 #swa_n = (self.iterations-self.swa_start)//self.swa_c_iters
                 #moving_average(self.swa_model, self.model, 1.0 / (swa_n + 1))
                 #swa_n += 1
                 if self.swa_model is None:
                     self.swa_model = AveragedModel(self.model)
+                import pdb;pdb.set_trace()
                 self.swa_model.update_parameters(self.model)
 
             if self.side_process:
