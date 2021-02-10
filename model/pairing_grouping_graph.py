@@ -133,6 +133,7 @@ class PairingGroupingGraph(BaseModel):
         self.useCurvedBBs = 'OverSeg' in checkpoint['config']['arch']
         self.text_line_smoothness = config['text_line_smoothness'] if 'text_line_smoothness' in config else 'original' #200
         self.use_overseg_non_max_sup = config['overseg_non_max_sup'] if 'overseg_non_max_sup' in config else False
+        self.prevent_vert_merges = config['prevent_vert_merges'] if 'prevent_vert_merges' in config else False
 
         self.fully_connected = config['fully_connected'] if 'fully_connected' in config else False
         self.graph_min_degree = config['graph_min_degree'] if 'graph_min_degree' in config else None
@@ -1454,6 +1455,19 @@ class PairingGroupingGraph(BaseModel):
 
                         newId1 = oldToNewBBIndexes[bbId1]
                         bb1ToMerge = bbs[newId1]
+
+                        if self.prevent_vert_merges:
+                            #This will introduce slowdowns as we are computing each partail merge instead of waiting till all merges are found
+                            h0 = bb0ToMerge.getHeight()
+                            r0 = bb0ToMerge.getReadPosition()
+                            h1 = bb1ToMerge.getHeight()
+                            r1 = bb1ToMerge.getReadPosition()
+                            
+                            #if they are horz (read orientation) offset too much (half height), don't merge
+                            #print('h0={}, h1={}, r0={}, r1={}, D: {}'.format(h0,h1,r0,r1,abs(r0-r1)<(h0+h1)/4))
+                            if abs(r0-r1)<(h0+h1)/4:
+                                continue
+
 
 
                         if newId0!=newId1:
