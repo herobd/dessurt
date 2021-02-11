@@ -572,10 +572,11 @@ class TextLine:
         self.minx,self.miny = self.poly_points.min(axis=0)
         self.maxx,self.maxy = self.poly_points.max(axis=0)
 
-    def getReadPosition(self):
-        if self.median_angle is None:
-            self.compute()
-        angle = self.median_angle
+    def getReadPosition(self,angle=None):
+        if angle is None:
+            if self.median_angle is None:
+                self.compute()
+            angle = self.median_angle
         slope = -math.tan(angle)
         xc,yc = self.center_point
 
