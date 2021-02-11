@@ -122,7 +122,7 @@ class BaseTrainer:
             self.swa_start = config['trainer']['swa_start'] if 'swa_start' in config['trainer'] else config['trainer']['weight_averaging_start']
             #self.swa_c_iters = config['trainer']['swa_c_iters'] if 'swa_c_iters' in config['trainer'] else config['trainer']['weight_averaging_c_iters']
             self.swa_avg_every = config['trainer']['swa_avg_every'] if 'swa_avg_every' in config['trainer'] else 0
-            assert(self.val_step>=self.swa_c_iters) #otherwise we'll start evaluating more than the (swa)model is updated
+            assert(self.val_step>=self.swa_avg_every) #otherwise we'll start evaluating more than the (swa)model is updated
 
 
 
@@ -289,7 +289,6 @@ class BaseTrainer:
                 #swa_n += 1
                 if self.swa_model is None:
                     self.swa_model = AveragedModel(self.model)
-                import pdb;pdb.set_trace()
                 self.swa_model.update_parameters(self.model)
 
             if self.side_process:
