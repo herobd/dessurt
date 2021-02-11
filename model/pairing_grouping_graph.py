@@ -1473,16 +1473,18 @@ class PairingGroupingGraph(BaseModel):
 
                         if self.prevent_vert_merges:
                             #This will introduce slowdowns as we are computing each partail merge instead of waiting till all merges are found
+                            angle = (bb0ToMerge.medianAngle()+bb1ToMerge.medianAngle())/2
                             h0 = bb0ToMerge.getHeight()
-                            r0 = bb0ToMerge.getReadPosition()
+                            r0 = bb0ToMerge.getReadPosition(angle)
                             h1 = bb1ToMerge.getHeight()
-                            r1 = bb1ToMerge.getReadPosition()
+                            r1 = bb1ToMerge.getReadPosition(angle)
                             
                             #if they are horz (read orientation) offset too much (half height), don't merge
-                            x,y = bb0ToMerge.getCenterPoint()
-                            if y>520 and y<575 and x>409 and x<709:
-                                print('h0={}, h1={}, r0={}, r1={}, D: {}'.format(h0,h1,r0,r1,abs(r0-r1)<(h0+h1)/4))
-                            if abs(r0-r1)<(h0+h1)/4:
+                            #x,y = bb0ToMerge.getCenterPoint()
+                            #if y>990 and y<1110 and x>800 and x<1380:
+                            #    print('{},{}    h0={}, h1={}, r0={}, r1={}, D: {}'.format(int(x),int(y),h0,h1,r0,r1,abs(r0-r1)<(h0+h1)/4))
+                            #    print('rot0={}, rot1={}'.format(bb0ToMerge.medianAngle(),bb1ToMerge.medianAngle()))
+                            if abs(r0-r1)>(h0+h1)/4:
                                 continue
 
 
