@@ -721,7 +721,7 @@ class PairingGroupingGraph(BaseModel):
             print('Unfroze detector')
         
 
-    def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=5000, debug=False,old_nn=False,gtTrans=None,merge_first_only=False, useOnlyGTSpace=False):
+    def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=5000, debug=False,old_nn=False,gtTrans=None,merge_first_only=False, useOnlyGTSpace=False, gtGroups=None):
         assert(image.size(0)==1) #implementation designed for batch size of 1. Should work to do data parallelism, since each copy of the model will get a batch size of 1
         #t###tic=timeit.default_timer()#t#
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
@@ -953,6 +953,7 @@ class PairingGroupingGraph(BaseModel):
                 bbTrans = transcriptions
 
                 if self.merge_first and not useOnlyGTSpace:
+                    assert gtGroups is None
                     #t#tic=timeit.default_timer()#t#
                     #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
                     #We don't build a full graph, just propose edges and extract the edge features
@@ -1101,7 +1102,8 @@ class PairingGroupingGraph(BaseModel):
                             bbTrans,
                             image,
                             good_edges=good_edges,
-                            keep_edges=keep_edges)
+                            keep_edges=keep_edges,
+                            gt_groups=gtGroups if gIter==0 else None)
 
                     if self.reintroduce_visual_features:
                         graph,last_node_visual_feats,last_edge_visual_feats = self.appendVisualFeatures(
@@ -1425,7 +1427,8 @@ class PairingGroupingGraph(BaseModel):
             skip_rec=False,
             merge_only=False,
             good_edges=None,
-            keep_edges=None):
+            keep_edges=None,
+            gt_groups=None):
         #assert(len(oldBBs)==0 or type(oldBBs[0]) is TextLine)
         assert(oldNodeFeats is None or oldGroups is None or oldNodeFeats.size(0)==len(oldGroups))
         oldNumGroups=len(oldGroups)
@@ -1448,6 +1451,17 @@ class PairingGroupingGraph(BaseModel):
             #relPreds = torch.sigmoid(edgePredictions[:,-1,1]).cpu().detach()
             mergePreds = torch.sigmoid(edgePredictions[:,-1,2]).cpu().detach()
             groupPreds = torch.sigmoid(edgePredictions[:,-1,3]).cpu().detach()
+            if gt_groups:
+                #just rewrite the predictions
+                gt_groups_map={}
+                for i,group in enumerate(gt_groups):
+                    for n in group:
+                        gt_groups_map[n]=i
+                for i,(n0,n1) in enumerate(oldEdgeIndexes):
+                    if gt_groups_map[n0] == gt_groups_map[n1]:
+                        groupPreds[i]=1
+                    else:
+                        groupPreds[i]=0
         else:
             mergePreds = torch.sigmoid(edgePredictions[:,-1,0]).cpu().detach()
         ##Prevent all nodes from merging during first iterations (bad init):

@@ -1475,7 +1475,7 @@ class GraphPairTrainer(BaseTrainer):
 
 
 
-    def newRun(self,instance,useGT,threshIntur=None,get=[],useOnlyGTSpace=False):
+    def newRun(self,instance,useGT,threshIntur=None,get=[],useOnlyGTSpace=False,useGTGroups=False):
         assert(not self.model_ref.predNN)
         numClasses = len(self.classMap)
         image, targetBoxes, adj, target_num_neighbors = self._to_tensor(instance)
@@ -1552,6 +1552,8 @@ class GraphPairTrainer(BaseTrainer):
                 targetBoxes_changed[:,:,-numBBTypes:]=0 #zero out other information to ensure results aren't contaminated
                 #useCurved doesnt include class
 
+
+
             allOutputBoxes, outputOffsets, allEdgePred, allEdgeIndexes, allNodePred, allPredGroups, rel_prop_pred,merge_prop_scores, final = self.model(
                                 image,
                                 targetBoxes_changed,
@@ -1562,7 +1564,8 @@ class GraphPairTrainer(BaseTrainer):
                                 otherThreshIntur=threshIntur, 
                                 hard_detect_limit=self.train_hard_detect_limit,
                                 gtTrans = gtTrans,
-                                merge_first_only = self.iteration<self.merge_first_only_until)
+                                merge_first_only = self.iteration<self.merge_first_only_until,
+                                gtGroups = gtGroups if useGTGroups else None)
             #TODO
             #predPairingShouldBeTrue,predPairingShouldBeFalse, eRecall,ePrec,fullPrec,ap,proposedInfo = self.prealignedEdgePred(adj,relPred,relIndexes,rel_prop_pred)
             #if bbPred is not None:
