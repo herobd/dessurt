@@ -866,7 +866,7 @@ class PairingGroupingGraph(BaseModel):
                     gtGroups = [[gt_to_new[gt_i] for gt_i in group] for group in gtGroups]
 
                 useBBs = torch.stack(useBBs,dim=0).to(saved_features.device)
-                assert(useBBs.size(0) == gtBBs.size(0))
+                assert self.training or useBBs.size(0) == gtBBs.size(0)
                 assert self.include_bb_conf or self.useCurvedBBs
                 #if self.useCurvedBBs and self.use_overseg_non_max_sup:
                 #    useBBs = non_max_sup_overseg(useBBs)
