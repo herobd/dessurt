@@ -930,7 +930,7 @@ class PairingGroupingGraph(BaseModel):
             useBBs = [TextLine(bb,step_size=self.text_line_smoothness) for bb in useBBs] #self.x1y1x2y2rToCurved(useBBs)
 
         if self.text_rec is not None:
-            if (useGTBBs or useOnlyGTSpace) and gtTrans is not None: # and len(gtTrans)==useBBs.size[0]:
+            if (useGTBBs or useOnlyGTSpace) and gtTrans is not None and len(gtTrans)==len(useBBs):
                 transcriptions = gtTrans
             elif not self.merge_first: #skip if oversegmented, for speed
                 transcriptions = self.getTranscriptions(useBBs,image)
