@@ -1549,6 +1549,7 @@ class GraphPairTrainer(BaseTrainer):
                 targetBoxes_changed=targetBoxes
 
             if useOnlyGTSpace and not self.model_ref.useCurvedBBs:
+                targetBoxes_changed=targetBoxes_changed.clone()
                 targetBoxes_changed[:,:,-numBBTypes:]=0 #zero out other information to ensure results aren't contaminated
                 #useCurved doesnt include class
 
@@ -1633,6 +1634,7 @@ class GraphPairTrainer(BaseTrainer):
                         merge_only= graphIteration==0 and merged_first
                         )
                 #t#self.opt_history['newAlignEdgePred gI{}'.format(graphIteration)].append(timeit.default_timer()-tic2)#t#
+
                 allEdgePredTypes.append(edgePredTypes)
                 allMissedRels.append(missedRels)
                 allBBAlignment.append(bbAlignment)
@@ -1902,9 +1904,10 @@ class GraphPairTrainer(BaseTrainer):
             num_class = len(self.scoreClassMap)
             minI = min(classMap.values())
             classMap = {v-minI:k for k,v in classMap.items()}
-            classIs = nodePred[:,-1,1:1+num_class].argmax(dim=1)
-            gt_classIs = targetBoxes[0,:,13:13+num_class].argmax(dim=1)
+            classIs = nodePred[:,-1,1:1+num_class].argmax(dim=1).tolist()
+            gt_classIs = targetBoxes[0,:,13:13+num_class].argmax(dim=1).tolist()
             unused_gt_adj = set(gtGroupAdj)
+            candidate_lists=defaultdict(list)
             for ei,(n0,n1) in enumerate(edgeIndexes):
                 gtG0 = predToGTGroup[n0]
                 gtG1 = predToGTGroup[n1]
@@ -1915,12 +1918,12 @@ class GraphPairTrainer(BaseTrainer):
                     unused_gt_adj.remove((min(gtG0,gtG1),max(gtG0,gtG1)))
                 
                 if (class0=='header' and class1=='question') or (class0=='question' and class1=='answer'):
-                    candidate_lists[gtG1].append((predEdge[ei,-1,0],true_pos))
+                    candidate_lists[gtG1].append((edgePred[ei,-1,0],true_pos))
                 elif (class1=='header' and class0=='question') or (class1=='question' and class0=='answer'):
-                    candidate_lists[gtG0].append((predEdge[ei,-1,0],true_pos))
+                    candidate_lists[gtG0].append((edgePred[ei,-1,0],true_pos))
                 else:
-                    candidate_lists[gtG0].append((predEdge[ei,-1,0],False))
-                    candidate_lists[gtG1].append((predEdge[ei,-1,0],False))
+                    candidate_lists[gtG0].append((edgePred[ei,-1,0],False))
+                    candidate_lists[gtG1].append((edgePred[ei,-1,0],False))
             for gtG0,gtG1 in unused_gt_adj:
                 class0=classMap[gt_classIs[gtG0]]
                 class1=classMap[gt_classIs[gtG1]]
@@ -1935,10 +1938,10 @@ class GraphPairTrainer(BaseTrainer):
             hit_at_5=0
 
             for gtG, candidate_list in candidate_lists.items():
-                if len(candidate_list)>1 or candidate_list[0][0]>=0:
-                    sum_ap += computeAP(candidate_list)
-                else:
-                    sum_ap += 0 #total miss
+                #if len(candidate_list)>1 or candidate_list[0][0]>=0:
+                #    sum_ap += computeAP(candidate_list)
+                #else:
+                #    sum_ap += 0 #total miss
 
                 candidate_list.sort(key=lambda a:a[0],reverse=True)
                 if candidate_list[0][1]:
@@ -1947,7 +1950,7 @@ class GraphPairTrainer(BaseTrainer):
                     hit_at_2 +=1
                 if any(a[1] for a in candidate_list[:5]):
                     hit_at_5 +=1
-            log['DocStruct mAP'] = sum_ap/len(candidate_lists) #not quite right. Need to add every other possible rel. A
+            #log['DocStruct mAP'] = sum_ap/len(candidate_lists) #not quite right. Need to add every other possible rel. A
             log['DocStruct hit@1'] = hit_at_1/len(candidate_lists)
             log['DocStruct hit@2'] = hit_at_2/len(candidate_lists)
             log['DocStruct hit@5'] = hit_at_5/len(candidate_lists)
@@ -2070,6 +2073,8 @@ class GraphPairTrainer(BaseTrainer):
                  got[name] = finalRelTypes
             elif name=='final_missedRels':
                  got[name] = finalMissedRels
+            elif name=='DocStruct':
+                got[name]=log['DocStruct hit@1']
             elif name != 'bb_stats' and name != 'nn_acc':
                 raise NotImplementedError('Cannot get [{}], unknown'.format(name))
         return losses, log, got
