@@ -227,17 +227,21 @@ class GraphPairTrainer(BaseTrainer):
         else:
             threshIntur = None
         useGT = self.useGT(iteration)
+        if useGT:
+            useOnlyGTSpace = random.random()<0.5
+        else:
+            useOnlyGTSpace = False
 
         #print('\t\t\t\t{} {}'.format(iteration,thisInstance['imgName']))
         if self.amp:
             with torch.cuda.amp.autocast():
                 if self.mergeAndGroup:
-                    losses, run_log, out = self.newRun(thisInstance,useGT,threshIntur)
+                    losses, run_log, out = self.newRun(thisInstance,useGT,threshIntur,useOnlyGTSpace=useOnlyGTSpace)
                 else:
                     losses, run_log, out = self.run(thisInstance,useGT,threshIntur)
         else:
             if self.mergeAndGroup:
-                losses, run_log, out = self.newRun(thisInstance,useGT,threshIntur)
+                losses, run_log, out = self.newRun(thisInstance,useGT,threshIntur,useOnlyGTSpace=useOnlyGTSpace)
             else:
                 losses, run_log, out = self.run(thisInstance,useGT,threshIntur)
         #t#self.opt_history['full run'].append(timeit.default_timer()-tic)#t#
@@ -1511,7 +1515,7 @@ class GraphPairTrainer(BaseTrainer):
                     assert((t_Ls[i]<=t_Rs[i]).all() and (t_Ts[i]<=t_Bs[i]).all())
 
                 #add some jitter
-                if not useOnlyGTSpace:
+                if self.model.training:
                     jitter_std=0.001
                     t_Ls = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Ls]
                     t_Ts = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Ts]
@@ -1546,10 +1550,16 @@ class GraphPairTrainer(BaseTrainer):
                 r = targetBoxes[:,:,2]
                 targetBoxes_changed = torch.stack((x1,y1,x2,y2,r),dim=2) #leave out class information
             else:
-                targetBoxes_changed=targetBoxes
+                targetBoxes_changed=targetBoxes.clone()
+                if self.model.training:
+                    targetBoxes_changed[:,:,0] += targetBoxes_changed[:,:,0].new_empty().normal_(std=1)
+                    targetBoxes_changed[:,:,1] += targetBoxes_changed[:,:,1].new_empty().normal_(std=1)
+                    targetBoxes_changed[:,:,2] += targetBoxes_changed[:,:,1].new_empty().normal_(std=0.01)
+                    targetBoxes_changed[:,:,3] += targetBoxes_changed[:,:,3].new_empty().normal_(std=1)
+                    targetBoxes_changed[:,:,4] += targetBoxes_changed[:,:,4].new_empty().normal_(std=1)
+                    #we tweak the classes in the model
 
             if useOnlyGTSpace and not self.model_ref.useCurvedBBs:
-                targetBoxes_changed=targetBoxes_changed.clone()
                 targetBoxes_changed[:,:,-numBBTypes:]=0 #zero out other information to ensure results aren't contaminated
                 #useCurved doesnt include class
 
