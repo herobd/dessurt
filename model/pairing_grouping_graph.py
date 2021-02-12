@@ -1693,7 +1693,6 @@ class PairingGroupingGraph(BaseModel):
                         match_found=True
                         break
                 assert match_found
-            import pdb;pdb.set_trace()
 
 
         #Actually change bbs to list,  we'll adjusting appropriate values in groups as we convert groups to list
