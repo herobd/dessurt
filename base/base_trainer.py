@@ -122,7 +122,7 @@ class BaseTrainer:
             self.swa_start = config['trainer']['swa_start'] if 'swa_start' in config['trainer'] else config['trainer']['weight_averaging_start']
             #self.swa_c_iters = config['trainer']['swa_c_iters'] if 'swa_c_iters' in config['trainer'] else config['trainer']['weight_averaging_c_iters']
             self.swa_avg_every = config['trainer']['swa_avg_every'] if 'swa_avg_every' in config['trainer'] else 0
-            assert(self.val_step>=self.swa_c_iters) #otherwise we'll start evaluating more than the (swa)model is updated
+            assert(self.val_step>=self.swa_avg_every) #otherwise we'll start evaluating more than the (swa)model is updated
 
 
 
@@ -198,6 +198,21 @@ class BaseTrainer:
                     if step_num<step:
                         return (step_num-steps[i])*(0.99/(step-steps[i]))+.01
                 return 1.0
+            self.lr_schedule = torch.optim.lr_scheduler.LambdaLR(self.optimizer,riseLR)
+        elif self.useLearningSchedule=='multi_rise then swa':
+            steps = config['trainer']['warmup_steps']
+            warmup_cap = 1.0
+            swa_lr_mul = config['trainer']['swa_lr_mul'] if 'swa_lr_mul' in config['trainer'] else 0.001
+            assert(type(steps) is list)
+            steps=[0]+steps
+            def riseLR(step_num):
+                if step_num<self.swa_start:
+                    for i,step in enumerate(steps[1:]):
+                        if step_num<step:
+                            return warmup_cap*((step_num-steps[i])*(0.99/(step-steps[i]))+.01)
+                    return 1.0
+                else:
+                    return swa_lr_mul
             self.lr_schedule = torch.optim.lr_scheduler.LambdaLR(self.optimizer,riseLR)
         elif self.useLearningSchedule=='multi_rise with cyclic_full then swa':
             steps = config['trainer']['warmup_steps']
@@ -289,7 +304,6 @@ class BaseTrainer:
                 #swa_n += 1
                 if self.swa_model is None:
                     self.swa_model = AveragedModel(self.model)
-                import pdb;pdb.set_trace()
                 self.swa_model.update_parameters(self.model)
 
             if self.side_process:
