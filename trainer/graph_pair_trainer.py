@@ -1491,6 +1491,7 @@ class GraphPairTrainer(BaseTrainer):
             gtTrans = None
         #t#tic=timeit.default_timer()#t##t#
         if (useGT or useOnlyGTSpace) and targetBoxes is not None:
+            numBBTypes = self.model_ref.numBBTypes
             if self.model_ref.useCurvedBBs and not useOnlyGTSpace:
                 #build targets of GT to pass as detections
                 ph_boxes = [torch.zeros(1,1,1,1,1)]*3
@@ -1500,7 +1501,6 @@ class GraphPairTrainer(BaseTrainer):
                 numAnchors = self.model_ref.detector.numAnchors
                 numBBParams = self.model_ref.detector.numBBParams
                 numBBParams = self.model_ref.detector.numBBParams
-                numBBTypes = self.model_ref.numBBTypes
                 grid_sizesH=[image.size(2)//s[0] for s in scale]
                 grid_sizesW=[image.size(3)//s[0] for s in scale]
 
@@ -1886,6 +1886,76 @@ class GraphPairTrainer(BaseTrainer):
                     log['bb_allRecall_{}'.format(graphIteration)]=allRecall
                     log['bb_allFm_{}'.format(graphIteration)]= 2*allPrec*allRecall/(allPrec+allRecall) if allPrec+allRecall>0 else 0
 
+        #We'll use information from the final prediction before the final pruning
+        if 'DocStruct' in get:
+            predToGTGroup={}
+            gtGroupToPred={}
+            for node in range(len(predGroups)):
+                predTargGroup = [bbAlignment[bb] for bb in predGroups[node] if bbAlignment[bb]>=0]
+                if len(predTargGroup)>0:
+                    gtGroup = getGTGroup(predTargGroup,targetIndexToGroup)
+                    predToGTGroup[node]=gtGroup
+                    assert gtGroup not in gtGroupToPred #shouldn't happend with gt detections and grouping
+                    gtGroupToPred[gtGroup]=node
+            
+            classMap = self.scoreClassMap
+            num_class = len(self.scoreClassMap)
+            minI = min(classMap.values())
+            classMap = {v-minI:k for k,v in classMap.items()}
+            classIs = nodePred[:,-1,1:1+num_class].argmax(dim=1)
+            gt_classIs = targetBoxes[0,:,13:13+num_class].argmax(dim=1)
+            unused_gt_adj = set(gtGroupAdj)
+            for ei,(n0,n1) in enumerate(edgeIndexes):
+                gtG0 = predToGTGroup[n0]
+                gtG1 = predToGTGroup[n1]
+                class0 = classMap[classIs[n0]]
+                class1 = classMap[classIs[n1]]
+                true_pos = (min(gtG0,gtG1),max(gtG0,gtG1)) in gtGroupAdj
+                if true_pos:
+                    unused_gt_adj.remove((min(gtG0,gtG1),max(gtG0,gtG1)))
+                
+                if (class0=='header' and class1=='question') or (class0=='question' and class1=='answer'):
+                    candidate_lists[gtG1].append((predEdge[ei,-1,0],true_pos))
+                elif (class1=='header' and class0=='question') or (class1=='question' and class0=='answer'):
+                    candidate_lists[gtG0].append((predEdge[ei,-1,0],true_pos))
+                else:
+                    candidate_lists[gtG0].append((predEdge[ei,-1,0],False))
+                    candidate_lists[gtG1].append((predEdge[ei,-1,0],False))
+            for gtG0,gtG1 in unused_gt_adj:
+                class0=classMap[gt_classIs[gtG0]]
+                class1=classMap[gt_classIs[gtG1]]
+                if (class0=='header' and class1=='question') or (class0=='question' and class1=='answer'):
+                    candidate_lists[gtG1].append((-1,true_pos))
+                elif (class1=='header' and class0=='question') or (class1=='question' and class0=='answer'):
+                    candidate_lists[gtG0].append((-1,true_pos))
+
+            sum_ap=0
+            hit_at_1=0
+            hit_at_2=0
+            hit_at_5=0
+
+            for gtG, candidate_list in candidate_lists.items():
+                if len(candidate_list)>1 or candidate_list[0][0]>=0:
+                    sum_ap += computeAP(candidate_list)
+                else:
+                    sum_ap += 0 #total miss
+
+                candidate_list.sort(key=lambda a:a[0],reverse=True)
+                if candidate_list[0][1]:
+                    hit_at_1 +=1
+                if any(a[1] for a in candidate_list[:2]):
+                    hit_at_2 +=1
+                if any(a[1] for a in candidate_list[:5]):
+                    hit_at_5 +=1
+            log['DocStruct mAP'] = sum_ap/len(candidate_lists) #not quite right. Need to add every other possible rel. A
+            log['DocStruct hit@1'] = hit_at_1/len(candidate_lists)
+            log['DocStruct hit@2'] = hit_at_2/len(candidate_lists)
+            log['DocStruct hit@5'] = hit_at_5/len(candidate_lists)
+            
+            
+
+            #TODO missed rels (nodes)
+
         #t#self.opt_history['all losses'].append(timeit.default_timer()-tic)#t#
         #t#tic=timeit.default_timer()#t##t#
         #print final state of graph
@@ -1958,6 +2028,9 @@ class GraphPairTrainer(BaseTrainer):
         #    log['final_prop_rel_recall']=final_prop_rel_recall
         #if final_prop_rel_prec is not None:
         #    log['final_prop_rel_prec']=final_prop_rel_prec
+
+
+
 
 
         got={}#outputBoxes, outputOffsets, relPred, relIndexes, bbPred, rel_prop_pred

@@ -27,7 +27,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         return acc_metrics
 
     if toEval is None:
-        toEval = ['allEdgePred','allEdgeIndexes','allNodePred','allOutputBoxes', 'allPredGroups', 'allEdgePredTypes','allMissedRels','final','final_edgePredTypes','final_missedRels','allBBAlignment']
+        toEval = ['allEdgePred','allEdgeIndexes','allNodePred','allOutputBoxes', 'allPredGroups', 'allEdgePredTypes','allMissedRels','final','final_edgePredTypes','final_missedRels','allBBAlignment','DocStruct']
 
     draw_verbosity = config['draw_verbosity'] if 'draw_verbosity' in config else 2
 
@@ -105,6 +105,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
 
     #dataT = __to_tensor(data,gpu)
     print('{}: {} x {}'.format(imageName,data.shape[2],data.shape[3]))
+    trainer.use_gt_trans = config['useGTTrans'] if 'useGTTrans' in config else False
     if useDetections=='gt':
         useGTGroups = config['gtGroups'] if 'gtGroups' in config else False
         losses, log, out = trainer.newRun(instance,True,get=toEval,useGTGroups=useGTGroups)
