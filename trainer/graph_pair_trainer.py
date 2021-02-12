@@ -1908,8 +1908,20 @@ class GraphPairTrainer(BaseTrainer):
                 if len(predTargGroup)>0:
                     gtGroup = getGTGroup(predTargGroup,targetIndexToGroup)
                     predToGTGroup[node]=gtGroup
-                    assert gtGroup not in gtGroupToPred #shouldn't happend with gt detections and grouping
-                    gtGroupToPred[gtGroup]=node
+                    #assert gtGroup not in gtGroupToPred #shouldn't happend with gt detections and grouping
+                    if useGTGroups and gtGroup in gtGroupToPred:
+                        print('WARNING WARNING')
+                        print('> pred groups NOT aligned to GT groups')
+                        predTargGroupOther = [bbAlignment[bb] for bb in predGroups[gtGroupToPred[gtGroup]] if bbAlignment[bb]>=0]
+                        print('> gt group:{}, me:{}, other:{}'.format(gtGroups[gtGroup],predTargGroup,predTargGroupOther))
+                        print('WARNING WARNING')
+                    if gtGroup not in gtGroupToPred:
+                        gtGroupToPred[gtGroup]=node
+                    else:
+                        #this is missed
+                        del predToGTGroup[gtGroupToPred[gtGroup]]
+                        del predToGTGroup[node]
+                        del gtGroupToPred[gtGroup]
             
             classMap = self.scoreClassMap
             num_class = len(self.scoreClassMap)
@@ -1920,6 +1932,8 @@ class GraphPairTrainer(BaseTrainer):
             unused_gt_adj = set(gtGroupAdj)
             candidate_lists=defaultdict(list)
             for ei,(n0,n1) in enumerate(edgeIndexes):
+                if n0 not in predToGTGroup or n1 not in predToGTGroup:
+                    continue
                 gtG0 = predToGTGroup[n0]
                 gtG1 = predToGTGroup[n1]
                 class0 = classMap[classIs[n0]]
