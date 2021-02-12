@@ -1164,7 +1164,8 @@ class PairingGroupingGraph(BaseModel):
                         None,#uniFeats.detach() if uniFeats is not None else None,
                         useBBs,
                         bbTrans,
-                        image)
+                        image,
+                        gt_groups=[[g] for g in range(len(groups))] if gtGroups is not None else None)
                 #print('!D! after  edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(graph[2].size(),useBBs.size(),graph[0].size(),len(edgeIndexes)))
                 if not self.useCurvedBBs and self.detector.predNumNeighbors:
                     #Discard NN prediction. We don't use it anymore
@@ -1692,6 +1693,7 @@ class PairingGroupingGraph(BaseModel):
                         match_found=True
                         break
                 assert match_found
+            import pdb;pdb.set_trace()
 
 
         #Actually change bbs to list,  we'll adjusting appropriate values in groups as we convert groups to list
