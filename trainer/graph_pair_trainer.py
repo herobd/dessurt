@@ -227,8 +227,9 @@ class GraphPairTrainer(BaseTrainer):
         else:
             threshIntur = None
         useGT = self.useGT(iteration)
-        if useGT:
-            useOnlyGTSpace = random.random()<0.5
+        if useGT and random.random()<0.5:
+            useOnlyGTSpace = True
+            useGT = False
         else:
             useOnlyGTSpace = False
 

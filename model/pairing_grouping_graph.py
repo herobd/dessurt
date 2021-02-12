@@ -800,6 +800,8 @@ class PairingGroupingGraph(BaseModel):
 
 
                 #perform greedy alignment of gt and predicted. Only keep aligned predictions
+                if not bbPredictions.is_cuda:
+                    gtBBs=gtBBs.cpu()
                 ious = allIOU(gtBBs,bbPredictions[:,1:],x1y1x2y2=self.useCurvedBBs) #iou calculation
                 #if self.useCurvedBBs:
                 #    ious = allIO_clipU(
@@ -930,7 +932,7 @@ class PairingGroupingGraph(BaseModel):
             useBBs = [TextLine(bb,step_size=self.text_line_smoothness) for bb in useBBs] #self.x1y1x2y2rToCurved(useBBs)
 
         if self.text_rec is not None:
-            if (useGTBBs or useOnlyGTSpace) and gtTrans is not None and len(gtTrans)==len(useBBs):
+            if (useGTBBs or useOnlyGTSpace) and gtTrans is not None: # and len(gtTrans)==useBBs.size[0]:
                 transcriptions = gtTrans
             elif not self.merge_first: #skip if oversegmented, for speed
                 transcriptions = self.getTranscriptions(useBBs,image)
