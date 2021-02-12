@@ -143,7 +143,7 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
         data_loader, valid_data_loader = getDataLoader(config,'train')
     else:
         valid_data_loader, data_loader = getDataLoader(config,'test')
-        data_loader=valid_data_loader
+        data_loader = valid_data_loader
 
     if addDATASET:
         config['DATASET']=valid_data_loader.dataset

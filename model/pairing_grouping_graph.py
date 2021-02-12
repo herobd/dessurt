@@ -721,7 +721,7 @@ class PairingGroupingGraph(BaseModel):
             print('Unfroze detector')
         
 
-    def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=5000, debug=False,old_nn=False,gtTrans=None,merge_first_only=False, useOnlyGTSpace=False):
+    def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=5000, debug=False,old_nn=False,gtTrans=None,merge_first_only=False, useOnlyGTSpace=False, gtGroups=None):
         assert(image.size(0)==1) #implementation designed for batch size of 1. Should work to do data parallelism, since each copy of the model will get a batch size of 1
         #t###tic=timeit.default_timer()#t#
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
@@ -818,12 +818,14 @@ class PairingGroupingGraph(BaseModel):
                 ious=None
                 ious_list.sort(key=lambda a:a[0], reverse=True)
                 gt_parts=defaultdict(list)
+                gt_to_new = {}
                 for iou,gt_i,p_i in ious_list:
                     gt_i=gt_i.item()
                     if self.useCurvedBBs:
                         gt_used[gt_i]=True
                         gt_parts[gt_i].append((iou,bbPredictions[p_i,0:1],bbPredictions[p_i,6:]))
                     elif not gt_used[gt_i] and not pred_used[p_i]:
+                        gt_to_new[gt_i]=len(useBBs)
                         useBBs.append(torch.cat((bbPredictions[p_i,0:1],gtBBs[gt_i,0:5],bbPredictions[p_i,6:]), dim=0))
                         num_gt_used+=1
                         if num_gt_used>=gtBBs.size(0):
@@ -846,6 +848,7 @@ class PairingGroupingGraph(BaseModel):
                         total_iou = ious.sum()
                         conf = (confs*ious).sum()/total_iou
                         cls = (clses*ious[:,None]).sum(dim=0)/total_iou
+                        gt_to_new[gt_i]=len(useBBs)
                         useBBs.append(torch.cat((conf[None],gtBBs[gt_i,0:5],cls),dim=0))
 
 
@@ -854,13 +857,18 @@ class PairingGroupingGraph(BaseModel):
                     if not used:
                         conf = torch.FloatTensor([1])
                         cls = torch.FloatTensor(self.numBBTypes+(1 if self.detector.predNumNeighbors else 0)).fill_(0.5)
+                        gt_to_new[gt_i]=len(useBBs)
                         useBBs.append(torch.cat((conf,gtBBs[gt_i,0:5],cls),dim=0))
+
+                if gtGroups is not None:
+                    gtGroups = [[gt_to_new[gt_i] for gt_i in group] for group in gtGroups]
 
                 useBBs = torch.stack(useBBs,dim=0)
                 assert(useBBs.size(0) == gtBBs.size(0))
                 assert self.include_bb_conf or self.useCurvedBBs
                 #if self.useCurvedBBs and self.use_overseg_non_max_sup:
                 #    useBBs = non_max_sup_overseg(useBBs)
+                gtBBs=gtBBs[None,...]
             else:
 
 
@@ -922,7 +930,7 @@ class PairingGroupingGraph(BaseModel):
             useBBs = [TextLine(bb,step_size=self.text_line_smoothness) for bb in useBBs] #self.x1y1x2y2rToCurved(useBBs)
 
         if self.text_rec is not None:
-            if useGTBBs and gtTrans is not None and len(gtTrans)==len(useBBs):
+            if (useGTBBs or useOnlyGTSpace) and gtTrans is not None and len(gtTrans)==len(useBBs):
                 transcriptions = gtTrans
             elif not self.merge_first: #skip if oversegmented, for speed
                 transcriptions = self.getTranscriptions(useBBs,image)
@@ -953,6 +961,7 @@ class PairingGroupingGraph(BaseModel):
                 bbTrans = transcriptions
 
                 if self.merge_first and not useOnlyGTSpace:
+                    assert gtGroups is None
                     #t#tic=timeit.default_timer()#t#
                     #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
                     #We don't build a full graph, just propose edges and extract the edge features
@@ -1101,7 +1110,8 @@ class PairingGroupingGraph(BaseModel):
                             bbTrans,
                             image,
                             good_edges=good_edges,
-                            keep_edges=keep_edges)
+                            keep_edges=keep_edges,
+                            gt_groups=gtGroups if gIter==0 else ([[g] for g in range(len(groups))] if gtGroups is not None else None))
 
                     if self.reintroduce_visual_features:
                         graph,last_node_visual_feats,last_edge_visual_feats = self.appendVisualFeatures(
@@ -1425,7 +1435,8 @@ class PairingGroupingGraph(BaseModel):
             skip_rec=False,
             merge_only=False,
             good_edges=None,
-            keep_edges=None):
+            keep_edges=None,
+            gt_groups=None):
         #assert(len(oldBBs)==0 or type(oldBBs[0]) is TextLine)
         assert(oldNodeFeats is None or oldGroups is None or oldNodeFeats.size(0)==len(oldGroups))
         oldNumGroups=len(oldGroups)
@@ -1448,158 +1459,162 @@ class PairingGroupingGraph(BaseModel):
             #relPreds = torch.sigmoid(edgePredictions[:,-1,1]).cpu().detach()
             mergePreds = torch.sigmoid(edgePredictions[:,-1,2]).cpu().detach()
             groupPreds = torch.sigmoid(edgePredictions[:,-1,3]).cpu().detach()
+            if gt_groups:
+                #just rewrite the predictions
+                gt_groups_map={}
+                for i,group in enumerate(gt_groups):
+                    for n in group:
+                        gt_groups_map[n]=i
+                for i,(n0,n1) in enumerate(oldEdgeIndexes):
+                    if gt_groups_map[n0] == gt_groups_map[n1]:
+                        groupPreds[i]=1
+                    else:
+                        groupPreds[i]=0
         else:
             mergePreds = torch.sigmoid(edgePredictions[:,-1,0]).cpu().detach()
-        ##Prevent all nodes from merging during first iterations (bad init):
-        if True: #not dont_merge:
-            mergedTo=set()
-            #check for merges, where we will combine two BBs into one
-            for i,(n0,n1) in enumerate(oldEdgeIndexes):
-                #mergePred = edgePreds[i,-1,1]
+
+        if gt_groups is not None:
+            mergeThresh=6
+
+        mergedTo=set()
+        #check for merges, where we will combine two BBs into one
+        for i,(n0,n1) in enumerate(oldEdgeIndexes):
+            #mergePred = edgePreds[i,-1,1]
+            
+            if mergePreds[i]>mergeThresh: #TODO condition this on whether it is correct. and GT?:
+                if self.training and random.random()<0.001: #randomly don't merge for robustness in training
+                    continue
+                if len(oldGroups[n0])==1 and len(oldGroups[n1])==1: #can only merge ungrouped nodes. This assumption is used later in the code WXS
+                    #changedNodeIds.add(n0)
+                    #changedNodeIds.add(n1)
+                    bbId0 = oldGroups[n0][0]
+                    bbId1 = oldGroups[n1][0]
+                    newId0 = oldToNewBBIndexes[bbId0]
+                    bb0ToMerge = bbs[newId0]
+
+                    newId1 = oldToNewBBIndexes[bbId1]
+                    bb1ToMerge = bbs[newId1]
+
+                    if self.prevent_vert_merges:
+                        #This will introduce slowdowns as we are computing each partail merge instead of waiting till all merges are found
+                        angle = (bb0ToMerge.medianAngle()+bb1ToMerge.medianAngle())/2
+                        h0 = bb0ToMerge.getHeight()
+                        r0 = bb0ToMerge.getReadPosition(angle)
+                        h1 = bb1ToMerge.getHeight()
+                        r1 = bb1ToMerge.getReadPosition(angle)
+                        
+                        #if they are horz (read orientation) offset too much (half height), don't merge
+                        #x,y = bb0ToMerge.getCenterPoint()
+                        #if y>990 and y<1110 and x>800 and x<1380:
+                        #    print('{},{}    h0={}, h1={}, r0={}, r1={}, D: {}'.format(int(x),int(y),h0,h1,r0,r1,abs(r0-r1)<(h0+h1)/4))
+                        #    print('rot0={}, rot1={}'.format(bb0ToMerge.medianAngle(),bb1ToMerge.medianAngle()))
+                        if abs(r0-r1)>(h0+h1)/4:
+                            continue
+
+
+
+                    if newId0!=newId1:
+                        if self.useCurvedBBs:
+                            bb0ToMerge.merge(bb1ToMerge) # "
+                        else:
+                            bbs[newId0]= self.mergeBB(bb0ToMerge,bb1ToMerge)
+                        #merge two merged bbs
+                        oldToNewBBIndexes = {k:(v if v!=newId1 else newId0) for k,v in oldToNewBBIndexes.items()}
+                        del bbs[newId1]
+                        #if self.text_rec is not None and not skip_rec:
+                        if oldBBTrans is not None:
+                            del bbTrans[newId1]
+                        mergedTo.add(newId0)
+
+
+        oldBBIdToNew = oldToNewBBIndexes
                 
-                if mergePreds[i]>mergeThresh: #TODO condition this on whether it is correct. and GT?:
-                    if self.training and random.random()<0.001: #randomly don't merge for robustness in training
-                        continue
-                    if len(oldGroups[n0])==1 and len(oldGroups[n1])==1: #can only merge ungrouped nodes. This assumption is used later in the code WXS
-                        #changedNodeIds.add(n0)
-                        #changedNodeIds.add(n1)
-                        bbId0 = oldGroups[n0][0]
-                        bbId1 = oldGroups[n1][0]
-                        newId0 = oldToNewBBIndexes[bbId0]
-                        bb0ToMerge = bbs[newId0]
 
-                        newId1 = oldToNewBBIndexes[bbId1]
-                        bb1ToMerge = bbs[newId1]
+        if self.text_rec is not None and len(bbs)>0 and not skip_rec:
+            if merge_only :
+                doTransIndexes = [idx for idx in bbs] #everything, since we skip recognition for speed
+            else:
+                doTransIndexes = [idx for idx in mergedTo if idx in bbs]
+            if len(doTransIndexes)>0:
+                doBBs = [bbs[idx] for idx in doTransIndexes]
+                if not self.useCurvedBBs:
+                    doBBs = torch.stack(doBBs,dim=0)
+                newTrans = self.getTranscriptions(doBBs,image)
+                for i,idx in enumerate(doTransIndexes):
+                    bbTrans[idx] = newTrans[i]
+        if merge_only:
+            newBBs=[]
+            newBBTrans=[] if self.text_rec is not None else None
+            for bbId,bb in bbs.items():
+                newBBs.append(bb)
+                if self.text_rec is not None and not skip_rec:
+                    newBBTrans.append(bbTrans[bbId])
+            return newBBs, newBBTrans
 
-                        if self.prevent_vert_merges:
-                            #This will introduce slowdowns as we are computing each partail merge instead of waiting till all merges are found
-                            angle = (bb0ToMerge.medianAngle()+bb1ToMerge.medianAngle())/2
-                            h0 = bb0ToMerge.getHeight()
-                            r0 = bb0ToMerge.getReadPosition(angle)
-                            h1 = bb1ToMerge.getHeight()
-                            r1 = bb1ToMerge.getReadPosition(angle)
-                            
-                            #if they are horz (read orientation) offset too much (half height), don't merge
-                            #x,y = bb0ToMerge.getCenterPoint()
-                            #if y>990 and y<1110 and x>800 and x<1380:
-                            #    print('{},{}    h0={}, h1={}, r0={}, r1={}, D: {}'.format(int(x),int(y),h0,h1,r0,r1,abs(r0-r1)<(h0+h1)/4))
-                            #    print('rot0={}, rot1={}'.format(bb0ToMerge.medianAngle(),bb1ToMerge.medianAngle()))
-                            if abs(r0-r1)>(h0+h1)/4:
-                                continue
+        #rewrite groups with merged instances
+        assignedGroup={} #this will allow us to remove merged instances
+        oldGroupToNew={}
+        workGroups =  {}#{i:v for i,v in enumerate(oldGroups)}
+        changedGroups = []
+        for id,bbIds in enumerate(oldGroups):
+            newGroup = [oldBBIdToNew[oldId] for oldId in bbIds]
+            if len(newGroup)==1 and newGroup[0] in assignedGroup: #WXS
+                oldGroupToNew[id]=assignedGroup[newGroup[0]]
+                changedGroups.append(newGroup[0])
+                #nothing else needs done, since the group has the ID,
+            else:
+                workGroups[id] = newGroup
+                for bbId in newGroup:
+                    assignedGroup[bbId]=id
+    
+        newGroupToOldMerge=defaultdict(list) #tracks what has been merged
+        for k,v in oldGroupToNew.items():
+            newGroupToOldMerge[v].append(k)
 
+        #D#
+        for i in range(oldNumGroups):
+            assert(i in oldGroupToNew or i in workGroups)
 
+        #We'll adjust the edges to acount for merges as well as prune edges and get ready for grouping
+        #temp = oldEdgeIndexes
+        #oldEdgeIndexes = []
 
-                        if newId0!=newId1:
-                            if self.useCurvedBBs:
-                                bb0ToMerge.merge(bb1ToMerge) # "
-                            else:
-                                bbs[newId0]= self.mergeBB(bb0ToMerge,bb1ToMerge)
-                            #merge two merged bbs
-                            oldToNewBBIndexes = {k:(v if v!=newId1 else newId0) for k,v in oldToNewBBIndexes.items()}
-                            del bbs[newId1]
-                            #if self.text_rec is not None and not skip_rec:
-                            if oldBBTrans is not None:
-                                del bbTrans[newId1]
-                            mergedTo.add(newId0)
+        #Prune and adjust the edges (to groups)
+        groupEdges=[]
 
+        D_numOldEdges=len(oldEdgeIndexes)
+        D_numOldAboveThresh=(edgePreds>keepEdgeThresh).sum()
+        prunedOldEdgeIndexes=[]
+        for i,(n0,n1) in enumerate(oldEdgeIndexes):
+            if not merge_only and self.fully_connected and edgePreds[i]>keepEdgeThresh:
+                good_edges.append(i)
+            if ((keep_edges is not None and i in keep_edges) or 
+                    ((not self.fully_connected or not merge_only) and edgePreds[i]>keepEdgeThresh)):
+                old_n0=n0
+                old_n1=n1
+                if n0 in oldGroupToNew:
+                    n0 = oldGroupToNew[n0]
+                if n1 in oldGroupToNew:
+                    n1 = oldGroupToNew[n1]
 
-            oldBBIdToNew = oldToNewBBIndexes
-                    
-
-            if self.text_rec is not None and len(bbs)>0 and not skip_rec:
-                if merge_only :
-                    doTransIndexes = [idx for idx in bbs] #everything, since we skip recognition for speed
-                else:
-                    doTransIndexes = [idx for idx in mergedTo if idx in bbs]
-                if len(doTransIndexes)>0:
-                    doBBs = [bbs[idx] for idx in doTransIndexes]
-                    if not self.useCurvedBBs:
-                        doBBs = torch.stack(doBBs,dim=0)
-                    newTrans = self.getTranscriptions(doBBs,image)
-                    for i,idx in enumerate(doTransIndexes):
-                        bbTrans[idx] = newTrans[i]
-            if merge_only:
-                newBBs=[]
-                newBBTrans=[] if self.text_rec is not None else None
-                for bbId,bb in bbs.items():
-                    newBBs.append(bb)
-                    if self.text_rec is not None and not skip_rec:
-                        newBBTrans.append(bbTrans[bbId])
-                return newBBs, newBBTrans
-
-            #rewrite groups with merged instances
-            assignedGroup={} #this will allow us to remove merged instances
-            oldGroupToNew={}
-            workGroups =  {}#{i:v for i,v in enumerate(oldGroups)}
-            changedGroups = []
-            for id,bbIds in enumerate(oldGroups):
-                newGroup = [oldBBIdToNew[oldId] for oldId in bbIds]
-                if len(newGroup)==1 and newGroup[0] in assignedGroup: #WXS
-                    oldGroupToNew[id]=assignedGroup[newGroup[0]]
-                    changedGroups.append(newGroup[0])
-                    #nothing else needs done, since the group has the ID,
-                else:
-                    workGroups[id] = newGroup
-                    for bbId in newGroup:
-                        assignedGroup[bbId]=id
-        
-            newGroupToOldMerge=defaultdict(list) #tracks what has been merged
-            for k,v in oldGroupToNew.items():
-                newGroupToOldMerge[v].append(k)
-
-            #D#
-            for i in range(oldNumGroups):
-                assert(i in oldGroupToNew or i in workGroups)
-
-            #We'll adjust the edges to acount for merges as well as prune edges and get ready for grouping
-            #temp = oldEdgeIndexes
-            #oldEdgeIndexes = []
-
-            #Prune and adjust the edges (to groups)
-            groupEdges=[]
-
-            D_numOldEdges=len(oldEdgeIndexes)
-            D_numOldAboveThresh=(edgePreds>keepEdgeThresh).sum()
-            prunedOldEdgeIndexes=[]
-            for i,(n0,n1) in enumerate(oldEdgeIndexes):
-                if not merge_only and self.fully_connected and edgePreds[i]>keepEdgeThresh:
-                    good_edges.append(i)
-                if ((keep_edges is not None and i in keep_edges) or 
-                        ((not self.fully_connected or not merge_only) and edgePreds[i]>keepEdgeThresh)):
-                    old_n0=n0
-                    old_n1=n1
-                    if n0 in oldGroupToNew:
-                        n0 = oldGroupToNew[n0]
-                    if n1 in oldGroupToNew:
-                        n1 = oldGroupToNew[n1]
-
-                    assert(n0 in workGroups and n1 in workGroups)
-                    if n0!=n1:
-                        #oldEdgeIndexes.append((n0,n1))
-                        groupEdges.append((groupPreds[i].item(),n0,n1))
-                    #else:
-                    #    It disapears
-                    prunedOldEdgeIndexes.append((i,old_n0,old_n1))
-                #else: #D#
-                #    old_n0=n0
-                #    old_n1=n1
-                #    if n0 in oldGroupToNew:
-                #        n0 = oldGroupToNew[n0]
-                #    if n1 in oldGroupToNew:
-                #        n1 = oldGroupToNew[n1]
-                #    print('pruned [{},{}] n([{},{}])'.format(old_n0,old_n1,n0,n1))
-
-            #print('!D! original edges:{}, above thresh:{}, kept edges:{}'.format(D_numOldEdges,D_numOldAboveThresh,len(groupEdges)))
-             
-        else:
-            #skipping merging
-            groupEdges=[]
-            prunedOldEdgeIndexes=[]
-            for i,(n0,n1) in enumerate(oldEdgeIndexes):
-                if edgePreds[i]>keepEdgeThresh:
+                assert(n0 in workGroups and n1 in workGroups)
+                if n0!=n1:
+                    #oldEdgeIndexes.append((n0,n1))
                     groupEdges.append((groupPreds[i].item(),n0,n1))
-                    prunedOldEdgeIndexes.append((i,n0,n1))
-            #oldEdgeIndexes=None
+                #else:
+                #    It disapears
+                prunedOldEdgeIndexes.append((i,old_n0,old_n1))
+            #else: #D#
+            #    old_n0=n0
+            #    old_n1=n1
+            #    if n0 in oldGroupToNew:
+            #        n0 = oldGroupToNew[n0]
+            #    if n1 in oldGroupToNew:
+            #        n1 = oldGroupToNew[n1]
+            #    print('pruned [{},{}] n([{},{}])'.format(old_n0,old_n1,n0,n1))
+
+        #print('!D! original edges:{}, above thresh:{}, kept edges:{}'.format(D_numOldEdges,D_numOldAboveThresh,len(groupEdges)))
+             
 
 
 
@@ -1628,6 +1643,54 @@ class PairingGroupingGraph(BaseModel):
         #D#
         for i in range(oldNumGroups):
             assert(i in oldGroupToNewGrouping or i in oldGroupToNew)
+
+
+        if gt_groups is not None:
+            #check the produced groups to see if they match gt groups
+            fix_gg = [] #gt groups not in workGroups (because no edge existed)
+            for gg in gt_groups:
+                match_found=False
+                for id,group in workGroups.items():
+                    is_match=True
+                    for bb in gg:
+                        if bb not in group:
+                            is_match=False
+                            break
+                    if is_match:
+                        match_found=True
+                        break
+                #assert match_found
+                if not match_found:
+                    fix_gg.append(gg)
+
+            #fix
+            for gg in fix_gg:
+                w_groups=[]
+                for new_g,w_group in workGroups.items():
+                    for g_bb in gg:
+                        if g_bb in w_group:
+                            w_groups.append(new_g)
+                assert len(w_groups)>1
+                root_new_g = w_groups[0]
+                for new_g in w_groups[1:]:
+                    workGroups[root_new_g] += workGroups[new_g]
+                    oldGroupToNewGrouping = {k:(v if v!=new_g else root_new_g) for k,v in oldGroupToNewGrouping.items()}
+                    del workGroups[new_g]
+
+            #recheck
+            for gg in gt_groups:
+                match_found=False
+                for id,group in workGroups.items():
+                    is_match=True
+                    for bb in gg:
+                        if bb not in group:
+                            is_match=False
+                            break
+                    if is_match:
+                        match_found=True
+                        break
+                assert match_found
+
 
         #Actually change bbs to list,  we'll adjusting appropriate values in groups as we convert groups to list
         bbIdToPos={}
