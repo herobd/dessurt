@@ -26,8 +26,11 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
                 acc_metrics[ind,i] += metric(output[ind:ind+1], target[ind:ind+1])
         return acc_metrics
 
+    useGTGroups = config['gtGroups'] if 'gtGroups' in config else False
     if toEval is None:
         toEval = ['allEdgePred','allEdgeIndexes','allNodePred','allOutputBoxes', 'allPredGroups', 'allEdgePredTypes','allMissedRels','final','final_edgePredTypes','final_missedRels','allBBAlignment']
+        if useGTGroups:
+            toEval.append('DocStruct')
 
     draw_verbosity = config['draw_verbosity'] if 'draw_verbosity' in config else 2
 
@@ -105,10 +108,11 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
 
     #dataT = __to_tensor(data,gpu)
     print('{}: {} x {}'.format(imageName,data.shape[2],data.shape[3]))
+    trainer.use_gt_trans = config['useGTTrans'] if 'useGTTrans' in config else False
     if useDetections=='gt':
-        losses, log, out = trainer.newRun(instance,True,get=toEval)
+        losses, log, out = trainer.newRun(instance,True,get=toEval,useGTGroups=useGTGroups)
     elif useDetections=='gtSpaceOnly':
-        losses, log, out = trainer.newRun(instance,False,useOnlyGTSpace=True,get=toEval)
+        losses, log, out = trainer.newRun(instance,False,useOnlyGTSpace=True,get=toEval,useGTGroups=useGTGroups)
     elif type(useDetections) is str:
         raise NotImplementedError('using saved detections not adjusted for new eval')
         dataset=config['DATASET']
