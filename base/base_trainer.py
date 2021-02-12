@@ -199,6 +199,21 @@ class BaseTrainer:
                         return (step_num-steps[i])*(0.99/(step-steps[i]))+.01
                 return 1.0
             self.lr_schedule = torch.optim.lr_scheduler.LambdaLR(self.optimizer,riseLR)
+        elif self.useLearningSchedule=='multi_rise then swa':
+            steps = config['trainer']['warmup_steps']
+            warmup_cap = 1.0
+            swa_lr_mul = config['trainer']['swa_lr_mul'] if 'swa_lr_mul' in config['trainer'] else 0.001
+            assert(type(steps) is list)
+            steps=[0]+steps
+            def riseLR(step_num):
+                if step_num<self.swa_start:
+                    for i,step in enumerate(steps[1:]):
+                        if step_num<step:
+                            return warmup_cap*((step_num-steps[i])*(0.99/(step-steps[i]))+.01)
+                    return 1.0
+                else:
+                    return swa_lr_mul
+            self.lr_schedule = torch.optim.lr_scheduler.LambdaLR(self.optimizer,riseLR)
         elif self.useLearningSchedule=='multi_rise with cyclic_full then swa':
             steps = config['trainer']['warmup_steps']
             warmup_cap = config['trainer']['warmup_cap']
