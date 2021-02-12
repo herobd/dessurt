@@ -1552,11 +1552,11 @@ class GraphPairTrainer(BaseTrainer):
             else:
                 targetBoxes_changed=targetBoxes.clone()
                 if self.model.training:
-                    targetBoxes_changed[:,:,0] += targetBoxes_changed[:,:,0].new_empty().normal_(std=1)
-                    targetBoxes_changed[:,:,1] += targetBoxes_changed[:,:,1].new_empty().normal_(std=1)
-                    targetBoxes_changed[:,:,2] += targetBoxes_changed[:,:,1].new_empty().normal_(std=0.01)
-                    targetBoxes_changed[:,:,3] += targetBoxes_changed[:,:,3].new_empty().normal_(std=1)
-                    targetBoxes_changed[:,:,4] += targetBoxes_changed[:,:,4].new_empty().normal_(std=1)
+                    targetBoxes_changed[:,:,0] += torch.randn_like(targetBoxes_changed[:,:,0])
+                    targetBoxes_changed[:,:,1] += torch.randn_like(targetBoxes_changed[:,:,1])
+                    targetBoxes_changed[:,:,2] += torch.randn_like(targetBoxes_changed[:,:,2])*0.01
+                    targetBoxes_changed[:,:,3] += torch.randn_like(targetBoxes_changed[:,:,3])
+                    targetBoxes_changed[:,:,4] += torch.randn_like(targetBoxes_changed[:,:,4])
                     #we tweak the classes in the model
 
             if useOnlyGTSpace and not self.model_ref.useCurvedBBs:
