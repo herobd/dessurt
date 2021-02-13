@@ -1902,26 +1902,27 @@ class GraphPairTrainer(BaseTrainer):
         #We'll use information from the final prediction before the final pruning
         if 'DocStruct' in get:
             predToGTGroup={}
-            gtGroupToPred={}
+            #gtGroupToPred={}
             for node in range(len(predGroups)):
                 predTargGroup = [bbAlignment[bb] for bb in predGroups[node] if bbAlignment[bb]>=0]
                 if len(predTargGroup)>0:
                     gtGroup = getGTGroup(predTargGroup,targetIndexToGroup)
                     predToGTGroup[node]=gtGroup
                     #assert gtGroup not in gtGroupToPred #shouldn't happend with gt detections and grouping
-                    if useGTGroups and gtGroup in gtGroupToPred:
-                        print('WARNING WARNING')
-                        print('> pred groups NOT aligned to GT groups')
-                        predTargGroupOther = [bbAlignment[bb] for bb in predGroups[gtGroupToPred[gtGroup]] if bbAlignment[bb]>=0]
-                        print('> gt group:{}, me:{}, other:{}'.format(gtGroups[gtGroup],predTargGroup,predTargGroupOther))
-                        print('WARNING WARNING')
-                    if gtGroup not in gtGroupToPred:
-                        gtGroupToPred[gtGroup]=node
-                    else:
-                        #this is missed
-                        del predToGTGroup[gtGroupToPred[gtGroup]]
-                        del predToGTGroup[node]
-                        del gtGroupToPred[gtGroup]
+                    #if it has split a group over two nodes, we'll just use both of them, as this is supposed to query from gt
+                    #if useGTGroups and gtGroup in gtGroupToPred:
+                    #    print('WARNING WARNING')
+                    #    print('> pred groups NOT aligned to GT groups')
+                    #    predTargGroupOther = [bbAlignment[bb] for bb in predGroups[gtGroupToPred[gtGroup]] if bbAlignment[bb]>=0]
+                    #    print('> gt group:{}, me:{}, other:{}'.format(gtGroups[gtGroup],predTargGroup,predTargGroupOther))
+                    #    print('WARNING WARNING')
+                    #if gtGroup not in gtGroupToPred:
+                    #    gtGroupToPred[gtGroup]=node
+                    #else:
+                    #    #this is missed
+                    #    del predToGTGroup[gtGroupToPred[gtGroup]]
+                    #    del predToGTGroup[node]
+                    #    del gtGroupToPred[gtGroup]
             
             classMap = self.scoreClassMap
             num_class = len(self.scoreClassMap)
@@ -1953,9 +1954,11 @@ class GraphPairTrainer(BaseTrainer):
                 class0=classMap[gt_classIs[gtG0]]
                 class1=classMap[gt_classIs[gtG1]]
                 if (class0=='header' and class1=='question') or (class0=='question' and class1=='answer'):
-                    candidate_lists[gtG1].append((-1,true_pos))
+                    candidate_lists[gtG1].append((-1,False))
                 elif (class1=='header' and class0=='question') or (class1=='question' and class0=='answer'):
-                    candidate_lists[gtG0].append((-1,true_pos))
+                    candidate_lists[gtG0].append((-1,False))
+                else:
+                    assert False
 
             sum_ap=0
             hit_at_1=0
