@@ -1673,6 +1673,7 @@ class PairingGroupingGraph(BaseModel):
                     for g_bb in gg:
                         if g_bb in w_group:
                             w_groups.append(new_g)
+                            break
                 assert len(w_groups)>1
                 root_new_g = w_groups[0]
                 for new_g in w_groups[1:]:
