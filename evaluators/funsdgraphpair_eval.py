@@ -29,7 +29,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
     useGTGroups = config['gtGroups'] if 'gtGroups' in config else False
     if toEval is None:
         toEval = ['allEdgePred','allEdgeIndexes','allNodePred','allOutputBoxes', 'allPredGroups', 'allEdgePredTypes','allMissedRels','final','final_edgePredTypes','final_missedRels','allBBAlignment']
-        if useGTGroups:
+        if True:#useGTGroups:
             toEval.append('DocStruct')
 
     draw_verbosity = config['draw_verbosity'] if 'draw_verbosity' in config else 2
