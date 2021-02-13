@@ -1941,7 +1941,11 @@ class GraphPairTrainer(BaseTrainer):
                 class1 = classMap[classIs[n1]]
                 true_pos = (min(gtG0,gtG1),max(gtG0,gtG1)) in gtGroupAdj
                 if true_pos:
-                    unused_gt_adj.remove((min(gtG0,gtG1),max(gtG0,gtG1)))
+                    try:
+                        unused_gt_adj.remove((min(gtG0,gtG1),max(gtG0,gtG1)))
+                    except KeyError as e:
+                        if useGTGroups:
+                            raise e
                 
                 if (class0=='header' and class1=='question') or (class0=='question' and class1=='answer'):
                     candidate_lists[gtG1].append((edgePred[ei,-1,0],true_pos))
