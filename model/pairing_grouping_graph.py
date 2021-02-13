@@ -1676,9 +1676,10 @@ class PairingGroupingGraph(BaseModel):
                 assert len(w_groups)>1
                 root_new_g = w_groups[0]
                 for new_g in w_groups[1:]:
-                    workGroups[root_new_g] += workGroups[new_g]
-                    oldGroupToNewGrouping = {k:(v if v!=new_g else root_new_g) for k,v in oldGroupToNewGrouping.items()}
-                    del workGroups[new_g]
+                    if new_g in workGroups:
+                        workGroups[root_new_g] += workGroups[new_g]
+                        oldGroupToNewGrouping = {k:(v if v!=new_g else root_new_g) for k,v in oldGroupToNewGrouping.items()}
+                        del workGroups[new_g]
 
             #recheck
             for gg in gt_groups:
