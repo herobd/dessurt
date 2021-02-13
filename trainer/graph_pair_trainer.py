@@ -1951,8 +1951,10 @@ class GraphPairTrainer(BaseTrainer):
                     candidate_lists[gtG0].append((edgePred[ei,-1,0],False))
                     candidate_lists[gtG1].append((edgePred[ei,-1,0],False))
             for gtG0,gtG1 in unused_gt_adj:
-                class0=classMap[gt_classIs[gtG0]]
-                class1=classMap[gt_classIs[gtG1]]
+                gtBB0=gtGroups[gtG0][0]
+                gtBB1=gtGroups[gtG1][0]
+                class0=classMap[gt_classIs[gtBB0]]
+                class1=classMap[gt_classIs[gtBB1]]
                 if (class0=='header' and class1=='question') or (class0=='question' and class1=='answer'):
                     candidate_lists[gtG1].append((-1,False))
                 elif (class1=='header' and class0=='question') or (class1=='question' and class0=='answer'):
