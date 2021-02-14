@@ -227,7 +227,7 @@ class GraphPairTrainer(BaseTrainer):
         else:
             threshIntur = None
         useGT = self.useGT(iteration)
-        if useGT and random.random()<0.5:
+        if useGT and random.random()<0.9:
             useOnlyGTSpace = True
             useGT = False
         else:
@@ -1963,11 +1963,13 @@ class GraphPairTrainer(BaseTrainer):
                     candidate_lists[gtG1].append((-1,False))
                 elif (class1=='header' and class0=='question') or (class1=='question' and class0=='answer'):
                     candidate_lists[gtG0].append((-1,False))
-                elif class0=='question'  and class1=='question':
-                    #IDK
-                    candidate_lists[gtG0].append((-1,False))
+                #elif class0=='question'  and class1=='question':
+                #    #IDK
+                #    candidate_lists[gtG0].append((-1,False))
                 else:
-                    assert False
+                    #there are some lableling annomalies in the FUNSD test set
+                    candidate_lists[gtG0].append((-1,False))
+                    #assert False
 
             sum_ap=0
             hit_at_1=0
