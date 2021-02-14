@@ -80,6 +80,7 @@ class GraphPairTrainer(BaseTrainer):
         self.stop_from_gt = config['trainer']['stop_from_gt'] if 'stop_from_gt' in config['trainer'] else None
         self.partial_from_gt = config['trainer']['partial_from_gt'] if 'partial_from_gt' in config['trainer'] else None
         self.max_use_pred = config['trainer']['max_use_pred'] if 'max_use_pred' in config['trainer'] else 0.9
+        self.bothGT =  config['trainer']['bothGT'] if 'bothGT' in config['trainer'] else True
 
         self.conf_thresh_init = config['trainer']['conf_thresh_init'] if 'conf_thresh_init' in config['trainer'] else 0.9
         self.conf_thresh_change_iters = config['trainer']['conf_thresh_change_iters'] if 'conf_thresh_change_iters' in config['trainer'] else 5000
@@ -227,7 +228,7 @@ class GraphPairTrainer(BaseTrainer):
         else:
             threshIntur = None
         useGT = self.useGT(iteration)
-        if useGT and random.random()<0.5:
+        if self.bothGT and useGT and random.random()<0.5:
             useOnlyGTSpace = True
             useGT = False
         else:
@@ -1558,6 +1559,8 @@ class GraphPairTrainer(BaseTrainer):
                     targetBoxes_changed[:,:,2] += torch.randn_like(targetBoxes_changed[:,:,2])*0.01
                     targetBoxes_changed[:,:,3] += torch.randn_like(targetBoxes_changed[:,:,3])
                     targetBoxes_changed[:,:,4] += torch.randn_like(targetBoxes_changed[:,:,4])
+                    targetBoxes_changed[:,:,3][targetBoxes_changed[:,:,3]<1]=1
+                    targetBoxes_changed[:,:,4][targetBoxes_changed[:,:,4]<1]=1
                     #we tweak the classes in the model
 
             if useOnlyGTSpace and not self.model_ref.useCurvedBBs:
