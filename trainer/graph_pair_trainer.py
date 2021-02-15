@@ -2006,9 +2006,10 @@ class GraphPairTrainer(BaseTrainer):
                 if any(a[1] for a in candidate_list[:5]):
                     hit_at_5 +=1
             #log['DocStruct mAP'] = sum_ap/len(candidate_lists) #not quite right. Need to add every other possible rel. A
-            log['DocStruct hit@1'] = hit_at_1/len(candidate_lists)
-            log['DocStruct hit@2'] = hit_at_2/len(candidate_lists)
-            log['DocStruct hit@5'] = hit_at_5/len(candidate_lists)
+            if len(candidate_lists)>0:
+                log['DocStruct hit@1'] = hit_at_1/len(candidate_lists)
+                log['DocStruct hit@2'] = hit_at_2/len(candidate_lists)
+                log['DocStruct hit@5'] = hit_at_5/len(candidate_lists)
 
 
             sum_hit=0
