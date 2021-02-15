@@ -16,6 +16,19 @@ from model.overseg_box_detector import build_box_predictions
 
 import torch.autograd.profiler as profile
 
+
+def maxRelScoreIsHit(child_groups,parent_groups,edgeIndexes,edgePred):
+    max_score=-1
+    max_score_is_hit=False
+    for ei,(pG0,pG1) in enumerate(edgeIndexes):
+        if pG0 in child_groups or pG1 in child_groups:
+            score = edgePred[ei,-1,1]
+            if score>max_score:
+                max_score = score
+                if pG1 in parent_groups or pG0 in parent_groups:
+                    max_score_is_hit = True
+    return max_score_is_hit
+
 class GraphPairTrainer(BaseTrainer):
     """
     Trainer class
@@ -1951,12 +1964,12 @@ class GraphPairTrainer(BaseTrainer):
                             raise e
                 
                 if (class0=='header' and class1=='question') or (class0=='question' and class1=='answer'):
-                    candidate_lists[gtG1].append((edgePred[ei,-1,0],true_pos))
+                    candidate_lists[gtG1].append((edgePred[ei,-1,1],true_pos))
                 elif (class1=='header' and class0=='question') or (class1=='question' and class0=='answer'):
-                    candidate_lists[gtG0].append((edgePred[ei,-1,0],true_pos))
+                    candidate_lists[gtG0].append((edgePred[ei,-1,1],true_pos))
                 else:
-                    candidate_lists[gtG0].append((edgePred[ei,-1,0],False))
-                    candidate_lists[gtG1].append((edgePred[ei,-1,0],False))
+                    candidate_lists[gtG0].append((edgePred[ei,-1,1],False))
+                    candidate_lists[gtG1].append((edgePred[ei,-1,1],False))
             for gtG0,gtG1 in unused_gt_adj:
                 gtBB0=gtGroups[gtG0][0]
                 gtBB1=gtGroups[gtG1][0]
@@ -1996,6 +2009,45 @@ class GraphPairTrainer(BaseTrainer):
             log['DocStruct hit@1'] = hit_at_1/len(candidate_lists)
             log['DocStruct hit@2'] = hit_at_2/len(candidate_lists)
             log['DocStruct hit@5'] = hit_at_5/len(candidate_lists)
+
+
+            sum_hit=0
+            gtGroupToPred=defaultdict(list) #list as we could have a gt group split between two pred groups
+            for pG,gtG in predToGTGroup.items():
+                gtGroupToPred[gtG].append(pG)
+            for gg0,gg1 in gtGroupAdj:
+                gtBB0=gtGroups[gg0][0]
+                gtBB1=gtGroups[gg1][0]
+                class0=classMap[gt_classIs[gtBB0]]
+                class1=classMap[gt_classIs[gtBB1]]
+                if (class0=='header' and class1=='question') or (class0=='question' and class1=='answer'):
+                    parent=gg0
+                    child=gg1
+                    parent_groups = gtGroupToPred[parent]
+                    child_groups = gtGroupToPred[child]
+
+                    if maxRelScoreIsHit(child_groups,parent_groups,edgeIndexes,edgePred):
+                        sum_hit+=1
+                elif (class1=='header' and class0=='question') or (class1=='question' and class0=='answer'):
+                    parent=gg1
+                    child=gg0
+                    parent_groups = gtGroupToPred[parent]
+                    child_groups = gtGroupToPred[child]
+
+                    if maxRelScoreIsHit(child_groups,parent_groups,edgeIndexes,edgePred):
+                        sum_hit+=1
+                else: #labeling annomally, check both
+                    parent_groups = gtGroupToPred[gg0]
+                    child_groups = gtGroupToPred[gg1]
+                    if maxRelScoreIsHit(child_groups,parent_groups,edgeIndexes,edgePred):
+                        sum_hit+=0.5
+                    parent_groups = gtGroupToPred[gg1]
+                    child_groups = gtGroupToPred[gg0]
+                    if maxRelScoreIsHit(child_groups,parent_groups,edgeIndexes,edgePred):
+                        sum_hit+=0.5
+
+            log['DocStruct redid hit@1'] = sum_hit/len(gtGroupAdj)
+
             
             
 
