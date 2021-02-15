@@ -1946,70 +1946,70 @@ class GraphPairTrainer(BaseTrainer):
             classMap = {v-minI:k for k,v in classMap.items()}
             classIs = nodePred[:,-1,1:1+num_class].argmax(dim=1).tolist()
             gt_classIs = targetBoxes[0,:,13:13+num_class].argmax(dim=1).tolist()
-            unused_gt_adj = set(gtGroupAdj)
-            candidate_lists=defaultdict(list)
-            for ei,(n0,n1) in enumerate(edgeIndexes):
-                if n0 not in predToGTGroup or n1 not in predToGTGroup:
-                    continue
-                gtG0 = predToGTGroup[n0]
-                gtG1 = predToGTGroup[n1]
-                class0 = classMap[classIs[n0]]
-                class1 = classMap[classIs[n1]]
-                true_pos = (min(gtG0,gtG1),max(gtG0,gtG1)) in gtGroupAdj
-                if true_pos:
-                    try:
-                        unused_gt_adj.remove((min(gtG0,gtG1),max(gtG0,gtG1)))
-                    except KeyError as e:
-                        if useGTGroups:
-                            raise e
-                
-                if (class0=='header' and class1=='question') or (class0=='question' and class1=='answer'):
-                    candidate_lists[gtG1].append((edgePred[ei,-1,1],true_pos))
-                elif (class1=='header' and class0=='question') or (class1=='question' and class0=='answer'):
-                    candidate_lists[gtG0].append((edgePred[ei,-1,1],true_pos))
-                else:
-                    candidate_lists[gtG0].append((edgePred[ei,-1,1],False))
-                    candidate_lists[gtG1].append((edgePred[ei,-1,1],False))
-            for gtG0,gtG1 in unused_gt_adj:
-                gtBB0=gtGroups[gtG0][0]
-                gtBB1=gtGroups[gtG1][0]
-                class0=classMap[gt_classIs[gtBB0]]
-                class1=classMap[gt_classIs[gtBB1]]
-                if (class0=='header' and class1=='question') or (class0=='question' and class1=='answer'):
-                    candidate_lists[gtG1].append((-1,False))
-                elif (class1=='header' and class0=='question') or (class1=='question' and class0=='answer'):
-                    candidate_lists[gtG0].append((-1,False))
-                #elif class0=='question'  and class1=='question':
-                #    #IDK
-                #    candidate_lists[gtG0].append((-1,False))
-                else:
-                    #there are some lableling annomalies in the FUNSD test set
-                    candidate_lists[gtG0].append((-1,False))
-                    #assert False
+            #unused_gt_adj = set(gtGroupAdj)
+            #candidate_lists=defaultdict(list)
+            #for ei,(n0,n1) in enumerate(edgeIndexes):
+            #    if n0 not in predToGTGroup or n1 not in predToGTGroup:
+            #        continue
+            #    gtG0 = predToGTGroup[n0]
+            #    gtG1 = predToGTGroup[n1]
+            #    class0 = classMap[classIs[n0]]
+            #    class1 = classMap[classIs[n1]]
+            #    true_pos = (min(gtG0,gtG1),max(gtG0,gtG1)) in gtGroupAdj
+            #    if true_pos:
+            #        try:
+            #            unused_gt_adj.remove((min(gtG0,gtG1),max(gtG0,gtG1)))
+            #        except KeyError as e:
+            #            if useGTGroups:
+            #                raise e
+            #    
+            #    if (class0=='header' and class1=='question') or (class0=='question' and class1=='answer'):
+            #        candidate_lists[gtG1].append((edgePred[ei,-1,1],true_pos))
+            #    elif (class1=='header' and class0=='question') or (class1=='question' and class0=='answer'):
+            #        candidate_lists[gtG0].append((edgePred[ei,-1,1],true_pos))
+            #    else:
+            #        candidate_lists[gtG0].append((edgePred[ei,-1,1],False))
+            #        candidate_lists[gtG1].append((edgePred[ei,-1,1],False))
+            #for gtG0,gtG1 in unused_gt_adj:
+            #    gtBB0=gtGroups[gtG0][0]
+            #    gtBB1=gtGroups[gtG1][0]
+            #    class0=classMap[gt_classIs[gtBB0]]
+            #    class1=classMap[gt_classIs[gtBB1]]
+            #    if (class0=='header' and class1=='question') or (class0=='question' and class1=='answer'):
+            #        candidate_lists[gtG1].append((-1,False))
+            #    elif (class1=='header' and class0=='question') or (class1=='question' and class0=='answer'):
+            #        candidate_lists[gtG0].append((-1,False))
+            #    #elif class0=='question'  and class1=='question':
+            #    #    #IDK
+            #    #    candidate_lists[gtG0].append((-1,False))
+            #    else:
+            #        #there are some lableling annomalies in the FUNSD test set
+            #        candidate_lists[gtG0].append((-1,False))
+            #        #assert False
 
-            sum_ap=0
-            hit_at_1=0
-            hit_at_2=0
-            hit_at_5=0
+            #sum_ap=0
+            #hit_at_1=0
+            #hit_at_2=0
+            #hit_at_5=0
 
-            for gtG, candidate_list in candidate_lists.items():
-                #if len(candidate_list)>1 or candidate_list[0][0]>=0:
-                #    sum_ap += computeAP(candidate_list)
-                #else:
-                #    sum_ap += 0 #total miss
+            #for gtG, candidate_list in candidate_lists.items():
+            #    #if len(candidate_list)>1 or candidate_list[0][0]>=0:
+            #    #    sum_ap += computeAP(candidate_list)
+            #    #else:
+            #    #    sum_ap += 0 #total miss
 
-                candidate_list.sort(key=lambda a:a[0],reverse=True)
-                if candidate_list[0][1]:
-                    hit_at_1 +=1
-                if any(a[1] for a in candidate_list[:2]):
-                    hit_at_2 +=1
-                if any(a[1] for a in candidate_list[:5]):
-                    hit_at_5 +=1
-            #log['DocStruct mAP'] = sum_ap/len(candidate_lists) #not quite right. Need to add every other possible rel. A
-            if len(candidate_lists)>0:
-                log['DocStruct hit@1'] = hit_at_1/len(candidate_lists)
-                log['DocStruct hit@2'] = hit_at_2/len(candidate_lists)
-                log['DocStruct hit@5'] = hit_at_5/len(candidate_lists)
+            #    candidate_list.sort(key=lambda a:a[0],reverse=True)
+            #    if candidate_list[0][1]:
+            #        hit_at_1 +=1
+            #    if any(a[1] for a in candidate_list[:2]):
+            #        hit_at_2 +=1
+            #    if any(a[1] for a in candidate_list[:5]):
+            #        hit_at_5 +=1
+            ##log['DocStruct mAP'] = sum_ap/len(candidate_lists) #not quite right. Need to add every other possible rel. A
+            #if len(candidate_lists)>0:
+            #    log['DocStruct hit@1'] = hit_at_1/len(candidate_lists)
+            #    log['DocStruct hit@2'] = hit_at_2/len(candidate_lists)
+            #    log['DocStruct hit@5'] = hit_at_5/len(candidate_lists)
 
 
             sum_hit=0
@@ -2046,8 +2046,13 @@ class GraphPairTrainer(BaseTrainer):
                     child_groups = gtGroupToPred[gg0]
                     if maxRelScoreIsHit(child_groups,parent_groups,edgeIndexes,edgePred):
                         sum_hit+=0.5
+<<<<<<< HEAD
 
             if len(gtGroupAdj):
+=======
+            
+            if len(gtGroupAdj)>0:
+>>>>>>> cfb17911a3c1da463d3c34fef0ed6cbef3223331
                 log['DocStruct redid hit@1'] = sum_hit/len(gtGroupAdj)
 
             
@@ -2170,7 +2175,8 @@ class GraphPairTrainer(BaseTrainer):
             elif name=='final_missedRels':
                  got[name] = finalMissedRels
             elif name=='DocStruct':
-                got[name]=log['DocStruct redid hit@1']
+                if 'redid' in log:
+                    got[name]=log['DocStruct redid hit@1']
             elif name != 'bb_stats' and name != 'nn_acc':
                 raise NotImplementedError('Cannot get [{}], unknown'.format(name))
         return losses, log, got
