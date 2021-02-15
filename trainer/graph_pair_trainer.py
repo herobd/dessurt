@@ -2046,13 +2046,7 @@ class GraphPairTrainer(BaseTrainer):
                     child_groups = gtGroupToPred[gg0]
                     if maxRelScoreIsHit(child_groups,parent_groups,edgeIndexes,edgePred):
                         sum_hit+=0.5
-<<<<<<< HEAD
-
-            if len(gtGroupAdj):
-=======
-            
             if len(gtGroupAdj)>0:
->>>>>>> cfb17911a3c1da463d3c34fef0ed6cbef3223331
                 log['DocStruct redid hit@1'] = sum_hit/len(gtGroupAdj)
 
             
