@@ -2047,7 +2047,8 @@ class GraphPairTrainer(BaseTrainer):
                     if maxRelScoreIsHit(child_groups,parent_groups,edgeIndexes,edgePred):
                         sum_hit+=0.5
 
-            log['DocStruct redid hit@1'] = sum_hit/len(gtGroupAdj)
+            if len(gtGroupAdj):
+                log['DocStruct redid hit@1'] = sum_hit/len(gtGroupAdj)
 
             
             
@@ -2169,7 +2170,7 @@ class GraphPairTrainer(BaseTrainer):
             elif name=='final_missedRels':
                  got[name] = finalMissedRels
             elif name=='DocStruct':
-                got[name]=log['DocStruct hit@1']
+                got[name]=log['DocStruct redid hit@1']
             elif name != 'bb_stats' and name != 'nn_acc':
                 raise NotImplementedError('Cannot get [{}], unknown'.format(name))
         return losses, log, got
