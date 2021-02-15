@@ -27,6 +27,8 @@ def maxRelScoreIsHit(child_groups,parent_groups,edgeIndexes,edgePred):
                 max_score = score
                 if pG1 in parent_groups or pG0 in parent_groups:
                     max_score_is_hit = True
+                else:
+                    max_score_is_hit = False
     return max_score_is_hit
 
 class GraphPairTrainer(BaseTrainer):
@@ -2169,7 +2171,7 @@ class GraphPairTrainer(BaseTrainer):
             elif name=='final_missedRels':
                  got[name] = finalMissedRels
             elif name=='DocStruct':
-                if 'redid' in log:
+                if 'DocStruct redid hit@1' in log:
                     got[name]=log['DocStruct redid hit@1']
             elif name != 'bb_stats' and name != 'nn_acc':
                 raise NotImplementedError('Cannot get [{}], unknown'.format(name))
