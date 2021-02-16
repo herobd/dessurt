@@ -1165,7 +1165,8 @@ class PairingGroupingGraph(BaseModel):
                         useBBs,
                         bbTrans,
                         image,
-                        gt_groups=[[g] for g in range(len(groups))] if gtGroups is not None else None)
+                        gt_groups=[[g] for g in range(len(groups))] if gtGroups is not None else None,
+                        final=True)
                 #print('!D! after  edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(graph[2].size(),useBBs.size(),graph[0].size(),len(edgeIndexes)))
                 if not self.useCurvedBBs and self.detector.predNumNeighbors:
                     #Discard NN prediction. We don't use it anymore
@@ -1439,7 +1440,8 @@ class PairingGroupingGraph(BaseModel):
             merge_only=False,
             good_edges=None,
             keep_edges=None,
-            gt_groups=None):
+            gt_groups=None,
+            final=False):
         #assert(len(oldBBs)==0 or type(oldBBs[0]) is TextLine)
         assert(oldNodeFeats is None or oldGroups is None or oldNodeFeats.size(0)==len(oldGroups))
         oldNumGroups=len(oldGroups)
@@ -1458,8 +1460,10 @@ class PairingGroupingGraph(BaseModel):
         newBBIdCounter=0
         #toMergeBBs={}
         if not merge_only:
-            edgePreds = torch.sigmoid(edgePredictions[:,-1,0]).cpu().detach()
-            #relPreds = torch.sigmoid(edgePredictions[:,-1,1]).cpu().detach()
+            if not final:
+                edgePreds = torch.sigmoid(edgePredictions[:,-1,0]).cpu().detach()
+            else:
+                edgePreds = torch.sigmoid(edgePredictions[:,-1,1]).cpu().detach()
             mergePreds = torch.sigmoid(edgePredictions[:,-1,2]).cpu().detach()
             groupPreds = torch.sigmoid(edgePredictions[:,-1,3]).cpu().detach()
             if gt_groups:
