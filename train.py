@@ -20,10 +20,12 @@ from torch.nn.parallel import DistributedDataParallel
 
 try: 
     from knockknock import slack_sender
+    with open('knock.knock') as f:
+        webhook_url = f.read().strip()
 except:
-    pass
+    webhook_url = None
 
-webhook_url = 'https://hooks.slack.com/services/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'
+
 
 
 logging.basicConfig(level=logging.INFO, format='')
@@ -188,12 +190,12 @@ if __name__ == '__main__':
                 join=True)
     elif config['cuda']:
         with torch.cuda.device(config['gpu']):
-            if not supercomputer:
+            if not supercomputer and webhook_url is not None:
                 notify_main(None,config, args.resume)
             else:
                 main(None,config, args.resume)
     else:
-        if not supercomputer:
+        if not supercomputer and webhook_url is not None:
             notify_main(None,config, args.resume)
         else:
             main(None,config, args.resume)
