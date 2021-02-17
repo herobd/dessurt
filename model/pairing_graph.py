@@ -8,6 +8,10 @@ from model.graph_net import GraphNet
 from model.meta_graph_net import MetaGraphNet
 from model.binary_pair_net import BinaryPairNet
 from model.binary_pair_real import BinaryPairReal
+try:
+    from model.old_binary_pair_real import OldBinaryPairReal
+except:
+    pass
 #from model.roi_align.roi_align import RoIAlign
 #from model.roi_align import ROIAlign as RoIAlign
 from torchvision.ops import RoIAlign
@@ -663,7 +667,7 @@ class PairingGraph(BaseModel):
                         debug_masks.append(cropArea)
 
             if self.useShapeFeats:
-                if type(self.pairer) is BinaryPairReal and type(self.pairer.shape_layers) is not nn.Sequential:
+                if (type(self.pairer) is BinaryPairReal or type(self.pairer) is OldBinaryPairReal) and type(self.pairer.shape_layers) is not nn.Sequential:
                     #The index specification is to allign with the format feat nets are trained with
                     ixs=[0,1,2,3,3+self.numBBTypes,3+self.numBBTypes,4+self.numBBTypes,5+self.numBBTypes,6+self.numBBTypes,6+2*self.numBBTypes,6+2*self.numBBTypes,7+2*self.numBBTypes]
                 else:
