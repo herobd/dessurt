@@ -1286,7 +1286,7 @@ class GraphPairTrainer(BaseTrainer):
                 #remove predictions that overlapped with GT, but not enough
                 if self.model_ref.predNN:
                     start=1
-                    toKeep = 1-((bbFullHit==0) * (bbAlignment!=-1)) #toKeep = not (incomplete_overlap and did_overlap)
+                    toKeep = ~((bbFullHit==0) * (bbAlignment!=-1)) #toKeep = not (incomplete_overlap and did_overlap)
                     if toKeep.any():
                         bbPredNN_use = bbPred[toKeep][:,:,0]
                         bbAlignment_use = bbAlignment[toKeep]
@@ -1400,7 +1400,7 @@ class GraphPairTrainer(BaseTrainer):
         #    loss = relLoss
 
 
-        if self.model_ref.predNN and bbPredNN_use is not None and bbPredNN_use.size(0)>0:
+        if self.model_ref.predNN and bbPredNN_use is not None and bbPredNN_use.size(0)>0 and 'nnFinal' in self.loss:
             alignedNN_use = alignedNN_use[:,None] #introduce "time" dimension to broadcast
             nn_loss_final = self.loss['nnFinal'](bbPredNN_use,alignedNN_use)
             losses['nnFinalLoss']=nn_loss_final
