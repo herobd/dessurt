@@ -61,13 +61,12 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 700000,
+        "iterations": 240000,
         "swa": true,
-        "swa_start": 600000,
-        "swa_c_iters": 10000,
+        "swa_start": 140000,
         "save_dir": "saved/",
-        "val_step": 20000,
-        "save_step": 20000,
+        "val_step": 10000,
+        "save_step": 10000,
         "save_step_minor": 200,
         "log_step": 250,
         "verbosity": 1,
@@ -86,7 +85,8 @@
         "max_use_pred": 0.5,
         "use_all_bb_pred_for_rel_loss": true,
 
-        "use_learning_schedule": true,
+        "use_learning_schedule": "spike then swa",
+        "swa_lr_mul": 0.1,
         "adapt_lr": false
     },
     "arch": "PairingGroupingGraph", 

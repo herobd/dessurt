@@ -149,7 +149,10 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         print('Unknown detection flag: '+useDetections)
         exit()
     else:
-        losses, log, out = trainer.newRun(instance,False,get=toEval)
+        if trainer.mergeAndGroup:
+            losses, log, out = trainer.newRun(instance,False,get=toEval)
+        else:
+            losses, log, out = trainer.run(instance,False)
 
 
     if trackAtt:

@@ -88,11 +88,12 @@ class GraphPairTrainer(BaseTrainer):
         self.thresh_conf = config['trainer']['thresh_conf'] if 'thresh_conf' in config['trainer'] else 0.92
         self.thresh_intersect = config['trainer']['thresh_intersect'] if 'thresh_intersect' in config['trainer'] else 0.4
         self.thresh_rel = config['trainer']['thresh_rel'] if 'thresh_rel' in config['trainer'] else 0.5
-        self.thresh_edge = self.model_ref.keepEdgeThresh
-        self.thresh_overSeg = self.model_ref.mergeThresh
-        self.thresh_group = self.model_ref.groupThresh
-        self.thresh_rel = [self.thresh_rel]*len(self.thresh_group)
-        self.thresh_error = config['trainer']['thresh_error'] if 'thresh_error' in config['trainer'] else [0.5]*len(self.thresh_group)
+        if self.mergeAndGroup:
+            self.thresh_edge = self.model_ref.keepEdgeThresh
+            self.thresh_overSeg = self.model_ref.mergeThresh
+            self.thresh_group = self.model_ref.groupThresh
+            self.thresh_rel = [self.thresh_rel]*len(self.thresh_group)
+            self.thresh_error = config['trainer']['thresh_error'] if 'thresh_error' in config['trainer'] else [0.5]*len(self.thresh_group)
 
         self.gt_bb_align_IOcU_thresh = 0.4 if 'gt_bb_align_IOcU_thresh' not in config['trainer'] else config['trainer']['gt_bb_align_IOcU_thresh']
         self.final_bb_iou_thresh = config['trainer']['final_bb_iou_thresh'] if 'final_bb_iou_thresh' in config['trainer'] else (config['final_bb_iou_thresh'] if 'final_bb_iou_thresh' in config else 0.5)
