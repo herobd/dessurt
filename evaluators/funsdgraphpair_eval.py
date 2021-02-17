@@ -162,13 +162,16 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         else:
             attList = model.pairer.attn
     #relPredFull = relPred
-    allEdgePred = out['allEdgePred']
-    allEdgeIndexes = out['allEdgeIndexes']
-    allNodePred = out['allNodePred']
-    allOutputBoxes = out['allOutputBoxes']
-    allPredGroups = out['allPredGroups']
-    allEdgePredTypes = out['allEdgePredTypes']
-    allMissedRels = out['allMissedRels']
+    if 'allEdgePred' in out:
+        allEdgePred = out['allEdgePred']
+        allEdgeIndexes = out['allEdgeIndexes']
+        allNodePred = out['allNodePred']
+        allOutputBoxes = out['allOutputBoxes']
+        allPredGroups = out['allPredGroups']
+        allEdgePredTypes = out['allEdgePredTypes']
+        allMissedRels = out['allMissedRels']
+    else:
+        allEdgePred = None
 
     if targetBoxes is not None:
         targetSize=targetBoxes.size(1)
