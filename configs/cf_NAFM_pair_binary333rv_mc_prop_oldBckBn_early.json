@@ -1,5 +1,5 @@
 {
-    "name": "NAFM_pair_binary333rv_mc_prop_oldBckBn",
+    "name": "NAFM_pair_binary333rv_mc_prop_oldBckBn_early",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -71,7 +71,7 @@
         "swa_start": 240000,
         "swa_c_iters": 10000,
         "save_dir": "saved/",
-        "val_step": 20000,
+        "val_step": 10000,
         "save_step": 20000,
         "save_step_minor": 200,
         "log_step": 250,
