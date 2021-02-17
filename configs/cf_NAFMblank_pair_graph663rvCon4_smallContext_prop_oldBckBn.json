@@ -10,7 +10,7 @@
         "data_dir": "../data/forms",
         "batch_size": 1,
         "shuffle": true,
-        "num_workers": 2,
+        "num_workers": 3,
         "crop_to_page":false,
         "color":false,
         "rescale_range": [0.4,0.65],
@@ -69,10 +69,9 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 700000,
+        "iterations": 340000,
         "swa": true,
-        "swa_start": 600000,
-        "swa_c_iters": 10000,
+        "swa_start": 240000,
         "save_dir": "saved/",
         "val_step": 20000,
         "save_step": 20000,
@@ -94,7 +93,8 @@
         "max_use_pred": 0.5,
         "use_all_bb_pred_for_rel_loss": true,
 
-        "use_learning_schedule": true,
+        "use_learning_schedule": "spike then swa",
+        "swa_lr_mul": 0.1,
         "adapt_lr": false
     },
     "arch": "PairingGroupingGraph", 

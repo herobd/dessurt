@@ -237,6 +237,15 @@ class BaseTrainer:
                 else:
                     return swa_lr_mul
             self.lr_schedule = torch.optim.lr_scheduler.LambdaLR(self.optimizer,riseLR)
+        elif self.useLearningSchedule=='spike then swa':
+            warmup_steps = config['trainer']['warmup_steps'] if 'warmup_steps' in config['trainer'] else 1000
+            swa_lr_mul = config['trainer']['swa_lr_mul'] if 'swa_lr_mul' in config['trainer'] else 0.1
+            def spikeThenSWA(step_num):
+                if step_num<self.swa_start:
+                    return min((max(0.000001,step_num-(warmup_steps-3))/100)**-0.1, step_num*(1.485/warmup_steps)+.01)
+                else:
+                    return swa_lr_mul
+            self.lr_schedule = torch.optim.lr_scheduler.LambdaLR(self.optimizer,spikeThenSWA)
         elif self.useLearningSchedule is True:
             warmup_steps = config['trainer']['warmup_steps'] if 'warmup_steps' in config['trainer'] else 1000
             #lr_lambda = lambda step_num: min((step_num+1)**-0.3, (step_num+1)*warmup_steps**-1.3)
