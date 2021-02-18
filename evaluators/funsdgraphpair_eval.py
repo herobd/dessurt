@@ -60,6 +60,9 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
     if not trainer.model.detector.predNumNeighbors:
         instance['num_neighbors']=None
 
+
+    trainer.train_hard_detect_limit=99999999999
+
     trackAtt = config['showAtt'] if 'showAtt' in config else False
     if trackAtt:
         if model.pairer is None:
