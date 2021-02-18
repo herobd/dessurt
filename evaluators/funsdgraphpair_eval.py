@@ -152,7 +152,10 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         print('Unknown detection flag: '+useDetections)
         exit()
     else:
-        losses, log, out = trainer.newRun(instance,False,get=toEval)
+        if trainer.mergeAndGroup:
+            losses, log, out = trainer.newRun(instance,False,get=toEval)
+        else:
+            losses, log, out = trainer.run(instance,False)
 
 
     if trackAtt:
@@ -162,13 +165,16 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         else:
             attList = model.pairer.attn
     #relPredFull = relPred
-    allEdgePred = out['allEdgePred']
-    allEdgeIndexes = out['allEdgeIndexes']
-    allNodePred = out['allNodePred']
-    allOutputBoxes = out['allOutputBoxes']
-    allPredGroups = out['allPredGroups']
-    allEdgePredTypes = out['allEdgePredTypes']
-    allMissedRels = out['allMissedRels']
+    if 'allEdgePred' in out:
+        allEdgePred = out['allEdgePred']
+        allEdgeIndexes = out['allEdgeIndexes']
+        allNodePred = out['allNodePred']
+        allOutputBoxes = out['allOutputBoxes']
+        allPredGroups = out['allPredGroups']
+        allEdgePredTypes = out['allEdgePredTypes']
+        allMissedRels = out['allMissedRels']
+    else:
+        allEdgePred = None
 
     if targetBoxes is not None:
         targetSize=targetBoxes.size(1)
