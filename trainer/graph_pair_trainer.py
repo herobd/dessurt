@@ -13,6 +13,10 @@ import random, os, math
 
 from model.oversegment_loss import build_oversegmented_targets_multiscale
 from model.overseg_box_detector import build_box_predictions
+try:
+    from model.optimize import optimizeRelationships, optimizeRelationshipsSoft
+except:
+    pass
 
 import torch.autograd.profiler as profile
 
@@ -149,8 +153,9 @@ class GraphPairTrainer(BaseTrainer):
         if 'edge' in self.loss:
             self.loss['rel'] = self.loss['edge']
 
-        #error
+        #error fixing, eval special stuff
         self.remove_same_pairs = False if 'remove_same_pairs' not in config else config['remove_same_pairs']
+        self.optimize = False if 'optimize' not in config else config['optimize']
 
         #t#self.opt_history = defaultdict(list)#t#
         self.do_characterization = config['characterization'] if 'characterization' in config else False
@@ -1279,6 +1284,11 @@ class GraphPairTrainer(BaseTrainer):
         else:
             outputBoxes, outputOffsets, relPred, relIndexes, bbPred, rel_prop_pred = self.model(image,
                     otherThresh=self.conf_thresh_init, otherThreshIntur=threshIntur, hard_detect_limit=self.train_hard_detect_limit)
+
+            if self.optimize:
+                #This changes relPred
+                self.optimizeF(relPred,relIndexes,bbPred[:,-1,0])
+
             #gtPairing,predPairing = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred)
             predPairingShouldBeTrue,predPairingShouldBeFalse, eRecall,ePrec,fullPrec,ap, bbAlignment, bbFullHit, proposedInfo, final_prop_rel_recall, final_prop_rel_prec = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred,relIndexes, rel_prop_pred)
             if bbPred is not None and bbPred.size(0)>0:
@@ -2198,8 +2208,8 @@ class GraphPairTrainer(BaseTrainer):
             assert 'blank' not in self.classMap
 
             num_classes = len(self.scoreClassMap)
-            class0 = outputBoxes[predGroups[g0][0],5:5+num_classes].argmax().item()
-            class1 = outputBoxes[predGroups[g1][0],5:5+num_classes].argmax().item()
+            class0 = outputBoxes[predGroups[g0][0],6:6+num_classes].argmax().item()
+            class1 = outputBoxes[predGroups[g1][0],6:6+num_classes].argmax().item()
 
             if class0!=class1:
                 new_pairs.append((g0,g1))
@@ -3286,4 +3296,46 @@ class GraphPairTrainer(BaseTrainer):
 
         #plt.show()
 
+    def optimizeF(self,relPred,relCand,predNN,rel_threshold=0.7):
+        penalty = 0.25
+        #print('optimizing with penalty {}'.format(penalty))
+        thresh=0.15
+        while thresh<0.45:
+            keep = relPred>thresh
+            newRelPred = relPred[keep].cpu()
+            if newRelPred.size(0)<700:
+                break
+        if newRelPred.size(0)>0:
+            #newRelCand = [ cand for i,cand in enumerate(relCand) if keep[i] ]
+            usePredNN= True# predNN is not None and config['optimize']!='gt'
+            idMap={}
+            newId=0
+            newRelCand=[]
+            numNeighbors=[]
+            for index,(id1,id2) in enumerate(relCand):
+                if keep[index]:
+                    if id1 not in idMap:
+                        idMap[id1]=newId
+                        if not usePredNN:
+                            numNeighbors.append(target_num_neighbors[0,bbAlignment[id1]])
+                        else:
+                            numNeighbors.append(predNN[id1].item())
+                        newId+=1
+                    if id2 not in idMap:
+                        idMap[id2]=newId
+                        if not usePredNN:
+                            numNeighbors.append(target_num_neighbors[0,bbAlignment[id2]])
+                        else:
+                            numNeighbors.append(predNN[id2].item())
+                        newId+=1
+                    newRelCand.append( [idMap[id1],idMap[id2]] )            
 
+
+            #if not usePredNN:
+                #    decision = optimizeRelationships(newRelPred,newRelCand,numNeighbors,penalty)
+            #else:
+            decision= optimizeRelationshipsSoft(newRelPred,newRelCand,numNeighbors,penalty, rel_threshold)
+            decision= torch.from_numpy( np.round_(decision).astype(int) )
+            decision=decision.to(relPred.device)
+            relPred[keep] = torch.where(0==decision,relPred[keep]-1,relPred[keep]+self.thresh_rel)
+            relPred[~keep] -=1
