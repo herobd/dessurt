@@ -723,6 +723,7 @@ class PairingGroupingGraph(BaseModel):
 
     def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=5000, debug=False,old_nn=False,gtTrans=None,merge_first_only=False, useOnlyGTSpace=False, gtGroups=None):
         assert(image.size(0)==1) #implementation designed for batch size of 1. Should work to do data parallelism, since each copy of the model will get a batch size of 1
+        self.merges_performed=0 #just tracking to see if it's working
         #t###tic=timeit.default_timer()#t#
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
         if not self.detector.forGraphPairing:
@@ -1461,9 +1462,9 @@ class PairingGroupingGraph(BaseModel):
         #toMergeBBs={}
         if not merge_only:
             if not final:
-                edgePreds = torch.sigmoid(edgePredictions[:,-1,0]).cpu().detach()
+                edgePreds = torch.sigmoid(edgePredictions[:,-1,0]).cpu().detach() #keep edge pred
             else:
-                edgePreds = torch.sigmoid(edgePredictions[:,-1,1]).cpu().detach()
+                edgePreds = torch.sigmoid(edgePredictions[:,-1,1]).cpu().detach() #rel pred
             mergePreds = torch.sigmoid(edgePredictions[:,-1,2]).cpu().detach()
             groupPreds = torch.sigmoid(edgePredictions[:,-1,3]).cpu().detach()
             if gt_groups:
@@ -1491,6 +1492,7 @@ class PairingGroupingGraph(BaseModel):
             if mergePreds[i]>mergeThresh: #TODO condition this on whether it is correct. and GT?:
                 if self.training and random.random()<0.001: #randomly don't merge for robustness in training
                     continue
+
                 if len(oldGroups[n0])==1 and len(oldGroups[n1])==1: #can only merge ungrouped nodes. This assumption is used later in the code WXS
                     #changedNodeIds.add(n0)
                     #changedNodeIds.add(n1)
@@ -1532,6 +1534,7 @@ class PairingGroupingGraph(BaseModel):
                         if oldBBTrans is not None:
                             del bbTrans[newId1]
                         mergedTo.add(newId0)
+                        self.merges_performed+=1
 
 
         oldBBIdToNew = oldToNewBBIndexes
