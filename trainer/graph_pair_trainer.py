@@ -149,6 +149,9 @@ class GraphPairTrainer(BaseTrainer):
         if 'edge' in self.loss:
             self.loss['rel'] = self.loss['edge']
 
+        #error
+        self.remove_same_pairs = False if 'remove_same_pairs' not in config else config['remove_same_pairs']
+
         #t#self.opt_history = defaultdict(list)#t#
         self.do_characterization = config['characterization'] if 'characterization' in config else False
         if self.do_characterization:
@@ -2069,6 +2072,8 @@ class GraphPairTrainer(BaseTrainer):
         ###
         gt_groups_adj = instance['gt_groups_adj']
         if final is not None:
+            if self.remove_same_pairs:
+                final = self.removeSamePairs(final)
             finalLog, finalRelTypes, finalMissedRels = self.finalEval(targetBoxes.cpu() if targetBoxes is not None else None,gtGroups,gt_groups_adj,targetIndexToGroup,*final,bb_iou_thresh=self.final_bb_iou_thresh)
             log.update(finalLog)
             if self.save_images_every>0 and self.iteration%self.save_images_every==0:
@@ -2184,7 +2189,22 @@ class GraphPairTrainer(BaseTrainer):
                 raise NotImplementedError('Cannot get [{}], unknown'.format(name))
         return losses, log, got
 
+    def removeSamePairs(self,final):
+        outputBoxes,predGroups,predPairs,predTrans = final
+        new_pairs = []
+        for g0,g1 in predPairs:
+            assert len(predGroups[g0])==1
+            assert len(predGroups[g1])==1
+            assert 'blank' not in self.classMap
 
+            num_classes = len(self.scoreClassMap)
+            class0 = outputBoxes[predGroups[g0][0],5:5+num_classes].argmax().item()
+            class1 = outputBoxes[predGroups[g1][0],5:5+num_classes].argmax().item()
+
+            if class0!=class1:
+                new_pairs.append((g0,g1))
+        return outputBoxes,predGroups,new_pairs,predTrans
+            
 
     def finalEval(self,targetBoxes,gtGroups,gt_groups_adj,targetIndexToGroup,outputBoxes,predGroups,predPairs,predTrans=None, bb_iou_thresh=0.5):
         log={}
