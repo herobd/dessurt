@@ -2198,8 +2198,8 @@ class GraphPairTrainer(BaseTrainer):
             assert 'blank' not in self.classMap
 
             num_classes = len(self.scoreClassMap)
-            class0 = outputBoxes[predGroups[g0][0],5:5+num_classes].argmax().item()
-            class1 = outputBoxes[predGroups[g1][0],5:5+num_classes].argmax().item()
+            class0 = outputBoxes[predGroups[g0][0],6:6+num_classes].argmax().item()
+            class1 = outputBoxes[predGroups[g1][0],6:6+num_classes].argmax().item()
 
             if class0!=class1:
                 new_pairs.append((g0,g1))
