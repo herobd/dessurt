@@ -1461,9 +1461,9 @@ class PairingGroupingGraph(BaseModel):
         #toMergeBBs={}
         if not merge_only:
             if not final:
-                edgePreds = torch.sigmoid(edgePredictions[:,-1,0]).cpu().detach()
+                edgePreds = torch.sigmoid(edgePredictions[:,-1,0]).cpu().detach() #keep edge pred
             else:
-                edgePreds = torch.sigmoid(edgePredictions[:,-1,1]).cpu().detach()
+                edgePreds = torch.sigmoid(edgePredictions[:,-1,1]).cpu().detach() #rel pred
             mergePreds = torch.sigmoid(edgePredictions[:,-1,2]).cpu().detach()
             groupPreds = torch.sigmoid(edgePredictions[:,-1,3]).cpu().detach()
             if gt_groups:
