@@ -9,6 +9,8 @@ warmup_steps=1000
 
 lr_lambda = lambda step_num: min((max(0.000001,step_num-(warmup_steps-3))/100)**-0.1, step_num*(1.485/warmup_steps)+.01)
 
+lr_lambda2 = lambda step_num: min((step_num+1)**-0.3, (step_num+1)*warmup_steps**-1.3)
+
 def lrf(step_num):
     return min((max(0.000001,step_num-(warmup_steps-3))/100)**-0.1, step_num*(1.485/warmup_steps)+.01)
 
@@ -43,5 +45,13 @@ y=np.array(y)
 
 print('max val: {}'.format(y.max()))
 print('mean val: {}'.format(y.mean()))
-plt.plot(x,y,'.')
+plt.plot(x,y,'r.')
+
+x2 = [i for i in range(0,iterations)]
+y2 = [lr_lambda2(i) for i in x]
+y2=np.array(y2)
+
+print('max val: {}'.format(y.max()))
+print('mean val: {}'.format(y.mean()))
+plt.plot(x2,y2,'b.')
 plt.show()
