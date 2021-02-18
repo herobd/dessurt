@@ -141,6 +141,7 @@ class FormsGraphPair(GraphPairDataset):
         self.no_graphics =  config['no_graphics'] if 'no_graphics' in config else False
         self.only_opposite_pairs = config['only_opposite_pairs'] if 'only_opposite_pairs' in config else False
         
+        
         self.group_only_same = config['group_only_same'] if 'group_only_same' in config else False
         self.no_groups = config['no_groups'] if 'no_groups' in config else False
         assert(not self.no_groups or not self.group_only_same)
