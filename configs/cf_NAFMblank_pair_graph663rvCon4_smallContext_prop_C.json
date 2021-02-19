@@ -1,10 +1,9 @@
 {
-    "name": "NAFMblank_pair_graph663rvCon4_smallContext_prop_B",
+    "name": "NAFMblank_pair_graph663rvCon4_smallContext_prop_C",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
-    "super_computer":true,
     "data_loader": {
         "data_set_name": "FormsGraphPair",
         "special_dataset": null,
