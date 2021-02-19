@@ -2372,7 +2372,10 @@ class GraphPairTrainer(BaseTrainer):
             log['final_group_ED_precision']=entity_detection_TP/len(predGroupsT)
         else:
             log['final_group_ED_precision']=1
-        log['final_group_ED_F1'] = 2*log['final_group_ED_precision']*log['final_group_ED_recall']/(log['final_group_ED_recall']+log['final_group_ED_precision'])
+        if log['final_group_ED_recall']+log['final_group_ED_precision']>0:
+            log['final_group_ED_F1'] = 2*log['final_group_ED_precision']*log['final_group_ED_recall']/(log['final_group_ED_recall']+log['final_group_ED_precision'])
+        else:
+            log['final_group_ED_F1'] = 0
 
         for hit in gtGroupHit:
             if not hit:
