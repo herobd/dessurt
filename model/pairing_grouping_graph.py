@@ -33,8 +33,8 @@ import utils.img_f as img_f
 import timeit
 import torch.autograd.profiler as profiler
 
-MAX_CANDIDATES=2000 #these are only used for line-of-sight selection
-MAX_GRAPH_SIZE=4000
+MAX_CANDIDATES=700 #these are only used for line-of-sight selection
+MAX_GRAPH_SIZE=750
 
 def minAndMaxXY(boundingRects):
     min_X,min_Y,max_X,max_Y = np.array(boundingRects).transpose(1,0)
@@ -704,6 +704,9 @@ class PairingGroupingGraph(BaseModel):
             self.debug=True
         else:
             self.debug=False
+
+        if 'change_relationship_proposal' in config:
+            self.relationshipProposal = config['change_relationship_proposal']
 
         #t#self.opt_history=defaultdict(list)#t#
 
