@@ -2324,6 +2324,9 @@ class GraphPairTrainer(BaseTrainer):
             for node in range(len(predGroups)):
                 predGroupsT[node] = []
 
+
+        entity_detection_TP=0
+
         
         gtGroupHit=[False]*len(gtGroups)
         groupCompleteness=[]
@@ -2358,6 +2361,18 @@ class GraphPairTrainer(BaseTrainer):
                 completeness=sum([gtId in predGroupT for gtId in gtGroups[gtGroupId]])
                 completeness/=len(gtGroups[gtGroupId])
                 groupCompleteness.append(completeness)
+                
+                if completeness==1 and purity==1:
+                    entity_detection_TP+=1
+        if len(gtGroups)>0:
+            log['final_group_ED_recall']=entity_detection_TP/len(gtGroups)
+        else:
+            log['final_group_ED_recall']=1
+        if len(predGroupsT)>0:
+            log['final_group_ED_precision']=entity_detection_TP/len(predGroupsT)
+        else:
+            log['final_group_ED_precision']=1
+        log['final_group_ED_F1'] = 2*log['final_group_ED_precision']*log['final_group_ED_recall']/(log['final_group_ED_recall']+log['final_group_ED_precision'])
 
         for hit in gtGroupHit:
             if not hit:
@@ -2368,7 +2383,9 @@ class GraphPairTrainer(BaseTrainer):
         log['final_groupPurity']=np.mean([v for k,v in groupPurity.items()])
 
         gtRelHit=set()
+        gtRelHit_strict=set()
         relPrec=0
+        relPrec_strict=0
         if predPairs is None:
             predPairs=[]
         if 'blank' in self.classMap and predGroups is not None:
@@ -2388,6 +2405,9 @@ class GraphPairTrainer(BaseTrainer):
                 if pair_id in gt_groups_adj:
                     relPrec+=1
                     gtRelHit.add((min(gtG0,gtG1),max(gtG0,gtG1)))
+                    if groupPurity[gtG0]==1 and groupPurity[gtG1]==1:
+                        relPrec_strict+=1
+                        gtRelHit_strict.add((min(gtG0,gtG1),max(gtG0,gtG1)))
                     if 'blank' in self.classMap:
                         old_pi = newToOldPredPairs[pi]
                         rel_types[old_pi] = 'TP'
@@ -2405,19 +2425,30 @@ class GraphPairTrainer(BaseTrainer):
         #print('DEBUG false negatives={}'.format(len(gt_groups_adj)-len(gtRelHit)))
         if len(predPairs)>0:
             relPrec /= len(predPairs)
+            relPrec_strict /= len(predPairs)
         else:
             relPrec = 1
+            relPrec_strict = 1
         if len(gt_groups_adj)>0:
             relRecall = len(gtRelHit)/len(gt_groups_adj)
+            relRecall_strict = len(gtRelHit_strict)/len(gt_groups_adj)
         else:
             relRecall = 1
+            relRecall_strict = 1
+
 
         log['final_rel_prec']=relPrec
         log['final_rel_recall']=relRecall
+        log['final_rel_strict_prec']=relPrec_strict
+        log['final_rel_strict_recall']=relRecall_strict
         if relPrec+relRecall>0:
             log['final_rel_Fm']=(2*(relPrec*relRecall)/(relPrec+relRecall))
         else:
             log['final_rel_Fm']=0
+        if relPrec_strict+relRecall_strict>0:
+            log['final_rel_strict_Fm']=(2*(relPrec_strict*relRecall_strict)/(relPrec_strict+relRecall_strict))
+        else:
+            log['final_rel_strict_Fm']=0
 
 
         missed_rels = gt_groups_adj.difference(gtRelHit)

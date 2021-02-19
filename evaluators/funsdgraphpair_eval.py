@@ -110,7 +110,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         #        os.mkdir(nPath)
 
     #dataT = __to_tensor(data,gpu)
-    print('{}: {} x {}'.format(imageName,data.shape[2],data.shape[3]))
+    #print('{}: {} x {}'.format(imageName,data.shape[2],data.shape[3]))
     trainer.use_gt_trans = config['useGTTrans'] if 'useGTTrans' in config else False
     if useDetections=='gt':
         losses, log, out = trainer.newRun(instance,True,get=toEval,useGTGroups=useGTGroups)
@@ -258,17 +258,31 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
 
     for key in losses.keys():
         losses[key] = losses[key].item()
-    retData= { 
-               **toRet,
-               **losses,
 
-             }
+    if False:
+        retData= { 
+                   **toRet,
+                   **losses,
+
+                 }
+    else:
+        retData={}
+    keep_prefixes=['final_bb_all','final_group','final_rel','prop_rel','DocStruct','F-M','prec@','recall@','bb_Fm','bb_recall','bb_prec']
     for key,value in log.items():
         #if key.startswith('final'):
-        if type(value) is np.ndarray:
-            retData[key]={i:[value[i]] for i in range(value.shape[0])}
+        if trainer.mergeAndGroup:
+            for prefix in keep_prefixes:
+                if key.startswith(prefix):
+                    if type(value) is np.ndarray:
+                        retData[key]={i:[value[i]] for i in range(value.shape[0])}
+                    else:
+                        retData[key]=[value]
+                    break
         else:
-            retData[key]=[value]
+            if type(value) is np.ndarray:
+                retData[key]={i:[value[i]] for i in range(value.shape[0])}
+            else:
+                retData[key]=[value]
     #if rel_ap is not None: #none ap if no relationships
     #    retData['rel_AP']=rel_ap
     #    retData['no_targs']=0
