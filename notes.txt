@@ -11,7 +11,6 @@ NAFMblank_pair_os100k2_binary333rv_mc_prop_nms_strictAlign_smooth_mfl
 
 JOBS
  FUNSDLines_pair_graph663rvCon4_smallContext_prop_readGTDBertTune 454 4545
-Adobe_pair_binary333rv_mc_prop_longer 333 333
 FUNSDLines_pair_binaryN333rv_noViz_prop_readGTDBert
 FUNSDLines_pair_binaryN333rv_noViz_prop_readGTDBertWholePartTune
 FUNSDLines_pair_graph663rv_noViz_prop_readGTDBertWholeTune
@@ -33,7 +32,6 @@ FUNSDLines_pair_binary333rv_mc_prop_longer_B
 FUNSDLines_pair_graph663rvCon4_smallContext_prop_B
 NAFMblank_pair_graph663rvCon4_smallContext_prop_B
                                     FUNSDLines_pair_binary5rv_mc_prop_preBckBn_120k  40137978        0:09
-                     FUNSDLines_pair_graph663rvCon4_smallContext_prop_preBckBn_120k  40137905        3:28
                       FUNSDLines_pair_graph77rvCon4_smallContext_prop_preBckBn_120k  40137199       32:07
                        FUNSDLines_pair_graph9rvCon4_smallContext_prop_preBckBn_120k  40137063       34:36
                                   FUNSDLines_pair_binary333rv_mc_prop_preBckBn_120k  40136964       37:28
