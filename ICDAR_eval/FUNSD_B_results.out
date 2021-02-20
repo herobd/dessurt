@@ -1,0 +1,58 @@
+DeprecationWarning: 'source deactivate' is deprecated. Use 'conda deactivate'.
+# conda environments:
+#
+base                     /apps/miniconda3/4.6.14
+c10                      /fslhome/brianld/.conda/envs/c10
+pyt1                     /fslhome/brianld/.conda/envs/pyt1
+                         /fslhome/brianld/miniconda3
+                      *  /fslhome/brianld/miniconda3/envs/new
+                         /fslhome/brianld/miniconda3/envs/qr
+                         /fslhome/brianld/miniconda3/envs/qr9
+                         /fslhome/brianld/miniconda3/envs/tf
+                         /fslhome/brianld/miniconda3/envs/tf1
+
+FUNSD B binary
+loaded FUNSDLines_pair_binary333rv_mc_prop_longer_B iteration 720000
+Detecting number of neighbors!
+Successfully loaded SWA model
+test metrics
+DocStruct redid hit@1 overall mean: 0.6468241814162514, std 0.2765708672741901
+final_bb_allPrec overall mean: 0.7035599411916504, std 0.17602081725112087
+final_bb_allRecall overall mean: 0.6669681903655436, std 0.1821852397862737
+final_bb_allFm overall mean: 0.6829841413062239, std 0.17678703388146608
+final_group_ED_recall overall mean: 0.6951612785226476, std 0.14829617109700194
+final_group_ED_precision overall mean: 0.7018041124056087, std 0.14844329405067117
+final_group_ED_F1 overall mean: 0.6946723599909302, std 0.14261585026043963
+final_groupCompleteness overall mean: 0.7211967820597248, std 0.13876125172437861
+final_groupPurity overall mean: 0.7436543063640078, std 0.13205870903009426
+final_rel_prec overall mean: 0.6004078803086813, std 0.27914526416251806
+final_rel_recall overall mean: 0.6252566962221677, std 0.2870507225192657
+final_rel_strict_prec overall mean: 0.5762308723245619, std 0.27847485283174445
+final_rel_strict_recall overall mean: 0.6017570190326944, std 0.2910004134416959
+final_rel_Fm overall mean: 0.5785106351680928, std 0.2789904558333982
+final_rel_strict_Fm overall mean: 0.5549399609894038, std 0.27896060199653355
+prop_rel_recall overall mean: 0.9473082802917137, std 0.09181987245769997
+prop_rel_prec overall mean: 0.12819991517816956, std 0.06276086820198615
+FUNSD B binary with GT
+loaded FUNSDLines_pair_binary333rv_mc_prop_longer_B iteration 720000
+added config[useDetect]=gtSpaceOnly
+Detecting number of neighbors!
+Successfully loaded SWA model
+test metrics
+DocStruct redid hit@1 overall mean: 0.6563862553233961, std 0.27190615751756664
+final_bb_allPrec overall mean: 0.7522321047614414, std 0.17348147631074398
+final_bb_allRecall overall mean: 0.7502829399201965, std 0.1739766067136942
+final_bb_allFm overall mean: 0.7512416018463317, std 0.17372070994826205
+final_group_ED_recall overall mean: 0.7712149414770718, std 0.13721099445410692
+final_group_ED_precision overall mean: 0.7669501294540736, std 0.14587585451472346
+final_group_ED_F1 overall mean: 0.7667235550459869, std 0.13791576741149073
+final_groupCompleteness overall mean: 0.7873486748154839, std 0.12600478179911714
+final_groupPurity overall mean: 0.7963518037758432, std 0.126646168133663
+final_rel_prec overall mean: 0.5968579337505094, std 0.28162284486164196
+final_rel_recall overall mean: 0.6496018020252908, std 0.28647614928880594
+final_rel_strict_prec overall mean: 0.5930297358046644, std 0.2831260719904298
+final_rel_strict_recall overall mean: 0.6449830550142914, std 0.288311956229589
+final_rel_Fm overall mean: 0.587412447419941, std 0.2726261488377098
+final_rel_strict_Fm overall mean: 0.5832818497392988, std 0.27406611003208714
+prop_rel_recall overall mean: 0.9127414672997722, std 0.13780237299544146
+prop_rel_prec overall mean: 0.1400086680773663, std 0.07272882175836792

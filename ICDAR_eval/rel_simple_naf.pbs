@@ -1,0 +1,63 @@
+#!/bin/bash
+
+
+#SBATCH --time=1:20:00   # walltime
+#SBATCH --ntasks=5
+#SBATCH --nodes=1
+#SBATCH --gres=gpu:1
+#SBATCH -J "eval NAF"
+#SBATCH --mem-per-cpu=2048M
+#SBATCH --mail-user=herobd@gmail.com   # email address
+#SBATCH --mail-type=END
+#SBATCH --mail-type=FAIL
+#xxxSBATCH -C 'pascal'
+#xxxSBATCH --qos=standby   
+#xxxSBATCH --requeue
+
+#130:00:00
+
+export PBS_NODEFILE=`/fslapps/fslutils/generate_pbs_nodefile`
+export PBS_JOBID=$SLURM_JOB_ID
+export PBS_O_WORKDIR="$SLURM_SUBMIT_DIR"
+export PBS_QUEUE=batch
+
+export OMP_NUM_THREADS=$SLURM_CPUS_ON_NODE
+
+#Tesseract things
+module load libtiff/4.0
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/fslhome/brianld/local/lib
+export PATH=$PATH:/fslhome/brianld/local/bin
+export TESSDATA_PREFIX=/fslhome/brianld/tesseract/tessdata
+
+#echo "From here on is the output from the program"
+#module load python/3.6
+module load cuda/10.1
+module load cudnn/7.6
+#module load pytorch/1.0
+#module load opencv/3/2
+cd ~/pairing
+#source pairing/bin/activate
+source deactivate
+source activate /fslhome/brianld/miniconda3/envs/new
+
+#rm -r out/*
+#rm -r out2/*
+#mkdir out2
+echo 'Key-value relationship detection on the simple NAF dataset'
+
+echo 'Davis is on oldshipzion'
+#python new_eval.py -c ../Visual-Template-Free-Form-Parsing/saved/pairing_fullNAF_375k/checkpoint-latest.pth -g 0 -v 0 -T -f cf_pairing_fullNAF.json -a optimize=1,data_loader=special_dataset=simple,validation=special_dataset=simple -T
+
+echo 'Ours no GCN (fine-tuned from snapshot) is on edison'
+#python new_eval.py -c saved/NAFM_pair_binary333rv_mc_prop_oldBckBn_early/checkpoint-latest.pth -g 0 -v 0 -T -a remove_same_pairs=1,data_loader=only_opposite_pairs=1,validation=only_opposite_pairs=1,data_loader=special_dataset=simple,validation=special_dataset=simple
+
+echo 'Ours with GCN (fine-tuned from snapshot) is on jareditebarge'
+#python new_eval.py -c saved/NAFMblank_pair_graph663rvCon4_smallContext_prop_oldBckBn/checkpoint-latest.pth -g 0 -v 0 -T -a remove_same_pairs=1,data_loader=only_opposite_pairs=1,validation=only_opposite_pairs=1,data_loader=special_dataset=simple,validation=special_dataset=simple
+
+
+echo 'Ours no GCN (full)'
+python new_eval.py -c saved/NAFMblank_pair_binary333rv_mc_prop_longer_B/checkpoint-latest.pth -g 0 -v 0 -T -a remove_same_pairs=1,data_loader=only_opposite_pairs=1,validation=only_opposite_pairs=1,data_loader=special_dataset=simple,validation=special_dataset=simple
+
+echo 'Ours with GCN (full) is on edison'
+#python new_eval.py -c saved/NAFMblank_pair_graph663rvCon4_smallContext_prop_B/checkpoint-latest.pth -g 0 -v 0 -T -a remove_same_pairs=1,data_loader=only_opposite_pairs=1,validation=only_opposite_pairs=1,data_loader=special_dataset=simple,validation=special_dataset=simple
+
