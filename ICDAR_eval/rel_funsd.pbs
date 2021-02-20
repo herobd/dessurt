@@ -1,0 +1,111 @@
+#!/bin/bash
+
+
+#SBATCH --time=1:20:00   # walltime
+#SBATCH --ntasks=5
+#SBATCH --nodes=1
+#SBATCH --gres=gpu:1
+#SBATCH -J "eval FUNSD"
+#SBATCH --mem-per-cpu=2048M
+#SBATCH --mail-user=herobd@gmail.com   # email address
+#SBATCH --mail-type=END
+#SBATCH --mail-type=FAIL
+#xxxSBATCH -C 'pascal'
+#xxxSBATCH --qos=standby   
+#xxxSBATCH --requeue
+
+#130:00:00
+
+export PBS_NODEFILE=`/fslapps/fslutils/generate_pbs_nodefile`
+export PBS_JOBID=$SLURM_JOB_ID
+export PBS_O_WORKDIR="$SLURM_SUBMIT_DIR"
+export PBS_QUEUE=batch
+
+export OMP_NUM_THREADS=$SLURM_CPUS_ON_NODE
+
+#Tesseract things
+module load libtiff/4.0
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/fslhome/brianld/local/lib
+export PATH=$PATH:/fslhome/brianld/local/bin
+export TESSDATA_PREFIX=/fslhome/brianld/tesseract/tessdata
+
+#echo "From here on is the output from the program"
+#module load python/3.6
+module load cuda/10.1
+module load cudnn/7.6
+#module load pytorch/1.0
+#module load opencv/3/2
+cd ~/pairing
+#source pairing/bin/activate
+source deactivate
+source activate /fslhome/brianld/miniconda3/envs/new
+conda info --envs
+
+#rm -r out/*
+#rm -r out2/*
+#mkdir out2
+
+
+echo 'FUN B graph'
+python new_eval.py -c saved/FUNSDLines_pair_graph663rvCon4_smallContext_prop_B/checkpoint-latest.pth -g 0 -v 0 -T
+#echo 'FUNSD B binary'
+#python new_eval.py -c saved/FUNSDLines_pair_binary333rv_mc_prop_longer_B/checkpoint-latest.pth -g 0 -v 0 -T 
+
+echo 'FUN B graph with GT'
+python new_eval.py -c saved/FUNSDLines_pair_graph663rvCon4_smallContext_prop_B/checkpoint-latest.pth -g 0 -v 0 -T -a useDetect=gtSpaceOnly
+#echo 'FUNSD B binary with GT'
+#python new_eval.py -c saved/FUNSDLines_pair_binary333rv_mc_prop_longer_B/checkpoint-latest.pth -g 0 -v 0 -T -a useDetect=gtSpaceOnly
+echo 'FUN B graph with GT+groups'
+python new_eval.py -c saved/FUNSDLines_pair_graph663rvCon4_smallContext_prop_B/checkpoint-latest.pth -g 0 -v 0 -T -a useDetect=gtSpaceOnly,gtGroups=1
+
+#python new_eval.py -c saved/NAFMblank_pair_graph663rvCon4_smallContext_prop_B/checkpoint-latest.pth -g 0 -v 0 -T -a data_loader=special_dataset=simple -d out -n 7
+#python new_eval.py -c saved/NAFMblank_pair_binary333rv_mc_prop_longer_B/checkpoint-latest.pth -g 0 -v 0 -T -a data_loader=special_dataset=simple -d out -n 7
+
+#echo "FUNSD graph B GT"
+#python new_eval.py -c saved/FUNSDLines_pair_graph663rvCon4_smallContext_prop_B/checkpoint-latest.pth -g 0 -v 0 -a useDetect=gtSpaceOnly,gtGroups=1 -T
+#echo "FUNSD graph B  no gt"
+#python new_eval.py -c saved/FUNSDLines_pair_graph663rvCon4_smallContext_prop_B/checkpoint-latest.pth -g 0 -v 0 -T
+#echo "FUNSD binary B GT"
+#python new_eval.py -c saved/FUNSDLines_pair_binary333rv_mc_prop_longer_B/checkpoint-latest.pth -g 0 -v 0 -a useDetect=gtSpaceOnly,gtGroups=1 -T
+#echo "FUNSD binary B no gt"
+#python new_eval.py -c saved/FUNSDLines_pair_binary333rv_mc_prop_longer_B/checkpoint-latest.pth -g 0 -v 0  -T
+#
+#echo "FUNSD graph orig GT"
+#python new_eval.py -c saved/FUNSDLines_pair_graph663rvCon4_smallContext_prop/checkpoint-iteration700000.pth -g 0 -v 0 -a useDetect=gtSpaceOnly,gtGroups=1 -T
+#echo "FUNSD graph orig no gt"
+#python new_eval.py -c saved/FUNSDLines_pair_graph663rvCon4_smallContext_prop/checkpoint-iteration700000.pth -g 0 -v 0 -T
+#echo "FUNSD binary orig GT"
+#python new_eval.py -c saved/FUNSDLines_pair_binary333rv_mc_prop_longer2/checkpoint-iteration600000.pth -g 0 -v 0 -a useDetect=gtSpaceOnly,gtGroups=1 -T
+#echo "FUNSD binary orig no gt"
+#python new_eval.py -c saved/FUNSDLines_pair_binary333rv_mc_prop_longer2/checkpoint-iteration600000.pth -g 0 -v 0  -T
+
+#python new_eval.py -c saved/NAFMblank_pair_binary333rv_mc_prop_longer2/checkpoint-iteration600000.pth -g 0 -v 0
+#python new_eval.py -c saved/FUNSDLines_pair_os98k_graphNAtt663rvCon4_sc_prop_nms_strictAlign_smooth_mfl/checkpoint-iteration700000.pth -a characterization=1,trainer=init_merge_rule=picky,draw_verbosity=4 -d out2 -n 9 
+
+#python new_eval.py -c saved/NAFMblank_pair_os100k2_binary333rv_mc_prop_nms_strictAlign_smooth_mfl/checkpoint-latest.pth -g 0 -d out -n 9 -v 0 --do_train -a model=conf_thresh=0.4,model=use_hard_conf_thresh=1
+#python new_eval.py -c saved/NAFMblank_pair_os100k2_graphNAtt663rvCon4_sc_prop_nms_strictAlign_smooth_mfl_small/checkpoint-latest.pth -g 0 -d out -n 9 -v 0 --do_train  -a model=conf_thresh=0.4,model=use_hard_conf_thresh=1
+#python new_eval.py -c saved/Adobe_detect_augR_oversegMultScl/checkpoint-iteration100000.pth -g 0 -d out -n 9 -v 0 -a THRESH=0.7
+
+#python new_eval.py -c saved/NAFGSblank_pair_os100k2_graphNAtt543rv_sc_prop_nms_strictAlign_smooth/checkpoint-latest.pth -g 0 -d out -n 9 -v 0 -a model=rel_merge_hard_thresh=0.3,final_bb_iou_thresh=0.2,characterization=1 
+#python new_eval.py -c saved/FUNSDLines_pair_os98k_graphNAtt663rvCon4_sc_prop_nms_strictAlign_smooth_mfl/checkpoint-latest.pth -g 0 -d out -n 9 -v 0 -a model=rel_merge_hard_thresh=0.3
+
+#python new_eval.py -c saved/NAFMblank_pair_os100k2_graphNAtt663rvCon4_sc_prop_nms_strictAlign_smooth_mfl/checkpoint-latest.pth -g 0 -d out -n 9 -v 0 -a model=prevent_vert_merges=1
+
+
+
+
+#python new_eval.py -c saved/FUNSDLines_pair_binary3P2_smallContext_prop2/checkpoint-iteration25000.pth -g 0 -v 0
+#python new_eval.py -c saved/FUNSDLines_pair_binary3P2_smallContext_prop2/checkpoint-iteration25000.pth -g 0 -v 0 -a useDetection=gt
+
+#python new_eval.py -c saved/FUNSDLines_pair_os98k_graphAtt122_smallContext_prop/checkpoint-latest.pth -g 0 -d out -n 9 -v 0 
+#python new_eval.py -c saved/FUNSDLines_pair_os98k_binary3P3rv_smallContext_prop/checkpoint-latest.pth -g 0 -d out -n 9 -v 0 
+#python new_eval.py -c saved/FUNSDLines_pair_os98k_graphAtt122rv_smallContext_propMergeLight/checkpoint-latest.pth -g 0 -d out -n 9 -v 0 
+#python new_eval.py -c saved/FUNSDLines_pair_os98k_binary333rv_sc_propMergeLight_nms_strictAlign_smooth/checkpoint-latest.pth -g 0 -d out -n 9 -v 0 
+#python new_eval.py -c saved/FUNSDLines_pair_os98k_graphAtt122rv_smallContext_propMergeLightNoBtwnPx/checkpoint-latest.pth -g 0 -d out -n 9 -v 0
+#
+#python new_eval.py -c saved/FUNSDLines_pair_os98k_graphAtt122rv_smallContext_prop_tess/checkpoint-latest.pth -g 0 -d out -n 9 -v 0 
+
+#python new_eval.py -c saved/NAFGblank_pair_os100k2_binary333rv_sc_prop_nms_strictAlign_smooth/checkpoint-latest.pth -g 0 -d out -n 9 -v 0 
+#python new_eval.py -c saved/NAFGblank_pair_os100k2_graphNAtt333rv_sc_prop_nms_strictAlign_smooth/checkpoint-latest.pth -g 0 -d out -n 9 -v 0 
+
+#python new_eval.py -c saved/NAFG_pair_binary3P3_smallContext_prop/checkpoint-latest.pth -g 0 -d out -n 9 -v 0 -a model=legacy=1
