@@ -2550,6 +2550,7 @@ class GraphPairTrainer(BaseTrainer):
         missed_misc_rels=0
         hit_header_rels=0
         hit_question_rels=0
+        hit_misc_rels=0
 
         false_pos_keep_scores=[]
         true_pos_keep_scores=[]
@@ -2860,13 +2861,15 @@ class GraphPairTrainer(BaseTrainer):
         for gtGId1,gtGId2 in gtEdge2Pred.keys():
             classIdx1 = targetBoxes[gtGroups[gtGId1][0],13:13+numClasses].argmax()
             classIdx2 = targetBoxes[gtGroups[gtGId2][0],13:13+numClasses].argmax()
-            assert(classIdx1!=classIdx2)
+            #assert(classIdx1!=classIdx2)
             minIdx = min(classIdx1,classIdx2)
             maxIdx = max(classIdx1,classIdx2)
             if minIdx==0 and maxIdx==1:
                 hit_header_rels+=1
             elif minIdx==1 and maxIdx==2:
                 hit_question_rels+=1
+            elif minIdx==maxIdx:
+                hit_misc_rels+=1
             else:
                 assert(False)
         
@@ -3069,6 +3072,7 @@ class GraphPairTrainer(BaseTrainer):
         self.characterization_sum['num_header_rel_false_pos']+=false_pos_consistent_header_rels
         self.characterization_sum['num_header_rel_false_neg']+=missed_header_rels
         self.characterization_sum['num_question_rel_true_pos']+=hit_question_rels
+        self.characterization_sum['num_misc_rel_true_pos']+=hit_question_rels
         self.characterization_sum['num_question_rel_false_pos']+=false_pos_consistent_question_rels
         self.characterization_sum['num_question_rel_false_neg']+=missed_question_rels
         self.characterization_sum['num_misc_rel_false_neg']+=missed_misc_rels
@@ -3119,6 +3123,7 @@ class GraphPairTrainer(BaseTrainer):
         self.characterization_form['missed_misc_rels'].append(missed_misc_rels/num_false_neg if num_false_neg>0 else 0)
         self.characterization_form['hit_header_rels'].append(hit_header_rels/num_true_pos if num_true_pos>0 else 0)
         self.characterization_form['hit_question_rels'].append(hit_question_rels/num_true_pos if num_true_pos>0 else 0)
+        self.characterization_form['hit_misc_rels'].append(hit_misc_rels/num_true_pos if num_true_pos>0 else 0)
 
         self.characterization_form['double_rel_pred'].append(double_rel_pred/num_pos if num_pos>0 else 0)
         self.characterization_form['missed_rel_was_single'].append(missed_rel_was_single/num_false_neg if num_false_neg>0 else 0)
