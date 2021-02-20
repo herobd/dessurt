@@ -181,6 +181,8 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
         model.eval()
     if verbosity>1:
         model.summary()
+    else:
+        print('model param counts: {}'.format(model.num_params()))
 
     if type(config['loss'])==dict: 
         loss={}#[eval(l) for l in config['loss']]

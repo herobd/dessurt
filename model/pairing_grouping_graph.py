@@ -2686,6 +2686,10 @@ class PairingGroupingGraph(BaseModel):
             b_groups_index1 = groups_index1[b_start:b_end]
             b_groups_index2 = groups_index2[b_start:b_end]
 
+            if not self.useCurvedBBs:
+                b_groupIs_index1 = groupIs_index1[b_start:b_end]
+                b_groupIs_index2 = groupIs_index2[b_start:b_end]
+
             if self.useShapeFeats:
                 shapeFeats = torch.FloatTensor(len(b_edges),self.numShapeFeats)
             if self.detector.predNumNeighbors:
@@ -2905,15 +2909,15 @@ class PairingGroupingGraph(BaseModel):
                     shapeFeats[:,ixs[11]] = (allFeats1[:,1]-allFeats2[:,1])/self.normalizeVert
                     if self.useShapeFeats!='old':
                         assert(not self.rotation)
-                        tlX_index1=blX_index1 = torch.stack([min([tlX[b] for b in group]) for group in groupIs_index1],dim=0)
-                        trX_index1=brX_index1 = torch.stack([max([trX[b] for b in group]) for group in groupIs_index1],dim=0)
-                        tlY_index1=trY_index1 = torch.stack([min([tlY[b] for b in group]) for group in groupIs_index1],dim=0)
-                        blY_index1=brY_index1 = torch.stack([max([brY[b] for b in group]) for group in groupIs_index1],dim=0)
+                        tlX_index1=blX_index1 = torch.stack([min([tlX[b] for b in group]) for group in b_groupIs_index1],dim=0)
+                        trX_index1=brX_index1 = torch.stack([max([trX[b] for b in group]) for group in b_groupIs_index1],dim=0)
+                        tlY_index1=trY_index1 = torch.stack([min([tlY[b] for b in group]) for group in b_groupIs_index1],dim=0)
+                        blY_index1=brY_index1 = torch.stack([max([brY[b] for b in group]) for group in b_groupIs_index1],dim=0)
 
-                        tlX_index2=blX_index2 = torch.stack([min([tlX[b] for b in group]) for group in groupIs_index2],dim=0)
-                        trX_index2=brX_index2 = torch.stack([max([trX[b] for b in group]) for group in groupIs_index2],dim=0)
-                        tlY_index2=trY_index2 = torch.stack([min([tlY[b] for b in group]) for group in groupIs_index2],dim=0)
-                        blY_index2=brY_index2 = torch.stack([max([brY[b] for b in group]) for group in groupIs_index2],dim=0)
+                        tlX_index2=blX_index2 = torch.stack([min([tlX[b] for b in group]) for group in b_groupIs_index2],dim=0)
+                        trX_index2=brX_index2 = torch.stack([max([trX[b] for b in group]) for group in b_groupIs_index2],dim=0)
+                        tlY_index2=trY_index2 = torch.stack([min([tlY[b] for b in group]) for group in b_groupIs_index2],dim=0)
+                        blY_index2=brY_index2 = torch.stack([max([brY[b] for b in group]) for group in b_groupIs_index2],dim=0)
 
                         startCorners = 8+self.numBBTypes+self.numBBTypes
                         shapeFeats[:,startCorners +0] = torch.sqrt( (tlX_index1-tlX_index2)**2 + (tlY_index1-tlY_index2)**2 )/self.normalizeDist
