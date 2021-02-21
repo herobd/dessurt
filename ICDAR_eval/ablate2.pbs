@@ -49,8 +49,8 @@ conda info --envs
 
 echo 'yes 0 net yes'
 python new_eval.py -c saved/FUNSDLines_pair_graph9rvCon4_smallContext_prop_preBckBn_120k/checkpoint-latest.pth -g 0 -v 0 -T 
-echo 'yes 1 net yes'
-python new_eval.py -c saved/FUNSDLines_pair_graph77rvCon4_smallContext_prop_preBckBn_120k/checkpoint-latest.pth -g 0 -v 0 -T 
+echo 'yes 1 net yes is on nephisboat'
+#python new_eval.py -c saved/FUNSDLines_pair_graph77rvCon4_smallContext_prop_preBckBn_120k/checkpoint-latest.pth -g 0 -v 0 -T 
 echo '222 yes 2 net yes'
 python new_eval.py -c saved/FUNSDLines_pair_graph222rvCon4_smallContext_prop_preBckBn_120k/checkpoint-latest.pth -g 0 -v 0 -T 
 echo 'WIDE (512)222 yes 2 net yes'
