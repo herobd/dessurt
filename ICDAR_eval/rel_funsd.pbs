@@ -44,19 +44,19 @@ conda info --envs
 #rm -r out/*
 #rm -r out2/*
 #mkdir out2
-
+echo 'NEW ITER'
 
 echo 'FUN B graph'
-python new_eval.py -c saved/FUNSDLines_pair_graph663rvCon4_smallContext_prop_B/checkpoint-latest.pth -g 0 -v 0 -T
+python new_eval.py -c saved/FUNSDLines_pair_graph663rvCon4_smallContext_prop_B/checkpoint-iteration700000.pth -g 0 -v 0 -T
 #echo 'FUNSD B binary'
 #python new_eval.py -c saved/FUNSDLines_pair_binary333rv_mc_prop_longer_B/checkpoint-latest.pth -g 0 -v 0 -T 
 
 echo 'FUN B graph with GT'
-python new_eval.py -c saved/FUNSDLines_pair_graph663rvCon4_smallContext_prop_B/checkpoint-latest.pth -g 0 -v 0 -T -a useDetect=gtSpaceOnly
+python new_eval.py -c saved/FUNSDLines_pair_graph663rvCon4_smallContext_prop_B/checkpoint-iteration700000.pth -g 0 -v 0 -T -a useDetect=gtSpaceOnly
 #echo 'FUNSD B binary with GT'
 #python new_eval.py -c saved/FUNSDLines_pair_binary333rv_mc_prop_longer_B/checkpoint-latest.pth -g 0 -v 0 -T -a useDetect=gtSpaceOnly
 echo 'FUN B graph with GT+groups'
-python new_eval.py -c saved/FUNSDLines_pair_graph663rvCon4_smallContext_prop_B/checkpoint-latest.pth -g 0 -v 0 -T -a useDetect=gtSpaceOnly,gtGroups=1
+python new_eval.py -c saved/FUNSDLines_pair_graph663rvCon4_smallContext_prop_B/checkpoint-iteration700000.pth -g 0 -v 0 -T -a useDetect=gtSpaceOnly,gtGroups=1
 
 #python new_eval.py -c saved/NAFMblank_pair_graph663rvCon4_smallContext_prop_B/checkpoint-latest.pth -g 0 -v 0 -T -a data_loader=special_dataset=simple -d out -n 7
 #python new_eval.py -c saved/NAFMblank_pair_binary333rv_mc_prop_longer_B/checkpoint-latest.pth -g 0 -v 0 -T -a data_loader=special_dataset=simple -d out -n 7
