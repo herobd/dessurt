@@ -1442,6 +1442,32 @@ class GraphPairTrainer(BaseTrainer):
                 'rel_recall': eRecall,
                 'rel_Fm': 2*(fullPrec*eRecall)/(eRecall+fullPrec) if eRecall+fullPrec>0 else 0
                 }
+
+        gt_hit = [False]*targetBoxes.size(1)
+        if self.model_ref.predNN:
+            start=1
+        else:
+            start=0
+        ed_true_pos=0
+        for ni in range(outputBoxes.size(0)):
+            if bbAlignment[ni]>-1 and bbFullHit[ni] and not gt_hit[bbAlignment[ni]]:
+                ed_true_pos+=1
+                gt_hit[bbAlignment[ni]]=True
+                p_cls = outputBoxes[ni,start:start+self.model_ref.numBBTypes].argmax().item()
+                assert  targetBoxes[0,bbAlignment[ni],13+p_cls]==1
+        if targetBoxes.size(1)>0:
+            log['ED_recall'] = ed_true_pos/targetBoxes.size(1)
+        else:
+            log['ED_recall'] = 1
+        if outputBoxes.size(0)>0:
+            log['ED_prec'] = ed_true_pos/outputBoxes.size(0)
+        else:
+            log['ED_prec'] = 1
+        if log['ED_recall']+log['ED_prec']>0:
+            log['ED_F1']=2*log['ED_prec']*log['ED_recall']/(log['ED_recall']+log['ED_prec'])
+        else:
+            log['ED_F1']=0
+
         if ap is not None:
             log['rel_AP']=ap
         if not self.model_ref.detector_frozen:
