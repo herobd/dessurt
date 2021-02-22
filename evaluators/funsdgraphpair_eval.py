@@ -252,7 +252,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         #print('\n{} ap:{}\tnumMissedByDetect:{}\tmissedByHuer:{}'.format(imageName,rel_ap,numMissedByDetect,numMissedByHeur))
 
     if outDir is not None:
-        path = os.path.join(outDir,'{}_final_relFm:{:.2}_r+p:{:.2}+{:.2}_bbFm:{:.2}_r+p:{:.2}+{:.2}.png'.format(imageName,float(log['final_rel_Fm']),float(log['final_rel_recall']),float(log['final_rel_prec']),float(log['final_bb_allFm']),float(log['final_bb_allRecall']),float(log['final_bb_allPrec'])))
+        path = os.path.join(outDir,'{}_final_relFm:{:.2}_r+p:{:.2}+{:.2}_EDFm:{:.2}_r+p:{:.2}+{:.2}.png'.format(imageName,float(log['final_rel_Fm']),float(log['final_rel_recall']),float(log['final_rel_prec']),float(log['final_group_ED_F1']),float(log['final_group_ED_recall']),float(log['final_group_ED_precision'])))
         finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = out['final']
         draw_graph(finalOutputBoxes,trainer.model.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,data,out['final_edgePredTypes'],out['final_missedRels'],targetBoxes,trainer.classMap,path,bbTrans=finalBBTrans,useTextLines=trainer.model.useCurvedBBs,targetGroups=instance['gt_groups'],targetPairs=instance['gt_groups_adj'])
 
@@ -267,7 +267,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
                  }
     else:
         retData={}
-    keep_prefixes=['final_bb_all','final_group','final_rel','prop_rel','DocStruct','F-M','prec@','recall@','bb_Fm','bb_recall','bb_prec']
+    keep_prefixes=['final_bb_all','final_group','final_rel','prop_rel','DocStruct','F-M','prec@','recall@','bb_Fm','bb_recall','bb_prec','ED_']
     for key,value in log.items():
         #if key.startswith('final'):
         if trainer.mergeAndGroup:
