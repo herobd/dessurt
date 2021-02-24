@@ -78,10 +78,11 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
             #for pair in targetPairs:
             #if len(predTypes)==1:
             #    print('num missing: {}'.format(len(missedRels)))
-        for pair in missedRels:
-            img_f.line(image,groupCenters[pair[0]],groupCenters[pair[1]],(1,0,0.1),3,draw='mult')
-                #if len(predTypes)==1:
-                #    print('{} -- {}'.format(groupCenters[pair[0]],groupCenters[pair[1]]))
+        if verbosity>0:
+            for pair in missedRels:
+                img_f.line(image,groupCenters[pair[0]],groupCenters[pair[1]],(1,0,0.1),3,draw='mult')
+                    #if len(predTypes)==1:
+                    #    print('{} -- {}'.format(groupCenters[pair[0]],groupCenters[pair[1]]))
 
         to_write_text=[]
         bbs = outputBoxes
