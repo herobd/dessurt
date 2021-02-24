@@ -1,0 +1,149 @@
+DeprecationWarning: 'source deactivate' is deprecated. Use 'conda deactivate'.
+# conda environments:
+#
+base                     /apps/miniconda3/4.6.14
+c10                      /fslhome/brianld/.conda/envs/c10
+pyt1                     /fslhome/brianld/.conda/envs/pyt1
+                         /fslhome/brianld/miniconda3
+                      *  /fslhome/brianld/miniconda3/envs/new
+                         /fslhome/brianld/miniconda3/envs/qr
+                         /fslhome/brianld/miniconda3/envs/qr9
+                         /fslhome/brianld/miniconda3/envs/tf
+                         /fslhome/brianld/miniconda3/envs/tf1
+
+FUN B graph
+loaded FUNSDLines_pair_graph663rvCon4_smallContext_prop_B iteration 720000
+added config[characterization]=1
+Detecting number of neighbors!
+Successfully loaded SWA model
+model param counts: (13613185, 15983764)
+/zhome/brianld/pairing/trainer/graph_pair_trainer.py:2671: UserWarning: This overload of nonzero is deprecated:
+	nonzero()
+Consider using one of the following signatures instead:
+	nonzero(*, bool as_tuple) (Triggered internally at  /opt/conda/conda-bld/pytorch_1607370117127/work/torch/csrc/utils/python_arg_parser.cpp:882.)
+  nonzero = bb_close[bb].nonzero()
+/zhome/brianld/pairing/trainer/graph_pair_trainer.py:3327: RuntimeWarning: More than 20 figures have been opened. Figures created through the pyplot interface (`matplotlib.pyplot.figure`) are retained until explicitly closed and may consume too much memory. (To control this warning, see the rcParam `figure.max_open_warning`).
+  plt.figure(fignum)
+test metrics
+DocStruct redid hit@1 overall mean: 0.6782941690282343, std 0.23933273211057957
+final_bb_allPrec overall mean: 0.46733903663869536, std 0.22123651486572526
+final_bb_allRecall overall mean: 0.450531802629439, std 0.20601787349832337
+final_bb_allFm overall mean: 0.4572224133148382, std 0.21143820756542378
+final_group_ED_recall overall mean: 0.6078158201971638, std 0.17984386898137564
+final_group_ED_precision overall mean: 0.6184140840645239, std 0.17083047965753984
+final_group_ED_F1 overall mean: 0.6091649889551911, std 0.16859501322078496
+final_groupCompleteness overall mean: 0.6286166965995502, std 0.1697296638078117
+final_groupPurity overall mean: 0.6551947187986991, std 0.1651937978190565
+final_rel_prec overall mean: 0.6107666922515708, std 0.29532987963610335
+final_rel_recall overall mean: 0.6370396573704779, std 0.2777384197015022
+final_rel_strict_prec overall mean: 0.5990986803410554, std 0.2943723739675779
+final_rel_strict_recall overall mean: 0.6250672638008593, std 0.2793926207883904
+final_rel_Fm overall mean: 0.592142122694759, std 0.2832492767549628
+final_rel_strict_Fm overall mean: 0.5805924551819163, std 0.283054327162482
+prop_rel_recall overall mean: 0.9653755844270588, std 0.06653234833293035
+prop_rel_prec overall mean: 0.102355770257206, std 0.05038296105765298
+
+==============
+Avg by form
+==============
+false_pos_is_single:	0.356
+false_pos_group_involved:	0.211
+false_pos_inpure_group:	0.076
+false_pos_from_bad_class:	0.086
+false_pos_bad_node:	0.229
+false_pos_with_good_nodes:	0.142
+false_pos_with_misclassed_nodes:	0.328
+inconsistent_edges:	0.067
+false_pos_consistent_header_rels:	0.156
+false_pos_consistent_question_rels:	0.572
+missed_header_rels:	0.207
+missed_question_rels:	0.652
+missed_misc_rels:	0.001
+hit_header_rels:	0.061
+hit_question_rels:	0.857
+hit_misc_rels:	0.002
+double_rel_pred:	0.025
+missed_rel_was_single:	0.405
+missed_rel_from_bad_detection:	0.248
+missed_rel_from_bad_merge:	0.052
+missed_rel_from_missed_prop:	0.058
+missed_rel_from_bad_group:	0.131
+missed_rel_from_poor_alignement:	0.037
+missed_rel_from_misclass:	0.078
+missed_rel_from_pruned_edge_all:	0.256
+missed_rel_from_pruned_edge_0:	0.331
+missed_rel_from_pruned_edge_1:	0.281
+missed_rel_from_pruned_edge_2:	0.207
+
+==============
+Total count
+==============
+num_true_pos:	633.000
+num_false_pos:	296.000
+num_false_neg:	431.000
+num_header_rel_true_pos:	60.000
+num_header_rel_false_pos:	68.000
+num_header_rel_false_neg:	164.000
+num_question_rel_true_pos:	572.000
+num_misc_rel_true_pos:	572.000
+num_question_rel_false_pos:	195.000
+num_question_rel_false_neg:	265.000
+num_misc_rel_false_neg:	2.000
+false_pos_is_single:	93.000
+false_pos_group_involved:	64.000
+false_pos_inpure_group:	19.000
+false_pos_from_bad_class:	29.000
+false_pos_bad_node:	84.000
+false_pos_with_good_nodes:	63.000
+false_pos_with_misclassed_nodes:	102.000
+inconsistent_edges:	35.000
+false_pos_consistent_header_rels:	68.000
+false_pos_consistent_question_rels:	195.000
+double_rel_pred:	25.000
+missed_rel_was_single:	98.000
+missed_rel_from_bad_detection:	126.000
+missed_rel_from_bad_merge:	19.000
+missed_rel_from_missed_prop:	64.000
+missed_rel_from_bad_group:	41.000
+missed_rel_from_poor_alignement:	8.000
+missed_rel_from_misclass:	31.000
+total_merges:	45.000
+missed_rel_from_pruned_edge_all:	142.000
+missed_rel_from_pruned_edge_0:	81.000
+missed_rel_from_pruned_edge_1:	38.000
+missed_rel_from_pruned_edge_2:	23.000
+
+==============
+Total portions
+==============
+precision:	0.681
+recall:	0.595
+header_rel_precision:	0.469
+header_rel_recall:	0.268
+question_rel_precision:	0.746
+question_rel_recall:	0.683
+num_misc_rel_true_pos:	0.616
+num_misc_rel_false_neg:	0.005
+false_pos_is_single:	0.314
+false_pos_group_involved:	0.216
+false_pos_inpure_group:	0.064
+false_pos_from_bad_class:	0.098
+false_pos_bad_node:	0.284
+false_pos_with_good_nodes:	0.213
+false_pos_with_misclassed_nodes:	0.345
+inconsistent_edges:	0.038
+false_pos_consistent_header_rels:	0.230
+false_pos_consistent_question_rels:	0.659
+double_rel_pred:	0.027
+missed_rel_was_single:	0.227
+missed_rel_from_bad_detection:	0.292
+missed_rel_from_bad_merge:	0.044
+missed_rel_from_missed_prop:	0.148
+missed_rel_from_bad_group:	0.095
+missed_rel_from_poor_alignement:	0.019
+missed_rel_from_misclass:	0.072
+total_merges:	0.048
+missed_rel_from_pruned_edge_all:	0.329
+missed_rel_from_pruned_edge_0:	0.188
+missed_rel_from_pruned_edge_1:	0.088
+missed_rel_from_pruned_edge_2:	0.053
