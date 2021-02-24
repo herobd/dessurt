@@ -2233,7 +2233,7 @@ class GraphPairTrainer(BaseTrainer):
         for g0,g1 in predPairs:
             assert len(predGroups[g0])==1
             assert len(predGroups[g1])==1
-            assert 'blank' not in self.classMap
+            #assert 'blank' not in self.classMap
 
             num_classes = len(self.scoreClassMap)
             class0 = outputBoxes[predGroups[g0][0],6:6+num_classes].argmax().item()
