@@ -33,7 +33,7 @@ def plotRect(img,color,xyrhw,lineWidth=1):
     img_f.line(img,bl,tl,color,lineWidth)
 
 
-def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,image,predTypes,missedRels,targetBoxes,classMap,path,verbosity=2,bbTrans=None,useTextLines=False,targetGroups=None,targetPairs=None,bbAlignment=None):
+def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,image,predTypes,missedRels,missedGroups,targetBoxes,classMap,path,verbosity=2,bbTrans=None,useTextLines=False,targetGroups=None,targetPairs=None,bbAlignment=None):
     #for graphIteration,(outputBoxes,nodePred,edgePred,edgeIndexes,predGroups) in zip(allOutputBoxes,allNodePred,allEdgePred,allEdgeIndexes,allPredGroups):
         if bbTrans is not None:
             transPath = path[:-3]+'txt'
@@ -48,11 +48,11 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
             #image = img_f.gray2rgb(image*255)/255
         #if name=='text_start_gt':
 
-        if verbosity>1 and targetBoxes is not None:
+        if verbosity>2 and targetBoxes is not None:
             #Draw GT bbs
             for j in range(targetBoxes.size(1)):
                 plotRect(image,(1,0.5,0),targetBoxes[0,j,0:5])
-        if verbosity>1 and targetGroups is not None:
+        if verbosity>0 and targetGroups is not None and missedGroups is None:
             color=(0.99,0,0.3)
             lineWidth=1
             groupCenters=[]
@@ -84,20 +84,133 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                 #    print('{} -- {}'.format(groupCenters[pair[0]],groupCenters[pair[1]]))
 
         to_write_text=[]
-        if verbosity>1 and outputBoxes is not None:
-            #Draw pred bbs
-            bbs = outputBoxes
-            numClasses=len(classMap)
-            if 'blank' in classMap:
-                blank=True
-                numClasses-=1
-                for cls,idx in classMap.items():
-                    if cls!='blank':
-                        assert(idx<classMap['blank'])
-            else:
-                blank=False
-            for j in range(len(bbs)):
-                #circle aligned predictions
+        bbs = outputBoxes
+        numClasses=len(classMap)
+        if 'blank' in classMap:
+            blank=True
+            numClasses-=1
+            for cls,idx in classMap.items():
+                if cls!='blank':
+                    assert(idx<classMap['blank'])
+        else:
+            blank=False
+        #if verbosity>0 and outputBoxes is not None:
+        #    #Draw pred bbs
+        #    for j in range(len(bbs)):
+        #        #circle aligned predictions
+        #        if useTextLines:
+        #            conf = bbs[j].getConf()
+        #            maxIndex = np.argmax(bbs[j].getCls()[:numClasses])
+        #            if 'gI0' in path:
+        #                assert(len(bbs[j].all_primitive_rects)==1)
+        #            if blank:
+        #                is_blank = bbs[j].getCls()[-1]>0.5
+        #        else:
+        #            conf = bbs[j,0]
+        #            maxIndex =np.argmax(bbs[j,6:6+numClasses])
+        #            if blank:
+        #                is_blank = bbs[j,-1]>0.5
+        #        shade = conf#(conf-bb_thresh)/(1-bb_thresh)
+        #        #print(shade)
+        #        #if name=='text_start_gt' or name=='field_end_gt':
+        #        #    img_f.bb(bbImage[:,:,1],p1,p2,shade,2)
+        #        #if name=='text_end_gt':
+        #        #    img_f.bb(bbImage[:,:,2],p1,p2,shade,2)
+        #        #elif name=='field_end_gt' or name=='field_start_gt':
+        #        #    img_f.bb(bbImage[:,:,0],p1,p2,shade,2)
+        #        if maxIndex==0:
+        #            color=(0,0,shade) #header
+        #        elif maxIndex==1:
+        #            color=(0,shade,shade) #question
+        #        elif maxIndex==2:
+        #            color=(shade,shade,0) #answer
+        #        elif maxIndex==3:
+        #            color=(shade,0,shade) #other
+        #        else:
+        #            raise NotImplementedError('Only 4 colors/classes implemented for drawing')
+        #        lineWidth=1
+        #        
+        #        if useTextLines:
+        #            pts = bbs[j].polyPoints()
+        #            pts = pts.reshape((-1,1,2))
+        #            if verbosity<3 or bbAlignment[j].item()!=-1:
+        #                fill = 'transparent'
+        #            else:
+        #                fill = False
+        #            img_f.polylines(image,pts.astype(np.int),fill,color,lineWidth)
+        #            x,y = bbs[j].getCenterPoint()
+        #            x=int(x)
+        #            y=int(y)
+        #        else:
+        #            plotRect(image,color,bbs[j,1:6],lineWidth)
+        #            x=int(bbs[j,1])
+        #            y=int(bbs[j,2])
+
+        #        if blank and is_blank:
+        #            #draw a B at center of box
+        #            if x-4<0:
+        #                x=4
+        #            if y-4<0:
+        #                y=4
+        #            if x+4>=image.shape[1]:
+        #                x=image.shape[1]-5
+        #            if y+4>=image.shape[0]:
+        #                y=image.shape[0]-5
+        #            image[y-2:y+3,x-1]=color
+        #            image[y-2,x]=color
+        #            image[y-1,x+1]=color
+        #            image[y,x]=color
+        #            image[y+1,x+1]=color
+        #            image[y+2,x]=color
+
+        #            image[y-4:y+5,x-4]=color
+        #            image[y-4:y+5,x+4]=color
+        #            image[y-4,x-4:x+5]=color
+        #            image[y+4,x-4:x+5]=color
+
+
+        #        #if verbosity>3 and predNN is not None:
+        #        #    targ_j = bbAlignment[j].item()
+        #        #    if targ_j>=0:
+        #        #        gtNN = target_num_neighbors[0,targ_j].item()
+        #        #    else:
+        #        #        gtNN = 0
+        #        #    pred_nn = predNN[j].item()
+        #        #    color2 = min(abs(pred_nn-gtNN),1)#*0.5
+        #        #    img_f.putText(image,'{:.2}/{}'.format(pred_nn,gtNN),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(color2,0,0),2,cv2.LINE_AA)
+        #        #if bbTrans is not None:
+        #        #    to_write_text.append(('{}'.format(j),(int(x),int(y)),(int(round(color[0]*255)),int(round(color[1]*255)),int(round(color[2]*255)))))
+        #        #    #img_f.putText(image,'{}'.format(j),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,color,2,cv2.LINE_AA)
+        #        #    transOut.write('{}: {}\n'.format(j,bbTrans[j]))
+        if bbTrans is not None:
+            transOut.close()
+            if len(to_write_text)>0:
+                pil_image = Image.fromarray((image*255).astype(np.uint8))
+                pil_draw = ImageDraw.Draw(pil_image)
+                try:
+                    font = ImageFont.truetype("UbuntuMono-R.ttf", 9)
+                    for text,loc,color in to_write_text:
+                        pil_draw.text(loc,text,color,font=font)
+                except OSError:
+                    try:
+                        font = ImageFont.truetype("google-roboto", 9)
+                        for text,loc,color in to_write_text:
+                            pil_draw.text(loc,text,color,font=font)
+                    except OSError:
+                        pass
+
+                image = np.array(pil_image).astype(np.float32)/255
+
+
+        #Draw pred groups (based on bb pred)
+        groupCenters=[]
+        if predGroups is None:
+            predGroups = [[i] for i in range(len(bbs))]
+        for group in predGroups:
+            maxX=maxY=0
+            minY=minX=99999999
+            idColor = [random.random()/2+0.5 for i in range(3)]
+            for j in group:
                 if useTextLines:
                     conf = bbs[j].getConf()
                     maxIndex = np.argmax(bbs[j].getCls()[:numClasses])
@@ -130,125 +243,86 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                     raise NotImplementedError('Only 4 colors/classes implemented for drawing')
                 lineWidth=1
                 
-                if useTextLines:
-                    pts = bbs[j].polyPoints()
-                    pts = pts.reshape((-1,1,2))
-                    if verbosity<3 or bbAlignment[j].item()!=-1:
-                        fill = 'transparent'
-                    else:
-                        fill = False
-                    img_f.polylines(image,pts.astype(np.int),fill,color,lineWidth)
-                    x,y = bbs[j].getCenterPoint()
-                    x=int(x)
-                    y=int(y)
-                else:
-                    plotRect(image,color,bbs[j,1:6],lineWidth)
-                    x=int(bbs[j,1])
-                    y=int(bbs[j,2])
-
-                if blank and is_blank:
-                    #draw a B at center of box
-                    if x-4<0:
-                        x=4
-                    if y-4<0:
-                        y=4
-                    if x+4>=image.shape[1]:
-                        x=image.shape[1]-5
-                    if y+4>=image.shape[0]:
-                        y=image.shape[0]-5
-                    image[y-2:y+3,x-1]=color
-                    image[y-2,x]=color
-                    image[y-1,x+1]=color
-                    image[y,x]=color
-                    image[y+1,x+1]=color
-                    image[y+2,x]=color
-
-                    image[y-4:y+5,x-4]=color
-                    image[y-4:y+5,x+4]=color
-                    image[y-4,x-4:x+5]=color
-                    image[y+4,x-4:x+5]=color
-
-
-                #if verbosity>3 and predNN is not None:
-                #    targ_j = bbAlignment[j].item()
-                #    if targ_j>=0:
-                #        gtNN = target_num_neighbors[0,targ_j].item()
-                #    else:
-                #        gtNN = 0
-                #    pred_nn = predNN[j].item()
-                #    color2 = min(abs(pred_nn-gtNN),1)#*0.5
-                #    img_f.putText(image,'{:.2}/{}'.format(pred_nn,gtNN),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(color2,0,0),2,cv2.LINE_AA)
-                #if bbTrans is not None:
-                #    to_write_text.append(('{}'.format(j),(int(x),int(y)),(int(round(color[0]*255)),int(round(color[1]*255)),int(round(color[2]*255)))))
-                #    #img_f.putText(image,'{}'.format(j),(x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.5,color,2,cv2.LINE_AA)
-                #    transOut.write('{}: {}\n'.format(j,bbTrans[j]))
-        if bbTrans is not None:
-            transOut.close()
-            if len(to_write_text)>0:
-                pil_image = Image.fromarray((image*255).astype(np.uint8))
-                pil_draw = ImageDraw.Draw(pil_image)
-                try:
-                    font = ImageFont.truetype("UbuntuMono-R.ttf", 9)
-                    for text,loc,color in to_write_text:
-                        pil_draw.text(loc,text,color,font=font)
-                except OSError:
-                    try:
-                        font = ImageFont.truetype("google-roboto", 9)
-                        for text,loc,color in to_write_text:
-                            pil_draw.text(loc,text,color,font=font)
-                    except OSError:
-                        pass
-
-                image = np.array(pil_image).astype(np.float32)/255
-
-
-        #Draw pred groups (based on bb pred)
-        groupCenters=[]
-        if predGroups is not None:
-            for group in predGroups:
-                maxX=maxY=0
-                minY=minX=99999999
-                idColor = [random.random()/2+0.5 for i in range(3)]
-                for j in group:
+                if verbosity>1 or len(group)==1:
                     if useTextLines:
-                        pts = outputBoxes[j].polyPoints()
-                        for pt in pts:
-                            image[int(pt[1]):int(pt[1])+2,int(pt[0]):int(pt[0])+2]=idColor
-                        maxX = max(maxX,*outputBoxes[j].polyXs())
-                        minX = min(minX,*outputBoxes[j].polyXs())
-                        maxY = max(maxY,*outputBoxes[j].polyYs())
-                        minY = min(minY,*outputBoxes[j].polyYs())
+                        pts = bbs[j].polyPoints()
+                        pts = pts.reshape((-1,1,2))
+                        if verbosity<3 or bbAlignment[j].item()!=-1:
+                            fill = 'transparent'
+                        else:
+                            fill = False
+                        img_f.polylines(image,pts.astype(np.int),fill,color,lineWidth)
+                        x,y = bbs[j].getCenterPoint()
+                        x=int(x)
+                        y=int(y)
                     else:
-                        tr,tl,br,bl=getCorners(outputBoxes[j,1:6])
+                        plotRect(image,color,bbs[j,1:6],lineWidth)
+                        x=int(bbs[j,1])
+                        y=int(bbs[j,2])
+
+                    if blank and is_blank:
+                        #draw a B at center of box
+                        if x-4<0:
+                            x=4
+                        if y-4<0:
+                            y=4
+                        if x+4>=image.shape[1]:
+                            x=image.shape[1]-5
+                        if y+4>=image.shape[0]:
+                            y=image.shape[0]-5
+                        image[y-2:y+3,x-1]=color
+                        image[y-2,x]=color
+                        image[y-1,x+1]=color
+                        image[y,x]=color
+                        image[y+1,x+1]=color
+                        image[y+2,x]=color
+
+                        image[y-4:y+5,x-4]=color
+                        image[y-4:y+5,x+4]=color
+                        image[y-4,x-4:x+5]=color
+                        image[y+4,x-4:x+5]=color
+                if useTextLines:
+                    pts = outputBoxes[j].polyPoints()
+                    for pt in pts:
+                        image[int(pt[1]):int(pt[1])+2,int(pt[0]):int(pt[0])+2]=idColor
+                    maxX = max(maxX,*outputBoxes[j].polyXs())
+                    minX = min(minX,*outputBoxes[j].polyXs())
+                    maxY = max(maxY,*outputBoxes[j].polyYs())
+                    minY = min(minY,*outputBoxes[j].polyYs())
+                else:
+                    tr,tl,br,bl=getCorners(outputBoxes[j,1:6])
+                    if verbosity>1:
                         image[tl[1]:tl[1]+2,tl[0]:tl[0]+2]=idColor
                         image[tr[1]:tr[1]+1,tr[0]:tr[0]+1]=idColor
                         image[bl[1]:bl[1]+1,bl[0]:bl[0]+1]=idColor
                         image[br[1]:br[1]+1,br[0]:br[0]+1]=idColor
-                        maxX=max(maxX,tr[0],tl[0],br[0],bl[0])
-                        minX=min(minX,tr[0],tl[0],br[0],bl[0])
-                        maxY=max(maxY,tr[1],tl[1],br[1],bl[1])
-                        minY=min(minY,tr[1],tl[1],br[1],bl[1])
-                if useTextLines:
-                    maxX=int(maxX)
-                    minX=int(minX)
-                    maxY=int(maxY)
-                    minY=int(minY)
-                minX-=2
-                minY-=2
-                maxX+=2
-                maxY+=2
-                lineWidth=2
-                color=(0.5,0,1)
-                if len(group)>1:
-                    img_f.line(image,(minX,minY),(maxX,minY),color,lineWidth)
-                    img_f.line(image,(maxX,minY),(maxX,maxY),color,lineWidth)
-                    img_f.line(image,(maxX,maxY),(minX,maxY),color,lineWidth)
-                    img_f.line(image,(minX,maxY),(minX,minY),color,lineWidth)
+                    maxX=max(maxX,tr[0],tl[0],br[0],bl[0])
+                    minX=min(minX,tr[0],tl[0],br[0],bl[0])
+                    maxY=max(maxY,tr[1],tl[1],br[1],bl[1])
+                    minY=min(minY,tr[1],tl[1],br[1],bl[1])
+            if useTextLines:
+                maxX=int(maxX)
+                minX=int(minX)
+                maxY=int(maxY)
+                minY=int(minY)
+            minX-=2
+            minY-=2
+            maxX+=2
+            maxY+=2
+            lineWidth=2
+            #color=(0.5,0,1)
+            if len(group)>1:
+                img_f.line(image,(minX,minY),(maxX,minY),color,lineWidth)
+                img_f.line(image,(maxX,minY),(maxX,maxY),color,lineWidth)
+                img_f.line(image,(maxX,maxY),(minX,maxY),color,lineWidth)
+                img_f.line(image,(minX,maxY),(minX,minY),color,lineWidth)
+                if verbosity>1:
                     image[minY:minY+3,minX:minX+3]=idColor
+            if verbosity>1:
                 image[maxY:maxY+1,minX:minX+1]=idColor
                 image[maxY:maxY+1,maxX:maxX+1]=idColor
                 image[minY:minY+1,maxX:maxX+1]=idColor
-                groupCenters.append(((minX+maxX)//2,(minY+maxY)//2))
+            groupCenters.append(((minX+maxX)//2,(minY+maxY)//2))
 
 
 
@@ -311,17 +385,19 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                         img_f.line(image,(x1,y1),(x2,y2),lineColor,2)
                         cX = (x1+x2)//2
                         cY = (y1+y2)//2
-                        #print('{} {},  {} {},  > {} {}'.format(x1,y1,x2,y2,cX,cY))
-                        for i,(offsetX,offsetY,s) in enumerate([(-2,-2,3),(1,-2,3),(1,1,3),(-2,1,3)]):
-                            if i>=len(boxColors):
-                                break
-                            tX=cX+offsetX
-                            tY=cY+offsetY
-                            image[tY:tY+s,tX:tX+s]=boxColors[i]
-                        #error
-                        if len(boxColors)==5 and cY-3>=0 and cY+4<image.shape[0] and cX-3>=0 and cX+4<image.shape[1]:
-                            image[cY-3,cX-2:cX+4]=boxColors[4]
-                            image[cY-2:cY+4,cX-3]=boxColors[4]
+                        
+                        if verbosity>1:
+                            #print('{} {},  {} {},  > {} {}'.format(x1,y1,x2,y2,cX,cY))
+                            for i,(offsetX,offsetY,s) in enumerate([(-2,-2,3),(1,-2,3),(1,1,3),(-2,1,3)]):
+                                if i>=len(boxColors):
+                                    break
+                                tX=cX+offsetX
+                                tY=cY+offsetY
+                                image[tY:tY+s,tX:tX+s]=boxColors[i]
+                            #error
+                            if len(boxColors)==5 and cY-3>=0 and cY+4<image.shape[0] and cX-3>=0 and cX+4<image.shape[1]:
+                                image[cY-3,cX-2:cX+4]=boxColors[4]
+                                image[cY-2:cY+4,cX-3]=boxColors[4]
             else:
                 lineColor = (0,0.8,0)
                 for i,x1,y1,x2,y2 in edgesToDraw:
@@ -364,6 +440,49 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
         #        x2 = round(targetBoxes[0,j,0].item())
         #        y2 = round(targetBoxes[0,j,1].item())
         #        img_f.line(image,(x1,y1),(x2,y2),gtcolor,wth)
+
+        if verbosity>0 and missedGroups is not None:
+            for mgi in missedGroups:
+                maxX=maxY=0
+                minX=minY=9999999999
+                for bbi in targetGroups[mgi]:
+                    if verbosity>1:
+                        plotRect(image,(1,0.5,0),targetBoxes[0,bbi,0:5])
+                    tr,tl,br,bl=getCorners(targetBoxes[0,bbi,0:5])
+                    cls = targetBoxes[0,bbi,13:13+numClasses].argmax().item()
+                    #image[tl[1]:tl[1]+2,tl[0]:tl[0]+2]=idColor
+                    #image[tr[1]:tr[1]+1,tr[0]:tr[0]+1]=idColor
+                    #image[bl[1]:bl[1]+1,bl[0]:bl[0]+1]=idColor
+                    #image[br[1]:br[1]+1,br[0]:br[0]+1]=idColor
+                    maxX=max(maxX,tr[0],tl[0],br[0],bl[0])
+                    minX=min(minX,tr[0],tl[0],br[0],bl[0])
+                    maxY=max(maxY,tr[1],tl[1],br[1],bl[1])
+                    minY=min(minY,tr[1],tl[1],br[1],bl[1])
+                minX-=5
+                minY-=5
+                maxX+=5
+                maxY+=5
+                lineWidth=2
+                color=(0.82,0,0)
+                img_f.line(image,(minX,minY),(maxX,minY),color,lineWidth)
+                img_f.line(image,(maxX,minY),(maxX,maxY),color,lineWidth)
+                img_f.line(image,(maxX,maxY),(minX,maxY),color,lineWidth)
+                img_f.line(image,(minX,maxY),(minX,minY),color,lineWidth)
+                #image[minY:minY+3,minX:minX+3]=idColor
+                if cls==0:
+                    color=(0,0,shade) #header
+                elif cls==1:
+                    color=(0,shade,shade) #question
+                elif cls==2:
+                    color=(shade,shade,0) #answer
+                elif cls==3:
+                    color=(shade,0,shade) #other
+                else:
+                    raise NotImplementedError('Only 4 colors/classes implemented for drawing')
+
+                img_f.line(image,(maxX,maxY+1),(minX,maxY+1),color,2)
+                img_f.line(image,(maxX,maxY+3),(minX,maxY+3),(0.82,0,0),1)
+
 
     
 

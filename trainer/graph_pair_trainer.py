@@ -1445,16 +1445,16 @@ class GraphPairTrainer(BaseTrainer):
 
         gt_hit = [False]*targetBoxes.size(1)
         if self.model_ref.predNN:
-            start=1
+            start=7
         else:
-            start=0
+            start=6
         ed_true_pos=0
         for ni in range(outputBoxes.size(0)):
             if bbAlignment[ni]>-1 and bbFullHit[ni] and not gt_hit[bbAlignment[ni]]:
-                ed_true_pos+=1
-                gt_hit[bbAlignment[ni]]=True
                 p_cls = outputBoxes[ni,start:start+self.model_ref.numBBTypes].argmax().item()
-                assert  targetBoxes[0,bbAlignment[ni],13+p_cls]==1
+                if targetBoxes[0,bbAlignment[ni],13+p_cls]==1:
+                    ed_true_pos+=1
+                    gt_hit[bbAlignment[ni]]=True
         if targetBoxes.size(1)>0:
             log['ED_recall'] = ed_true_pos/targetBoxes.size(1)
         else:
@@ -2110,7 +2110,7 @@ class GraphPairTrainer(BaseTrainer):
         if final is not None:
             if self.remove_same_pairs:
                 final = self.removeSamePairs(final)
-            finalLog, finalRelTypes, finalMissedRels = self.finalEval(targetBoxes.cpu() if targetBoxes is not None else None,gtGroups,gt_groups_adj,targetIndexToGroup,*final,bb_iou_thresh=self.final_bb_iou_thresh)
+            finalLog, finalRelTypes, finalMissedRels, finalMissedGroups = self.finalEval(targetBoxes.cpu() if targetBoxes is not None else None,gtGroups,gt_groups_adj,targetIndexToGroup,*final,bb_iou_thresh=self.final_bb_iou_thresh)
             log.update(finalLog)
             if self.save_images_every>0 and self.iteration%self.save_images_every==0:
                 path = os.path.join(self.save_images_dir,'{}_{}.png'.format('b','final'))#instance['name'],graphIteration))
@@ -2125,6 +2125,7 @@ class GraphPairTrainer(BaseTrainer):
                         image,
                         finalRelTypes,
                         finalMissedRels,
+                        finalMissedGroups,
                         targetBoxes,
                         self.classMap,
                         path,
@@ -2218,6 +2219,7 @@ class GraphPairTrainer(BaseTrainer):
                  got[name] = finalRelTypes
             elif name=='final_missedRels':
                  got[name] = finalMissedRels
+                 got['final_missedGroups'] = finalMissedGroups
             elif name=='DocStruct':
                 if 'DocStruct redid hit@1' in log:
                     got[name]=log['DocStruct redid hit@1']
@@ -2355,9 +2357,11 @@ class GraphPairTrainer(BaseTrainer):
 
         
         gtGroupHit=[False]*len(gtGroups)
+        gtGroupHit_pure=[False]*len(gtGroups)
         groupCompleteness=[]
         groupPurity={}
         predToGTGroup={}
+        predToGTGroup_BROS={}
         offId = -1
         for node,predGroupT in predGroupsT.items():
             gtGroupId = getGTGroup(predGroupT,targetIndexToGroup)
@@ -2390,6 +2394,22 @@ class GraphPairTrainer(BaseTrainer):
                 
                 if completeness==1 and purity==1:
                     entity_detection_TP+=1
+                    gtGroupHit_pure[gtGroupId]=True
+            
+            #FOR BROS EVAL
+            hit=False
+            for predT in predGroupT:
+                if predT in BROS_head_to_group:
+                    if node not in predToGTGroup_BROS:
+                        predToGTGroup_BROS[node] = BROS_head_to_group[predT]
+                        hit=True
+                    else:
+                        predToGTGroup_BROS[node]=-1
+                        hit=False
+                        break
+            if not hit:
+                predToGTGroup_BROS[node]=-1
+
         if len(gtGroups)>0:
             log['final_group_ED_recall']=entity_detection_TP/len(gtGroups)
         else:
@@ -2412,8 +2432,10 @@ class GraphPairTrainer(BaseTrainer):
         log['final_groupPurity']=np.mean([v for k,v in groupPurity.items()])
 
         gtRelHit=set()
+        gtRelHit_BROS=set()
         gtRelHit_strict=set()
         relPrec=0
+        relPrec_BROS=0
         relPrec_strict=0
         if predPairs is None:
             predPairs=[]
@@ -2422,6 +2444,13 @@ class GraphPairTrainer(BaseTrainer):
         else:
             rel_types=[]
         for pi,(n0,n1) in enumerate(predPairs):
+            BROS_gtG0 = predToGTGroup_BROS[n0]
+            BROS_gtG1 = predToGTGroup_BROS[n1]
+            if BROS_gtG0>=0 and BROS_gtG1>=0:
+                pair_id = (min(BROS_gtG0,BROS_gtG1),max(BROS_gtG0,BROS_gtG1))
+                if pair_id in gt_groups_adj:
+                    relPrec_BROS+=1
+                    gtRelHit_BROS.add((min(BROS_gtG0,BROS_gtG1),max(BROS_gtG0,BROS_gtG1)))
             if n0 not in predToGTGroup or n1 not in predToGTGroup:
                 print('ERROR, pair ({},{}) not foundi n predToGTGroup'.format(n0,n1))
                 print('predToGTGroup {}: {}'.format(len(predToGTGroup),predToGTGroup))
@@ -2455,21 +2484,27 @@ class GraphPairTrainer(BaseTrainer):
         if len(predPairs)>0:
             relPrec /= len(predPairs)
             relPrec_strict /= len(predPairs)
+            relPrec_BROS /= len(predPairs)
         else:
             relPrec = 1
             relPrec_strict = 1
+            relPrec_BROS = 1
         if len(gt_groups_adj)>0:
             relRecall = len(gtRelHit)/len(gt_groups_adj)
             relRecall_strict = len(gtRelHit_strict)/len(gt_groups_adj)
+            relRecall_BROS = len(gtRelHit_BROS)/len(gt_groups_adj)
         else:
             relRecall = 1
             relRecall_strict = 1
+            relRecall_BROS = 1
 
 
         log['final_rel_prec']=relPrec
         log['final_rel_recall']=relRecall
         log['final_rel_strict_prec']=relPrec_strict
         log['final_rel_strict_recall']=relRecall_strict
+        log['final_rel_BROS_prec']=relPrec_BROS
+        log['final_rel_BROS_recall']=relRecall_BROS
         if relPrec+relRecall>0:
             log['final_rel_Fm']=(2*(relPrec*relRecall)/(relPrec+relRecall))
         else:
@@ -2478,12 +2513,20 @@ class GraphPairTrainer(BaseTrainer):
             log['final_rel_strict_Fm']=(2*(relPrec_strict*relRecall_strict)/(relPrec_strict+relRecall_strict))
         else:
             log['final_rel_strict_Fm']=0
+        if relPrec_BROS+relRecall_BROS>0:
+            log['final_rel_BROS_Fm']=(2*(relPrec_BROS*relRecall_BROS)/(relPrec_BROS+relRecall_BROS))
+        else:
+            log['final_rel_BROS_Fm']=0
 
 
-        missed_rels = gt_groups_adj.difference(gtRelHit)
+        missed_rels = gt_groups_adj.difference(gtRelHit_strict)
         if 'blank' in self.classMap:
             missed_rels = set((newToOldGTGroups[g1],newToOldGTGroups[g2]) for g1,g2 in missed_rels)
-        return log, [rel_types], missed_rels
+
+        missed_groups = [i for i in range(len(gtGroups)) if not gtGroupHit_pure[i]]
+        if 'blank' in self.classMap:
+            missed_groups = [newToOldGTGroups[gi] for gi in missed_groups]
+        return log, [rel_types], missed_rels, missed_groups
 
     def characterization_eval(self,
                         allOutputBoxes,
