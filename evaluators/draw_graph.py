@@ -52,7 +52,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
             #Draw GT bbs
             for j in range(targetBoxes.size(1)):
                 plotRect(image,(1,0.5,0),targetBoxes[0,j,0:5])
-        if verbosity>0 and targetGroups is not None and missedGroups is None:
+        if verbosity>0 and targetGroups is not None:
             color=(0.99,0,0.3)
             lineWidth=1
             groupCenters=[]
@@ -67,7 +67,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                 minX = min(xs)-1
                 maxY = max(ys)+1
                 minY = min(ys)-1
-                if len(group)>1:
+                if len(group)>1 and missedGroups is None:
                     img_f.line(image,(minX,minY),(maxX,minY),color,lineWidth)
                     img_f.line(image,(maxX,maxY),(maxX,minY),color,lineWidth)
                     img_f.line(image,(minX,maxY),(maxX,maxY),color,lineWidth)
@@ -78,8 +78,8 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
             #for pair in targetPairs:
             #if len(predTypes)==1:
             #    print('num missing: {}'.format(len(missedRels)))
-            for pair in missedRels:
-                img_f.line(image,groupCenters[pair[0]],groupCenters[pair[1]],(1,0,0.1),3,draw='mult')
+        for pair in missedRels:
+            img_f.line(image,groupCenters[pair[0]],groupCenters[pair[1]],(1,0,0.1),3,draw='mult')
                 #if len(predTypes)==1:
                 #    print('{} -- {}'.format(groupCenters[pair[0]],groupCenters[pair[1]]))
 

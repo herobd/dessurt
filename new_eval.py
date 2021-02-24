@@ -451,13 +451,49 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                 for i in range(len(metrics)):
                     print(metrics[i].__name__ + ': '+str(val_metrics_sum[i]))
                 for typ in val_comb_metrics:
-                    try:
-                        print('{} overall mean: {}, std {}'.format(typ,np.mean(val_comb_metrics[typ],axis=0), np.std(val_comb_metrics[typ],axis=0)))
-                        for name, typeLists in val_metrics_list[typ].items():
-                            print('{} {} mean: {}, std {}'.format(typ,name,np.mean(typeLists,axis=0),np.std(typeLists,axis=0)))
-                    except e:
-                        print('ERROR on {}: {}'.format(typ,e))
-                        print('{}'.format(val_comb_metrics[typ]))
+                    if 'final_rel_XX_predCount'==typ:
+                        rel_pred_count = sum(val_comb_metrics[typ])
+                    elif 'final_rel_XX_gtCount'==typ:
+                        rel_gt_count = sum(val_comb_metrics[typ])
+                    elif 'final_rel_XX_strict_TP'==typ:
+                        rel_strict_TP = sum(val_comb_metrics[typ])
+                    elif 'final_rel_XX_BROS_TP'==typ:
+                        rel_BROS_TP = sum(val_comb_metrics[typ])
+                    elif 'final_group_XX_TP'==typ:
+                        group_TP = sum(val_comb_metrics[typ])
+                    elif 'final_group_XX_gtCount'==typ:
+                        group_gt_count = sum(val_comb_metrics[typ])
+                    elif 'final_group_XX_predCount'==typ:
+                        group_pred_count = sum(val_comb_metrics[typ])
+                    else:
+                        assert 'XX' not in typ
+                        if 'final_rel_BROS_prec'==typ:
+                            BROS_prec = np.mean(val_comb_metrics[typ],axis=0)
+                        elif 'final_rel_BROS_recall'==typ:
+                            BROS_recall = np.mean(val_comb_metrics[typ],axis=0)
+                        if 'final_rel_BROS_Fm'==typ:
+                            BROS_Fm = np.mean(val_comb_metrics[typ],axis=0)
+                        try:
+                            print('{} overall mean: {}, std {}'.format(typ,np.mean(val_comb_metrics[typ],axis=0), np.std(val_comb_metrics[typ],axis=0)))
+                            for name, typeLists in val_metrics_list[typ].items():
+                                print('{} {} mean: {}, std {}'.format(typ,name,np.mean(typeLists,axis=0),np.std(typeLists,axis=0)))
+                        except e:
+                            print('ERROR on {}: {}'.format(typ,e))
+                            print('{}'.format(val_comb_metrics[typ]))
+
+
+                print('----PER DOCUMENT------')
+                print('BROS relationship Recall Prec F1: {:.2f} & {:.2f} & {:.2f}'.format(BROS_recall,BROS_prec,BROS_Fm))
+                print('----OVERALL------')
+                BROS_recall = rel_BROS_TP/rel_gt_count
+                BROS_prec = rel_BROS_TP/rel_pred_count
+                print('BROS relationships Recall Prec F1: {:.2f} & {:.2f} & {:.2f}'.format(100*BROS_recall,100*BROS_prec,100*2*BROS_recall*BROS_prec/(BROS_prec+BROS_recall)))
+                strict_recall = rel_strict_TP/rel_gt_count
+                strict_prec = rel_strict_TP/rel_pred_count
+                print('strict relationships Recall Prec F1: {:.2f} & {:.2f} & {:.2f}'.format(100*strict_recall,100*strict_prec,100*2*strict_recall*strict_prec/(strict_prec+strict_recall)))
+                group_recall = group_TP/group_gt_count
+                group_prec = group_TP/group_pred_count
+                print('entity Recall Prec F1: {:.2f} & {:.2f} & {:.2f}'.format(100*group_recall,100*group_prec,100*2*group_recall*group_prec/(group_prec+group_recall)))
 
             if 'save_nns' in config:
                 pickle.dump(nns,open(config['save_nns'],'wb'))

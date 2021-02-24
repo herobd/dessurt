@@ -2354,11 +2354,12 @@ class GraphPairTrainer(BaseTrainer):
 
 
         entity_detection_TP=0
+        BROS_head_to_group = {group[0]:i for i,group in enumerate(gtGroups)}
 
         
         gtGroupHit=[False]*len(gtGroups)
         gtGroupHit_pure=[False]*len(gtGroups)
-        groupCompleteness=[]
+        groupCompleteness={}
         groupPurity={}
         predToGTGroup={}
         predToGTGroup_BROS={}
@@ -2390,7 +2391,7 @@ class GraphPairTrainer(BaseTrainer):
             if gtGroupId>=0:
                 completeness=sum([gtId in predGroupT for gtId in gtGroups[gtGroupId]])
                 completeness/=len(gtGroups[gtGroupId])
-                groupCompleteness.append(completeness)
+                groupCompleteness[node]=completeness
                 
                 if completeness==1 and purity==1:
                     entity_detection_TP+=1
@@ -2410,6 +2411,10 @@ class GraphPairTrainer(BaseTrainer):
             if not hit:
                 predToGTGroup_BROS[node]=-1
 
+        log['final_group_XX_TP']=entity_detection_TP
+        log['final_group_XX_gtCount']=len(gtGroups)
+        log['final_group_XX_predCount']=len(predGroupsT)
+
         if len(gtGroups)>0:
             log['final_group_ED_recall']=entity_detection_TP/len(gtGroups)
         else:
@@ -2423,13 +2428,16 @@ class GraphPairTrainer(BaseTrainer):
         else:
             log['final_group_ED_F1'] = 0
 
+        groupCompleteness_list = list(groupCompleteness.values())
         for hit in gtGroupHit:
             if not hit:
-                groupCompleteness.append(0)
+                groupCompleteness_list.append(0)
         
 
-        log['final_groupCompleteness']=np.mean(groupCompleteness)
+        log['final_groupCompleteness']=np.mean(groupCompleteness_list)
         log['final_groupPurity']=np.mean([v for k,v in groupPurity.items()])
+
+
 
         gtRelHit=set()
         gtRelHit_BROS=set()
@@ -2463,9 +2471,12 @@ class GraphPairTrainer(BaseTrainer):
                 if pair_id in gt_groups_adj:
                     relPrec+=1
                     gtRelHit.add((min(gtG0,gtG1),max(gtG0,gtG1)))
-                    if groupPurity[gtG0]==1 and groupPurity[gtG1]==1:
+                    if groupPurity[gtG0]==1 and groupPurity[gtG1]==1 and n0 in groupCompleteness and groupCompleteness[n0]==1 and n1 in groupCompleteness and groupCompleteness[n1]==1:
                         relPrec_strict+=1
                         gtRelHit_strict.add((min(gtG0,gtG1),max(gtG0,gtG1)))
+                        assert BROS_gtG0==gtG0
+                        assert BROS_gtG1==gtG1
+                        assert (min(gtG0,gtG1),max(gtG0,gtG1)) in gtRelHit_BROS
                     if 'blank' in self.classMap:
                         old_pi = newToOldPredPairs[pi]
                         rel_types[old_pi] = 'TP'
@@ -2481,6 +2492,13 @@ class GraphPairTrainer(BaseTrainer):
         #print('DEBUG true positives={}'.format(len(gtRelHit)))
         #print('DEBUG false positives={}'.format(len(predPairs)-len(gtRelHit)))
         #print('DEBUG false negatives={}'.format(len(gt_groups_adj)-len(gtRelHit)))
+        #log['final_rel_TP']=relPrec
+        assert relPrec_strict==len(gtRelHit_strict)
+        assert relPrec_BROS==len(gtRelHit_BROS)
+        log['final_rel_XX_strict_TP']=relPrec_strict
+        log['final_rel_XX_BROS_TP']=relPrec_BROS
+        log['final_rel_XX_predCount']=len(predPairs)
+        log['final_rel_XX_gtCount']=len(gt_groups_adj)
         if len(predPairs)>0:
             relPrec /= len(predPairs)
             relPrec_strict /= len(predPairs)
