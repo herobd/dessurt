@@ -2454,11 +2454,24 @@ class GraphPairTrainer(BaseTrainer):
         for pi,(n0,n1) in enumerate(predPairs):
             BROS_gtG0 = predToGTGroup_BROS[n0]
             BROS_gtG1 = predToGTGroup_BROS[n1]
+            hit=False
             if BROS_gtG0>=0 and BROS_gtG1>=0:
                 pair_id = (min(BROS_gtG0,BROS_gtG1),max(BROS_gtG0,BROS_gtG1))
                 if pair_id in gt_groups_adj:
+                    hit=True
                     relPrec_BROS+=1
                     gtRelHit_BROS.add((min(BROS_gtG0,BROS_gtG1),max(BROS_gtG0,BROS_gtG1)))
+                    if 'blank' in self.classMap:
+                        old_pi = newToOldPredPairs[pi]
+                        rel_types[old_pi] = 'TP'
+                    else:
+                        rel_types.append('TP')
+            if not hit:
+                if 'blank' in self.classMap:
+                    old_pi = newToOldPredPairs[pi]
+                    rel_types[old_pi] = 'FP'
+                else:
+                    rel_types.append('FP')
             if n0 not in predToGTGroup or n1 not in predToGTGroup:
                 print('ERROR, pair ({},{}) not foundi n predToGTGroup'.format(n0,n1))
                 print('predToGTGroup {}: {}'.format(len(predToGTGroup),predToGTGroup))
@@ -2477,17 +2490,17 @@ class GraphPairTrainer(BaseTrainer):
                         assert BROS_gtG0==gtG0
                         assert BROS_gtG1==gtG1
                         assert (min(gtG0,gtG1),max(gtG0,gtG1)) in gtRelHit_BROS
-                    if 'blank' in self.classMap:
-                        old_pi = newToOldPredPairs[pi]
-                        rel_types[old_pi] = 'TP'
-                    else:
-                        rel_types.append('TP')
+                    #if 'blank' in self.classMap:
+                    #    old_pi = newToOldPredPairs[pi]
+                    #    rel_types[old_pi] = 'TP'
+                    #else:
+                    #    rel_types.append('TP')
                     continue
-            if 'blank' in self.classMap:
-                old_pi = newToOldPredPairs[pi]
-                rel_types[old_pi] = 'FP'
-            else:
-                rel_types.append('FP')
+            #if 'blank' in self.classMap:
+            #    old_pi = newToOldPredPairs[pi]
+            #    rel_types[old_pi] = 'FP'
+            #else:
+            #    rel_types.append('FP')
 
         #print('DEBUG true positives={}'.format(len(gtRelHit)))
         #print('DEBUG false positives={}'.format(len(predPairs)-len(gtRelHit)))
