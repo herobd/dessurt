@@ -14,6 +14,7 @@ if __name__ == '__main__':
 
     print(saved.keys())
     #print(type(saved['logger'].entries))
-    print(saved['swa_state_dict']['n_averaged'])
+    if 'swa_state_dict' in saved:
+        print(saved['swa_state_dict']['n_averaged'])
     print(saved['iteration'])
 
