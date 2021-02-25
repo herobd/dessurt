@@ -1927,6 +1927,7 @@ class GraphPairTrainer(BaseTrainer):
                             image,
                             edgePredTypes,
                             missedRels,
+                            None,
                             targetBoxes,
                             self.classMap,
                             path,
