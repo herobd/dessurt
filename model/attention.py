@@ -7,7 +7,7 @@ from torch import nn
 def clones(module, N):
     "Produce N identical layers."
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
-def attention(query, key, value, mask=None, dropout=None):
+def attention(query, key, value, mask=None, dropout=None,fixed=False):
     "Compute 'Scaled Dot Product Attention'"
     d_k = query.size(-1)
     scores = torch.matmul(query, key.transpose(-2, -1)) \
@@ -21,8 +21,9 @@ def attention(query, key, value, mask=None, dropout=None):
         else:
             scores = scores.masked_fill(mask == 0, -1e9)
     p_attn = F.softmax(scores, dim = -1)
-    if mask is not None:
-        p_attn = scores.masked_fill(mask == 0, 0) #this is needed in casa node has no neigbors
+    
+    if mask is not None and fixed:
+        p_attn = p_attn.masked_fill(mask == 0, 0) #this is needed in casa node has no neigbors
         #will create a zero vector in those cases, instead of an average of all nodes
     if dropout is not None:
         p_attn = dropout(p_attn)
@@ -77,6 +78,7 @@ class MultiHeadedAttention(nn.Module):
             self.learned=False
         self.half = 'half' in self.mod
         self.none = 'none' in self.mod
+        self.fixed= 'fixed' in self.mod
         
         
     def forward(self, query, key, value, mask=None):
@@ -99,13 +101,13 @@ class MultiHeadedAttention(nn.Module):
         # 2) Apply attention on all the projected vectors in batch. 
         if self.half:
             x, self.attn = attention(query[...,:self.d_k//2], key[...,:self.d_k//2], value, mask=mask, 
-                                     dropout=self.dropout)
+                                     dropout=self.dropout,fixed=self.fixed)
         elif self.learned:
             x, self.attn = learned_attention(query, key, value, mask=mask, 
                                      dropout=self.dropout,network=self.attNet)
         else:
             x, self.attn = attention(query, key, value, mask=mask, 
-                                     dropout=self.dropout)
+                                     dropout=self.dropout,fixed=self.fixed)
         
         # 3) "Concat" using a view and apply a final linear. 
         x = x.transpose(1, 2).contiguous() \
