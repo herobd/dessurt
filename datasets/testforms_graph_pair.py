@@ -154,7 +154,7 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=FormsGraphPair(dirPath=dirPath,split='train',config={
+    data=FormsGraphPair(dirPath=dirPath,split='test',config={
 	"data_set_name": "FormsGraphPair",
         "special_dataset": None,
         "data_dir": "../data/forms",
@@ -177,6 +177,9 @@ if __name__ == "__main__":
         "only_opposite_pairs": False,
         "no_groups": True
 })
+
+    print('dataset len: {}'.format(len(data)))
+    exit()
 
     dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=forms_graph_pair.collate)
     dataLoaderIter = iter(dataLoader)

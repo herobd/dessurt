@@ -2233,7 +2233,7 @@ class GraphPairTrainer(BaseTrainer):
         for g0,g1 in predPairs:
             assert len(predGroups[g0])==1
             assert len(predGroups[g1])==1
-            assert 'blank' not in self.classMap
+            #assert 'blank' not in self.classMap
 
             num_classes = len(self.scoreClassMap)
             class0 = outputBoxes[predGroups[g0][0],6:6+num_classes].argmax().item()
@@ -2550,7 +2550,7 @@ class GraphPairTrainer(BaseTrainer):
             log['final_rel_BROS_Fm']=0
 
 
-        missed_rels = gt_groups_adj.difference(gtRelHit_strict)
+        missed_rels = gt_groups_adj.difference(gtRelHit_BROS)
         if 'blank' in self.classMap:
             missed_rels = set((newToOldGTGroups[g1],newToOldGTGroups[g2]) for g1,g2 in missed_rels)
 
