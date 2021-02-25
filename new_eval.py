@@ -319,7 +319,7 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                 #for validIndex in range(index,index+step*vBatchSize, vBatchSize):
                 #for validBatch
                     #if valyypidIndex/vBatchSize < len(valid_data_loader):
-                if batch < len(valid_data_loader):
+                if batch < len(valid_data_loader) and not do_train:
                         if verbosity>0:
                             print('{} batch index: {}/{}       '.format(validName,batch,len(valid_data_loader)),end='\r')
                         #data, target = valid_iter.next() #valid_data_loader[validIndex]
