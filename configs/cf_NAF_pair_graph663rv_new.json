@@ -1,5 +1,5 @@
 {
-    "name": "FUNSDLines_pair_graph663rv_new",
+    "name": "NAF_pair_graph663rv_new",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -10,7 +10,7 @@
         "data_dir": "../data/forms",
         "batch_size": 1,
         "shuffle": true,
-        "num_workers": 2,
+        "num_workers": 3,
         "crop_to_page":false,
         "color":false,
         "rescale_range": [0.4,0.65],
@@ -96,7 +96,7 @@
     },
     "arch": "PairingGroupingGraph", 
     "model": {
-        "detector_checkpoint": "saved/FUNSDLines_detect_augR_staggerLighter/checkpoint-iteration250000.pth",
+        "detector_checkpoint": "saved/NAF_detect_augR_staggerLighter/checkpoint-iteration250000.pth",
         "detect_conf_thresh": 0.5,
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
