@@ -1,25 +1,31 @@
 {
-    "name": "FUNSDLines_detect_augR_staggerLighter",
+    "name": "NAFblank_detect_augR_staggerLighter",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
-        "data_set_name": "FUNSDBoxDetect",
-        "data_dir": "../data/FUNSD",
+        "data_set_name": "FormsBoxDetect",
+        "data_dir": "../data/forms",
         "batch_size": 5,
         "shuffle": true,
         "num_workers": 4,
-        "split_to_lines": true,
         "crop_to_page":false,
         "color":false,
-        "rescale_range": [0.8,1.2],
+        "rescale_range": [0.4,0.65],
         "crop_params": {
             "crop_size":[700,1600],
-            "pad":50,
+            "pad":0,
             "flip_horz": false,
             "rot_degree_std_dev": 1,
             "rot_freq": 0.5
+        },
+        "no_blanks": false,
+        "swap_circle":true,
+        "no_graphics":true,
+        "cache_resized_images": true,
+        "only_types": {
+            "boxes":true
         },
         "rotation": false
 
@@ -27,7 +33,11 @@
     },
     "validation": {
         "shuffle": false,
-        "rescale_range": [1,1],
+        "rescale_range": [0.52,0.52],
+        "only_types": {
+            "boxes":true
+        },
+        "batch_size": 1,
         "crop_params": false
     },
 
@@ -56,7 +66,7 @@
         "save_dir": "saved/",
         "val_step": 10000,
         "save_step": 50000,
-        "save_step_minor": 500,
+        "save_step_minor":500,
         "log_step": 1000,
         "verbosity": 1,
         "monitor": "loss",

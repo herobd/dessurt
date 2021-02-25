@@ -1684,6 +1684,8 @@ class GraphPairTrainer(BaseTrainer):
         proposedInfo=None
         mergeProposedInfo=None
 
+       # print('effective prop thresh: {:.3f}, raw: {:.3f}'.format(torch.sigmoid(torch.FloatTensor([rel_prop_pred[-1]])).item(),rel_prop_pred[-1]))
+
         merged_first = self.model_ref.merge_first and not useOnlyGTSpace
         if allEdgePred is not None:
             for graphIteration,(outputBoxes,edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allOutputBoxes,allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
