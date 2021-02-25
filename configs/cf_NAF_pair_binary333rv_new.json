@@ -1,29 +1,36 @@
 {
-    "name": "FUNSDLines_pair_binary333rv_prev",
+    "name": "NAF_pair_binary333rv_new",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
-        "data_set_name": "FUNSDGraphPair",
-        "data_dir": "../data/FUNSD",
+        "data_set_name": "FormsGraphPair",
+        "special_dataset": null,
+        "data_dir": "../data/forms",
         "batch_size": 1,
         "shuffle": true,
         "num_workers": 3,
-        "split_to_lines": true,
         "crop_to_page":false,
         "color":false,
-        "rescale_range": [0.8,1.2],
+        "rescale_range": [0.4,0.65],
         "crop_params": {
-            "crop_size":[800,800],
-	    "pad":50
-        }
+            "crop_size":[600,1400],
+            "pad":0
+        },
+        "no_blanks": true,
+        "swap_circle":true,
+        "no_graphics":true,
+        "cache_resized_images": true,
+        "rotation": false,
+        "only_opposite_pairs": false,
+        "no_groups": true
 
 
     },
     "validation": {
         "shuffle": false,
-        "rescale_range": [1,1],
+        "rescale_range": [0.52,0.52],
         "crop_params": null,
         "batch_size": 1
     },
@@ -40,7 +47,6 @@
         "box": "YoloLoss",
         "rel": "sigmoid_BCE_loss",
         "propRel": "sigmoid_BCE_loss",
-        "nnFinal": "MSE",
         "classFinal": "sigmoid_BCE_loss",
         "confFinal": "sigmoid_BCE_loss"
     },
@@ -48,7 +54,6 @@
         "box": 1.0,
         "rel": 0.5,
         "propRel": 0.5,
-        "nnFinal": 0.25,
         "classFinal": 0.5,
         "confFinal": 0.5
     },
@@ -64,12 +69,11 @@
         "iterations": 700000,
         "swa": true,
         "swa_start": 600000,
-        "swa_c_iters": 10000,
         "save_dir": "saved/",
         "val_step": 25000,
         "save_step": 50000,
         "save_step_minor": 200,
-        "log_step": 250,
+        "log_step": 500,
         "verbosity": 1,
         "monitor": "loss",
         "monitor_mode": "none",
@@ -77,6 +81,7 @@
         "conf_thresh_init": 0.5,
         "conf_thresh_change_iters": 0,
         "retry_count":1,
+
 
         "mergeAndGroup": true,
 
@@ -93,7 +98,7 @@
     },
     "arch": "PairingGroupingGraph", 
     "model": {
-        "detector_checkpoint": "saved/FUNSDLines_detect_augR_staggerLighter/checkpoint-iteration250000.pth",
+        "detector_checkpoint": "saved/NAF_detect_augR_staggerLighter/checkpoint-iteration250000.pth",
         "conf_thresh": 0.5,
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
@@ -110,52 +115,52 @@
         "no_grad_feats": true,
         "feat_norm": "group_norm",
 
-        "expand_rel_context": 150,
-        "featurizer_start_h": 32,
-        "featurizer_start_w": 32,
-        "featurizer_conv": ["sep128","M","sep128","sep128","M","sep256","sep256","M"],
+        "expand_rel_context": 20,
+        "featurizer_start_h": 16,
+        "featurizer_start_w": 16,
+        "featurizer_conv": ["sep128","sep128","M","sep256","sep256","M"],
         "featurizer_conv_auto": true,
         "featurizer_fc": null,
 
         "pred_nn": false,
         "pred_class": true,
-        "expand_bb_context": 150,
-        "featurizer_bb_start_h": 32,
-        "featurizer_bb_start_w": 32,
-        "bb_featurizer_conv": ["sep64","M","sep64","sep64","M","sep128","sep128","M"],
+        "expand_bb_context": 20,
+        "featurizer_bb_start_h": 10,
+        "featurizer_bb_start_w": 10,
+        "bb_featurizer_conv": ["sep64","sep64","M","sep128"],
 
         "fix_bi_dir": true,
         "reintroduce_visual_features": "fixed map",
         "graph_config": [
             {
             "arch": "BinaryPairReal",
-            "in_channels": 256,
-            "node_out": 5,
+            "in_channels": 512,
+            "node_out": 3,
             "edge_out": 5,
-            "layers": ["GroupNorm","ReLU","FC256","FCnR256"],
-            "layers_bb": ["GroupNorm","ReLU","FCnR256"],
+            "layers": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
+            "layers_bb": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
             "merge_thresh": 0.8,
             "group_thresh": 0.95,
             "keep_edge_thresh": 0.1
         },
         {
             "arch": "BinaryPairReal",
-            "in_channels": 256,
-            "node_out": 5,
+            "in_channels": 512,
+            "node_out": 3,
             "edge_out": 5,
-            "layers": ["GroupNorm","ReLU","FC256","FCnR256"],
-            "layers_bb": ["GroupNorm","ReLU","FCnR256"],
+            "layers": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
+            "layers_bb": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
             "merge_thresh": 0.9,
             "group_thresh": 0.9,
             "keep_edge_thresh": 0.1
         },
         {
             "arch": "BinaryPairReal",
-            "in_channels": 256,
-            "node_out": 5,
+            "in_channels": 512,
+            "node_out": 3,
             "edge_out": 5,
-            "layers": ["GroupNorm","ReLU","FC256","FCnR256"],
-            "layers_bb": ["GroupNorm","ReLU","FCnR256"],
+            "layers": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
+            "layers_bb": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
             "merge_thresh": 0.9,
             "group_thresh": 0.6,
             "keep_edge_thresh": 0.5

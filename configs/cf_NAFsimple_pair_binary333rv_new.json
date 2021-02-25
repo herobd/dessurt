@@ -1,5 +1,5 @@
 {
-    "name": "NAFsimple_pair_binary333rv_new",
+    "name": "NAF_pair_binary333rv_new",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
