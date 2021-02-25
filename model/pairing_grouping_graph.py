@@ -3561,7 +3561,7 @@ class PairingGroupingGraph(BaseModel):
             if not self.training:
                 max_rel_to_keep *= 3
             keep = min(keep,self.max_rel_to_keep)
-            #print('keeping {} of {}'.format(keep,len(rels_ordered)))
+            print('keeping {} of {}'.format(keep,len(rels_ordered)))
             keep_rels = [r[1] for r in rels_ordered[:keep]]
             #if merge_only:
                 #print('total rels:{}, keeping:{}, max:{}'.format(len(rels_ordered),keep,max_rel_to_keep))
