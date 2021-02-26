@@ -1,5 +1,5 @@
 {
-    "name": "FUNSDLines_pair_graph222rv_new",
+    "name": "FUNSDLines_pair_graph222rv_ablate",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
