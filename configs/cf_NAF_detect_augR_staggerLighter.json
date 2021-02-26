@@ -9,7 +9,7 @@
         "data_dir": "../data/forms",
         "batch_size": 5,
         "shuffle": true,
-        "num_workers": 4,
+        "num_workers": 5,
         "crop_to_page":false,
         "color":false,
         "rescale_range": [0.4,0.65],
@@ -92,7 +92,7 @@
                                 "hd4-128", "vd1-128", "hd8-128", 128,  "M", 
                                 "hd8-256","vd2-256","hd16-256",256, 256],
         "up_layers_cfg":[],
-        "anchors_file": "FUNSDLines_anchors_noRot_25.json",
+        "anchors_file": "anchors_noRot_new_25.json",
         "rotation":false
     }
 }
