@@ -1,36 +1,29 @@
 {
-    "name": "NAFblank_pair_graph663rv_new",
+    "name": "FUNSDLines_pair_graph222rv_ablate",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
-        "data_set_name": "FormsGraphPair",
-        "special_dataset": null,
-        "data_dir": "../data/forms",
+        "data_set_name": "FUNSDGraphPair",
+        "data_dir": "../data/FUNSD",
         "batch_size": 1,
         "shuffle": true,
         "num_workers": 3,
+        "split_to_lines": true,
         "crop_to_page":false,
         "color":false,
-        "rescale_range": [0.4,0.65],
+        "rescale_range": [0.8,1.2],
         "crop_params": {
-            "crop_size":[600,1400],
-            "pad":0
-        },
-        "no_blanks": false,
-        "swap_circle":true,
-        "no_graphics":true,
-        "cache_resized_images": true,
-        "rotation": false,
-        "only_opposite_pairs": false,
-        "no_groups": true
+            "crop_size":[800,800],
+	    "pad":50
+        }
 
 
     },
     "validation": {
         "shuffle": false,
-        "rescale_range": [0.52,0.52],
+        "rescale_range": [1,1],
         "crop_params": null,
         "batch_size": 1
     },
@@ -47,6 +40,7 @@
         "box": "YoloLoss",
         "rel": "sigmoid_BCE_loss",
         "propRel": "sigmoid_BCE_loss",
+        "nnFinal": "MSE",
         "classFinal": "sigmoid_BCE_loss",
         "confFinal": "sigmoid_BCE_loss"
     },
@@ -73,7 +67,7 @@
         "val_step": 25000,
         "save_step": 50000,
         "save_step_minor": 200,
-        "log_step": 500,
+        "log_step": 250,
         "verbosity": 1,
         "monitor": "loss",
         "monitor_mode": "none",
@@ -96,7 +90,7 @@
     },
     "arch": "PairingGroupingGraph", 
     "model": {
-        "detector_checkpoint": "saved/NAFblank_detect_augR_staggerLighter/checkpoint-iteration250000.pth",
+        "detector_checkpoint": "saved/FUNSDLines_detect_augR_staggerLighter/checkpoint-iteration250000.pth",
         "detect_conf_thresh": 0.5,
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
@@ -133,9 +127,9 @@
 	    {
             "arch": "MetaGraphNet",
             "in_channels": 256,
-            "node_out": 4,
+            "node_out": 5,
             "edge_out": 5,
-            "num_layers": 6,
+            "num_layers": 2,
             "num_heads": 4,
             "repetitions": 1,
             "use_repetition_res": false,
@@ -150,9 +144,9 @@
         {
             "arch": "MetaGraphNet",
             "in_channels": 256,
-            "node_out": 4,
+            "node_out": 5,
             "edge_out": 5,
-            "num_layers": 6,
+            "num_layers": 2,
             "num_heads": 4,
             "repetitions": 1,
             "use_repetition_res": false,
@@ -167,9 +161,9 @@
         {
             "arch": "MetaGraphNet",
             "in_channels": 256,
-            "node_out": 4,
+            "node_out": 5,
             "edge_out": 5,
-            "num_layers": 3,
+            "num_layers": 2,
             "num_heads": 4,
             "repetitions": 1,
             "use_repetition_res": false,
