@@ -483,7 +483,7 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
 
 
                 print('----PER DOCUMENT------')
-                print('BROS relationship Recall Prec F1: {:.2f} & {:.2f} & {:.2f}'.format(BROS_recall*100,BROS_prec*100,BROS_Fm*100))
+                print('BROS relationship Recall Prec F1: {:.2f} & {:.2f} & {:.2f}'.format(100*BROS_recall,100*BROS_prec,100*BROS_Fm))
                 print('----OVERALL------')
                 BROS_recall = rel_BROS_TP/rel_gt_count
                 BROS_prec = rel_BROS_TP/rel_pred_count

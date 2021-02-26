@@ -92,7 +92,7 @@
                                 "hd4-128", "vd1-128", "hd8-128", 128,  "M", 
                                 "hd8-256","vd2-256","hd16-256",256, 256],
         "up_layers_cfg":[],
-        "anchors_file": "FUNSDLines_anchors_noRot_25.json",
+        "anchors_file": "anchors_noRot_new_25.json",
         "rotation":false
     }
 }
