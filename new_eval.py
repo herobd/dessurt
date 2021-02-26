@@ -107,8 +107,8 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
             addTo[add[-2]] = value
             printM+=add[-2]+']={}'.format(value)
             print(printM)
-            if (add[-2]=='useDetections' or add[-2]=='useDetect') and 'gt' not in value:
-                addDATASET=True
+            #if (add[-2]=='useDetections' or add[-2]=='useDetect') and 'gt' not in value:
+            #    addDATASET=True
         
     #config['data_loader']['batch_size']=math.ceil(config['data_loader']['batch_size']/2)
     if 'save_spaced' in config:
