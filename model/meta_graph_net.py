@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import math
 import json
 from .net_builder import make_layers, getGroupSize
-from .graphconvolution import MultiHeadedAttention
+from .attention import MultiHeadedAttention
 from torch_geometric.nn import MetaLayer
 from torch_scatter import scatter_mean
 import numpy as np
@@ -827,6 +827,10 @@ class MetaGraphNet(nn.Module):
         else:
             node_att_thinker='cat'
             node_att_more_norm=False
+
+        if 'node_att_thinker' in config:
+            node_att_thinker = config['node_att_thinker']
+
         edge_sep_norm = 'better_norm_edge' in config and config['better_norm_edge']
 
 

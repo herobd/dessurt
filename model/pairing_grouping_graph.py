@@ -189,7 +189,12 @@ class PairingGroupingGraph(BaseModel):
         self.rotation = self.detector.rotation
         self.scale = self.detector.scale
         self.anchors = self.detector.anchors
-        self.confThresh = config['conf_thresh'] if 'conf_thresh' in config else 0.5
+        if 'detect_conf_thresh' in config:
+            self.detect_conf_thresh = config['detect_conf_thresh'] 
+        elif 'conf_thresh' in config:
+            self.detect_conf_thresh = config['conf_thresh'] 
+        else:
+            self.detect_conf_thresh = 0.5
         self.useHardConfThresh = config['use_hard_conf_thresh'] if 'use_hard_conf_thresh' in config else True
         self.predNN = config['pred_nn'] if 'pred_nn' in config else False
         assert(not self.predNN)
@@ -755,13 +760,13 @@ class PairingGroupingGraph(BaseModel):
         
         #t###tic=timeit.default_timer()#t#
         if self.useHardConfThresh:
-            self.used_threshConf = self.confThresh
+            self.used_threshConf = self.detect_conf_thresh
         else:
             maxConf = bbPredictions[:,:,0].max().item()
             if otherThreshIntur is None:
-                confThreshMul = self.confThresh
+                confThreshMul = self.detect_conf_thresh
             else:
-                confThreshMul = self.confThresh*(1-otherThreshIntur) + otherThresh*otherThreshIntur
+                confThreshMul = self.detect_conf_thresh*(1-otherThreshIntur) + otherThresh*otherThreshIntur
             self.used_threshConf = max(maxConf*confThreshMul,0.5)
 
         if self.training:
@@ -3561,7 +3566,7 @@ class PairingGroupingGraph(BaseModel):
             if not self.training:
                 max_rel_to_keep *= 3
             keep = min(keep,self.max_rel_to_keep)
-            #print('keeping {} of {}'.format(keep,len(rels_ordered)))
+            print('keeping {} of {}'.format(keep,len(rels_ordered)))
             keep_rels = [r[1] for r in rels_ordered[:keep]]
             #if merge_only:
                 #print('total rels:{}, keeping:{}, max:{}'.format(len(rels_ordered),keep,max_rel_to_keep))
