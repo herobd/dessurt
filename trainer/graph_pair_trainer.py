@@ -106,7 +106,6 @@ class GraphPairTrainer(BaseTrainer):
         self.stop_from_gt = config['trainer']['stop_from_gt'] if 'stop_from_gt' in config['trainer'] else None
         self.partial_from_gt = config['trainer']['partial_from_gt'] if 'partial_from_gt' in config['trainer'] else None
         self.max_use_pred = config['trainer']['max_use_pred'] if 'max_use_pred' in config['trainer'] else 0.9
-        self.bothGT =  config['trainer']['bothGT'] if 'bothGT' in config['trainer'] else True
 
         self.conf_thresh_init = config['trainer']['conf_thresh_init'] if 'conf_thresh_init' in config['trainer'] else 0.9
         self.conf_thresh_change_iters = config['trainer']['conf_thresh_change_iters'] if 'conf_thresh_change_iters' in config['trainer'] else 5000
@@ -257,12 +256,14 @@ class GraphPairTrainer(BaseTrainer):
             threshIntur = 1 - iteration/self.conf_thresh_change_iters
         else:
             threshIntur = None
-        useGT = self.useGT(iteration)
-        if self.bothGT and useGT and random.random()<0.9:
-            useOnlyGTSpace = True
-            useGT = False
-        else:
-            useOnlyGTSpace = False
+        #useGT = self.useGT(iteration)
+        #if self.bothGT and useGT and random.random()<0.9:
+        #    useOnlyGTSpace = True
+        #    useGT = False
+        #else:
+        #    useOnlyGTSpace = False
+        useOnlyGTSpace = self.useGT(iteration)
+        useGT = False
 
         #print('\t\t\t\t{} {}'.format(iteration,thisInstance['imgName']))
         if self.amp:
@@ -270,11 +271,13 @@ class GraphPairTrainer(BaseTrainer):
                 if self.mergeAndGroup:
                     losses, run_log, out = self.newRun(thisInstance,useGT,threshIntur,useOnlyGTSpace=useOnlyGTSpace)
                 else:
+                    useGT = useOnlyGTSpace
                     losses, run_log, out = self.run(thisInstance,useGT,threshIntur)
         else:
             if self.mergeAndGroup:
                 losses, run_log, out = self.newRun(thisInstance,useGT,threshIntur,useOnlyGTSpace=useOnlyGTSpace)
             else:
+                useGT = useOnlyGTSpace
                 losses, run_log, out = self.run(thisInstance,useGT,threshIntur)
         #t#self.opt_history['full run'].append(timeit.default_timer()-tic)#t#
 
@@ -1683,6 +1686,8 @@ class GraphPairTrainer(BaseTrainer):
         allBBAlignment=[]
         proposedInfo=None
         mergeProposedInfo=None
+
+       # print('effective prop thresh: {:.3f}, raw: {:.3f}'.format(torch.sigmoid(torch.FloatTensor([rel_prop_pred[-1]])).item(),rel_prop_pred[-1]))
 
         merged_first = self.model_ref.merge_first and not useOnlyGTSpace
         if allEdgePred is not None:

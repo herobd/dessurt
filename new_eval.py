@@ -319,7 +319,7 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                 #for validIndex in range(index,index+step*vBatchSize, vBatchSize):
                 #for validBatch
                     #if valyypidIndex/vBatchSize < len(valid_data_loader):
-                if batch < len(valid_data_loader):
+                if batch < len(valid_data_loader) and not do_train:
                         if verbosity>0:
                             print('{} batch index: {}/{}       '.format(validName,batch,len(valid_data_loader)),end='\r')
                         #data, target = valid_iter.next() #valid_data_loader[validIndex]
@@ -483,7 +483,7 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
 
 
                 print('----PER DOCUMENT------')
-                print('BROS relationship Recall Prec F1: {:.2f} & {:.2f} & {:.2f}'.format(BROS_recall*100,BROS_prec*100,BROS_Fm*100))
+                print('BROS relationship Recall Prec F1: {:.2f} & {:.2f} & {:.2f}'.format(100*BROS_recall,100*BROS_prec,100*BROS_Fm))
                 print('----OVERALL------')
                 BROS_recall = rel_BROS_TP/rel_gt_count
                 BROS_prec = rel_BROS_TP/rel_pred_count
