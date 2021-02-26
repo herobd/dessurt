@@ -3541,12 +3541,13 @@ class PairingGroupingGraph(BaseModel):
             if self.training:
                 rels_ordered.sort(key=lambda x: x[0], reverse=True)
             keep_rels = [r[1] for r in rels_ordered if r[0]>rel_hard_thresh]
+            if merge_only:
+                max_rel_to_keep = self.max_merge_rel_to_keep
+            else:
+                max_rel_to_keep = self.max_rel_to_keep
             if self.training:
-                if merge_only:
-                    max_rel_to_keep = self.max_merge_rel_to_keep
-                else:
-                    max_rel_to_keep = self.max_rel_to_keep
-                keep_rels = keep_rels[:max_rel_to_keep]
+                max_rel_to_keep *= 4
+            keep_rels = keep_rels[:max_rel_to_keep]
             implicit_threshold = rel_hard_thresh
         else:
             rels_ordered.sort(key=lambda x: x[0], reverse=True)
