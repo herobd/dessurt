@@ -942,8 +942,13 @@ class PairingGroupingGraph(BaseModel):
             useBBs = [TextLine(bb,step_size=self.text_line_smoothness) for bb in useBBs] #self.x1y1x2y2rToCurved(useBBs)
 
         if self.text_rec is not None:
-            if (useGTBBs or useOnlyGTSpace) and gtTrans is not None: # and len(gtTrans)==useBBs.size[0]:
-                transcriptions = gtTrans
+            if useGTBBs and gtTrans is not None: # and len(gtTrans)==useBBs.size[0]:
+                assert 'word_bbs' not in useGTBBs
+                #transcriptions = gtTrans
+                transcriptions = ['']*useBBs.size(0)
+                for i,trans in enumerate(gtTrans):
+                    transcriptions[gt_to_new[i]]=trans
+                #transcriptions = [gtTrans[new_to_gt[newi]] if newi in new_to_gt else '' for newi in range(useBBs.size(0))] 
             elif not self.merge_first: #skip if oversegmented, for speed
                 transcriptions = self.getTranscriptions(useBBs,image)
                 if gtTrans is not None:
