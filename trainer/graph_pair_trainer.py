@@ -106,6 +106,8 @@ class GraphPairTrainer(BaseTrainer):
         self.stop_from_gt = config['trainer']['stop_from_gt'] if 'stop_from_gt' in config['trainer'] else None
         self.partial_from_gt = config['trainer']['partial_from_gt'] if 'partial_from_gt' in config['trainer'] else None
         self.max_use_pred = config['trainer']['max_use_pred'] if 'max_use_pred' in config['trainer'] else 0.9
+        self.use_word_bbs_gt = config['trainer']['use_word_bbs_gt'] if 'use_word_bbs_gt' in config['trainer'] else -1
+        self.valid_with_gt = config['trainer']['valid_with_gt'] if 'valid_with_gt'  in config['trainer'] else False
 
         self.conf_thresh_init = config['trainer']['conf_thresh_init'] if 'conf_thresh_init' in config['trainer'] else 0.9
         self.conf_thresh_change_iters = config['trainer']['conf_thresh_change_iters'] if 'conf_thresh_change_iters' in config['trainer'] else 5000
@@ -193,13 +195,23 @@ class GraphPairTrainer(BaseTrainer):
             #return np.zeros(0)
             return {}
 
-    def useGT(self,iteration):
-        if self.stop_from_gt is not None and iteration>=self.stop_from_gt:
-            return random.random()>self.max_use_pred #I think it's best to always have some GT examples
+    def useGT(self,iteration,force=False):
+        if force:
+            use=True
+        elif self.stop_from_gt is not None and iteration>=self.stop_from_gt:
+            use= random.random()>self.max_use_pred #I think it's best to always have some GT examples
         elif self.partial_from_gt is not None and iteration>=self.partial_from_gt:
-            return random.random()> self.max_use_pred*(iteration-self.partial_from_gt)/(self.stop_from_gt-self.partial_from_gt)
+            use= random.random()> self.max_use_pred*(iteration-self.partial_from_gt)/(self.stop_from_gt-self.partial_from_gt)
         else:
-            return True
+            use= True
+
+        if use:
+            ret='only_space'
+            if random.random()<=self.use_word_bbs_gt:
+                ret+=' word_bbs'
+            return ret
+        else:
+            return False
     #NEW
     def _train_iteration(self, iteration):
         """
@@ -256,26 +268,26 @@ class GraphPairTrainer(BaseTrainer):
             threshIntur = 1 - iteration/self.conf_thresh_change_iters
         else:
             threshIntur = None
-        #useGT = self.useGT(iteration)
+        useGT = self.useGT(iteration)
         #if self.bothGT and useGT and random.random()<0.9:
         #    useOnlyGTSpace = True
         #    useGT = False
         #else:
         #    useOnlyGTSpace = False
-        useOnlyGTSpace = self.useGT(iteration)
-        useGT = False
+        #useOnlyGTSpace = self.useGT(iteration)
+        #useGT = False
 
         #print('\t\t\t\t{} {}'.format(iteration,thisInstance['imgName']))
         if self.amp:
             with torch.cuda.amp.autocast():
                 if self.mergeAndGroup:
-                    losses, run_log, out = self.newRun(thisInstance,useGT,threshIntur,useOnlyGTSpace=useOnlyGTSpace)
+                    losses, run_log, out = self.newRun(thisInstance,useGT,threshIntur)
                 else:
                     useGT = useOnlyGTSpace
                     losses, run_log, out = self.run(thisInstance,useGT,threshIntur)
         else:
             if self.mergeAndGroup:
-                losses, run_log, out = self.newRun(thisInstance,useGT,threshIntur,useOnlyGTSpace=useOnlyGTSpace)
+                losses, run_log, out = self.newRun(thisInstance,useGT,threshIntur)
             else:
                 useGT = useOnlyGTSpace
                 losses, run_log, out = self.run(thisInstance,useGT,threshIntur)
@@ -367,6 +379,9 @@ class GraphPairTrainer(BaseTrainer):
         val_metrics = {}#defaultdict(lambda: 0.0)
         val_count = defaultdict(lambda: 1)
 
+        useGT = self.useGT(self.iteration,True) if self.valid_with_gt else False
+        prefix = 'valGT_' if self.valid_with_gt else 'val_'
+
 
         with torch.no_grad():
             for batch_idx, instance in enumerate(self.valid_data_loader):
@@ -375,13 +390,13 @@ class GraphPairTrainer(BaseTrainer):
                 if not self.logged:
                     print('iter:{} valid batch: {}/{}'.format(self.iteration,batch_idx,len(self.valid_data_loader)), end='\r')
                 if self.mergeAndGroup:
-                    losses,log_run, out = self.newRun(instance,False,get=['bb_stats','nn_acc'])
+                    losses,log_run, out = self.newRun(instance,useGT,get=['bb_stats','nn_acc'])
                 else:
-                    losses,log_run, out = self.run(instance,False,get=['bb_stats','nn_acc'])
+                    losses,log_run, out = self.run(instance,useGT,get=['bb_stats','nn_acc'])
 
                 for name,value in log_run.items():
                     if value is not None:
-                        val_name = 'val_'+name
+                        val_name = prefix+name
                         if val_name in val_metrics:
                             val_metrics[val_name]+=value
                             val_count[val_name]+=1
@@ -390,7 +405,7 @@ class GraphPairTrainer(BaseTrainer):
                 for name,value in losses.items():
                     if value is not None:
                         value = value.item()
-                        val_name = 'val_'+name
+                        val_name = prefix+name
                         if val_name in val_metrics:
                             val_metrics[val_name]+=value
                             val_count[val_name]+=1
@@ -1545,7 +1560,7 @@ class GraphPairTrainer(BaseTrainer):
 
 
 
-    def newRun(self,instance,useGT,threshIntur=None,get=[],useOnlyGTSpace=False,useGTGroups=False):
+    def newRun(self,instance,useGT,threshIntur=None,get=[]):#,useOnlyGTSpace=False,useGTGroups=False):
         assert(not self.model_ref.predNN)
         numClasses = len(self.classMap)
         image, targetBoxes, adj, target_num_neighbors = self._to_tensor(instance)
@@ -1560,9 +1575,36 @@ class GraphPairTrainer(BaseTrainer):
         else:
             gtTrans = None
         #t#tic=timeit.default_timer()#t##t#
-        if (useGT or useOnlyGTSpace) and targetBoxes is not None:
+        if useGT and len(useGT)>0:
             numBBTypes = self.model_ref.numBBTypes
-            if self.model_ref.useCurvedBBs and not useOnlyGTSpace:
+            if 'word_bbs' in useGT: #useOnlyGTSpace and self.use_word_bbs_gt:
+                word_boxes = instance['form_metadata']['word_boxes'][None,:,:,].to(targetBoxes.device) #I can change this as it isn't used later
+                if self.model_ref.useCurvedBBs:
+                    word_boxes = instance['form_metadata']['word_boxes']
+                    x1 = word_boxes[:,:,0]-word_boxes[:,:,4]
+                    x2 = word_boxes[:,:,0]+word_boxes[:,:,4]
+                    y1 = word_boxes[:,:,1]-word_boxes[:,:,3]
+                    y2 = word_boxes[:,:,1]+word_boxes[:,:,3]
+                    r = word_boxes[:,:,2]
+                    targetBoxes_changed = torch.stack((x1,y1,x2,y2,r),dim=2) #leave out class information
+                    if self.model.training:
+                        targetBoxes_changed[:,:,0] += torch.randn_like(targetBoxes_changed[:,:,0])
+                        targetBoxes_changed[:,:,1] += torch.randn_like(targetBoxes_changed[:,:,1])
+                        targetBoxes_changed[:,:,2] += torch.randn_like(targetBoxes_changed[:,:,2])
+                        targetBoxes_changed[:,:,3] += torch.randn_like(targetBoxes_changed[:,:,2])
+                else:
+                    targetBoxes_changed=word_boxes
+                    if self.model.training:
+                        targetBoxes_changed[:,:,0] += torch.randn_like(targetBoxes_changed[:,:,0])
+                        targetBoxes_changed[:,:,1] += torch.randn_like(targetBoxes_changed[:,:,1])
+                        if self.model_ref.rotation:
+                            targetBoxes_changed[:,:,2] += torch.randn_like(targetBoxes_changed[:,:,2])*0.01
+                        targetBoxes_changed[:,:,3] += torch.randn_like(targetBoxes_changed[:,:,3])
+                        targetBoxes_changed[:,:,4] += torch.randn_like(targetBoxes_changed[:,:,4])
+                        targetBoxes_changed[:,:,3][targetBoxes_changed[:,:,3]<1]=1
+                        targetBoxes_changed[:,:,4][targetBoxes_changed[:,:,4]<1]=1
+
+            elif self.model_ref.useCurvedBBs and 'only_space' not in useGT:#not useOnlyGTSpace:
                 #build targets of GT to pass as detections
                 ph_boxes = [torch.zeros(1,1,1,1,1)]*3
                 ph_cls = [torch.zeros(1,1,1,1,1)]*3
@@ -1607,7 +1649,7 @@ class GraphPairTrainer(BaseTrainer):
                     ys.append(level_y.view(level_y.size(0),level_y.size(1)*level_y.size(2),level_y.size(3),level_y.size(4)))
                 targetBoxes_changed = build_box_predictions(ys,scale,ys[0].device,numAnchors,numBBParams,numBBTypes)
                 targetBoxes_changed = targetBoxes_changed[:,targetBoxes_changed[0,:,0]>0.5]
-            elif self.model_ref.useCurvedBBs and useOnlyGTSpace:
+            elif self.model_ref.useCurvedBBs and 'only_space' in useGT: #useOnlyGTSpace:
                 #convert target boxes to x1y1x2y2r, as that's what TextLine expects
                 x1 = targetBoxes[:,:,0]-targetBoxes[:,:,4]
                 x2 = targetBoxes[:,:,0]+targetBoxes[:,:,4]
@@ -1620,15 +1662,16 @@ class GraphPairTrainer(BaseTrainer):
                 if self.model.training:
                     targetBoxes_changed[:,:,0] += torch.randn_like(targetBoxes_changed[:,:,0])
                     targetBoxes_changed[:,:,1] += torch.randn_like(targetBoxes_changed[:,:,1])
-                    targetBoxes_changed[:,:,2] += torch.randn_like(targetBoxes_changed[:,:,2])*0.01
+                    if self.model_ref.rotation:
+                        targetBoxes_changed[:,:,2] += torch.randn_like(targetBoxes_changed[:,:,2])*0.01
                     targetBoxes_changed[:,:,3] += torch.randn_like(targetBoxes_changed[:,:,3])
                     targetBoxes_changed[:,:,4] += torch.randn_like(targetBoxes_changed[:,:,4])
                     targetBoxes_changed[:,:,3][targetBoxes_changed[:,:,3]<1]=1
                     targetBoxes_changed[:,:,4][targetBoxes_changed[:,:,4]<1]=1
                     #we tweak the classes in the model
 
-            if useOnlyGTSpace and not self.model_ref.useCurvedBBs:
-                targetBoxes_changed[:,:,-numBBTypes:]=0 #zero out other information to ensure results aren't contaminated
+            if 'only_space' in useGT and not self.model_ref.useCurvedBBs:
+                targetBoxes_changed[:,:,5:]=0 #zero out other information to ensure results aren't contaminated
                 #useCurved doesnt include class
 
 
@@ -1638,13 +1681,13 @@ class GraphPairTrainer(BaseTrainer):
                                 targetBoxes_changed,
                                 target_num_neighbors,
                                 useGT,
-                                useOnlyGTSpace=useOnlyGTSpace,
+                                #useOnlyGTSpace=useOnlyGTSpace,
                                 otherThresh=self.conf_thresh_init, 
                                 otherThreshIntur=threshIntur, 
                                 hard_detect_limit=self.train_hard_detect_limit,
                                 gtTrans = gtTrans,
                                 merge_first_only = self.iteration<self.merge_first_only_until,
-                                gtGroups = gtGroups if useGTGroups else None)
+                                gtGroups = gtGroups if 'groups' in useGT else None)
             #TODO
             #predPairingShouldBeTrue,predPairingShouldBeFalse, eRecall,ePrec,fullPrec,ap,proposedInfo = self.prealignedEdgePred(adj,relPred,relIndexes,rel_prop_pred)
             #if bbPred is not None:
