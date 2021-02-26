@@ -172,7 +172,7 @@ class AdobeGraphPair(GraphPairDataset):
                 groups.append([bb_id])
 
         #self.pairs=list(pairs)
-        return bbs,bb_ids, numClasses, trans, groups, {}
+        return bbs,bb_ids, numClasses, trans, groups, {}, {}
 
 
     def getResponseBBIdList(self,queryId,annotations):

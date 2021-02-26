@@ -113,7 +113,7 @@ class GraphPairDataset(torch.utils.data.Dataset):
         
         ##tic=timeit.default_timer()
 
-        bbs,ids,numClasses,trans, groups, metadata = self.parseAnn(annotations,s)
+        bbs,ids,numClasses,trans, groups, metadata, form_metadata = self.parseAnn(annotations,s)
         #trans = {i:v for i,v in enumerate(trans)}
         #metadata = {i:v for i,v in enumerate(metadata)}
 
@@ -247,6 +247,7 @@ class GraphPairDataset(torch.utils.data.Dataset):
                 "cropPoint": cropPoint,
                 "transcription": [trans[id] for id in ids],
                 "metadata": [metadata[id] for id in ids if id in metadata],
+                "form_metadata": form_metadata,
                 "gt_groups": groups,
                 "targetIndexToGroup":targetIndexToGroup,
                 "gt_groups_adj": groups_adj

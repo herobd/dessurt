@@ -19,7 +19,7 @@ from model.distilbert_adapter import DistilBertAdapter, DistilBertWholeAdapter
 from model.hand_code_emb import HandCodeEmb
 from skimage import draw
 from model.net_builder import make_layers, getGroupSize
-from utils.yolo_tools import non_max_sup_iou, non_max_sup_dist, non_max_sup_overseg, allIOU
+from utils.yolo_tools import non_max_sup_iou, non_max_sup_dist, non_max_sup_overseg, allIOU, allIO_clipU
 from utils.util import decode_handwriting
 from utils.bb_merging import TextLine, xyrwh_TextLine
 #from utils.string_utils import correctTrans
@@ -729,7 +729,7 @@ class PairingGroupingGraph(BaseModel):
             print('Unfroze detector')
         
 
-    def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=5000, debug=False,old_nn=False,gtTrans=None,merge_first_only=False, useOnlyGTSpace=False, gtGroups=None):
+    def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=5000, debug=False,old_nn=False,gtTrans=None,merge_first_only=False, gtGroups=None):
         assert(image.size(0)==1) #implementation designed for batch size of 1. Should work to do data parallelism, since each copy of the model will get a batch size of 1
         self.merges_performed=0 #just tracking to see if it's working
         #t###tic=timeit.default_timer()#t#
@@ -782,156 +782,157 @@ class PairingGroupingGraph(BaseModel):
 
 
 
-        if not useGTBBs:
-            #if useOnlyGTSpace:
-            #    self.used_threshConf*=0.9
-            if self.useCurvedBBs:
-                #TODO make this actually check for overseg...
-                threshed_bbPredictions = [bbPredictions[0,bbPredictions[0,:,0]>self.used_threshConf].cpu()]
-                if self.use_overseg_non_max_sup:
-                    threshed_bbPredictions[0] = non_max_sup_overseg(threshed_bbPredictions[0])
-                bbPredictions = threshed_bbPredictions
-            else:
-                bbPredictions = non_max_sup_iou(bbPredictions.cpu(),self.used_threshConf,0.4,hard_detect_limit)
-            #print(bbPredictions[0].size())
-
-            #I'm assuming batch size of one
-            assert(len(bbPredictions)==1)
-            bbPredictions=bbPredictions[0]
-            if self.no_grad_feats:
-                bbPredictions=bbPredictions.detach()
-
-
-            if useOnlyGTSpace:
-                #We'll correct the box predictions using the GT BBs, but no class/other GT
-                useBBs = []
-                gtBBs=gtBBs[0]
-
-
-                #perform greedy alignment of gt and predicted. Only keep aligned predictions
-                if not bbPredictions.is_cuda:
-                    gtBBs=gtBBs.cpu()
-                ious = allIOU(gtBBs,bbPredictions[:,1:],x1y1x2y2=self.useCurvedBBs) #iou calculation
-                #if self.useCurvedBBs:
-                #    ious = allIO_clipU(
-                #else:
-                #    ious = allIOU(gtBBs,bbPredictions[:,1:])
-                #ious[ious<0.3]=0
-                ious=ious.cpu()
-                bbPredictions=bbPredictions.cpu()
-                gtBBs=gtBBs.cpu()
-                #sort, do highest ious first
-                gt_used = [False]*gtBBs.size(0)
-                num_gt_used = 0
-                pred_used = [False]*bbPredictions.size(0)
-                num_pred_used = 0
-                ious_list = [(ious[gt_i,p_i],gt_i,p_i) for gt_i,p_i in ious.triu(1).nonzero(as_tuple=False)]
-                ious=None
-                ious_list.sort(key=lambda a:a[0], reverse=True)
-                gt_parts=defaultdict(list)
-                gt_to_new = {}
-                for iou,gt_i,p_i in ious_list:
-                    gt_i=gt_i.item()
-                    if self.useCurvedBBs:
-                        gt_used[gt_i]=True
-                        gt_parts[gt_i].append((iou,bbPredictions[p_i,0:1],bbPredictions[p_i,6:]))
-                    elif not gt_used[gt_i] and not pred_used[p_i]:
-                        gt_to_new[gt_i]=len(useBBs)
-                        useBBs.append(torch.cat((bbPredictions[p_i,0:1],gtBBs[gt_i,0:5],bbPredictions[p_i,6:]), dim=0))
-                        num_gt_used+=1
-                        if num_gt_used>=gtBBs.size(0):
-                            break
-                        gt_used[gt_i]=True
-
-                        if not pred_used[p_i]:
-                            num_pred_used+=1
-                            if num_pred_used>=bbPredictions.size(0) and not self.useCurvedBBs:
-                                break
-                            pred_used[p_i]=True
-                ious_list=None
-
-                if self.useCurvedBBs:
-                    for gt_i,parts in gt_parts.items():
-                        ious,confs,clses = zip(*parts)
-                        ious = torch.FloatTensor(ious)
-                        confs = torch.cat(confs)
-                        clses = torch.stack(clses,dim=0)
-                        total_iou = ious.sum()
-                        conf = (confs*ious).sum()/total_iou
-                        cls = (clses*ious[:,None]).sum(dim=0)/total_iou
-                        gt_to_new[gt_i]=len(useBBs)
-                        useBBs.append(torch.cat((conf[None],gtBBs[gt_i,0:5],cls),dim=0))
-
-
-                #Add any undetected boxes.
-                for gt_i,used in enumerate(gt_used):
-                    if not used:
-                        conf = torch.FloatTensor([1])
-                        cls = torch.FloatTensor(self.numBBTypes+(1 if self.detector.predNumNeighbors else 0)).fill_(0.5)
-                        gt_to_new[gt_i]=len(useBBs)
-                        useBBs.append(torch.cat((conf,gtBBs[gt_i,0:5],cls),dim=0))
-
-                if gtGroups is not None:
-                    gtGroups = [[gt_to_new[gt_i] for gt_i in group] for group in gtGroups]
-
-                useBBs = torch.stack(useBBs,dim=0).to(saved_features.device)
-                assert self.training or useBBs.size(0) == gtBBs.size(0)
-                assert self.include_bb_conf or self.useCurvedBBs
-                #if self.useCurvedBBs and self.use_overseg_non_max_sup:
-                #    useBBs = non_max_sup_overseg(useBBs)
-                gtBBs=gtBBs[None,...]
-            else:
-
-
-                if bbPredictions.size(0)==0:
-                    return [bbPredictions], offsetPredictions, None, None, None, None, None, None, (None,None,None,None)
-                if self.include_bb_conf or self.useCurvedBBs: 
-                    useBBs = bbPredictions
-                else:
-                    useBBs = bbPredictions[:,1:] #remove confidence score
-        elif useGTBBs=='saved':
-            if self.include_bb_conf or self.useCurvedBBs:
-                useBBs = gtBBs
-            else:
-                useBBs = gtBBs[:,1:]
+        #if not useGTBBs:
+        if self.useCurvedBBs:
+            #TODO make this actually check for overseg...
+            threshed_bbPredictions = [bbPredictions[0,bbPredictions[0,:,0]>self.used_threshConf].cpu()]
+            if self.use_overseg_non_max_sup:
+                threshed_bbPredictions[0] = non_max_sup_overseg(threshed_bbPredictions[0])
+            bbPredictions = threshed_bbPredictions
         else:
-            #if gtBBs is None:
-            #    if self.text_rec is not None:
-            #        transcriptions = self.getTranscriptions(useBBs,image)
-            #    else:
-            #        transcriptions=None
-            #    return [bbPredictions], offsetPredictions, None, None, None, None, None, (useBBs.cpu().detach(),None,None,transcriptions)
-            if self.useCurvedBBs:
-                #useBBs = gtBBs[0,gtBBs[0,:,0]>0.5] #get rid of batch channel and select true boxes (by conf)
-                useBBs = gtBBs[0]
+            bbPredictions = non_max_sup_iou(bbPredictions.cpu(),self.used_threshConf,0.4,hard_detect_limit)
+        #print(bbPredictions[0].size())
+
+        #I'm assuming batch size of one
+        assert(len(bbPredictions)==1)
+        bbPredictions=bbPredictions[0]
+        if self.no_grad_feats:
+            bbPredictions=bbPredictions.detach()
+
+
+        if useGTBBs:
+            #We'll correct the box predictions using the GT BBs, but no class/other GT
+            useBBs = []
+            gtBBs=gtBBs[0]
+
+
+            #perform greedy alignment of gt and predicted. Only keep aligned predictions
+            if not bbPredictions.is_cuda:
+                gtBBs=gtBBs.cpu()
+            if 'word_bbs' in useGTBBs and not self.useCurvedBBs:
+                ious = allIO_clipU(gtBBs,bbPredictions[:,1:]) #iou calculation, words are oversegmented lines
             else:
-                useBBs = gtBBs[0,:,0:5]
-            if self.useShapeFeats or self.relationshipProposal=='feature_nn':
+                ious = allIOU(gtBBs,bbPredictions[:,1:],x1y1x2y2=self.useCurvedBBs) #iou calculation
+            #if self.useCurvedBBs:
+            #    ious = allIO_clipU(
+            #else:
+            #    ious = allIOU(gtBBs,bbPredictions[:,1:])
+            #ious[ious<0.3]=0
+            ious=ious.cpu()
+            bbPredictions=bbPredictions.cpu()
+            gtBBs=gtBBs.cpu()
+            #sort, do highest ious first
+            gt_used = [False]*gtBBs.size(0)
+            num_gt_used = 0
+            pred_used = [False]*bbPredictions.size(0)
+            num_pred_used = 0
+            ious_list = [(ious[gt_i,p_i],gt_i,p_i) for gt_i,p_i in ious.triu(1).nonzero(as_tuple=False)]
+            ious=None
+            ious_list.sort(key=lambda a:a[0], reverse=True)
+            gt_parts=defaultdict(list)
+            gt_to_new = {}
+            for iou,gt_i,p_i in ious_list:
+                gt_i=gt_i.item()
                 if self.useCurvedBBs:
-                    classes = gtBBs[0,gtBBs[0,:,0]>0.5,6:]
-                    classes += torch.rand_like(classes)*0.42 -0.2
-                else:
-                    classes = gtBBs[0,:,13:]
-                    #pos = random.uniform(0.51,0.99)
-                    #neg = random.uniform(0.01,0.49)
-                    #classes = torch.where(classes==0,torch.tensor(neg).to(classes.device),torch.tensor(pos).to(classes.device))
-                    pos = torch.rand_like(classes)/2 +0.5
-                    neg = torch.rand_like(classes)/2
-                    classes = torch.where(classes==0,neg,pos)
-                    if self.detector.predNumNeighbors:
-                        nns = gtNNs.float()[0,:,None]
-                        #nns += torch.rand_like(nns)/1.5
-                        nns += (2*torch.rand_like(nns)-1)
-                        useBBs = torch.cat((useBBs,nns,classes),dim=1)
-                    else:
-                        useBBs = torch.cat((useBBs,classes),dim=1)
-            if self.include_bb_conf:
-                if self.useCurvedBBs:
-                    useBBs[:,0]+=torch.rand(useBBs.size(0)).to(useBBs.device)*0.45 - 0.2
-                else:
-                    #fake some confifence values
-                    conf = torch.rand(useBBs.size(0),1)*0.33 +0.66
-                    useBBs = torch.cat((conf.to(useBBs.device),useBBs),dim=1)
+                    gt_used[gt_i]=True
+                    gt_parts[gt_i].append((iou,bbPredictions[p_i,0:1],bbPredictions[p_i,6:]))
+                elif not gt_used[gt_i] and not pred_used[p_i]:
+                    gt_to_new[gt_i]=len(useBBs)
+                    useBBs.append(torch.cat((bbPredictions[p_i,0:1],gtBBs[gt_i,0:5],bbPredictions[p_i,6:]), dim=0))
+                    num_gt_used+=1
+                    if num_gt_used>=gtBBs.size(0):
+                        break
+                    gt_used[gt_i]=True
+
+                    if not pred_used[p_i]:
+                        num_pred_used+=1
+                        if num_pred_used>=bbPredictions.size(0) and not self.useCurvedBBs:
+                            break
+                        pred_used[p_i]=True
+            ious_list=None
+
+            if self.useCurvedBBs:
+                for gt_i,parts in gt_parts.items():
+                    ious,confs,clses = zip(*parts)
+                    ious = torch.FloatTensor(ious)
+                    confs = torch.cat(confs)
+                    clses = torch.stack(clses,dim=0)
+                    total_iou = ious.sum()
+                    conf = (confs*ious).sum()/total_iou
+                    cls = (clses*ious[:,None]).sum(dim=0)/total_iou
+                    gt_to_new[gt_i]=len(useBBs)
+                    useBBs.append(torch.cat((conf[None],gtBBs[gt_i,0:5],cls),dim=0))
+
+
+            #Add any undetected boxes.
+            for gt_i,used in enumerate(gt_used):
+                if not used:
+                    conf = torch.FloatTensor([1])
+                    cls = torch.FloatTensor(self.numBBTypes+(1 if self.detector.predNumNeighbors else 0)).fill_(0.5)
+                    gt_to_new[gt_i]=len(useBBs)
+                    useBBs.append(torch.cat((conf,gtBBs[gt_i,0:5],cls),dim=0))
+
+            if gtGroups is not None:
+                gtGroups = [[gt_to_new[gt_i] for gt_i in group] for group in gtGroups]
+
+            useBBs = torch.stack(useBBs,dim=0).to(saved_features.device)
+            assert self.training or useBBs.size(0) == gtBBs.size(0)
+            assert self.include_bb_conf or self.useCurvedBBs
+            #if self.useCurvedBBs and self.use_overseg_non_max_sup:
+            #    useBBs = non_max_sup_overseg(useBBs)
+            gtBBs=gtBBs[None,...]
+        else:
+
+
+            if bbPredictions.size(0)==0:
+                return [bbPredictions], offsetPredictions, None, None, None, None, None, None, (None,None,None,None)
+            if self.include_bb_conf or self.useCurvedBBs: 
+                useBBs = bbPredictions
+            else:
+                useBBs = bbPredictions[:,1:] #remove confidence score
+        #elif useGTBBs=='saved':
+        #    if self.include_bb_conf or self.useCurvedBBs:
+        #        useBBs = gtBBs
+        #    else:
+        #        useBBs = gtBBs[:,1:]
+        #else:
+        #    #if gtBBs is None:
+        #    #    if self.text_rec is not None:
+        #    #        transcriptions = self.getTranscriptions(useBBs,image)
+        #    #    else:
+        #    #        transcriptions=None
+        #    #    return [bbPredictions], offsetPredictions, None, None, None, None, None, (useBBs.cpu().detach(),None,None,transcriptions)
+        #    if self.useCurvedBBs:
+        #        #useBBs = gtBBs[0,gtBBs[0,:,0]>0.5] #get rid of batch channel and select true boxes (by conf)
+        #        useBBs = gtBBs[0]
+        #    else:
+        #        useBBs = gtBBs[0,:,0:5]
+        #    if self.useShapeFeats or self.relationshipProposal=='feature_nn':
+        #        if self.useCurvedBBs:
+        #            classes = gtBBs[0,gtBBs[0,:,0]>0.5,6:]
+        #            classes += torch.rand_like(classes)*0.42 -0.2
+        #        else:
+        #            classes = gtBBs[0,:,13:]
+        #            #pos = random.uniform(0.51,0.99)
+        #            #neg = random.uniform(0.01,0.49)
+        #            #classes = torch.where(classes==0,torch.tensor(neg).to(classes.device),torch.tensor(pos).to(classes.device))
+        #            pos = torch.rand_like(classes)/2 +0.5
+        #            neg = torch.rand_like(classes)/2
+        #            classes = torch.where(classes==0,neg,pos)
+        #            if self.detector.predNumNeighbors:
+        #                nns = gtNNs.float()[0,:,None]
+        #                #nns += torch.rand_like(nns)/1.5
+        #                nns += (2*torch.rand_like(nns)-1)
+        #                useBBs = torch.cat((useBBs,nns,classes),dim=1)
+        #            else:
+        #                useBBs = torch.cat((useBBs,classes),dim=1)
+        #    if self.include_bb_conf:
+        #        if self.useCurvedBBs:
+        #            useBBs[:,0]+=torch.rand(useBBs.size(0)).to(useBBs.device)*0.45 - 0.2
+        #        else:
+        #            #fake some confifence values
+        #            conf = torch.rand(useBBs.size(0),1)*0.33 +0.66
+        #            useBBs = torch.cat((conf.to(useBBs.device),useBBs),dim=1)
 
         useBBs=useBBs.detach()
         #if useGTBBs and self.useCurvedBBs:
@@ -3546,12 +3547,13 @@ class PairingGroupingGraph(BaseModel):
             if self.training:
                 rels_ordered.sort(key=lambda x: x[0], reverse=True)
             keep_rels = [r[1] for r in rels_ordered if r[0]>rel_hard_thresh]
+            if merge_only:
+                max_rel_to_keep = self.max_merge_rel_to_keep
+            else:
+                max_rel_to_keep = self.max_rel_to_keep
             if self.training:
-                if merge_only:
-                    max_rel_to_keep = self.max_merge_rel_to_keep
-                else:
-                    max_rel_to_keep = self.max_rel_to_keep
-                keep_rels = keep_rels[:max_rel_to_keep]
+                max_rel_to_keep *= 4
+            keep_rels = keep_rels[:max_rel_to_keep]
             implicit_threshold = rel_hard_thresh
         else:
             rels_ordered.sort(key=lambda x: x[0], reverse=True)
@@ -3565,8 +3567,8 @@ class PairingGroupingGraph(BaseModel):
                 max_rel_to_keep = self.max_rel_to_keep
             if not self.training:
                 max_rel_to_keep *= 3
-            keep = min(keep,self.max_rel_to_keep)
-            print('keeping {} of {}'.format(keep,len(rels_ordered)))
+            keep = min(keep,max_rel_to_keep)
+            #print('keeping {} of {}'.format(keep,len(rels_ordered)))
             keep_rels = [r[1] for r in rels_ordered[:keep]]
             #if merge_only:
                 #print('total rels:{}, keeping:{}, max:{}'.format(len(rels_ordered),keep,max_rel_to_keep))

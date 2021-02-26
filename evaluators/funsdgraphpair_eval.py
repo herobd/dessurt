@@ -112,45 +112,48 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
     #dataT = __to_tensor(data,gpu)
     #print('{}: {} x {}'.format(imageName,data.shape[2],data.shape[3]))
     trainer.use_gt_trans = config['useGTTrans'] if 'useGTTrans' in config else False
-    if useDetections=='gt':
-        losses, log, out = trainer.newRun(instance,True,get=toEval,useGTGroups=useGTGroups)
-    elif useDetections=='gtSpaceOnly':
-        losses, log, out = trainer.newRun(instance,False,useOnlyGTSpace=True,get=toEval,useGTGroups=useGTGroups)
-    elif type(useDetections) is str:
-        raise NotImplementedError('using saved detections not adjusted for new eval')
-        dataset=config['DATASET']
-        jsonPath = os.path.join(useDetections,imageName+'.json')
-        with open(os.path.join(jsonPath)) as f:
-            annotations = json.loads(f.read())
-        fixAnnotations(dataset,annotations)
-        savedBoxes = torch.FloatTensor(len(annotations['byId']),6+model.detector.predNumNeighbors+numClasses)
-        for i,(id,bb) in enumerate(annotations['byId'].items()):
-            qX, qY, qH, qW, qR, qIsText, qIsField, qIsBlank, qNN = getBBInfo(bb,dataset.rotate,useBlankClass=not dataset.no_blanks)
-            savedBoxes[i,0]=1 #conf
-            savedBoxes[i,1]=qX*scale #x-center, already scaled
-            savedBoxes[i,2]=qY*scale #y-center
-            savedBoxes[i,3]=qR #rotation
-            savedBoxes[i,4]=qH*scale/2
-            savedBoxes[i,5]=qW*scale/2
-            if model.detector.predNumNeighbors:
-                extra=1
-                savedBoxes[i,6]=qNN
-            else:
-                extra=0
-            savedBoxes[i,6+extra]=qIsText
-            savedBoxes[i,7+extra]=qIsField
-            
-        if gpu is not None:
-            savedBoxes=savedBoxes.to(gpu)
-        outputBoxes, outputOffsets, relPred, relIndexes, bbPred = model(dataT,savedBoxes,None,"saved",
-                otherThresh=confThresh,
-                otherThreshIntur=1 if confThresh is not None else None,
-                hard_detect_limit=600,
-                old_nn=True)
-        outputBoxes=savedBoxes.cpu()
-    elif useDetections:
-        print('Unknown detection flag: '+useDetections)
-        exit()
+    if useDetections:   
+        useGT='only_space'
+        if type(useDetections) is str:#useDetections=='gt':
+            useGT+=useDetections
+        losses, log, out = trainer.newRun(instance,useGT,get=toEval)
+    #elif useDetections=='gtSpaceOnly':
+    #    losses, log, out = trainer.newRun(instance,False,useOnlyGTSpace=True,get=toEval,useGTGroups=useGTGroups)
+    #elif type(useDetections) is str:
+    #    raise NotImplementedError('using saved detections not adjusted for new eval')
+    #    dataset=config['DATASET']
+    #    jsonPath = os.path.join(useDetections,imageName+'.json')
+    #    with open(os.path.join(jsonPath)) as f:
+    #        annotations = json.loads(f.read())
+    #    fixAnnotations(dataset,annotations)
+    #    savedBoxes = torch.FloatTensor(len(annotations['byId']),6+model.detector.predNumNeighbors+numClasses)
+    #    for i,(id,bb) in enumerate(annotations['byId'].items()):
+    #        qX, qY, qH, qW, qR, qIsText, qIsField, qIsBlank, qNN = getBBInfo(bb,dataset.rotate,useBlankClass=not dataset.no_blanks)
+    #        savedBoxes[i,0]=1 #conf
+    #        savedBoxes[i,1]=qX*scale #x-center, already scaled
+    #        savedBoxes[i,2]=qY*scale #y-center
+    #        savedBoxes[i,3]=qR #rotation
+    #        savedBoxes[i,4]=qH*scale/2
+    #        savedBoxes[i,5]=qW*scale/2
+    #        if model.detector.predNumNeighbors:
+    #            extra=1
+    #            savedBoxes[i,6]=qNN
+    #        else:
+    #            extra=0
+    #        savedBoxes[i,6+extra]=qIsText
+    #        savedBoxes[i,7+extra]=qIsField
+    #        
+    #    if gpu is not None:
+    #        savedBoxes=savedBoxes.to(gpu)
+    #    outputBoxes, outputOffsets, relPred, relIndexes, bbPred = model(dataT,savedBoxes,None,"saved",
+    #            otherThresh=confThresh,
+    #            otherThreshIntur=1 if confThresh is not None else None,
+    #            hard_detect_limit=600,
+    #            old_nn=True)
+    #    outputBoxes=savedBoxes.cpu()
+    #elif useDetections:
+    #    print('Unknown detection flag: '+useDetections)
+    #    exit()
     else:
         if trainer.mergeAndGroup:
             losses, log, out = trainer.newRun(instance,False,get=toEval)
