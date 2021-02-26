@@ -1,6 +1,6 @@
 {
-    "name": "test",
-    "cuda": false,
+    "name": "FUNSDLinesWords_pair_graph663rv_new",
+    "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
@@ -78,9 +78,10 @@
         "mergeAndGroup": true,
 
         "unfreeze_detector": 2000,
-        "partial_from_gt": null,
-        "stop_from_gt": null,
-        "use_word_bbs_gt": 1,
+        "partial_from_gt": 1,
+        "stop_from_gt": 2,
+        "use_word_bbs_gt": 0.5,
+        "max_use_pred": 0.33,
         "valid_with_gt": true,
         "use_all_bb_pred_for_rel_loss": true,
 
@@ -91,7 +92,7 @@
     },
     "arch": "PairingGroupingGraph", 
     "model": {
-        "detector_checkpoint": "saved/FUNSDLines_detect_augRFh_staggerLighter_NN/checkpoint-latest.pth",
+        "detector_checkpoint": "saved/FUNSDLines_detect_augR_staggerLighter/checkpoint-iteration250000.pth",
         "detect_conf_thresh": 0.5,
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
@@ -127,7 +128,7 @@
         "graph_config": [
 	    {
             "arch": "MetaGraphNet",
-            "in_channels": 128,
+            "in_channels": 256,
             "node_out": 5,
             "edge_out": 5,
             "num_layers": 6,
@@ -144,7 +145,7 @@
         },
         {
             "arch": "MetaGraphNet",
-            "in_channels": 128,
+            "in_channels": 256,
             "node_out": 5,
             "edge_out": 5,
             "num_layers": 6,
@@ -161,7 +162,7 @@
         },
         {
             "arch": "MetaGraphNet",
-            "in_channels": 128,
+            "in_channels": 256,
             "node_out": 5,
             "edge_out": 5,
             "num_layers": 3,
