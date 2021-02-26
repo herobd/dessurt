@@ -162,7 +162,7 @@
             "att_mod": "fixed",
             "merge_thresh": 0.9,
             "group_thresh": 0.9,
-            "keep_edge_thresh": 0.2
+            "keep_edge_thresh": 0.1
         },
         {
             "arch": "MetaGraphNet",
