@@ -207,7 +207,7 @@ class FormsGraphPair(GraphPairDataset):
         #print(metadata)
         assert(bbs is not None)
         assert(len(groups)>0)
-        return bbs,ids,numClasses, trans, groups, metadata
+        return bbs,ids,numClasses, trans, groups, metadata, {}
 
     def getResponseBBIdList(self,queryId,annotations):
         return getResponseBBIdList_(self,queryId,annotations)
