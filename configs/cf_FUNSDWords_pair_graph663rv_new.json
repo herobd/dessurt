@@ -1,6 +1,6 @@
 {
-    "name": "test",
-    "cuda": false,
+    "name": "FUNSDWords_pair_graph663rv_new",
+    "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
@@ -91,7 +91,7 @@
     },
     "arch": "PairingGroupingGraph", 
     "model": {
-        "detector_checkpoint": "saved/FUNSDLines_detect_augRFh_staggerLighter_NN/checkpoint-latest.pth",
+        "detector_checkpoint": "saved/FUNSDLines_detect_augR_staggerLighter/checkpoint-iteration250000.pth",
         "detect_conf_thresh": 0.5,
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
@@ -127,7 +127,7 @@
         "graph_config": [
 	    {
             "arch": "MetaGraphNet",
-            "in_channels": 128,
+            "in_channels": 256,
             "node_out": 5,
             "edge_out": 5,
             "num_layers": 6,
@@ -144,7 +144,7 @@
         },
         {
             "arch": "MetaGraphNet",
-            "in_channels": 128,
+            "in_channels": 256,
             "node_out": 5,
             "edge_out": 5,
             "num_layers": 6,
@@ -161,7 +161,7 @@
         },
         {
             "arch": "MetaGraphNet",
-            "in_channels": 128,
+            "in_channels": 256,
             "node_out": 5,
             "edge_out": 5,
             "num_layers": 3,
