@@ -1625,12 +1625,14 @@ class GraphPairTrainer(BaseTrainer):
 
                 #add some jitter
                 if self.model.training:
-                    jitter_std=0.001
-                    t_Ls = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Ls]
-                    t_Ts = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Ts]
-                    t_Rs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Rs]
-                    t_Bs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Bs]
-                    t_rs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_rs]
+                    t_Ls = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_() for t in t_Ls]
+                    t_Ts = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_() for t in t_Ts]
+                    t_Rs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_() for t in t_Rs]
+                    t_Bs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_() for t in t_Bs]
+                    t_rs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=0.01) for t in t_rs]
+                    #fix bad BBs introduced by jitter
+                    t_Ls[t_Ls>=t_Rs]+=1
+                    t_Ts[t_Ts>=t_Bs]+=1
 
                 tconf_scales = [t.type(torch.FloatTensor) for t in tconf_scales]
                 tcls_scales = [t.type(torch.FloatTensor) for t in tcls_scales]
@@ -1988,7 +1990,7 @@ class GraphPairTrainer(BaseTrainer):
                     log['bb_allFm_{}'.format(graphIteration)]= 2*allPrec*allRecall/(allPrec+allRecall) if allPrec+allRecall>0 else 0
 
         #Fine tuning detector. Should only happed once
-        if not self.model_ref.detector_frozen and graphIteration==0:
+        if not self.model_ref.detector_frozen:
             if targetBoxes is not None:
                 targSize = targetBoxes.size(1)
             else:
