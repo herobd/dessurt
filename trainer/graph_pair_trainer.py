@@ -849,6 +849,7 @@ class GraphPairTrainer(BaseTrainer):
                 wasOverSeg *= overlapping+close_ends.to(edge_loss_device) #refine candidates by rule
 
                 if self.picky_merging:
+                    #Only merge things of matching height
                     h_L = by_L-ty_L
                     h_R = by_R-ty_R
                     h_ratio = torch.min(h_L,h_R)/torch.max(h_L,h_R)
@@ -1903,32 +1904,6 @@ class GraphPairTrainer(BaseTrainer):
 
 
                 
-                #Fine tuning detector. Should only happed once
-                if not self.model_ref.detector_frozen and graphIteration==0:
-                    if targetBoxes is not None:
-                        targSize = targetBoxes.size(1)
-                    else:
-                        targSize =0 
-
-                    tic2=timeit.default_timer()
-                    if 'box' in self.loss:
-                        boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
-                        losses['boxLoss'] += boxLoss
-                        logIter['bb_position_loss'] = position_loss
-                        logIter['bb_conf_loss'] = conf_loss
-                        logIter['bb_class_loss'] = class_loss
-                        logIter['bb_nn_loss'] = nn_loss
-                    else:
-                        oversegLoss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered, recall_noclass, precision_noclass, gt_covered_noclass, pred_covered_noclass = self.loss['overseg'](outputOffsets,targetBoxes,[targSize],calc_stats='bb_stats' in get)
-                        losses['oversegLoss'] = oversegLoss
-                        logIter['bb_position_loss'] = position_loss
-                        logIter['bb_conf_loss'] = conf_loss
-                        logIter['bb_class_loss'] = class_loss
-                        if 'bb_stats' in get:
-                            logIter['bb_recall_noclass']=recall_noclass
-                            logIter['bb_precision_noclass']=precision_noclass
-                            logIter['bb_gt_covered_noclass']=gt_covered_noclass
-                            logIter['bb_pred_covered_noclass']=pred_covered_noclass
 
 
                     #t#self.opt_history['box_loss'].append(timeit.default_timer()-tic2)#t#
@@ -2011,6 +1986,33 @@ class GraphPairTrainer(BaseTrainer):
                     log['bb_allPrec_{}'.format(graphIteration)]=allPrec
                     log['bb_allRecall_{}'.format(graphIteration)]=allRecall
                     log['bb_allFm_{}'.format(graphIteration)]= 2*allPrec*allRecall/(allPrec+allRecall) if allPrec+allRecall>0 else 0
+
+        #Fine tuning detector. Should only happed once
+        if not self.model_ref.detector_frozen and graphIteration==0:
+            if targetBoxes is not None:
+                targSize = targetBoxes.size(1)
+            else:
+                targSize =0 
+
+            tic2=timeit.default_timer()
+            if 'box' in self.loss:
+                boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
+                losses['boxLoss'] += boxLoss
+                logIter['bb_position_loss'] = position_loss
+                logIter['bb_conf_loss'] = conf_loss
+                logIter['bb_class_loss'] = class_loss
+                logIter['bb_nn_loss'] = nn_loss
+            else:
+                oversegLoss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered, recall_noclass, precision_noclass, gt_covered_noclass, pred_covered_noclass = self.loss['overseg'](outputOffsets,targetBoxes,[targSize],calc_stats='bb_stats' in get)
+                losses['oversegLoss'] = oversegLoss
+                logIter['bb_position_loss'] = position_loss
+                logIter['bb_conf_loss'] = conf_loss
+                logIter['bb_class_loss'] = class_loss
+                if 'bb_stats' in get:
+                    logIter['bb_recall_noclass']=recall_noclass
+                    logIter['bb_precision_noclass']=precision_noclass
+                    logIter['bb_gt_covered_noclass']=gt_covered_noclass
+                    logIter['bb_pred_covered_noclass']=pred_covered_noclass
 
         #We'll use information from the final prediction before the final pruning
         if 'DocStruct' in get:
@@ -2206,11 +2208,6 @@ class GraphPairTrainer(BaseTrainer):
         #log['rel_Fm']= 2*(fullPrec*eRecall)/(eRecall+fullPrec) if eRecall+fullPrec>0 else 0
         #t#self.opt_history['final eval'].append(timeit.default_timer()-tic)#t#
 
-        if not self.model_ref.detector_frozen:
-            if 'nnFinalLoss' in losses:
-                log['nn loss improvement (neg is good)'] = losses['nnFinalLoss'].item()-nn_loss
-            if 'classFinalLoss' in losses:
-                log['class loss improvement (neg is good)'] = losses['classFinalLoss'].item()-class_loss
 
 
 
