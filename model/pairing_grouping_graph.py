@@ -460,7 +460,7 @@ class PairingGroupingGraph(BaseModel):
                     convOut=graph_in_channels-(self.numShapeFeatsBB+self.numTextFeats)
                 else:
                     convOut=featurizer_fc[0]-(self.numShapeFeatsBB+self.numTextFeats)
-                assert convOut>100,'There should be sufficient visual features. May need to increase graph size'
+                assert convOut>100,'There should be sufficient visual features. May need to increase graph (in) channels'
                 if featurizer is None:
                     convlayers = [ nn.Conv2d(detectorSavedFeatSize+bbMasks_bb,convOut,kernel_size=(2,3)) ]
                     if featurizer_fc is not None:
