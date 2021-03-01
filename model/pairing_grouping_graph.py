@@ -809,8 +809,8 @@ class PairingGroupingGraph(BaseModel):
             #perform greedy alignment of gt and predicted. Only keep aligned predictions
             if not bbPredictions.is_cuda:
                 gtBBs=gtBBs.cpu()
-            if 'word_bbs' in useGTBBs and not self.useCurvedBBs:
-                ious = allIO_clipU(gtBBs,bbPredictions[:,1:]) #iou calculation, words are oversegmented lines
+            if 'word_bbs' in useGTBBs or self.useCurvedBBs:
+                ious = allIO_clipU(gtBBs,bbPredictions[:,1:],x1y1x2y2=self.useCurvedBBs) #iou calculation, words are oversegmented lines
             else:
                 ious = allIOU(gtBBs,bbPredictions[:,1:],x1y1x2y2=self.useCurvedBBs) #iou calculation
             #if self.useCurvedBBs:
@@ -943,7 +943,7 @@ class PairingGroupingGraph(BaseModel):
 
         if self.text_rec is not None:
             if useGTBBs and gtTrans is not None: # and len(gtTrans)==useBBs.size[0]:
-                assert 'word_bbs' not in useGTBBs
+                assert 'word_bbs' not in useGTBBs and not self.useCurvedBBs
                 #transcriptions = gtTrans
                 transcriptions = ['']*useBBs.size(0)
                 for i,trans in enumerate(gtTrans):
