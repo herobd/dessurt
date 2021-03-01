@@ -128,9 +128,11 @@ class PairingGroupingGraph(BaseModel):
                 #config['detector_config'] = checkpoint['config']['model']
             else:
                 self.detector = checkpoint['model']
+            self.useCurvedBBs = 'OverSeg' in checkpoint['config']['arch']
         else:
             detector_config = config['detector_config']
             self.detector = eval(detector_config['arch'])(detector_config)
+            self.useCurvedBBs = 'OverSeg' in config['detector_config']['arch']
 
         if 'pretrained_backbone_checkpoint' in config:
             if os.path.exists(config['pretrained_backbone_checkpoint']):
@@ -145,7 +147,6 @@ class PairingGroupingGraph(BaseModel):
 
 
 
-        self.useCurvedBBs = 'OverSeg' in checkpoint['config']['arch']
         self.text_line_smoothness = config['text_line_smoothness'] if 'text_line_smoothness' in config else 'original' #200
         self.use_overseg_non_max_sup = config['overseg_non_max_sup'] if 'overseg_non_max_sup' in config else False
         self.prevent_vert_merges = config['prevent_vert_merges'] if 'prevent_vert_merges' in config else False

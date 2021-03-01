@@ -1581,7 +1581,6 @@ class GraphPairTrainer(BaseTrainer):
             if 'word_bbs' in useGT: #useOnlyGTSpace and self.use_word_bbs_gt:
                 word_boxes = instance['form_metadata']['word_boxes'][None,:,:,].to(targetBoxes.device) #I can change this as it isn't used later
                 if self.model_ref.useCurvedBBs:
-                    word_boxes = instance['form_metadata']['word_boxes']
                     x1 = word_boxes[:,:,0]-word_boxes[:,:,4]
                     x2 = word_boxes[:,:,0]+word_boxes[:,:,4]
                     y1 = word_boxes[:,:,1]-word_boxes[:,:,3]
@@ -1631,8 +1630,9 @@ class GraphPairTrainer(BaseTrainer):
                     t_Bs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_() for t in t_Bs]
                     t_rs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=0.01) for t in t_rs]
                     #fix bad BBs introduced by jitter
-                    t_Ls[t_Ls>=t_Rs]+=1
-                    t_Ts[t_Ts>=t_Bs]+=1
+                    for t_l,t_r,t_t,t_b in zip(t_Ls,t_Rs,t_Ts,t_Bs):
+                        t_l[t_l>=t_r]+=1
+                        t_t[t_t>=t_b]+=1
 
                 tconf_scales = [t.type(torch.FloatTensor) for t in tconf_scales]
                 tcls_scales = [t.type(torch.FloatTensor) for t in tcls_scales]
