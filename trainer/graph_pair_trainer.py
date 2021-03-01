@@ -1605,7 +1605,7 @@ class GraphPairTrainer(BaseTrainer):
                         targetBoxes_changed[:,:,3][targetBoxes_changed[:,:,3]<1]=1
                         targetBoxes_changed[:,:,4][targetBoxes_changed[:,:,4]<1]=1
 
-            elif self.model_ref.useCurvedBBs and 'only_space' not in useGT:#not useOnlyGTSpace:
+            elif self.model_ref.useCurvedBBs:# and 'only_space' not in useGT:#not useOnlyGTSpace:
                 #build targets of GT to pass as detections
                 ph_boxes = [torch.zeros(1,1,1,1,1)]*3
                 ph_cls = [torch.zeros(1,1,1,1,1)]*3
@@ -1651,15 +1651,20 @@ class GraphPairTrainer(BaseTrainer):
                     #                print('{} level_y[0,{},:,{},{}] = {}'.format(level,bo,r,c,level_y[0,bo,:,r,c]))
                     ys.append(level_y.view(level_y.size(0),level_y.size(1)*level_y.size(2),level_y.size(3),level_y.size(4)))
                 targetBoxes_changed = build_box_predictions(ys,scale,ys[0].device,numAnchors,numBBParams,numBBTypes)
+                #only take good predictions
                 targetBoxes_changed = targetBoxes_changed[:,targetBoxes_changed[0,:,0]>0.5]
-            elif self.model_ref.useCurvedBBs and 'only_space' in useGT: #useOnlyGTSpace:
-                #convert target boxes to x1y1x2y2r, as that's what TextLine expects
-                x1 = targetBoxes[:,:,0]-targetBoxes[:,:,4]
-                x2 = targetBoxes[:,:,0]+targetBoxes[:,:,4]
-                y1 = targetBoxes[:,:,1]-targetBoxes[:,:,3]
-                y2 = targetBoxes[:,:,1]+targetBoxes[:,:,3]
-                r = targetBoxes[:,:,2]
-                targetBoxes_changed = torch.stack((x1,y1,x2,y2,r),dim=2) #leave out class information
+
+                #remove conf and class information
+                targetBoxes_changed = targetBoxes_changed[:,:,1:6]
+
+            #elif self.model_ref.useCurvedBBs and 'only_space' in useGT: #useOnlyGTSpace:
+            #    #convert target boxes to x1y1x2y2r, as that's what TextLine expects
+            #    x1 = targetBoxes[:,:,0]-targetBoxes[:,:,4]
+            #    x2 = targetBoxes[:,:,0]+targetBoxes[:,:,4]
+            #    y1 = targetBoxes[:,:,1]-targetBoxes[:,:,3]
+            #    y2 = targetBoxes[:,:,1]+targetBoxes[:,:,3]
+            #    r = targetBoxes[:,:,2]
+            #    targetBoxes_changed = torch.stack((x1,y1,x2,y2,r),dim=2) #leave out class information
             else:
                 targetBoxes_changed=targetBoxes.clone()
                 if self.model.training:
