@@ -849,6 +849,7 @@ class GraphPairTrainer(BaseTrainer):
                 wasOverSeg *= overlapping+close_ends.to(edge_loss_device) #refine candidates by rule
 
                 if self.picky_merging:
+                    #Only merge things of matching height
                     h_L = by_L-ty_L
                     h_R = by_R-ty_R
                     h_ratio = torch.min(h_L,h_R)/torch.max(h_L,h_R)
@@ -1580,7 +1581,6 @@ class GraphPairTrainer(BaseTrainer):
             if 'word_bbs' in useGT: #useOnlyGTSpace and self.use_word_bbs_gt:
                 word_boxes = instance['form_metadata']['word_boxes'][None,:,:,].to(targetBoxes.device) #I can change this as it isn't used later
                 if self.model_ref.useCurvedBBs:
-                    word_boxes = instance['form_metadata']['word_boxes']
                     x1 = word_boxes[:,:,0]-word_boxes[:,:,4]
                     x2 = word_boxes[:,:,0]+word_boxes[:,:,4]
                     y1 = word_boxes[:,:,1]-word_boxes[:,:,3]
@@ -1604,7 +1604,7 @@ class GraphPairTrainer(BaseTrainer):
                         targetBoxes_changed[:,:,3][targetBoxes_changed[:,:,3]<1]=1
                         targetBoxes_changed[:,:,4][targetBoxes_changed[:,:,4]<1]=1
 
-            elif self.model_ref.useCurvedBBs and 'only_space' not in useGT:#not useOnlyGTSpace:
+            elif self.model_ref.useCurvedBBs:# and 'only_space' not in useGT:#not useOnlyGTSpace:
                 #build targets of GT to pass as detections
                 ph_boxes = [torch.zeros(1,1,1,1,1)]*3
                 ph_cls = [torch.zeros(1,1,1,1,1)]*3
@@ -1624,12 +1624,15 @@ class GraphPairTrainer(BaseTrainer):
 
                 #add some jitter
                 if self.model.training:
-                    jitter_std=0.001
-                    t_Ls = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Ls]
-                    t_Ts = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Ts]
-                    t_Rs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Rs]
-                    t_Bs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_Bs]
-                    t_rs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=jitter_std) for t in t_rs]
+                    t_Ls = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_() for t in t_Ls]
+                    t_Ts = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_() for t in t_Ts]
+                    t_Rs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_() for t in t_Rs]
+                    t_Bs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_() for t in t_Bs]
+                    t_rs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=0.01) for t in t_rs]
+                    #fix bad BBs introduced by jitter
+                    for t_l,t_r,t_t,t_b in zip(t_Ls,t_Rs,t_Ts,t_Bs):
+                        t_l[t_l>=t_r]+=1
+                        t_t[t_t>=t_b]+=1
 
                 tconf_scales = [t.type(torch.FloatTensor) for t in tconf_scales]
                 tcls_scales = [t.type(torch.FloatTensor) for t in tcls_scales]
@@ -1648,15 +1651,20 @@ class GraphPairTrainer(BaseTrainer):
                     #                print('{} level_y[0,{},:,{},{}] = {}'.format(level,bo,r,c,level_y[0,bo,:,r,c]))
                     ys.append(level_y.view(level_y.size(0),level_y.size(1)*level_y.size(2),level_y.size(3),level_y.size(4)))
                 targetBoxes_changed = build_box_predictions(ys,scale,ys[0].device,numAnchors,numBBParams,numBBTypes)
+                #only take good predictions
                 targetBoxes_changed = targetBoxes_changed[:,targetBoxes_changed[0,:,0]>0.5]
-            elif self.model_ref.useCurvedBBs and 'only_space' in useGT: #useOnlyGTSpace:
-                #convert target boxes to x1y1x2y2r, as that's what TextLine expects
-                x1 = targetBoxes[:,:,0]-targetBoxes[:,:,4]
-                x2 = targetBoxes[:,:,0]+targetBoxes[:,:,4]
-                y1 = targetBoxes[:,:,1]-targetBoxes[:,:,3]
-                y2 = targetBoxes[:,:,1]+targetBoxes[:,:,3]
-                r = targetBoxes[:,:,2]
-                targetBoxes_changed = torch.stack((x1,y1,x2,y2,r),dim=2) #leave out class information
+
+                #remove conf and class information
+                targetBoxes_changed = targetBoxes_changed[:,:,1:6]
+
+            #elif self.model_ref.useCurvedBBs and 'only_space' in useGT: #useOnlyGTSpace:
+            #    #convert target boxes to x1y1x2y2r, as that's what TextLine expects
+            #    x1 = targetBoxes[:,:,0]-targetBoxes[:,:,4]
+            #    x2 = targetBoxes[:,:,0]+targetBoxes[:,:,4]
+            #    y1 = targetBoxes[:,:,1]-targetBoxes[:,:,3]
+            #    y2 = targetBoxes[:,:,1]+targetBoxes[:,:,3]
+            #    r = targetBoxes[:,:,2]
+            #    targetBoxes_changed = torch.stack((x1,y1,x2,y2,r),dim=2) #leave out class information
             else:
                 targetBoxes_changed=targetBoxes.clone()
                 if self.model.training:
@@ -1903,32 +1911,6 @@ class GraphPairTrainer(BaseTrainer):
 
 
                 
-                #Fine tuning detector. Should only happed once
-                if not self.model_ref.detector_frozen and graphIteration==0:
-                    if targetBoxes is not None:
-                        targSize = targetBoxes.size(1)
-                    else:
-                        targSize =0 
-
-                    tic2=timeit.default_timer()
-                    if 'box' in self.loss:
-                        boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
-                        losses['boxLoss'] += boxLoss
-                        logIter['bb_position_loss'] = position_loss
-                        logIter['bb_conf_loss'] = conf_loss
-                        logIter['bb_class_loss'] = class_loss
-                        logIter['bb_nn_loss'] = nn_loss
-                    else:
-                        oversegLoss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered, recall_noclass, precision_noclass, gt_covered_noclass, pred_covered_noclass = self.loss['overseg'](outputOffsets,targetBoxes,[targSize],calc_stats='bb_stats' in get)
-                        losses['oversegLoss'] = oversegLoss
-                        logIter['bb_position_loss'] = position_loss
-                        logIter['bb_conf_loss'] = conf_loss
-                        logIter['bb_class_loss'] = class_loss
-                        if 'bb_stats' in get:
-                            logIter['bb_recall_noclass']=recall_noclass
-                            logIter['bb_precision_noclass']=precision_noclass
-                            logIter['bb_gt_covered_noclass']=gt_covered_noclass
-                            logIter['bb_pred_covered_noclass']=pred_covered_noclass
 
 
                     #t#self.opt_history['box_loss'].append(timeit.default_timer()-tic2)#t#
@@ -2011,6 +1993,33 @@ class GraphPairTrainer(BaseTrainer):
                     log['bb_allPrec_{}'.format(graphIteration)]=allPrec
                     log['bb_allRecall_{}'.format(graphIteration)]=allRecall
                     log['bb_allFm_{}'.format(graphIteration)]= 2*allPrec*allRecall/(allPrec+allRecall) if allPrec+allRecall>0 else 0
+
+        #Fine tuning detector. Should only happed once
+        if not self.model_ref.detector_frozen:
+            if targetBoxes is not None:
+                targSize = targetBoxes.size(1)
+            else:
+                targSize =0 
+
+            tic2=timeit.default_timer()
+            if 'box' in self.loss:
+                boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
+                losses['boxLoss'] += boxLoss
+                log['bb_position_loss'] = position_loss
+                log['bb_conf_loss'] = conf_loss
+                log['bb_class_loss'] = class_loss
+                log['bb_nn_loss'] = nn_loss
+            else:
+                oversegLoss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered, recall_noclass, precision_noclass, gt_covered_noclass, pred_covered_noclass = self.loss['overseg'](outputOffsets,targetBoxes,[targSize],calc_stats='bb_stats' in get)
+                losses['oversegLoss'] = oversegLoss
+                log['bb_position_loss'] = position_loss
+                log['bb_conf_loss'] = conf_loss
+                log['bb_class_loss'] = class_loss
+                if 'bb_stats' in get:
+                    log['bb_recall_noclass']=recall_noclass
+                    log['bb_precision_noclass']=precision_noclass
+                    log['bb_gt_covered_noclass']=gt_covered_noclass
+                    log['bb_pred_covered_noclass']=pred_covered_noclass
 
         #We'll use information from the final prediction before the final pruning
         if 'DocStruct' in get:
@@ -2206,11 +2215,6 @@ class GraphPairTrainer(BaseTrainer):
         #log['rel_Fm']= 2*(fullPrec*eRecall)/(eRecall+fullPrec) if eRecall+fullPrec>0 else 0
         #t#self.opt_history['final eval'].append(timeit.default_timer()-tic)#t#
 
-        if not self.model_ref.detector_frozen:
-            if 'nnFinalLoss' in losses:
-                log['nn loss improvement (neg is good)'] = losses['nnFinalLoss'].item()-nn_loss
-            if 'classFinalLoss' in losses:
-                log['class loss improvement (neg is good)'] = losses['classFinalLoss'].item()-class_loss
 
 
 

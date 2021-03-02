@@ -128,9 +128,11 @@ class PairingGroupingGraph(BaseModel):
                 #config['detector_config'] = checkpoint['config']['model']
             else:
                 self.detector = checkpoint['model']
+            self.useCurvedBBs = 'OverSeg' in checkpoint['config']['arch']
         else:
             detector_config = config['detector_config']
             self.detector = eval(detector_config['arch'])(detector_config)
+            self.useCurvedBBs = 'OverSeg' in config['detector_config']['arch']
 
         if 'pretrained_backbone_checkpoint' in config:
             if os.path.exists(config['pretrained_backbone_checkpoint']):
@@ -145,7 +147,6 @@ class PairingGroupingGraph(BaseModel):
 
 
 
-        self.useCurvedBBs = 'OverSeg' in checkpoint['config']['arch']
         self.text_line_smoothness = config['text_line_smoothness'] if 'text_line_smoothness' in config else 'original' #200
         self.use_overseg_non_max_sup = config['overseg_non_max_sup'] if 'overseg_non_max_sup' in config else False
         self.prevent_vert_merges = config['prevent_vert_merges'] if 'prevent_vert_merges' in config else False
@@ -460,7 +461,7 @@ class PairingGroupingGraph(BaseModel):
                     convOut=graph_in_channels-(self.numShapeFeatsBB+self.numTextFeats)
                 else:
                     convOut=featurizer_fc[0]-(self.numShapeFeatsBB+self.numTextFeats)
-                assert convOut>100,'There should be sufficient visual features. May need to increase graph size'
+                assert convOut>100,'There should be sufficient visual features. May need to increase graph (in) channels'
                 if featurizer is None:
                     convlayers = [ nn.Conv2d(detectorSavedFeatSize+bbMasks_bb,convOut,kernel_size=(2,3)) ]
                     if featurizer_fc is not None:
@@ -809,8 +810,8 @@ class PairingGroupingGraph(BaseModel):
             #perform greedy alignment of gt and predicted. Only keep aligned predictions
             if not bbPredictions.is_cuda:
                 gtBBs=gtBBs.cpu()
-            if 'word_bbs' in useGTBBs and not self.useCurvedBBs:
-                ious = allIO_clipU(gtBBs,bbPredictions[:,1:]) #iou calculation, words are oversegmented lines
+            if 'word_bbs' in useGTBBs or self.useCurvedBBs:
+                ious = allIO_clipU(gtBBs,bbPredictions[:,1:],x1y1x2y2=self.useCurvedBBs) #iou calculation, words are oversegmented lines
             else:
                 ious = allIOU(gtBBs,bbPredictions[:,1:],x1y1x2y2=self.useCurvedBBs) #iou calculation
             #if self.useCurvedBBs:
@@ -943,7 +944,7 @@ class PairingGroupingGraph(BaseModel):
 
         if self.text_rec is not None:
             if useGTBBs and gtTrans is not None: # and len(gtTrans)==useBBs.size[0]:
-                assert 'word_bbs' not in useGTBBs
+                assert 'word_bbs' not in useGTBBs and not self.useCurvedBBs
                 #transcriptions = gtTrans
                 transcriptions = ['']*useBBs.size(0)
                 for i,trans in enumerate(gtTrans):
