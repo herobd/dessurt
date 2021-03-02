@@ -3,9 +3,14 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-iterations=700000
+iterations=70000
 
 warmup_steps=1000
+steps=[1000,2000]
+down_steps= 5000
+swa_start=60000
+warmup_cap=1
+swa_lr_mul=0.1
 
 lr_lambda = lambda step_num: min((max(0.000001,step_num-(warmup_steps-3))/100)**-0.1, step_num*(1.485/warmup_steps)+.01)
 
@@ -13,6 +18,18 @@ lr_lambda2 = lambda step_num: min((step_num+1)**-0.3, (step_num+1)*warmup_steps*
 
 def lrf(step_num):
     return min((max(0.000001,step_num-(warmup_steps-3))/100)**-0.1, step_num*(1.485/warmup_steps)+.01)
+
+steps=[0]+steps
+def riseLR(step_num):
+                if step_num<swa_start-down_steps:
+                    for i,step in enumerate(steps[1:]):
+                        if step_num<step:
+                            return warmup_cap*(step_num-steps[i])/(step-steps[i])
+                    return 1.0
+                elif step_num<swa_start:
+                    return 1 - (1-swa_lr_mul)*(down_steps-(swa_start-step_num))/down_steps
+                else:
+                    return swa_lr_mul
 
 cycle_size=5000
 decay_rate=0.99995
@@ -48,7 +65,7 @@ print('mean val: {}'.format(y.mean()))
 plt.plot(x,y,'r.')
 
 x2 = [i for i in range(0,iterations)]
-y2 = [lr_lambda2(i) for i in x]
+y2 = [riseLR(i) for i in x]
 y2=np.array(y2)
 
 print('max val: {}'.format(y.max()))
