@@ -280,8 +280,10 @@ class BoxDetectDataset(torch.utils.data.Dataset):
                     fy=partial_rescale,
                     )
         #print('! dataset resize')
-        if not self.color:
+        if len(np_img.shape)==2:
             np_img=np_img[...,None] #add 'color' channel
+        if self.color and np_img.shape[2]==1:
+            np_img = np.repeat(np_img,3,axis=2)
         ##print('resize: {}  [{}, {}]'.format(timeit.default_timer()-tic,np_img.shape[0],np_img.shape[1]))
         
 
