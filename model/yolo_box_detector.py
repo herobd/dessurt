@@ -5,7 +5,7 @@ import math
 import json
 import numpy as np
 from .net_builder import make_layers
-
+from .resnet import resnet50
 
 
 
@@ -54,29 +54,48 @@ class YoloBoxDetector(nn.Module): #BaseModel
         self.numOutLine = (self.numBBTypes+self.numLineParams)*self.predLineCount
         self.numOutPoint = self.predPointCount*3
 
-        if 'down_layers_cfg' in config:
-            layers_cfg = config['down_layers_cfg']
+        if 'publaynet_model' in config:
+            checkpoint = torch.load(config['publaynet_model'], map_location='cpu')
+            resnet = resnet50(pretrained=False)
+            #has four downsamples, the same as my model
+            model_state_dict = resnet.state_dict()
+            new_state_dict={}
+            prefix = 'backbone.body.'
+            for key,value in checkpoint['model'].items():
+                if key.startswith(prefix):
+                    new_state_dict[key[len(prefix):]] = value
+            #copy FC accross
+            #new_state_dict['fc.weight'] = model_state_dict['fc.weight']
+            #new_state_dict['fc.bias'] = model_state_dict['fc.bias']
+                            
+            resnet.load_state_dict(new_state_dict)
+            self.net_down_modules=[resnet]
+            down_last_channels = self.last_channels = 2048
+            self.scale=(16,16)
         else:
-            layers_cfg=[in_ch,64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512]
+            if 'down_layers_cfg' in config:
+                layers_cfg = config['down_layers_cfg']
+            else:
+                layers_cfg=[in_ch,64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512]
 
-        self.net_down_modules, down_last_channels = make_layers(layers_cfg, dilation,norm,dropout=dropout)
-        self.final_features=None 
-        self.last_channels=down_last_channels
+            self.net_down_modules, down_last_channels = make_layers(layers_cfg, dilation,norm,dropout=dropout)
+            self.final_features=None 
+            self.last_channels=down_last_channels
+            scaleX=1
+            scaleY=1
+            for a in layers_cfg:
+                if a=='M' or (type(a) is str and a[0]=='D'):
+                    scaleX*=2
+                    scaleY*=2
+                elif type(a) is str and a[0]=='U':
+                    scaleX/=2
+                    scaleY/=2
+                elif type(a) is str and a[0:4]=='long': #long pool
+                    scaleX*=3
+                    scaleY*=2
+            self.scale=(scaleX,scaleY)
         self.net_down_modules.append(nn.Conv2d(down_last_channels, self.numOutBB+self.numOutLine+self.numOutPoint, kernel_size=1))
         self._hack_down = nn.Sequential(*self.net_down_modules)
-        scaleX=1
-        scaleY=1
-        for a in layers_cfg:
-            if a=='M' or (type(a) is str and a[0]=='D'):
-                scaleX*=2
-                scaleY*=2
-            elif type(a) is str and a[0]=='U':
-                scaleX/=2
-                scaleY/=2
-            elif type(a) is str and a[0:4]=='long': #long pool
-                scaleX*=3
-                scaleY*=2
-        self.scale=(scaleX,scaleY)
 
         if self.predPixelCount>0:
             if 'up_layers_cfg' in config:
