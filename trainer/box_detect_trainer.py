@@ -292,6 +292,8 @@ class BoxDetectTrainer(BaseTrainer):
         #    this_loss, position_loss, conf_loss, class_loss, recall, precision = lossC
         #else:
         data, targetBoxes, targetBoxes_sizes, targetLines, targetLines_sizes, targetPoints, targetPoints_sizes, targetPixels,target_num_neighbors = self._to_tensor(instance)
+        if not self.model.predNumNeighbors:
+            target_num_neighbors=None
         outputBoxes, outputOffsets, outputLines, outputOffsetLines, outputPoints, outputPixels = self.model(data)
 
         if 'box' in self.loss:
@@ -303,7 +305,10 @@ class BoxDetectTrainer(BaseTrainer):
             log['class_loss']=class_loss
             log['recall']=recall
             log['precision']=precision
-            log['F1']=2*recall*precision/(recall+precision)
+            if recall+precision>0:
+                log['F1']=2*recall*precision/(recall+precision)
+            else:
+                log['F1']=0
             #print('boxLoss:{}'.format(this_loss))
 #display(instance)
         elif 'overseg' in self.loss:
