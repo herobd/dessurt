@@ -125,6 +125,7 @@ class YoloLoss (nn.Module):
             loss_y = self.mse_loss(y[mask], ty[mask])
             loss_w = self.mse_loss(w[mask], tw[mask])
             loss_h = self.mse_loss(h[mask], th[mask])
+            
             if self.multiclass:
                 loss_cls = self.bce_loss(pred_cls[mask], tcls[mask].float())
             else:
