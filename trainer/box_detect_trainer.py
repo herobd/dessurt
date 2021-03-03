@@ -303,7 +303,10 @@ class BoxDetectTrainer(BaseTrainer):
             log['class_loss']=class_loss
             log['recall']=recall
             log['precision']=precision
-            log['F1']=2*recall*precision/(recall+precision)
+            if recall+precision>0:
+                log['F1']=2*recall*precision/(recall+precision)
+            else:
+                log['F1']=0
             #print('boxLoss:{}'.format(this_loss))
 #display(instance)
         elif 'overseg' in self.loss:
