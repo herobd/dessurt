@@ -178,12 +178,52 @@ class FUNSDGraphPair(GraphPairDataset):
         for entity in annotations['form']:
             for word in entity['words']:
                 lX,tY,rX,bY = word['box']
-                cX = (lX+rX)/2
-                cY = (tY+bY)/2
+                #cX = (lX+rX)/2
+                #cY = (tY+bY)/2
                 h = bY-tY +1
                 w = rX-lX +1
-                word_boxes.append([cX,cY,0,h/2,w/2])
-        word_boxes = torch.FloatTensor(word_boxes)
+                #word_boxes.append([cX,cY,0,h/2,w/2])
+                bb=[None]*16
+                if h/w>5 and self.rotate: #flip labeling, since FUNSD doesn't label verticle text correctly
+                    #I don't know if it needs rotated clockwise or countercw, so I just say countercw
+                    bb[0]=lX*s
+                    bb[1]=bY*s
+                    bb[2]=lX*s
+                    bb[3]=tY*s
+                    bb[4]=rX*s
+                    bb[5]=tY*s
+                    bb[6]=rX*s
+                    bb[7]=bY*s
+                    #w these for conveince to crop BBs within window
+                    bb[8]=s*(lX+rX)/2.0
+                    bb[9]=s*bY
+                    bb[10]=s*(lX+rX)/2.0
+                    bb[11]=s*tY
+                    bb[12]=s*lX
+                    bb[13]=s*(tY+bY)/2.0
+                    bb[14]=s*rX
+                    bb[15]=s*(tY+bY)/2.0
+                else:
+                    bb[0]=lX*s
+                    bb[1]=tY*s
+                    bb[2]=rX*s
+                    bb[3]=tY*s
+                    bb[4]=rX*s
+                    bb[5]=bY*s
+                    bb[6]=lX*s
+                    bb[7]=bY*s
+                    #w these for conveince to crop BBs within window
+                    bb[8]=s*lX
+                    bb[9]=s*(tY+bY)/2.0
+                    bb[10]=s*rX
+                    bb[11]=s*(tY+bY)/2.0
+                    bb[12]=s*(lX+rX)/2.0
+                    bb[13]=s*tY
+                    bb[14]=s*(rX+lX)/2.0
+                    bb[15]=s*bY
+                word_boxes.append(bb)
+        #word_boxes = torch.FloatTensor(word_boxes)
+        word_boxes = np.array(word_boxes)
         #self.pairs=list(pairs)
         return bbs, list(range(bbs.shape[1])), numClasses, trans, groups, {}, {'word_boxes':word_boxes}
 
