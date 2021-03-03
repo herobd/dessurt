@@ -801,7 +801,7 @@ class PairingGroupingGraph(BaseModel):
             bbPredictions=bbPredictions.detach()
 
 
-        if useGTBBs:
+        if useGTBBs and  gtBBs is not None:
             #We'll correct the box predictions using the GT BBs, but no class/other GT
             useBBs = []
             gtBBs=gtBBs[0]
