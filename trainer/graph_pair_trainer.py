@@ -1581,7 +1581,6 @@ class GraphPairTrainer(BaseTrainer):
             if 'word_bbs' in useGT: #useOnlyGTSpace and self.use_word_bbs_gt:
                 word_boxes = instance['form_metadata']['word_boxes'][None,:,:,].to(targetBoxes.device) #I can change this as it isn't used later
                 if self.model_ref.useCurvedBBs:
-                    word_boxes = instance['form_metadata']['word_boxes']
                     x1 = word_boxes[:,:,0]-word_boxes[:,:,4]
                     x2 = word_boxes[:,:,0]+word_boxes[:,:,4]
                     y1 = word_boxes[:,:,1]-word_boxes[:,:,3]
@@ -1631,8 +1630,9 @@ class GraphPairTrainer(BaseTrainer):
                     t_Bs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_() for t in t_Bs]
                     t_rs = [t.type(torch.FloatTensor) + torch.FloatTensor(t.size()).normal_(std=0.01) for t in t_rs]
                     #fix bad BBs introduced by jitter
-                    t_Ls[t_Ls>=t_Rs]+=1
-                    t_Ts[t_Ts>=t_Bs]+=1
+                    for t_l,t_r,t_t,t_b in zip(t_Ls,t_Rs,t_Ts,t_Bs):
+                        t_l[t_l>=t_r]+=1
+                        t_t[t_t>=t_b]+=1
 
                 tconf_scales = [t.type(torch.FloatTensor) for t in tconf_scales]
                 tcls_scales = [t.type(torch.FloatTensor) for t in tcls_scales]
@@ -2005,21 +2005,21 @@ class GraphPairTrainer(BaseTrainer):
             if 'box' in self.loss:
                 boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
                 losses['boxLoss'] += boxLoss
-                logIter['bb_position_loss'] = position_loss
-                logIter['bb_conf_loss'] = conf_loss
-                logIter['bb_class_loss'] = class_loss
-                logIter['bb_nn_loss'] = nn_loss
+                log['bb_position_loss'] = position_loss
+                log['bb_conf_loss'] = conf_loss
+                log['bb_class_loss'] = class_loss
+                log['bb_nn_loss'] = nn_loss
             else:
                 oversegLoss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered, recall_noclass, precision_noclass, gt_covered_noclass, pred_covered_noclass = self.loss['overseg'](outputOffsets,targetBoxes,[targSize],calc_stats='bb_stats' in get)
                 losses['oversegLoss'] = oversegLoss
-                logIter['bb_position_loss'] = position_loss
-                logIter['bb_conf_loss'] = conf_loss
-                logIter['bb_class_loss'] = class_loss
+                log['bb_position_loss'] = position_loss
+                log['bb_conf_loss'] = conf_loss
+                log['bb_class_loss'] = class_loss
                 if 'bb_stats' in get:
-                    logIter['bb_recall_noclass']=recall_noclass
-                    logIter['bb_precision_noclass']=precision_noclass
-                    logIter['bb_gt_covered_noclass']=gt_covered_noclass
-                    logIter['bb_pred_covered_noclass']=pred_covered_noclass
+                    log['bb_recall_noclass']=recall_noclass
+                    log['bb_precision_noclass']=precision_noclass
+                    log['bb_gt_covered_noclass']=gt_covered_noclass
+                    log['bb_pred_covered_noclass']=pred_covered_noclass
 
         #We'll use information from the final prediction before the final pruning
         if 'DocStruct' in get:
