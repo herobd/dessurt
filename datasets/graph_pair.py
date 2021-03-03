@@ -137,11 +137,23 @@ class GraphPairDataset(torch.utils.data.Dataset):
         #pixel_gt = table_pixels
 
         ##ticTr=timeit.default_timer()
+
         if self.transform is not None:
+            if 'word_boxes' in form_metadata:
+                word_bbs = form_metadata['word_boxes']
+                dif_f = bbs.shape[2]-word_bbs.shape[1]
+                blank = np.zeros([word_bbs.shape[0],dif_f])
+                prep_word_bbs = np.concatenate([word_bbs,blank],axis=1)[None,...]
+                crop_bbs = np.concatenate([bbs,prep_word_bbs],axis=1)
+                crop_ids=ids+['word']*word_bbs.shape[0]
+            else:
+                crop_bbs = bbs
+                crop_ids = ids
             out, cropPoint = self.transform({
                 "img": np_img,
-                "bb_gt": bbs,
-                'bb_auxs':ids,
+                "bb_gt": crop_bbs,
+                'bb_auxs':crop_ids,
+                #'word_bbs':form_metadata['word_boxes'] if 'word_boxes' in form_metadata else None
                 #"line_gt": {
                 #    "start_of_line": start_of_line,
                 #    "end_of_line": end_of_line
@@ -153,8 +165,23 @@ class GraphPairDataset(torch.utils.data.Dataset):
                 
             }, cropPoint)
             np_img = out['img']
-            bbs = out['bb_gt']
-            ids= out['bb_auxs']
+
+            if 'word_boxes' in form_metadata:
+                saw_word=False
+                word_index=-1
+                for i,ii in enumerate(out['bb_auxs']):
+                    if not saw_word:
+                        if 'word'==ii:
+                            saw_word=True
+                            word_index=i
+                    else:
+                        assert 'word'==ii
+                bbs = out['bb_gt'][:,:word_index]
+                ids= out['bb_auxs'][:word_index]
+                form_metadata['word_boxes'] = out['bb_gt'][0,word_index:,:8]
+            else:
+                bbs = out['bb_gt']
+                ids= out['bb_auxs']
 
 
 
@@ -209,6 +236,8 @@ class GraphPairDataset(torch.utils.data.Dataset):
         #end_of_line = None if end_of_line is None or end_of_line.shape[1] == 0 else torch.from_numpy(end_of_line)
         
         bbs = convertBBs(bbs,self.rotate,numClasses)
+        if 'word_boxes' in form_metadata:
+             form_metadata['word_boxes'] = convertBBs(form_metadata['word_boxes'][None,...],self.rotate,0)[0,...]
         if len(numNeighbors)>0:
             numNeighbors = torch.tensor(numNeighbors)[None,:] #add batch dim
         else:
