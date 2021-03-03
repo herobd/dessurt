@@ -45,7 +45,8 @@
     "loss_params": {
         "box": {
             "ignore_thresh": 0.5,
-            "bad_conf_weight": 20.0
+            "bad_conf_weight": 20.0,
+	    "multiclass": true
         }
     },
     "loss_weights":{"box":1.0},
