@@ -1665,7 +1665,7 @@ class GraphPairTrainer(BaseTrainer):
             #    y2 = targetBoxes[:,:,1]+targetBoxes[:,:,3]
             #    r = targetBoxes[:,:,2]
             #    targetBoxes_changed = torch.stack((x1,y1,x2,y2,r),dim=2) #leave out class information
-            else:
+            elif targetBoxes is not None:
                 targetBoxes_changed=targetBoxes.clone()
                 if self.model.training:
                     targetBoxes_changed[:,:,0] += torch.randn_like(targetBoxes_changed[:,:,0])
@@ -1677,8 +1677,10 @@ class GraphPairTrainer(BaseTrainer):
                     targetBoxes_changed[:,:,3][targetBoxes_changed[:,:,3]<1]=1
                     targetBoxes_changed[:,:,4][targetBoxes_changed[:,:,4]<1]=1
                     #we tweak the classes in the model
+            else:
+                targetBoxes_changed = None
 
-            if 'only_space' in useGT and not self.model_ref.useCurvedBBs:
+            if 'only_space' in useGT and not self.model_ref.useCurvedBBs and targetBoxes_changed is not None:
                 targetBoxes_changed[:,:,5:]=0 #zero out other information to ensure results aren't contaminated
                 #useCurved doesnt include class
 
