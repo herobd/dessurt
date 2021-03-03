@@ -1,5 +1,5 @@
 {
-    "name": "FUNSDLinesAndWords_pair_graph663rv_new",
+    "name": "FUNSDLines_pair_graph663rvCon4_smallContext_prop_B_rampdown",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -31,10 +31,10 @@
     
     "lr_scheduler_type": "none",
  
-    "optimizer_type": "AdamW",
+    "optimizer_type": "Adam",
     "optimizer": {
         "lr": 0.001,
-        "weight_decay": 0.01
+        "weight_decay": 0
     },
     "loss": {
         "box": "YoloLoss",
@@ -48,6 +48,7 @@
         "box": 1.0,
         "rel": 0.5,
         "propRel": 0.5,
+        "nnFinal": 0.25,
         "classFinal": 0.5,
         "confFinal": 0.5
     },
@@ -60,17 +61,18 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 700000,
+        "iterations": 720000,
         "swa": true,
-        "swa_start": 600000,
+        "swa_start": 620000,
         "save_dir": "saved/",
-        "val_step": 25000,
-        "save_step": 50000,
+        "val_step": 10000,
+        "save_step": 10000,
         "save_step_minor": 200,
         "log_step": 250,
         "verbosity": 1,
         "monitor": "loss",
         "monitor_mode": "none",
+        "warmup_steps": 1000,
         "conf_thresh_init": 0.5,
         "conf_thresh_change_iters": 0,
         "retry_count":1,
@@ -78,22 +80,21 @@
         "mergeAndGroup": true,
 
         "unfreeze_detector": 2000,
-        "partial_from_gt": 1,
-        "stop_from_gt": 2,
-        "use_word_bbs_gt": 0.5,
-        "max_use_pred": 0.33,
-        "valid_with_gt": true,
+        "partial_from_gt": 0,
+        "stop_from_gt": 20000,
+        "max_use_pred": 0.5,
         "use_all_bb_pred_for_rel_loss": true,
 
-        "use_learning_schedule": "multi_rise then swa",
+        "use_learning_schedule": "multi_rise then ramp_to_swa",
         "warmup_steps": [1000],
+        "ramp_down_steps": 10000,
         "swa_lr_mul": 0.1,
         "adapt_lr": false
     },
     "arch": "PairingGroupingGraph", 
     "model": {
-        "detector_checkpoint": "saved/FUNSDLines_detect_augR_staggerLighter/checkpoint-iteration250000.pth",
-        "detect_conf_thresh": 0.5,
+        "detector_checkpoint": "saved/FUNSDLines_detect_augRFh_staggerLighter_NN/checkpoint-latest.pth",
+        "conf_thresh": 0.5,
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
         "percent_rel_to_keep": 0.5,
@@ -137,8 +138,6 @@
             "use_repetition_res": false,
             "encode_type": "attention",
             "better_norm_attention": true,
-            "node_att_thinker": "cat",
-            "att_mod": "fixed",
             "merge_thresh": 0.8,
             "group_thresh": 0.95,
             "keep_edge_thresh": 0.1
@@ -154,11 +153,9 @@
             "use_repetition_res": false,
             "encode_type": "attention",
             "better_norm_attention": true,
-            "node_att_thinker": "cat",
-            "att_mod": "fixed",
             "merge_thresh": 0.9,
             "group_thresh": 0.9,
-            "keep_edge_thresh": 0.1
+            "keep_edge_thresh": 0.2
         },
         {
             "arch": "MetaGraphNet",
@@ -171,8 +168,6 @@
             "use_repetition_res": false,
             "encode_type": "attention",
             "better_norm_attention": true,
-            "node_att_thinker": "cat",
-            "att_mod": "fixed",
             "merge_thresh": 0.9,
             "group_thresh": 0.6,
             "keep_edge_thresh": 0.5
