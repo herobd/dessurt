@@ -18,7 +18,7 @@
             "crop_size":[600,1400],
             "pad":0
         },
-        "no_blanks": true,
+        "no_blanks": false,
         "swap_circle":true,
         "no_graphics":true,
         "cache_resized_images": true,
@@ -47,7 +47,6 @@
         "box": "YoloLoss",
         "rel": "sigmoid_BCE_loss",
         "propRel": "sigmoid_BCE_loss",
-        "nnFinal": "MSE",
         "classFinal": "sigmoid_BCE_loss",
         "confFinal": "sigmoid_BCE_loss"
     },
@@ -55,7 +54,6 @@
         "box": 1.0,
         "rel": 0.5,
         "propRel": 0.5,
-        "nnFinal": 0.25,
         "classFinal": 0.5,
         "confFinal": 0.5
     },
@@ -76,7 +74,7 @@
         "val_step": 25000,
         "save_step": 50000,
         "save_step_minor": 200,
-        "log_step": 250,
+        "log_step": 500,
         "verbosity": 1,
         "monitor": "loss",
         "monitor_mode": "none",
