@@ -205,7 +205,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
 
         #Draw pred groups (based on bb pred)
         groupCenters=[]
-        if predGroups is None:
+        if predGroups is None and bbs is not None:
             predGroups = [[i] for i in range(len(bbs))]
         for group in predGroups:
             maxX=maxY=0

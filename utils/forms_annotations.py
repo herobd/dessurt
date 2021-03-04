@@ -133,7 +133,8 @@ def convertBBs(bbs,rotate,numClasses):
     new_bbs[:,:,11]=botX
     new_bbs[:,:,12]=botY
     #print("{} {}, {} {}".format(new_bbs.shape,new_bbs[:,:,13:].shape,bbs.shape,bbs[:,:,-numClasses].shape))
-    new_bbs[:,:,13:]=bbs[:,:,-numClasses:]
+    if numClasses>0:
+        new_bbs[:,:,13:]=bbs[:,:,-numClasses:]
 
     assert(not np.isnan(new_bbs).any())
 

@@ -81,7 +81,7 @@
     "model": {
         "color":false,
         "pred_num_neighbors": false,
-        "number_of_box_types": 4,
+        "number_of_box_types": 3,
         "number_of_point_types": 0,
         "number_of_pixel_types": 0,
         "norm_type": "group_norm",
