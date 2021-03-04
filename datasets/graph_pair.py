@@ -107,8 +107,10 @@ class GraphPairDataset(torch.utils.data.Dataset):
                 fx=partial_rescale,
                 fy=partial_rescale,
                 )
-        if not self.color:
+        if len(np_img.shape)==2:
             np_img=np_img[...,None] #add 'color' channel
+        if self.color and np_img.shape[2]==1:
+            np_img = np.repeat(np_img,3,axis=2)
         ##print('resize: {}  [{}, {}]'.format(timeit.default_timer()-tic,np_img.shape[0],np_img.shape[1]))
         
         ##tic=timeit.default_timer()
