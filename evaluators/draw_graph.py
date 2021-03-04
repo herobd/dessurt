@@ -470,6 +470,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                 img_f.line(image,(maxX,maxY),(minX,maxY),color,lineWidth)
                 img_f.line(image,(minX,maxY),(minX,minY),color,lineWidth)
                 #image[minY:minY+3,minX:minX+3]=idColor
+                shade=1
                 if cls==0:
                     color=(0,0,shade) #header
                 elif cls==1:

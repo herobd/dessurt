@@ -1418,7 +1418,7 @@ class GraphPairTrainer(BaseTrainer):
                 targSize =0 
 
             if 'box' in self.loss:
-                boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
+                boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision,recall_noclass,precision_noclass = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
                 losses['boxLoss'] = boxLoss
             else:
                 oversegLoss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered, recall_noclass, precision_noclass, gt_covered_noclass, pred_covered_noclass = self.loss['overseg'](outputOffsets,targetBoxes,[targSize],calc_stats='bb_stats' in get)
@@ -1569,6 +1569,7 @@ class GraphPairTrainer(BaseTrainer):
         gtGroupAdj = instance['gt_groups_adj']
         targetIndexToGroup = instance['targetIndexToGroup']
         targetIndexToGroup = instance['targetIndexToGroup']
+        
         if self.use_gt_trans:
             gtTrans = instance['transcription']
             if (gtTrans)==0:

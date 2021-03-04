@@ -55,6 +55,7 @@ class YoloBoxDetector(nn.Module): #BaseModel
         self.numOutPoint = self.predPointCount*3
 
         if 'publaynet_model' in config:
+            #https://github.com/phamquiluan/PubLayNet
             self.use_resnet=True
             checkpoint = torch.load(config['publaynet_model'], map_location='cpu')
             self.resnet = resnet50(pretrained=False)
@@ -133,16 +134,16 @@ class YoloBoxDetector(nn.Module): #BaseModel
             x3=None
 
             x5_4 = self.upsample(x5)
-            if x5_4.size(2)<x4.size(4):
+            if x5_4.size(2)<x4.size(2):
                 assert x4.size(2)-x5_4.size(2)<2
                 x4 = x4[:,:,:x5_4.size(2)]
-            elif x5_4.size(2)>x4.size(4):
+            elif x5_4.size(2)>x4.size(2):
                 assert x5_4.size(2)-x4.size(2)<2
                 x5_4 = x5_4[:,:,:x4.size(2)]
-            if x5_4.size(3)<x4.size(4):
+            if x5_4.size(3)<x4.size(3):
                 assert x4.size(3)-x5_4.size(3)<2
                 x4 = x4[:,:,:,:x5_4.size(3)]
-            elif x5_4.size(3)>x4.size(4):
+            elif x5_4.size(3)>x4.size(3):
                 assert x5_4.size(3)-x4.size(3)<2
                 x5_4 = x5_4[:,:,:,:x4.size(3)]
             final_x = self.combine_layer(torch.cat([x4,x5_4],dim=1))
