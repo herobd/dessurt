@@ -801,7 +801,7 @@ class PairingGroupingGraph(BaseModel):
             bbPredictions=bbPredictions.detach()
 
 
-        if useGTBBs:
+        if useGTBBs and  gtBBs is not None:
             #We'll correct the box predictions using the GT BBs, but no class/other GT
             useBBs = []
             gtBBs=gtBBs[0]
@@ -978,7 +978,7 @@ class PairingGroupingGraph(BaseModel):
                 groups=[[i] for i in range(len(useBBs))]
                 bbTrans = transcriptions
 
-                if self.merge_first and not useOnlyGTSpace:
+                if self.merge_first:
                     assert gtGroups is None
                     #t#tic=timeit.default_timer()#t#
                     #with profiler.profile(profile_memory=True, record_shapes=True) as prof:

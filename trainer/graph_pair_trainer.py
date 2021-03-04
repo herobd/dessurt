@@ -127,7 +127,7 @@ class GraphPairTrainer(BaseTrainer):
 
         self.use_gt_trans = config['trainer']['use_gt_trans'] if 'use_gt_trans' in config['trainer'] else False
 
-        self.merge_first_only_until = config['trainer']['merge_first_only_until'] if 'merge_first_only_until' in config['trainer'] else 100
+        self.merge_first_only_until = config['trainer']['merge_first_only_until'] if 'merge_first_only_until' in config['trainer'] else 0
         self.init_merge_rule = config['trainer']['init_merge_rule'] if 'init_merge_rule' in config['trainer'] else None
         self.picky_merging = 'picky' in self.init_merge_rule if self.init_merge_rule is not None else False
 
@@ -1666,7 +1666,7 @@ class GraphPairTrainer(BaseTrainer):
             #    y2 = targetBoxes[:,:,1]+targetBoxes[:,:,3]
             #    r = targetBoxes[:,:,2]
             #    targetBoxes_changed = torch.stack((x1,y1,x2,y2,r),dim=2) #leave out class information
-            else:
+            elif targetBoxes is not None:
                 targetBoxes_changed=targetBoxes.clone()
                 if self.model.training:
                     targetBoxes_changed[:,:,0] += torch.randn_like(targetBoxes_changed[:,:,0])
@@ -1678,8 +1678,10 @@ class GraphPairTrainer(BaseTrainer):
                     targetBoxes_changed[:,:,3][targetBoxes_changed[:,:,3]<1]=1
                     targetBoxes_changed[:,:,4][targetBoxes_changed[:,:,4]<1]=1
                     #we tweak the classes in the model
+            else:
+                targetBoxes_changed = None
 
-            if 'only_space' in useGT and not self.model_ref.useCurvedBBs:
+            if 'only_space' in useGT and not self.model_ref.useCurvedBBs and targetBoxes_changed is not None:
                 targetBoxes_changed[:,:,5:]=0 #zero out other information to ensure results aren't contaminated
                 #useCurved doesnt include class
 
@@ -1741,12 +1743,12 @@ class GraphPairTrainer(BaseTrainer):
 
        # print('effective prop thresh: {:.3f}, raw: {:.3f}'.format(torch.sigmoid(torch.FloatTensor([rel_prop_pred[-1]])).item(),rel_prop_pred[-1]))
 
-        merged_first = self.model_ref.merge_first and not useOnlyGTSpace
+        merged_first = self.model_ref.merge_first #and not useOnlyGTSpace
         if allEdgePred is not None:
             for graphIteration,(outputBoxes,edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allOutputBoxes,allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
 
-                if self.model_ref.merge_first and useOnlyGTSpace:
-                    graphIteration+=1
+                #if self.model_ref.merge_first and useOnlyGTSpace:
+                #    graphIteration+=1
 
                 #t#tic2=timeit.default_timer()#t##t#
                 predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, proposedInfoI, logIter, edgePredTypes, missedRels = self.simplerAlignEdgePred(

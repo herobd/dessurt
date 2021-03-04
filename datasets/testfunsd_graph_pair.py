@@ -51,18 +51,30 @@ def display(data):
         answer=data['bb_gt'][b,i,15]
         other=data['bb_gt'][b,i,16]
         if header:
-            color = 'r-'
-        elif question:
             color = 'b-'
+        elif question:
+            color = 'c-'
         elif answer:
-            color = 'g-'
-        elif other:
             color = 'y-'
+        elif other:
+            color = 'm-'
         tr = (math.cos(rot)*w-math.sin(rot)*h +xc, math.sin(rot)*w+math.cos(rot)*h +yc)
         tl = (math.cos(rot)*-w-math.sin(rot)*h +xc, math.sin(rot)*-w+math.cos(rot)*h +yc)
         br = (math.cos(rot)*w-math.sin(rot)*-h +xc, math.sin(rot)*w+math.cos(rot)*-h +yc)
         bl = (math.cos(rot)*-w-math.sin(rot)*-h +xc, math.sin(rot)*-w+math.cos(rot)*-h +yc)
         #print([tr,tl,br,bl])
+    for i in range(data['form_metadata']['word_boxes'].size(0)):
+        word_bbs = data['form_metadata']['word_boxes']
+        xc=word_bbs[i,0]
+        yc=word_bbs[i,1]
+        rot=word_bbs[i,2]
+        h=word_bbs[i,3]
+        w=word_bbs[i,4]
+        color = 'r-'
+        tr = (math.cos(rot)*w-math.sin(rot)*h +xc, math.sin(rot)*w+math.cos(rot)*h +yc)
+        tl = (math.cos(rot)*-w-math.sin(rot)*h +xc, math.sin(rot)*-w+math.cos(rot)*h +yc)
+        br = (math.cos(rot)*w-math.sin(rot)*-h +xc, math.sin(rot)*w+math.cos(rot)*-h +yc)
+        bl = (math.cos(rot)*-w-math.sin(rot)*-h +xc, math.sin(rot)*-w+math.cos(rot)*-h +yc)
 
         ax_im.plot([tr[0],tl[0],bl[0],br[0],tr[0]],[tr[1],tl[1],bl[1],br[1],tr[1]],color)
     for ind1,ind2 in data['adj']:
@@ -89,7 +101,7 @@ def display(data):
             maxY=max(maxY,yc+h)
             minX=min(minX,xc-w)
             minY=min(minY,yc-h)
-        ax_im.plot([minX,maxX,maxX,minX,minX],[minY,minY,maxY,maxY,minY],'c:')
+        #ax_im.plot([minX,maxX,maxX,minX,minX],[minY,minY,maxY,maxY,minY],'c:')
         groupCenters.append(((minX+maxX)//2, (minY+minY)//2) )
 
     for g1,g2 in data['gt_groups_adj']:
