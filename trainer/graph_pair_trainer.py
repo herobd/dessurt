@@ -2006,7 +2006,7 @@ class GraphPairTrainer(BaseTrainer):
 
             tic2=timeit.default_timer()
             if 'box' in self.loss:
-                boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
+                boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision, recall_noclass,precision_noclass = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
                 losses['boxLoss'] += boxLoss
                 log['bb_position_loss'] = position_loss
                 log['bb_conf_loss'] = conf_loss
