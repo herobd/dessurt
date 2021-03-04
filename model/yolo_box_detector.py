@@ -84,6 +84,8 @@ class YoloBoxDetector(nn.Module): #BaseModel
             self.net_down_modules=[]
             down_last_channels = self.last_channels = 512# 2048, 256
             self.scale=(16,16)
+            self.save_scale=16
+            self.save2_scale=4
         else:
             self.use_resnet=False
             if 'down_layers_cfg' in config:
