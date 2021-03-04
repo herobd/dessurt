@@ -96,7 +96,7 @@
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
         "percent_rel_to_keep": 0.5,
-        "max_rel_to_keep": 400,
+        "max_rel_to_keep": 800,
         "roi_batch_size": 400,
 
 	"use_rel_shape_feats": "corner",
