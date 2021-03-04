@@ -68,7 +68,7 @@ class YoloLoss (nn.Module):
         #    target[:,:,[0,4]] /= self.scale[0]
         #    target[:,:,[1,3]] /= self.scale[1]
 
-        nGT, nCorrect, mask, conf_mask, tx, ty, tw, th, tconf, tcls, tneighbors, distances, ious = build_targets(
+        nGT, nCorrect, nCorrect_noclass, mask, conf_mask, tx, ty, tw, th, tconf, tcls, tneighbors, distances, ious = build_targets(
             pred_boxes=pred_boxes.cpu().data,
             pred_conf=pred_conf.cpu().data,
             pred_cls=pred_cls.cpu().data,
@@ -91,6 +91,12 @@ class YoloLoss (nn.Module):
             precision = float(nCorrect / nProposals)
         else:
             precision = 1
+
+        recall_noclass = float(nCorrect_noclass / nGT) if nGT else 1
+        if nProposals>0:
+            precision_noclass = float(nCorrect_noclass / nProposals)
+        else:
+            precision_noclass = 1
 
         # Handle masks
         mask = (mask.type(BoolTensor))
@@ -145,6 +151,8 @@ class YoloLoss (nn.Module):
                 loss_nn,
                 recall,
                 precision,
+                recall_noclass,
+                precision_noclass
             )
         else:
             return (
@@ -155,6 +163,8 @@ class YoloLoss (nn.Module):
                 0,
                 recall,
                 precision,
+                recall_noclass,
+                precision_noclass
             )
 
 def weighted_bce_loss(pred,gt,distances,ious,batch_size):
@@ -313,6 +323,7 @@ def build_targets(
 
     nGT = 0
     nCorrect = 0
+    nCorrect_noclass = 0
     #import pdb; pdb.set_trace()
     for b in range(nB):
         if calcIOUAndDist and target_sizes[b]>0:
@@ -374,10 +385,12 @@ def build_targets(
             pred_label = torch.argmax(pred_cls[b, best_n, gj, gi])
             score = pred_conf[b, best_n, gj, gi]
             #import pdb; pdb.set_trace()
-            if iou > 0.5 and pred_label == torch.argmax(target[b,t,13:]) and score > 0:
-                nCorrect += 1
+            if iou > 0.5 and score > 0:
+                nCorrect_noclass +=1
+                if torch.argmax(target[b,t,13:])==pred_label:
+                    nCorrect += 1
 
-    return nGT, nCorrect, mask, conf_mask, tx, ty, tw, th, tconf, tcls, tneighbors, distances, ious
+    return nGT, nCorrect, nCorrect_noclass, mask, conf_mask, tx, ty, tw, th, tconf, tcls, tneighbors, distances, ious
 
 
 
