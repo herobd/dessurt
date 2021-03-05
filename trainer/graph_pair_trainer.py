@@ -307,14 +307,6 @@ class GraphPairTrainer(BaseTrainer):
             else:
                 loss.backward()
 
-        if self.accum_grad_steps<2 or iteration%self.accum_grad_steps==0:
-            torch.nn.utils.clip_grad_value_(self.model.parameters(),1)
-            if self.amp:
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
-            else:
-                self.optimizer.step()
-        #t#self.opt_history['backprop'].append(timeit.default_timer()-tic)#t#
         meangrad=0
         count=0
         for m in self.model.parameters():
@@ -324,9 +316,17 @@ class GraphPairTrainer(BaseTrainer):
             meangrad+=m.grad.data.mean().cpu().item()
         if count!=0:
             meangrad/=count
-        self.optimizer.step()
+        if self.accum_grad_steps<2 or iteration%self.accum_grad_steps==0:
+            torch.nn.utils.clip_grad_value_(self.model.parameters(),1)
+            if self.amp:
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+            else:
+                self.optimizer.step()
+        #t#self.opt_history['backprop'].append(timeit.default_timer()-tic)#t#
         if len(losses)>0:
             loss = loss.item()
+        print('loss:{}, mean grad:{}'.format(loss,meangrad))
         log = {
             'mean grad': meangrad,
             'loss': loss,
