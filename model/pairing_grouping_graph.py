@@ -1252,7 +1252,7 @@ class PairingGroupingGraph(BaseModel):
             node_visual_feats[new_id] = prev_node_visual_feats[old_id]
 
         if not all(has_feat):
-            assert text_emb is not None == self.text_rec is not None
+            assert (text_emb is not None) == (self.text_rec is not None)
             if self.text_rec is not None:    
                 need_new_ids,need_groups,need_text_emb = zip(* [(i,g,t) for i,(has,g,t) in enumerate(zip(has_feat,groups,text_emb)) if not has])
                 need_text_emb = torch.stack(need_text_emb,dim=0)
