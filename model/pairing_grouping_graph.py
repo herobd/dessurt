@@ -1351,7 +1351,7 @@ class PairingGroupingGraph(BaseModel):
         else:
             if len(bbs)>1:
                 nodeConfPred = torch.sigmoid(nodeOuts[:,-1,self.nodeIdxConf:self.nodeIdxConf+1]).cpu()
-                bbConfPred = torch.FloatTensor(bbs.size(0),1)
+                bbConfPred = nodeConfPred.new_empty((bbs.size(0),1))#torch.FloatTensor(bbs.size(0),1)
                 for i,group in enumerate(groups):
                     bbConfPred[group] = nodeConfPred[i].detach()
                 if self.include_bb_conf:
@@ -1368,7 +1368,7 @@ class PairingGroupingGraph(BaseModel):
             if self.predClass:
                 #if not useGTBBs:
                 nodeClassPred = torch.sigmoid(nodeOuts[:,-1,self.nodeIdxClass:self.nodeIdxClassEnd].detach()).cpu()
-                bbClasPred = torch.FloatTensor(bbs.size(0),nodeClassPred.size(1))
+                bbClasPred = nodeClassPred.new_empty((bbs.size(0),nodeClassPred.size(1)))#torch.FloatTensor(bbs.size(0),nodeClassPred.size(1))
                 for i,group in enumerate(groups):
                     bbClasPred[group] = nodeClassPred[i].detach()
                 if self.numBBTypes==nodeClassPred.size(1):
