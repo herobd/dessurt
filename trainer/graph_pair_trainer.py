@@ -326,7 +326,7 @@ class GraphPairTrainer(BaseTrainer):
         #t#self.opt_history['backprop'].append(timeit.default_timer()-tic)#t#
         if len(losses)>0:
             loss = loss.item()
-        print('loss:{}, mean grad:{}'.format(loss,meangrad))
+        #print('loss:{}, mean grad:{}'.format(loss,meangrad))
         log = {
             'mean grad': meangrad,
             'loss': loss,
