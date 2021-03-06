@@ -59,7 +59,7 @@ class YoloBoxDetector(nn.Module): #BaseModel
             self.use_resnet=True
             checkpoint = torch.load(config['publaynet_model'], map_location='cpu')
             self.resnet = resnet50(pretrained=False)
-            #has four downsamples, the same as my model
+            #has five downsamples
             model_state_dict = self.resnet.state_dict()
             new_state_dict={}
             prefix = 'backbone.body.'

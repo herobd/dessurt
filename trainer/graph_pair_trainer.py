@@ -242,7 +242,7 @@ class GraphPairTrainer(BaseTrainer):
         except StopIteration:
             self.data_loader_iter = iter(self.data_loader)
             thisInstance = self.data_loader_iter.next()
-        if not self.model_ref.detector.predNumNeighbors:
+        if not self.model_ref.detector_predNumNeighbors:
             thisInstance['num_neighbors']=None
         ##toc=timeit.default_timer()
         #t#self.opt_history['get data'].append(timeit.default_timer()-ticAll)#t#
@@ -1571,7 +1571,10 @@ class GraphPairTrainer(BaseTrainer):
         targetIndexToGroup = instance['targetIndexToGroup']
         
         if self.use_gt_trans:
-            gtTrans = instance['transcription']
+            if 'word_bbs' in useGT:
+                gtTrans = instance['form_metadata']['word_trans']
+            else:
+                gtTrans = instance['transcription']
             if (gtTrans)==0:
                 gtTrans=None
         else:
