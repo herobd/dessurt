@@ -273,6 +273,10 @@ class PairingGroupingGraph(BaseModel):
             else:
                 self.embedding_model = lambda x: None 
 
+            if type(config['graph_config']) is list:
+                graph_in_channels = config['graph_config'][0]['in_channels'] if 'in_channels' in config['graph_config'][0] else 1
+            else:
+                graph_in_channels = config['graph_config']['in_channels'] if 'in_channels' in config['graph_config'] else 1
             self.merge_embedding_layer = nn.Sequential(nn.ReLU(True),nn.Linear(graph_in_channels+self.numTextFeats,graph_in_channels))
         else:
             self.text_rec=None
@@ -691,11 +695,17 @@ class PairingGroupingGraph(BaseModel):
                 prop_feats += 8
                 if self.shape_feats_normal:
                     prop_feats += 1
+
+            self.prop_with_text_emb = config['prop_with_text_emb'] if 'prop_with_text_emb' in config else False
+            
+            if self.prop_with_text_emb:
+                prop_feats+= 2*self.numTextFeats
+            prop_num_hidden = config['prop_num_hidden'] if 'prop_num_hidden' in config else 64
             self.rel_prop_nn = nn.Sequential(
-                                nn.Linear(prop_feats,64),
+                                nn.Linear(prop_feats,prop_num_hidden),
                                 nn.Dropout(0.25),
                                 nn.ReLU(True),
-                                nn.Linear(64,1)
+                                nn.Linear(prop_num_hidden,1)
                                 )
             if self.merge_first:
                 
@@ -879,7 +889,7 @@ class PairingGroupingGraph(BaseModel):
             for gt_i,used in enumerate(gt_used):
                 if not used:
                     conf = torch.FloatTensor([1])
-                    cls = torch.FloatTensor(self.numBBTypes+(1 if self.detector.predNumNeighbors else 0)).fill_(0.5)
+                    cls = torch.FloatTensor(self.numBBTypes+(1 if self.detector_predNumNeighbors else 0)).fill_(0.5)
                     gt_to_new[gt_i]=len(useBBs)
                     useBBs.append(torch.cat((conf,gtBBs[gt_i,0:5],cls),dim=0))
 
@@ -1002,7 +1012,7 @@ class PairingGroupingGraph(BaseModel):
             return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final
 
         else:
-            if not self.useCurvedBBs and self.detector.predNumNeighbors:
+            if not self.useCurvedBBs and self.detector_predNumNeighbors:
                 #Discard NN prediction. We don't use it anymore
                 bbPredictions = torch.cat([bbPredictions[:,:6],bbPredictions[:,7:]],dim=1)
                 useBBs = torch.cat([useBBs[:,:6],useBBs[:,7:]],dim=1)
@@ -2061,7 +2071,7 @@ class PairingGroupingGraph(BaseModel):
             candidates = self.selectLineOfSightEdges(bbs,imageHeight,imageWidth)
             rel_prop_scores = None
         elif self.relationshipProposal == 'feature_nn':
-            candidates, rel_prop_scores = self.selectFeatureNNEdges(bbs,imageHeight,imageWidth,image,features.device,merge_only=merge_only)
+            candidates, rel_prop_scores = self.selectFeatureNNEdges(bbs,imageHeight,imageWidth,image,features.device,merge_only=merge_only,text_emb=text_emb)
             if self.legacy:
                 bbs=bbs[:,1:] #discard confidence, we kept it so the proposer could see them
 
@@ -2493,7 +2503,7 @@ class PairingGroupingGraph(BaseModel):
 
             if self.useShapeFeats:
                 shapeFeats = torch.FloatTensor(len(b_edges),self.numShapeFeats)
-            if self.detector.predNumNeighbors:
+            if self.detector_predNumNeighbors:
                 extraPred=1
             else:
                 extraPred=0
@@ -2728,7 +2738,7 @@ class PairingGroupingGraph(BaseModel):
                         startNN =startCorners+4
                     else:
                         startNN = 8+self.numBBTypes+self.numBBTypes
-                    if self.detector.predNumNeighbors:
+                    if self.detector_predNumNeighbors:
                         shapeFeats[:,startNN +0] = allFeats1[:,5]
                         shapeFeats[:,startNN +1] = allFeats2[:,5]
                         startPos=startNN+2
@@ -2899,7 +2909,7 @@ class PairingGroupingGraph(BaseModel):
                     node_shapeFeats[:,0]= (allFeats[:,2]+math.pi)/(2*math.pi)
                     node_shapeFeats[:,1]=allFeats[:,3]/self.normalizeVert
                     node_shapeFeats[:,2]=allFeats[:,4]/self.normalizeHorz
-                    if self.detector.predNumNeighbors:
+                    if self.detector_predNumNeighbors:
                         if self.legacy:
                             node_shapeFeats[:,3]=allFeats[:,5]
                         else:
@@ -3007,7 +3017,7 @@ class PairingGroupingGraph(BaseModel):
 
 
 
-    def selectFeatureNNEdges(self,bbs,imageHeight,imageWidth,image,device,merge_only=False):
+    def selectFeatureNNEdges(self,bbs,imageHeight,imageWidth,image,device,merge_only=False,text_emb=False):
         if len(bbs)<2:
             return [], None
         #t#tic=timeit.default_timer()#t#
@@ -3220,6 +3230,9 @@ class PairingGroupingGraph(BaseModel):
             num_feats+=9
             if not self.shape_feats_normal:
                 num_feats-=1
+        
+        if self.prop_with_text_emb:
+            num_feats += 2*self.numTextFeats
         features = torch.FloatTensor(len(bbs),len(bbs), num_feats)
         features[:,:,0] = tlX1-tlX2
         features[:,:,1] = trX1-trX2
@@ -3281,6 +3294,13 @@ class PairingGroupingGraph(BaseModel):
         features[:,:,0:7]/=self.normalizeHorz
         features[:,:,7:14]/=self.normalizeVert
         features[:,:,14:19]/=(self.normalizeVert+self.normalizeHorz)/2
+
+        if self.prop_with_text_emb:
+            reduced_emb = text_emb#self.reduce_text_emb_for_prop(text_emb)
+
+            features[:,:,-2*reduced_emb.size(1):-reduced_emb.size(1)] = reduced_emb[None,:,:]
+            features[:,:,-reduced_emb.size(1):] = reduced_emb[:,None,:]
+
         features = features.view(len(bbs)**2,num_feats) #flatten
 
         #t#time=timeit.default_timer()-tic2#t#
@@ -4150,7 +4170,7 @@ class PairingGroupingGraph(BaseModel):
                         #t#times.pop(0)   #t#
                         #t#if len(times)>600:#t#
                             #t#times.pop(0)#t#
-                if not self.useCurvedBBs and self.detector.predNumNeighbors:
+                if not self.useCurvedBBs and self.detector_predNumNeighbors:
                     #Discard NN prediction. We don't use it anymore
                     allOutputBoxes = [ torch.cat([outBs[:,:6],outBs[:,7:]],dim=1) for outBs in allOutputBoxes]
                 return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, None, merge_prop_scores, None
@@ -4189,7 +4209,7 @@ class PairingGroupingGraph(BaseModel):
         #undirected
         #edgeIndexes = edgeIndexes[:len(edgeIndexes)//2]
         if graph is None:
-            if not self.useCurvedBBs and self.detector.predNumNeighbors:
+            if not self.useCurvedBBs and self.detector_predNumNeighbors:
                 #Discard NN prediction. We don't use it anymore
                 bbPredictions = torch.cat([bbPredictions[:,:6],bbPredictions[:,7:]],dim=1)
                 useBBs = torch.cat([useBBs[:,:6],useBBs[:,7:]],dim=1)
@@ -4300,7 +4320,7 @@ class PairingGroupingGraph(BaseModel):
                 gt_groups=[[g] for g in range(len(groups))] if gtGroups is not None else None,
                 final=True)
         #print('!D! after  edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(graph[2].size(),useBBs.size(),graph[0].size(),len(edgeIndexes)))
-        if not self.useCurvedBBs and self.detector.predNumNeighbors:
+        if not self.useCurvedBBs and self.detector_predNumNeighbors:
             #Discard NN prediction. We don't use it anymore
             useBBs = torch.cat([useBBs[:,:6],useBBs[:,7:]],dim=1)
         final=(useBBs if self.useCurvedBBs else useBBs.cpu().detach(),groups,edgeIndexes,bbTrans)
@@ -4322,7 +4342,7 @@ class PairingGroupingGraph(BaseModel):
                 #t#if len(times)>600:#t#
                     #t#times.pop(0)#t#
 
-        if not self.useCurvedBBs and self.detector.predNumNeighbors:
+        if not self.useCurvedBBs and self.detector_predNumNeighbors:
             #Discard NN prediction. We don't use it anymore
             allOutputBoxes = [ torch.cat([outBs[:,:6],outBs[:,7:]],dim=1) for outBs in allOutputBoxes]
         return allOutputBoxes, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final

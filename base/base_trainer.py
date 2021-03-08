@@ -551,7 +551,8 @@ class BaseTrainer:
                 self.swa_model = checkpoint['swa_model']
         #if self.swa:
         #    self.swa_n = checkpoint['swa_n']
-        if not did_brain_surgery:
+        dont_load_optimizer = self.config['dont_load_optimizer'] if 'dont_load_optimizer' in self.config else False
+        if not did_brain_surgery and not dont_load_optimizer:
             try:
                 self.optimizer.load_state_dict(checkpoint['optimizer'])
                 if self.with_cuda:
@@ -561,6 +562,8 @@ class BaseTrainer:
                                 state[k] = v.cuda(self.gpu)
             except ValueError as e:
                 print('WARNING did not load optimizer state_dict. {}'.format(e))
+        else:
+            print('Did not load optimizer')
         if self.useLearningSchedule:
             self.lr_schedule.load_state_dict(checkpoint['lr_schedule'])
         self.train_logger = checkpoint['logger']
