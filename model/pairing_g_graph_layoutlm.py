@@ -27,10 +27,10 @@ except:
 
 def normalize_bbox(bbox, width, height):
      return [
-         int(1000 * (bbox[0] / width)),
-         int(1000 * (bbox[1] / height)),
-         int(1000 * (bbox[2] / width)),
-         int(1000 * (bbox[3] / height)),
+         max(int(1000 * (bbox[0] / width)),0),
+         max(int(1000 * (bbox[1] / height)),0),
+         min(int(1000 * (bbox[2] / width)),1000),
+         min(int(1000 * (bbox[3] / height)),1000),
      ]
 
 class PairingGGraphLayoutLM(PairingGroupingGraph):
@@ -42,7 +42,7 @@ class PairingGGraphLayoutLM(PairingGroupingGraph):
 
         self.text_rec=None
         self.detector_predNumNeighbors=False
-        self.numBBTypes=0
+        self.numBBTypes=config['num_classes']
 
         self.tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
         self.layoutlm = LayoutLMModel.from_pretrained("microsoft/layoutlm-base-uncased") #out feats 768
@@ -71,13 +71,22 @@ class PairingGGraphLayoutLM(PairingGroupingGraph):
 
         self.detector_frozen=False
 
+
+        self.init_class_layer = nn.Sequential(
+                nn.Dropout(0.4),
+                nn.Linear(self.numTextFeats,64*self.numBBTypes),
+                nn.ReLU(True),
+                nn.Dropout(0.2),
+                nn.Linear(64*self.numBBTypes,self.numBBTypes)
+                )
+
         #def save_feats(module,input,output):
         #    self.saved_features=output
         #self.resnet.some_layer.register_forward_hook(save_feats)
 
         self.use2ndFeatures= config['use_2_feat_levels']
         if self.use2ndFeatures:
-            feats2_size = 512
+            feats2_size = 256
             feats2_scale = 4
             #def save_feats2(module,input,output):
             #    self.saved_features2=output
@@ -95,6 +104,7 @@ class PairingGGraphLayoutLM(PairingGroupingGraph):
         
 
     def forward(self, image, gtBBs=None, gtNNs=None, useGTBBs=False, otherThresh=None, otherThreshIntur=None, hard_detect_limit=5000, debug=False,old_nn=False,gtTrans=None,merge_first_only=False, gtGroups=None):
+        device = image.device
         num_words = len(gtTrans)
         assert useGTBBs and gtTrans is not None and len(gtTrans)==gtBBs.size(1)
         assert image.size(0)==1  #implementation designed for batch size of 1. Should work to do data parallelism, since each copy of the model will get a batch size of 1
@@ -103,7 +113,8 @@ class PairingGGraphLayoutLM(PairingGroupingGraph):
         #input_ids = []
         input_bbs = [[0,0,0,0]]
         total_string=''
-        for word,bb in zip(gtTrans,gtBBs):
+        word_token_map=[]
+        for i,(word,bb) in enumerate(zip(gtTrans,gtBBs)):
             if self.useCurvedBBs:
                 x1,y1,x2,y2,r=bb[:5]
             else:
@@ -116,21 +127,29 @@ class PairingGGraphLayoutLM(PairingGroupingGraph):
             word_tokens = self.tokenizer.tokenize(word)
             #input_ids.extend(word_tokens)
             total_string+=word+' '
+            word_token_map.append(range(len(input_bbs),len(input_bbs)+len(word_tokens)))
             input_bbs.extend([bb]*len(word_tokens))
         input_bbs.append([1000,1000,1000,1000])
-        inputs = self.tokenizer(total_string)
+        inputs = self.tokenizer(total_string,return_tensors="pt")
+        inputs = {k:i.to(device) for k,i in inputs.items()}
         #input_ids = torch.LongTensor([input_ids])
-        input_bbs = torch.LongTensor([input_bbs])
-        lm_out = self.layoutlm(**inputs,bbox=input_bbs)
-        lm_out = self.reduce_lm(lm_out)
+        input_bbs = torch.LongTensor([input_bbs]).to(device)
+        lm_out = self.layoutlm(**inputs,bbox=input_bbs).last_hidden_state[0]
+        #We'll now average the features for tokens from the same word-bb
+        #  This also discards the class and sep token's features.
+        new_lm_out = lm_out.new_zeros(len(word_token_map),lm_out.size(1))
+        for i,parts in enumerate(word_token_map):
+            if len(parts)>0:
+                new_lm_out[i] = torch.stack([lm_out[t] for t in parts],dim=0).mean(dim=0)
+        lm_out = self.reduce_lm(new_lm_out)
 
 
 
         init_class_pred = self.init_class_layer(lm_out)
 
         useBBs = torch.cat([
-            torch.ones(num_words,1),
-            gtBBs,
+            torch.ones(num_words,1).to(device),
+            gtBBs[:,:5],
             init_class_pred.detach()], dim=1)
 
 
@@ -158,7 +177,7 @@ class PairingGGraphLayoutLM(PairingGroupingGraph):
             x3=x4=None
 
             embeddings=lm_out
-            bbTrans = gtTran
+            bbTrans = gtTrans
 
             allOutputBoxes, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final = self.runGraph(
                     gtGroups,
@@ -171,11 +190,11 @@ class PairingGGraphLayoutLM(PairingGroupingGraph):
                     embeddings,
                     merge_first_only)
 
-            return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final
+            return allOutputBoxes, init_class_pred, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final
         else:
             if not self.useCurvedBBs and self.detector.predNumNeighbors:
                 #Discard NN prediction. We don't use it anymore
                 bbPredictions = torch.cat([bbPredictions[:,:6],bbPredictions[:,7:]],dim=1)
                 useBBs = torch.cat([useBBs[:,:6],useBBs[:,7:]],dim=1)
-            return [bbPredictions], offsetPredictions, None, None, None, None, None, None, (useBBs if self.useCurvedBBs else useBBs.cpu().detach(),None,None,transcriptions)
+            return [bbPredictions], init_class_pred, None, None, None, None, None, None, (useBBs if self.useCurvedBBs else useBBs.cpu().detach(),None,None,transcriptions)
 
