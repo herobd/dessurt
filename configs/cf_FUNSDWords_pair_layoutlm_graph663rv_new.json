@@ -73,7 +73,7 @@
 
         "mergeAndGroup": true,
 
-        "unfreeze_detector": 2000,
+        "unfreeze_detector": 1000,
         "partial_from_gt": null,
         "stop_from_gt": null,
         "use_word_bbs_gt": 1,
