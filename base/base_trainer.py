@@ -552,7 +552,7 @@ class BaseTrainer:
         #if self.swa:
         #    self.swa_n = checkpoint['swa_n']
         dont_load_optimizer = self.config['dont_load_optimizer'] if 'dont_load_optimizer' in self.config else False
-        if not did_brain_surgery and not dont_load_optimizer:
+        if not did_brain_surgery and not dont_load_optimizer and 'optimizer' in checkpoint:
             try:
                 self.optimizer.load_state_dict(checkpoint['optimizer'])
                 if self.with_cuda:

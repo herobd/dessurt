@@ -175,6 +175,8 @@ class PairingGroupingGraph(BaseModel):
             detect_save2_scale = config['detect_save2_scale']
         elif self.use2ndFeatures:
             detect_save2_scale = self.detector.save2_scale
+        else:
+            detect_save2_scale = None
         #splitScaleDiff = config['split_features_scale_diff'] if 'split_features_scale_diff' in config else None
 
         self.no_grad_feats = config['no_grad_feats'] if 'no_grad_feats' in config else False
@@ -4236,9 +4238,10 @@ class PairingGroupingGraph(BaseModel):
         if graph is None:
             if not self.useCurvedBBs and self.detector_predNumNeighbors:
                 #Discard NN prediction. We don't use it anymore
-                bbPredictions = torch.cat([bbPredictions[:,:6],bbPredictions[:,7:]],dim=1)
+                #bbPredictions = torch.cat([bbPredictions[:,:6],bbPredictions[:,7:]],dim=1)
                 useBBs = torch.cat([useBBs[:,:6],useBBs[:,7:]],dim=1)
-            return [bbPredictions], offsetPredictions, None, None, None, None, rel_prop_scores, merge_prop_scores, (useBBs if self.useCurvedBBs else useBBs.cpu().detach(),None,None,transcriptions)
+            return [useBBs], None, None, None, None, rel_prop_scores, merge_prop_scores, (useBBs if self.useCurvedBBs else useBBs.cpu().detach(),None,None,bbTrans)
+            return allOutputBoxes, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final
 
         if self.reintroduce_features=='map':
             last_node_visual_feats = graph[0]
