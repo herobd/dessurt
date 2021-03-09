@@ -4211,9 +4211,10 @@ class PairingGroupingGraph(BaseModel):
         if graph is None:
             if not self.useCurvedBBs and self.detector_predNumNeighbors:
                 #Discard NN prediction. We don't use it anymore
-                bbPredictions = torch.cat([bbPredictions[:,:6],bbPredictions[:,7:]],dim=1)
+                #bbPredictions = torch.cat([bbPredictions[:,:6],bbPredictions[:,7:]],dim=1)
                 useBBs = torch.cat([useBBs[:,:6],useBBs[:,7:]],dim=1)
-            return [bbPredictions], offsetPredictions, None, None, None, None, rel_prop_scores, merge_prop_scores, (useBBs if self.useCurvedBBs else useBBs.cpu().detach(),None,None,transcriptions)
+            return [useBBs], None, None, None, None, rel_prop_scores, merge_prop_scores, (useBBs if self.useCurvedBBs else useBBs.cpu().detach(),None,None,transcriptions)
+            return allOutputBoxes, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final
 
         if self.reintroduce_visual_features=='map':
             last_node_visual_feats = graph[0]
