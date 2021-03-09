@@ -1,5 +1,5 @@
 {
-    "name": "NAF_pair_graph663rv_new",
+    "name": "NAFsimple_pair_graph663rv_new",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
