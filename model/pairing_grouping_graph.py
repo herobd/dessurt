@@ -174,6 +174,8 @@ class PairingGroupingGraph(BaseModel):
             detect_save2_scale = config['detect_save2_scale']
         elif self.use2ndFeatures:
             detect_save2_scale = self.detector.save2_scale
+        else:
+            detect_save2_scale = None
         #splitScaleDiff = config['split_features_scale_diff'] if 'split_features_scale_diff' in config else None
 
         self.no_grad_feats = config['no_grad_feats'] if 'no_grad_feats' in config else False
