@@ -182,7 +182,10 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
     if verbosity>1:
         model.summary()
     else:
-        print('model param counts: {}'.format(model.num_params()))
+        try:
+            print('model param counts: {}'.format(model.num_params()))
+        except torch.nn.modules.module.ModuleAttributeError:
+            pass
 
     if type(config['loss'])==dict: 
         loss={}#[eval(l) for l in config['loss']]

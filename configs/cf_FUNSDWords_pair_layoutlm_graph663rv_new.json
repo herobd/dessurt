@@ -12,7 +12,7 @@
         "num_workers": 4,
         "split_to_lines": true,
         "crop_to_page":false,
-        "color":false,
+        "color":true,
         "rescale_range": [0.8,1.2],
         "crop_params": {
             "crop_size":[800,800],
@@ -40,13 +40,15 @@
         "rel": "sigmoid_BCE_loss",
         "propRel": "sigmoid_BCE_loss",
         "classFinal": "sigmoid_BCE_loss",
-        "confFinal": "sigmoid_BCE_loss"
+        "confFinal": "sigmoid_BCE_loss",
+	"init_classLoss": "sigmoid_BCE_loss"
     },
     "loss_weights": {
         "rel": 1,
         "propRel": 1,
         "classFinal": 1,
-        "confFinal": 1
+        "confFinal": 1,
+	"init_classLoss": 1
     },
     "loss_params": 
         {
@@ -90,12 +92,15 @@
         "detect_conf_thresh": 0.5,
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
+	"prop_with_text_emb": true,
+	"prop_num_hidden": 128,
         "percent_rel_to_keep": 0.5,
         "max_rel_to_keep": 800,
         "roi_batch_size": 400,
 
 	"publaynet_model": "saved/publaynet_model_196000.pth",
 	"use_2_feat_levels": true,
+	"num_classes": 4,
 
 
         "expand_rel_context": 20,
