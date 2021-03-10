@@ -209,6 +209,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
             predGroups = [[i] for i in range(len(bbs))]
         elif predGroups is None:
             predGroups = []
+
         for group in predGroups:
             maxX=maxY=0
             minY=minX=99999999
