@@ -95,7 +95,7 @@
 	"prop_with_text_emb": true,
 	"prop_num_hidden": 128,
         "percent_rel_to_keep": 0.5,
-        "max_rel_to_keep": 800,
+        "max_rel_to_keep": 450,
         "roi_batch_size": 400,
 
 	"publaynet_model": "saved/publaynet_model_196000.pth",
