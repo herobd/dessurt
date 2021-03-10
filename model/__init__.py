@@ -11,6 +11,7 @@ from model.pairing_box_net import PairingBoxNet
 from model.pairing_box_from_gt import PairingBoxFromGT
 from model.pairing_graph import PairingGraph
 from model.pairing_grouping_graph import PairingGroupingGraph
+from model.pairing_g_graph_layoutlm import PairingGGraphLayoutLM
 from model.binary_pair_net import BinaryPairNet
 from model.binary_pair_real import BinaryPairReal
 from model.graph_net import GraphNet

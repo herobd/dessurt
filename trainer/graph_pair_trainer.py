@@ -242,7 +242,7 @@ class GraphPairTrainer(BaseTrainer):
         except StopIteration:
             self.data_loader_iter = iter(self.data_loader)
             thisInstance = self.data_loader_iter.next()
-        if not self.model_ref.detector.predNumNeighbors:
+        if not self.model_ref.detector_predNumNeighbors:
             thisInstance['num_neighbors']=None
         ##toc=timeit.default_timer()
         #t#self.opt_history['get data'].append(timeit.default_timer()-ticAll)#t#
@@ -1571,7 +1571,10 @@ class GraphPairTrainer(BaseTrainer):
         targetIndexToGroup = instance['targetIndexToGroup']
         
         if self.use_gt_trans:
-            gtTrans = instance['transcription']
+            if useGT and 'word_bbs' in useGT:
+                gtTrans = instance['form_metadata']['word_trans']
+            else:
+                gtTrans = instance['transcription']
             if (gtTrans)==0:
                 gtTrans=None
         else:
@@ -1740,6 +1743,7 @@ class GraphPairTrainer(BaseTrainer):
         allBBAlignment=[]
         proposedInfo=None
         mergeProposedInfo=None
+
 
        # print('effective prop thresh: {:.3f}, raw: {:.3f}'.format(torch.sigmoid(torch.FloatTensor([rel_prop_pred[-1]])).item(),rel_prop_pred[-1]))
 
@@ -2012,7 +2016,7 @@ class GraphPairTrainer(BaseTrainer):
                 log['bb_conf_loss'] = conf_loss
                 log['bb_class_loss'] = class_loss
                 log['bb_nn_loss'] = nn_loss
-            else:
+            elif 'overseg' in self.loss:
                 oversegLoss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered, recall_noclass, precision_noclass, gt_covered_noclass, pred_covered_noclass = self.loss['overseg'](outputOffsets,targetBoxes,[targSize],calc_stats='bb_stats' in get)
                 losses['oversegLoss'] = oversegLoss
                 log['bb_position_loss'] = position_loss
@@ -2023,6 +2027,11 @@ class GraphPairTrainer(BaseTrainer):
                     log['bb_precision_noclass']=precision_noclass
                     log['bb_gt_covered_noclass']=gt_covered_noclass
                     log['bb_pred_covered_noclass']=pred_covered_noclass
+            elif 'init_class' in self.loss:
+                assert 'word_bbs' in useGT
+                init_class_pred = outputOffsets
+                targetClasses = instance['form_metadata']['word_classes'].to(init_class_pred.device)
+                losses['init_classLoss'] = self.loss['init_class'](init_class_pred,targetClasses)
 
         #We'll use information from the final prediction before the final pruning
         if 'DocStruct' in get:
