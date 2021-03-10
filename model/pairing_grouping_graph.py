@@ -1277,10 +1277,6 @@ class PairingGroupingGraph(BaseModel):
             bbTrans={i:v for i,v  in enumerate(oldBBTrans)}
         else:
             bbTrans=None
-        if old_text_emb is not None:
-            embeddings={i:v for i,v  in enumerate(old_text_emb)}
-        else:
-            embeddings=None
         oldToNewBBIndexes={i:i for i in range(len(oldBBs))}
         #newBBs_line={}
         newBBIdCounter=0
@@ -4140,6 +4136,7 @@ class PairingGroupingGraph(BaseModel):
 
 
     def runGraph(self,gtGroups,gtTrans,image,useBBs,saved_features,saved_features2,bbTrans,embeddings,merge_first_only=False):
+        
         groups=[[i] for i in range(len(useBBs))]
         if self.merge_first:
             assert gtGroups is None
@@ -4295,6 +4292,7 @@ class PairingGroupingGraph(BaseModel):
                     good_edges=good_edges,
                     keep_edges=keep_edges,
                     gt_groups=gtGroups if gIter==0 else ([[g] for g in range(len(groups))] if gtGroups is not None else None))
+
 
             if self.reintroduce_features:
                 graph,last_node_visual_feats,last_edge_visual_feats = self.appendVisualFeatures(

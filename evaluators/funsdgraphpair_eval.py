@@ -111,7 +111,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
 
     #dataT = __to_tensor(data,gpu)
     #print('{}: {} x {}'.format(imageName,data.shape[2],data.shape[3]))
-    trainer.use_gt_trans = config['useGTTrans'] if 'useGTTrans' in config else False
+    trainer.use_gt_trans = config['useGTTrans'] if 'useGTTrans' in config else (config['useGTText'] if 'useGTText' in config else False)
     if useDetections:   
         useGT='only_space'
         if type(useDetections) is str:#useDetections=='gt':
