@@ -1395,6 +1395,9 @@ def newGetTargIndexForPreds_textLines(target,pred,iou_thresh,numClasses,train_ta
                             small_group.append(pi)
                         else:
                             big_group.append(pi)
+
+                    if len(small_group)==0:
+                        continue
                     
                     if len(small_group)==1:
                         merged_small = pred[small_group[0]]
