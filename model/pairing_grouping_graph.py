@@ -106,6 +106,7 @@ class PairingGroupingGraph(BaseModel):
         super(PairingGroupingGraph, self).__init__(config)
         self.useCurvedBBs=False
         self.legacy= 'legacy' in config and config['legacy']
+        self.legacy_read= 'legacy_read' in config and config['legacy_read']
 
         if 'detector_checkpoint' in config:
             if os.path.exists(config['detector_checkpoint']):
@@ -279,7 +280,9 @@ class PairingGroupingGraph(BaseModel):
                 graph_in_channels = config['graph_config'][0]['in_channels'] if 'in_channels' in config['graph_config'][0] else 1
             else:
                 graph_in_channels = config['graph_config']['in_channels'] if 'in_channels' in config['graph_config'] else 1
-            self.merge_embedding_layer = nn.Sequential(nn.ReLU(True),nn.Linear(graph_in_channels+self.numTextFeats,graph_in_channels))
+
+            if self.legacy_read:
+                self.merge_embedding_layer = nn.Sequential(nn.ReLU(True),nn.Linear(graph_in_channels+self.numTextFeats,graph_in_channels))
         else:
             self.text_rec=None
             self.numTextFeats = 0
@@ -341,7 +344,7 @@ class PairingGroupingGraph(BaseModel):
         self.merge_pool_h = self.merge_pool2_h = config['merge_featurizer_start_h'] if 'merge_featurizer_start_h' in config else None
         self.merge_pool_w = self.merge_pool2_w = config['merge_featurizer_start_w'] if 'merge_featurizer_start_w' in config else None
 
-        self.reintroduce_visual_features = config['reintroduce_visual_features'] if 'reintroduce_visual_features' in config else False #"fixed map"
+        self.reintroduce_features = config['reintroduce_features'] if 'reintroduce_features' in config else  (config['reintroduce_visual_features'] if 'reintroduce_visual_features' in config else False) #"fixed map"
 
         self.splitFeatures= config['split_features_scale'] if 'split_features_scale' in config else False
 
@@ -497,7 +500,7 @@ class PairingGroupingGraph(BaseModel):
             self.mergeFeaturizerConv = nn.Sequential(*layers)
             if 'merge_pred_net' in config:
                 merge_pred_desc = config['merge_pred_net']#TODO
-                if self.reintroduce_visual_features=='map':
+                if self.reintroduce_features=='map':
                     merge_pred_desc = [last_ch_relC+self.numShapeFeats]+merge_pred_desc+['FCnR1']
                 else:
                     merge_pred_desc = [last_ch_relC+self.numShapeFeats,'ReLU']+merge_pred_desc+['FCnR1']
@@ -510,7 +513,7 @@ class PairingGroupingGraph(BaseModel):
                         nn.ReLU(True),
                         nn.Linear(last_ch_relC+self.numShapeFeats,1)
                         ]
-                if self.reintroduce_visual_features!='map':
+                if self.reintroduce_features!='map':
                     layers = [nn.ReLU(True)]+layers
                 self.mergepred = nn.Sequential(*layers)
 
@@ -530,7 +533,7 @@ class PairingGroupingGraph(BaseModel):
         feat_norm_fc = 'group_norm'
 
         if featurizer_fc is not None:
-            if type(self.reintroduce_visual_features) is str and 'map' in self.reintroduce_visual_features:
+            if type(self.reintroduce_features) is str and 'map' in self.reintroduce_features:
                 featurizer_fc = [rel_featurizer_conv_last+self.numShapeFeats] + featurizer_fc + ['FC{}'.format(graph_in_channels)]
             else:
                 featurizer_fc = [rel_featurizer_conv_last+self.numShapeFeats] + featurizer_fc + ['FCnR{}'.format(graph_in_channels)]
@@ -582,7 +585,7 @@ class PairingGroupingGraph(BaseModel):
                     else:
                         featurizer_conv = [backboneSavedFeatSize+bbMasks_bb] + featurizer
                     if featurizer_fc is None:
-                        if type(self.reintroduce_visual_features) is str and 'map' in self.reintroduce_visual_features:
+                        if type(self.reintroduce_features) is str and 'map' in self.reintroduce_features:
                             featurizer_conv += [convOut]
                         else:
                             featurizer_conv += ['C3-{}'.format(convOut)]
@@ -615,7 +618,7 @@ class PairingGroupingGraph(BaseModel):
             else:
                 featurizer_fc = [self.numShapeFeatsBB+self.numTextFeats]+featurizer_fc
             if featurizer_fc is not None:
-                if type(self.reintroduce_visual_features) is str and 'map' in self.reintroduce_visual_features:
+                if type(self.reintroduce_features) is str and 'map' in self.reintroduce_features:
                     featurizer_fc = featurizer_fc + ['FC{}'.format(graph_in_channels)] #the noRelu is handeled in remap
                 else:
                     featurizer_fc = featurizer_fc + ['FCnR{}'.format(graph_in_channels)]
@@ -646,7 +649,7 @@ class PairingGroupingGraph(BaseModel):
                 self.keepEdgeThresh.append(graphconfig['keep_edge_thresh'] if 'keep_edge_thresh' in graphconfig else 0.4)
             self.pairer = None
 
-            if type(self.reintroduce_visual_features) is str and 'map' in self.reintroduce_visual_features:
+            if type(self.reintroduce_features) is str and 'map' in self.reintroduce_features:
                 self.reintroduce_node_visual_maps = nn.ModuleList()
                 self.reintroduce_edge_visual_maps = nn.ModuleList()
                 self.reintroduce_node_visual_maps.append(nn.Linear(graph_in_channels,graph_in_channels))
@@ -654,7 +657,7 @@ class PairingGroupingGraph(BaseModel):
                 for i in range(len(self.graphnets)-1):
                     self.reintroduce_node_visual_maps.append(nn.Linear(graph_in_channels*2,graph_in_channels))
                     self.reintroduce_edge_visual_maps.append(nn.Linear(graph_in_channels*2,graph_in_channels))
-                if 'fixed' in self.reintroduce_visual_features:
+                if 'fixed' in self.reintroduce_features:
                     self.reintroduce_node_visual_activations =nn.ModuleList()
                     self.reintroduce_node_visual_activations.append(None)
                     self.reintroduce_edge_visual_activations =nn.ModuleList()
@@ -1053,8 +1056,8 @@ class PairingGroupingGraph(BaseModel):
             node_visual_feats[new_id] = prev_node_visual_feats[old_id]
 
         if not all(has_feat):
-            assert (text_emb is not None) == (self.text_rec is not None)
-            if self.text_rec is not None:    
+            #assert (text_emb is not None) == (self.text_rec is not None)
+            if text_emb is not None: #self.text_rec is not None:    
                 need_new_ids,need_groups,need_text_emb = zip(* [(i,g,t) for i,(has,g,t) in enumerate(zip(has_feat,groups,text_emb)) if not has])
                 need_text_emb = torch.stack(need_text_emb,dim=0)
             else:
@@ -1097,7 +1100,7 @@ class PairingGroupingGraph(BaseModel):
 
         #for now, we'll just sum the features.
         #new_graph = (torch.cat((node_features,node_visual_feats),dim=1),edge_indexes,torch.cat((edge_features,edge_visual_feats),dim=1),universal_features)
-        if self.reintroduce_visual_features=='fixed map':
+        if self.reintroduce_features=='fixed map':
             node_features_old=self.reintroduce_node_visual_activations[giter](node_features)
             edge_features_old=self.reintroduce_edge_visual_activations[giter](edge_features)
             cat_node_f = torch.cat((node_features_old,node_visual_feats),dim=1)
@@ -1114,7 +1117,7 @@ class PairingGroupingGraph(BaseModel):
                 #assert(edge_features.size(0)==0 or edge_features.max()<900)
             #assert(node_features.max()<900)
             
-        elif self.reintroduce_visual_features=='map':
+        elif self.reintroduce_features=='map':
             node_features_old=node_features
             edge_features_old=edge_features
             cat_node_f = torch.cat((node_features_old,node_visual_feats),dim=1)
@@ -1253,6 +1256,7 @@ class PairingGroupingGraph(BaseModel):
             oldUniversalFeats,
             oldBBs,
             oldBBTrans,
+            old_text_emb,
             image,
             skip_rec=False,
             merge_only=False,
@@ -1272,7 +1276,7 @@ class PairingGroupingGraph(BaseModel):
         if self.text_rec is not None and oldBBTrans is not None:
             bbTrans={i:v for i,v  in enumerate(oldBBTrans)}
         else:
-            bbTrans={}
+            bbTrans=None
         oldToNewBBIndexes={i:i for i in range(len(oldBBs))}
         #newBBs_line={}
         newBBIdCounter=0
@@ -1348,7 +1352,7 @@ class PairingGroupingGraph(BaseModel):
                         oldToNewBBIndexes = {k:(v if v!=newId1 else newId0) for k,v in oldToNewBBIndexes.items()}
                         del bbs[newId1]
                         #if self.text_rec is not None and not skip_rec:
-                        if oldBBTrans is not None:
+                        if bbTrans is not None:
                             del bbTrans[newId1]
                         mergedTo.add(newId0)
                         self.merges_performed+=1
@@ -1540,6 +1544,10 @@ class PairingGroupingGraph(BaseModel):
             newNodeFeats = torch.FloatTensor(len(workGroups),oldNodeFeats.size(1)).to(oldNodeFeats.device)
         else:
             newNodeFeats = None
+        if old_text_emb is not None and self.text_rec is None:
+            new_text_emb = torch.FloatTensor(len(workGroups),old_text_emb.size(1)).to(old_text_emb.device)
+        else:
+            new_text_emb = None
         oldToNewNodeIds_unchanged={}
         oldToNewIds_all={}
         newGroups=[]
@@ -1547,20 +1555,29 @@ class PairingGroupingGraph(BaseModel):
         for i,(idx,bbIds) in enumerate(workGroups.items()):
             newGroups.append([bbIdToPos[bbId] for bbId in bbIds])
             featsToCombine=[]
+            embeddings_to_combine=[]
             for oldNodeIdx in newGroupToOldGrouping[idx]:
                 oldToNewIds_all[oldNodeIdx]=i
                 featsToCombine.append(oldNodeFeats[oldNodeIdx] if oldNodeFeats is not None else None)
+                embeddings_to_combine.append(old_text_emb[oldNodeIdx] if old_text_emb is not None else None)
                 if oldNodeIdx in newGroupToOldMerge:
                     for mergedIdx in newGroupToOldMerge[oldNodeIdx]:
                         featsToCombine.append(oldNodeFeats[mergedIdx] if oldNodeFeats is not None else None)
+                        embeddings_to_combine.append(old_text_emb[mergedIdx] if old_text_emb is not None else None)
                         oldToNewIds_all[mergedIdx]=i
 
             if len(featsToCombine)==1:
                 oldToNewNodeIds_unchanged[oldNodeIdx]=i
                 if oldNodeFeats is not None:
                     newNodeFeats[i]=featsToCombine[0]
-            elif oldNodeFeats is not None:
-                newNodeFeats[i]=self.groupNodeFunc(featsToCombine)
+                if new_text_emb is not None and self.text_rec is None:
+                    new_text_emb[i]=embeddings_to_combine[0]
+            else:
+                if oldNodeFeats is not None:
+                    newNodeFeats[i]=self.groupNodeFunc(featsToCombine)
+                if new_text_emb is not None and self.text_rec is None:
+                    new_text_emb[i]=torch.stack(embeddings_to_combine,dim=0).mean(dim=0)
+
             #if oldNodeFeats is not None:
             #    #TEST#
             #    newNodeFeats=newNodeFeats.detach()
@@ -1622,8 +1639,12 @@ class PairingGroupingGraph(BaseModel):
         if self.text_rec is not None and oldNodeFeats is not None:
             newNodeEmbeddings = self.embedding_model(groupNodeTrans,oldNodeFeats.device)
             if self.add_noise_to_word_embeddings>0:
-                newNodeEmbeddings += torch.randn_like(newNodeEmbeddings).to(newNodeEmbeddings.device)*self.add_noise_to_word_embeddings
-            newNodeFeats = self.merge_embedding_layer(torch.cat((newNodeFeats,newNodeEmbeddings),dim=1))
+                newNodeEmbeddings += torch.randn_like(newNodeEmbeddings).to(newNodeEmbeddings.device)*self.add_noise_to_word_text_emb
+            if self.legacy_read:
+                newNodeFeats = self.merge_embedding_layer(torch.cat((newNodeFeats,newNodeEmbeddings),dim=1))
+                new_text_emb=old_text_emb
+            else:
+                new_text_emb = newNodeEmbeddings
 
         edges = newEdges
         newEdges = list(newEdges) + [(y,x) for x,y in newEdges] #add reverse edges so undirected/bidirectional
@@ -1651,7 +1672,7 @@ class PairingGroupingGraph(BaseModel):
         if not self.useCurvedBBs:
             newBBs = torch.stack(newBBs,dim=0)
 
-        return newBBs, newGraph, newGroups, edges, newBBTrans if self.text_rec is not None else None,  oldToNewNodeIds_unchanged, keep_edges
+        return newBBs, newGraph, newGroups, edges, newBBTrans if self.text_rec is not None else None, new_text_emb,  oldToNewNodeIds_unchanged, keep_edges
 
     def mergeAndGroupLegacy(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,skip_rec=False,merge_only=False,good_edges=None,keep_edges=None):
         if self.useCurvedBBs:
@@ -4115,6 +4136,7 @@ class PairingGroupingGraph(BaseModel):
 
 
     def runGraph(self,gtGroups,gtTrans,image,useBBs,saved_features,saved_features2,bbTrans,embeddings,merge_first_only=False):
+        
         groups=[[i] for i in range(len(useBBs))]
         if self.merge_first:
             assert gtGroups is None
@@ -4218,7 +4240,7 @@ class PairingGroupingGraph(BaseModel):
             return [useBBs], None, None, None, None, rel_prop_scores, merge_prop_scores, (useBBs if self.useCurvedBBs else useBBs.cpu().detach(),None,None,bbTrans)
             return allOutputBoxes, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final
 
-        if self.reintroduce_visual_features=='map':
+        if self.reintroduce_features=='map':
             last_node_visual_feats = graph[0]
             last_edge_visual_feats = graph[2]
 
@@ -4253,7 +4275,7 @@ class PairingGroupingGraph(BaseModel):
                 good_edges=None
             #print('!D! {} before edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(gIter,edgeFeats.size(),len(useBBs),nodeFeats.size(),len(edgeIndexes)))
             #print('      graph num edges: {}'.format(graph[1].size()))
-            useBBs,graph,groups,edgeIndexes,bbTrans,same_node_map,keep_edges=self.mergeAndGroup(
+            useBBs,graph,groups,edgeIndexes,bbTrans,embeddings,same_node_map,keep_edges=self.mergeAndGroup(
                     self.mergeThresh[gIter],
                     self.keepEdgeThresh[gIter],
                     self.groupThresh[gIter],
@@ -4265,12 +4287,14 @@ class PairingGroupingGraph(BaseModel):
                     uniFeats,
                     useBBs,
                     bbTrans,
+                    embeddings,
                     image,
                     good_edges=good_edges,
                     keep_edges=keep_edges,
                     gt_groups=gtGroups if gIter==0 else ([[g] for g in range(len(groups))] if gtGroups is not None else None))
 
-            if self.reintroduce_visual_features:
+
+            if self.reintroduce_features:
                 graph,last_node_visual_feats,last_edge_visual_feats = self.appendVisualFeatures(
                         gIter if self.merge_first else gIter+1,
                         useBBs,
@@ -4307,7 +4331,7 @@ class PairingGroupingGraph(BaseModel):
 
         ##Final state of the graph
         #print('!D! F before edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(edgeFeats.size(),useBBs.size(),nodeFeats.size(),len(edgeIndexes)))
-        useBBs,graph,groups,edgeIndexes,bbTrans,same_node_map,keep_edges=self.mergeAndGroup(
+        useBBs,graph,groups,edgeIndexes,bbTrans,_,same_node_map,keep_edges=self.mergeAndGroup(
                 self.mergeThresh[-1],
                 self.keepEdgeThresh[-1],
                 self.groupThresh[-1],
@@ -4319,6 +4343,7 @@ class PairingGroupingGraph(BaseModel):
                 None,#uniFeats.detach() if uniFeats is not None else None,
                 useBBs,
                 bbTrans,
+                None,
                 image,
                 gt_groups=[[g] for g in range(len(groups))] if gtGroups is not None else None,
                 final=True)

@@ -73,7 +73,7 @@
 
         "mergeAndGroup": true,
 
-        "unfreeze_detector": 2000,
+        "unfreeze_detector": 1000,
         "partial_from_gt": null,
         "stop_from_gt": null,
         "use_word_bbs_gt": 1,
@@ -81,7 +81,8 @@
         "valid_with_gt": true,
         "use_all_bb_pred_for_rel_loss": true,
 
-        "use_learning_schedule": "multi_rise then swa",
+        "use_learning_schedule": "multi_rise then ramp_to_swa",
+"ramp_down_steps": 10000,
         "warmup_steps": [1000],
         "swa_lr_mul": 0.1,
         "adapt_lr": false
@@ -95,7 +96,7 @@
 	"prop_with_text_emb": true,
 	"prop_num_hidden": 128,
         "percent_rel_to_keep": 0.5,
-        "max_rel_to_keep": 800,
+        "max_rel_to_keep": 450,
         "roi_batch_size": 400,
 
 	"publaynet_model": "saved/publaynet_model_196000.pth",

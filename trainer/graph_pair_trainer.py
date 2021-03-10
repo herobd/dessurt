@@ -165,6 +165,8 @@ class GraphPairTrainer(BaseTrainer):
             self.characterization_form=defaultdict(list)
             self.characterization_hist=defaultdict(list)
 
+        self.model_ref.used_threshConf=0.5
+
     def _to_tensor(self, instance):
         image = instance['img']
         bbs = instance['bb_gt']
