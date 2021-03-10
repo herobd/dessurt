@@ -147,7 +147,7 @@ class GraphPairDataset(torch.utils.data.Dataset):
                 blank = np.zeros([word_bbs.shape[0],dif_f])
                 prep_word_bbs = np.concatenate([word_bbs,blank],axis=1)[None,...]
                 crop_bbs = np.concatenate([bbs,prep_word_bbs],axis=1)
-                crop_ids=ids+['word']*word_bbs.shape[0]
+                crop_ids=ids+['word{}'.format(i) for i in range(word_bbs.shape[0])]
             else:
                 crop_bbs = bbs
                 crop_ids = ids
@@ -173,14 +173,16 @@ class GraphPairDataset(torch.utils.data.Dataset):
                 word_index=-1
                 for i,ii in enumerate(out['bb_auxs']):
                     if not saw_word:
-                        if 'word'==ii:
+                        if type(ii) is str and 'word' in ii:
                             saw_word=True
                             word_index=i
                     else:
-                        assert 'word'==ii
+                        assert 'word' in ii
                 bbs = out['bb_gt'][:,:word_index]
                 ids= out['bb_auxs'][:word_index]
                 form_metadata['word_boxes'] = out['bb_gt'][0,word_index:,:8]
+                word_ids=out['bb_auxs'][word_index:]
+                form_metadata['word_trans'] = [form_metadata['word_trans'][int(id[4:])] for id in word_ids]
             else:
                 bbs = out['bb_gt']
                 ids= out['bb_auxs']

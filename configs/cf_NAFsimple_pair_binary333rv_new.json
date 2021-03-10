@@ -1,5 +1,5 @@
 {
-    "name": "NAF_pair_binary333rv_new",
+    "name": "NAFsimple_pair_binary333rv_new",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -91,7 +91,8 @@
         "max_use_pred": 0.5,
         "use_all_bb_pred_for_rel_loss": true,
 
-        "use_learning_schedule": "multi_rise then swa",
+        "use_learning_schedule": "multi_rise then ramp_to_swa",
+"ramp_down_steps": 10000,
         "warmup_steps": [1000],
         "swa_lr_mul": 0.1,
         "adapt_lr": false

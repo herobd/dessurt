@@ -175,6 +175,7 @@ class FUNSDGraphPair(GraphPairDataset):
             groups = [[n] for n in range(len(boxes))]
 
         word_boxes=[]
+        word_trans=[]
         for entity in annotations['form']:
             for word in entity['words']:
                 lX,tY,rX,bY = word['box']
@@ -222,10 +223,11 @@ class FUNSDGraphPair(GraphPairDataset):
                     bb[14]=s*(rX+lX)/2.0
                     bb[15]=s*bY
                 word_boxes.append(bb)
+                word_trans.append(word['text'])
         #word_boxes = torch.FloatTensor(word_boxes)
         word_boxes = np.array(word_boxes)
         #self.pairs=list(pairs)
-        return bbs, list(range(bbs.shape[1])), numClasses, trans, groups, {}, {'word_boxes':word_boxes}
+        return bbs, list(range(bbs.shape[1])), numClasses, trans, groups, {}, {'word_boxes':word_boxes, 'word_trans':word_trans}
 
 
     def getResponseBBIdList(self,queryId,annotations):
