@@ -4177,6 +4177,7 @@ class PairingGroupingGraph(BaseModel):
                         None,
                         useBBs,
                         bbTrans,
+                        embeddings,
                         image,
                         skip_rec=merge_first_only,
                         merge_only=True)
