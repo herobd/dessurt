@@ -1,6 +1,6 @@
 new experiments:
 cf_FUNSDLines_pair_binary333rv_new.json
-cf_FUNSDLines_pair_graph663rv_new.json <- super, but move to nephisboat
+cf_FUNSDLines_pair_graph663rv_new.json <- nephisboat
 cf_NAFblank_pair_binary333rv_new.json
 cf_NAFblank_pair_binary333rv_prev.json
 cf_NAFblank_pair_graph663rv_new.json <- jareditebarge
