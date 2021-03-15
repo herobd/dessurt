@@ -197,6 +197,7 @@ class PairingGGraphLayoutLM(PairingGroupingGraph):
         if inputs['input_ids'].size(1)<self.max_token_len:
             inputs = {k:i.to(device) for k,i in inputs.items()}
             input_bbs = input_bbs.to(device)
+            assert inputs['input_ids'].size(1)==input_bbs.size(1)
             lm_out = self.layoutlm(**inputs,bbox=input_bbs).last_hidden_state[0] #get rid of batch dim
 
         else:

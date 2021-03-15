@@ -387,7 +387,7 @@ class GraphPairTrainer(BaseTrainer):
 
         with torch.no_grad():
             for batch_idx, instance in enumerate(self.valid_data_loader):
-                if not self.model_ref.detector.predNumNeighbors:
+                if not self.model_ref.detector_predNumNeighbors:
                     instance['num_neighbors']=None
                 if not self.logged:
                     print('iter:{} valid batch: {}/{}'.format(self.iteration,batch_idx,len(self.valid_data_loader)), end='\r')
@@ -1498,7 +1498,7 @@ class GraphPairTrainer(BaseTrainer):
                 log['class loss improvement (neg is good)'] = losses['classFinalLoss'].item()-class_loss
 
         if 'bb_stats' in get:
-            if self.model_ref.detector.predNumNeighbors:
+            if self.model_ref.detector_predNumNeighbors:
                 outputBoxes=torch.cat((outputBoxes[:,0:6],outputBoxes[:,7:]),dim=1) #throw away NN pred
             if targetBoxes is not None:
                 targetBoxes = targetBoxes.cpu()

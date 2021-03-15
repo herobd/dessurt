@@ -1,5 +1,5 @@
 {
-    "name": "FUNSDWords_pair_layoutlm_graph663rv_new",
+    "name": "FUNSDLines_pair_graph663rv_noEdgeViz_new",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -9,10 +9,10 @@
         "data_dir": "../data/FUNSD",
         "batch_size": 1,
         "shuffle": true,
-        "num_workers": 4,
+        "num_workers": 3,
         "split_to_lines": true,
         "crop_to_page":false,
-        "color":true,
+        "color":false,
         "rescale_range": [0.8,1.2],
         "crop_params": {
             "crop_size":[800,800],
@@ -37,21 +37,25 @@
         "weight_decay": 0.01
     },
     "loss": {
+        "box": "YoloLoss",
         "rel": "sigmoid_BCE_loss",
         "propRel": "sigmoid_BCE_loss",
+        "nnFinal": "MSE",
         "classFinal": "sigmoid_BCE_loss",
-        "confFinal": "sigmoid_BCE_loss",
-	"init_classLoss": "sigmoid_BCE_loss"
+        "confFinal": "sigmoid_BCE_loss"
     },
     "loss_weights": {
-        "rel": 1,
-        "propRel": 1,
-        "classFinal": 1,
-        "confFinal": 1,
-	"init_classLoss": 1
+        "box": 1.0,
+        "rel": 0.5,
+        "propRel": 0.5,
+        "classFinal": 0.5,
+        "confFinal": 0.5
     },
     "loss_params": 
         {
+            "box": {"ignore_thresh": 0.5,
+                    "bad_conf_weight": 20.0,
+                    "multiclass":true}
         },
     "metrics": [],
     "trainer": {
@@ -69,16 +73,14 @@
         "monitor_mode": "none",
         "conf_thresh_init": 0.5,
         "conf_thresh_change_iters": 0,
-        "retry_count":2,
+        "retry_count":1,
 
         "mergeAndGroup": true,
 
-        "unfreeze_detector": 1000,
-        "partial_from_gt": null,
-        "stop_from_gt": null,
-        "use_word_bbs_gt": 1,
-	"use_gt_trans": true,
-        "valid_with_gt": true,
+        "unfreeze_detector": 2000,
+        "partial_from_gt": 0,
+        "stop_from_gt": 2,
+        "max_use_pred": 0.5,
         "use_all_bb_pred_for_rel_loss": true,
 
         "use_learning_schedule": "multi_rise then ramp_to_swa",
@@ -87,43 +89,40 @@
         "swa_lr_mul": 0.1,
         "adapt_lr": false
     },
-    "arch": "PairingGGraphLayoutLM", 
+    "arch": "PairingGroupingGraph", 
     "model": {
         "detector_checkpoint": "saved/FUNSDLines_detect_augR_staggerLighter/checkpoint-iteration250000.pth",
         "detect_conf_thresh": 0.5,
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
-	"prop_with_text_emb": true,
-	"prop_num_hidden": 128,
         "percent_rel_to_keep": 0.5,
         "max_rel_to_keep": 400,
         "roi_batch_size": 400,
 
-	"publaynet_model": "saved/publaynet_model_196000.pth",
-	"use_2_feat_levels": true,
-	"num_classes": 4,
+	"use_rel_shape_feats": "only for edge",
+        "use_detect_layer_feats": 16,
+        "use_2nd_detect_layer_feats": 0,
+        "use_2nd_detect_scale_feats": 2,
+        "use_2nd_detect_feats_size": 64,
+        "use_fixed_masks": true,
+        "no_grad_feats": true,
+        "feat_norm": "group_norm",
 
-
-        "expand_rel_context": 20,
-        "featurizer_start_h": 12,
-        "featurizer_start_w": 12,
-        "featurizer_conv": ["k1-512","sep512","sep256","M","sep256","sep256","M"],
-        "featurizer_conv_auto": true,
-        "featurizer_fc": null,
+        "featurizer_fc": [],
 
         "pred_nn": false,
         "pred_class": true,
         "expand_bb_context": 20,
-        "featurizer_bb_start_h": 6,
-        "featurizer_bb_start_w": 6,
-        "bb_featurizer_conv": ["k1-512","sep128","sep128","M","sep128"],
+        "featurizer_bb_start_h": 10,
+        "featurizer_bb_start_w": 10,
+        "bb_featurizer_conv": ["sep256","sep256","M","sep256"],
 
         "fix_bi_dir": true,
         "reintroduce_visual_features": "fixed map",
         "graph_config": [
 	    {
             "arch": "MetaGraphNet",
-            "in_channels": 512,
+            "in_channels": 256,
             "node_out": 5,
             "edge_out": 5,
             "num_layers": 6,
@@ -140,7 +139,7 @@
         },
         {
             "arch": "MetaGraphNet",
-            "in_channels": 512,
+            "in_channels": 256,
             "node_out": 5,
             "edge_out": 5,
             "num_layers": 6,
@@ -157,7 +156,7 @@
         },
         {
             "arch": "MetaGraphNet",
-            "in_channels": 512,
+            "in_channels": 256,
             "node_out": 5,
             "edge_out": 5,
             "num_layers": 3,

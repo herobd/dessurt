@@ -331,13 +331,15 @@ class PairingGroupingGraph(BaseModel):
         self.useShapeFeats= config['use_shape_feats'] if 'use_shape_feats' in config else False
 
         if self.useShapeFeats!='only':
-            self.pool_h = config['featurizer_start_h']
-            self.pool_w = config['featurizer_start_w']
+            if self.useShapeFeats!='only for edge':
+                self.pool_h = config['featurizer_start_h']
+                self.pool_w = config['featurizer_start_w']
+                self.pool2_h=self.pool_h
+                self.pool2_w=self.pool_w
+
             self.poolBB_h = config['featurizer_bb_start_h'] if 'featurizer_bb_start_h' in config else 2
             self.poolBB_w = config['featurizer_bb_start_w'] if 'featurizer_bb_start_w' in config else 3
 
-            self.pool2_h=self.pool_h
-            self.pool2_w=self.pool_w
             self.poolBB2_h=self.poolBB_h
             self.poolBB2_w=self.poolBB_w
 
@@ -388,15 +390,9 @@ class PairingGroupingGraph(BaseModel):
             config['graph_config']['num_shape_feats']=self.numShapeFeats
         featurizer_fc = config['featurizer_fc'] if 'featurizer_fc' in config else []
         if self.useShapeFeats!='only':
-
-            self.expandedRelContext = config['expand_rel_context'] if 'expand_rel_context' in config else None
             if self.merge_first:
                 self.expandedMergeContextY,self.expandedMergeContextX = config['expand_merge_context']
 
-            if self.expandedRelContext is not None:
-                bbMasks=3
-            else:
-                bbMasks=2
             self.expandedBBContext = config['expand_bb_context'] if 'expand_bb_context' in config else None
             if self.expandedBBContext is not None:
                 bbMasks_bb=2
@@ -406,13 +402,41 @@ class PairingGroupingGraph(BaseModel):
             self.splitFeatureRes = config['split_feature_res'] if 'split_feature_res' in config else False
 
             feat_norm = config['feat_norm'] if 'feat_norm' in config else 'group_norm' #detector_config['norm_type'] #if 'norm_type' in detector_config else None
-            featurizer_conv = config['featurizer_conv'] if 'featurizer_conv' in config else [512,'M',512]
-            if self.splitFeatures:
-                featurizer_conv2 = config['featurizer_conv_first'] if 'featurizer_conv_first' in config else None
-                featurizer_conv2 = [backboneSavedFeatSize2+bbMasks] + featurizer_conv2 #bbMasks are appended
+            if self.useShapeFeats!='only for edge':
+                self.expandedRelContext = config['expand_rel_context'] if 'expand_rel_context' in config else None
+                if self.expandedRelContext is not None:
+                    bbMasks=3
+                else:
+                    bbMasks=2
+                featurizer_conv = config['featurizer_conv'] if 'featurizer_conv' in config else [512,'M',512]
+                if self.splitFeatures:
+                    featurizer_conv2 = config['featurizer_conv_first'] if 'featurizer_conv_first' in config else None
+                    featurizer_conv2 = [backboneSavedFeatSize2+bbMasks] + featurizer_conv2 #bbMasks are appended
+                    scaleX=1
+                    scaleY=1
+                    for a in featurizer_conv2:
+                        if a=='M' or (type(a) is str and a[0]=='D'):
+                            scaleX*=2
+                            scaleY*=2
+                        elif type(a) is str and a[0]=='U':
+                            scaleX/=2
+                            scaleY/=2
+                        elif type(a) is str and a[0:4]=='long': #long pool
+                            scaleX*=3
+                            scaleY*=2
+                    assert(scaleX==scaleY)
+                    splitScaleDiff=scaleX
+                    self.pool_h = self.pool_h//splitScaleDiff
+                    self.pool_w = self.pool_w//splitScaleDiff
+                    layers, last_ch_relC = make_layers(featurizer_conv2,norm=feat_norm,dropout=True)
+                    self.relFeaturizerConv2 = nn.Sequential(*layers)
+
+                    featurizer_conv = [backboneSavedFeatSize+last_ch_relC] + featurizer_conv
+                else:
+                    featurizer_conv = [backboneSavedFeatSize+bbMasks] + featurizer_conv #bbMasks are appended
                 scaleX=1
                 scaleY=1
-                for a in featurizer_conv2:
+                for a in featurizer_conv:
                     if a=='M' or (type(a) is str and a[0]=='D'):
                         scaleX*=2
                         scaleY*=2
@@ -422,48 +446,35 @@ class PairingGroupingGraph(BaseModel):
                     elif type(a) is str and a[0:4]=='long': #long pool
                         scaleX*=3
                         scaleY*=2
-                assert(scaleX==scaleY)
-                splitScaleDiff=scaleX
-                self.pool_h = self.pool_h//splitScaleDiff
-                self.pool_w = self.pool_w//splitScaleDiff
-                layers, last_ch_relC = make_layers(featurizer_conv2,norm=feat_norm,dropout=True)
-                self.relFeaturizerConv2 = nn.Sequential(*layers)
+                #self.scale=(scaleX,scaleY) this holds scale for detector
+                fsizeX = self.pool_w//scaleX
+                fsizeY = self.pool_h//scaleY
+                if 'featurizer_conv_auto' in config and config['featurizer_conv_auto']:
+                    featurizer_conv.append(graph_in_channels-self.numShapeFeats)
+                    assert featurizer_fc is None
+                layers, last_ch_relC = make_layers(featurizer_conv,norm=feat_norm,dropout=True) 
+                if featurizer_fc is None: #we don't have a FC layer, so channels need to be the same as graph model expects
+                    if last_ch_relC+self.numShapeFeats!=graph_in_channels:
+                        new_layer = [last_ch_relC,'k1-{}'.format(graph_in_channels-self.numShapeFeats)]
+                        print('WARNING: featurizer_conv did not line up with graph_in_channels, adding layer k1-{}'.format(graph_in_channels-self.numShapeFeats))
+                        #new_layer = last_ch_relC,'C3-{}'.format(graph_in_channels-self.numShapeFeats)]
+                        new_layer, last_ch_relC = make_layers(new_layer,norm=feat_norm,dropout=True) 
+                        layers+=new_layer
+                layers.append( nn.AvgPool2d((fsizeY,fsizeX)) )
+                self.relFeaturizerConv = nn.Sequential(*layers)
+                rel_featurizer_conv_last = last_ch_relC
 
-                featurizer_conv = [backboneSavedFeatSize+last_ch_relC] + featurizer_conv
+                #self.roi_align = RoIAlign(self.pool_h,self.pool_w,1.0/backbone_save_scale) Facebook implementation
+                self.roi_align = RoIAlign((self.pool_h,self.pool_w),1.0/backbone_save_scale,-1)
+                if self.use2ndFeatures:
+                    #self.roi_align2 = RoIAlign(self.pool2_h,self.pool2_w,1.0/backbone_save2_scale)
+                    self.roi_align2 = RoIAlign((self.pool2_h,self.pool2_w),1.0/backbone_save2_scale,-1)
+                else:
+                    last_ch_relC=0
             else:
-                featurizer_conv = [backboneSavedFeatSize+bbMasks] + featurizer_conv #bbMasks are appended
-            scaleX=1
-            scaleY=1
-            for a in featurizer_conv:
-                if a=='M' or (type(a) is str and a[0]=='D'):
-                    scaleX*=2
-                    scaleY*=2
-                elif type(a) is str and a[0]=='U':
-                    scaleX/=2
-                    scaleY/=2
-                elif type(a) is str and a[0:4]=='long': #long pool
-                    scaleX*=3
-                    scaleY*=2
-            #self.scale=(scaleX,scaleY) this holds scale for detector
-            fsizeX = self.pool_w//scaleX
-            fsizeY = self.pool_h//scaleY
-            if 'featurizer_conv_auto' in config and config['featurizer_conv_auto']:
-                featurizer_conv.append(graph_in_channels-self.numShapeFeats)
-                assert featurizer_fc is None
-            layers, last_ch_relC = make_layers(featurizer_conv,norm=feat_norm,dropout=True) 
-            if featurizer_fc is None: #we don't have a FC layer, so channels need to be the same as graph model expects
-                if last_ch_relC+self.numShapeFeats!=graph_in_channels:
-                    new_layer = [last_ch_relC,'k1-{}'.format(graph_in_channels-self.numShapeFeats)]
-                    print('WARNING: featurizer_conv did not line up with graph_in_channels, adding layer k1-{}'.format(graph_in_channels-self.numShapeFeats))
-                    #new_layer = last_ch_relC,'C3-{}'.format(graph_in_channels-self.numShapeFeats)]
-                    new_layer, last_ch_relC = make_layers(new_layer,norm=feat_norm,dropout=True) 
-                    layers+=new_layer
-            layers.append( nn.AvgPool2d((fsizeY,fsizeX)) )
-            self.relFeaturizerConv = nn.Sequential(*layers)
-            rel_featurizer_conv_last = last_ch_relC
-
-            #self.roi_align = RoIAlign(self.pool_h,self.pool_w,1.0/backbone_save_scale) Facebook implementation
-            self.roi_align = RoIAlign((self.pool_h,self.pool_w),1.0/backbone_save_scale,-1)
+                rel_featurizer_conv_last = 0
+                last_ch_relC=0
+                self.expandedRelContext=None
         else:
             rel_featurizer_conv_last = 0
 
@@ -517,12 +528,6 @@ class PairingGroupingGraph(BaseModel):
                     layers = [nn.ReLU(True)]+layers
                 self.mergepred = nn.Sequential(*layers)
 
-        if self.use2ndFeatures:
-            #self.roi_align2 = RoIAlign(self.pool2_h,self.pool2_w,1.0/backbone_save2_scale)
-            self.roi_align2 = RoIAlign((self.pool2_h,self.pool2_w),1.0/backbone_save2_scale,-1)
-        else:
-            last_ch_relC=0
-        if self.merge_first:
             self.merge_roi_align = RoIAlign((self.merge_pool_h,self.merge_pool_w),1.0/backbone_save_scale,-1)
             if self.use2ndFeatures:
                 self.merge_roi_align2 = RoIAlign((self.merge_pool2_h,self.merge_pool2_w),1.0/backbone_save2_scale,-1)
@@ -2283,7 +2288,7 @@ class PairingGroupingGraph(BaseModel):
             brX = brX.cpu()
             brY = brY.cpu()
         #build all-mask image, may want to move this up and use for relationship proposals
-        if self.expandedRelContext is not None:
+        if self.expandedRelContext is not None or self.expandedBBContext is not None:
             allMasks = torch.zeros(imageHeight,imageWidth)
             if merge_only:
                 #since each bb fragment is an axis aligned rect, we'll speed things up
@@ -2311,7 +2316,7 @@ class PairingGroupingGraph(BaseModel):
             pool_w=self.merge_pool_w
             pool2_h=self.merge_pool2_h
             pool2_w=self.merge_pool2_w
-        elif self.useShapeFeats != 'only':
+        elif self.useShapeFeats != 'only' and self.useShapeFeats != 'only for edge':
             pool_h=self.pool_h
             pool_w=self.pool_w
             pool2_h=self.pool2_h
@@ -2375,7 +2380,7 @@ class PairingGroupingGraph(BaseModel):
             groupIs_index1 = [ [b for b in groups[c[0]]] for c in edges ]
             groupIs_index2 = [ [b for b in groups[c[1]]] for c in edges ]
 
-        if self.useShapeFeats!='only':
+        if self.useShapeFeats!='only' and self.useShapeFeats != 'only for edge':
             #get axis aligned rectangle from corners
             #t#tic2=timeit.default_timer()#t#
             rois = torch.zeros((len(edges),5)).to(features.device) #(batchIndex,x1,y1,x2,y2) as expected by ROI Align
@@ -2489,7 +2494,7 @@ class PairingGroupingGraph(BaseModel):
         #    img_f.waitKey()
 
         #build all-mask image, may want to move this up and use for relationship proposals
-        if (not merge_only and self.useShapeFeats!='only') or (merge_only and self.merge_use_mask):
+        if (not merge_only and self.useShapeFeats!='only' and self.useShapeFeats != 'only for edge') or (merge_only and self.merge_use_mask):
             if self.expandedRelContext is not None:
                 #We're going to add a third mask for all bbs
                 numMasks=3
@@ -2501,7 +2506,7 @@ class PairingGroupingGraph(BaseModel):
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
         relFeats=[] #where we'll store the feature of each batch
         
-        if self.useShapeFeats=='only':
+        if self.useShapeFeats=='only' or self.useShapeFeats=='only for edge':
             batch_size = len(edges)
         elif merge_only:
             batch_size = 2*self.roi_batch_size
@@ -2514,7 +2519,7 @@ class PairingGroupingGraph(BaseModel):
             #t#tic=timeit.default_timer()#t#
             if ib>0 and not self.all_grad:
                 torch.set_grad_enabled(False)
-            if self.useShapeFeats!='only' or merge_only:
+            if (self.useShapeFeats!='only' and self.useShapeFeats != 'only for edge') or merge_only:
                 b_rois = rois[b_start:b_end]
             b_edges = edges[b_start:b_end]
             b_groups_index1 = groups_index1[b_start:b_end]
@@ -2532,7 +2537,7 @@ class PairingGroupingGraph(BaseModel):
                 extraPred=0
 
             #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
-            if self.useShapeFeats!='only':
+            if self.useShapeFeats!='only' and self.useShapeFeats != 'only for edge':
                 if merge_only:
                     #o#stackedEdgeFeatWindows = self.merge_roi_align(features,b_rois.to(features.device))
                     stackedEdgeFeatWindows = self.merge_roi_align(features,b_rois)
@@ -2556,7 +2561,7 @@ class PairingGroupingGraph(BaseModel):
 
 
                 #make instance specific masks and make shape (spatial) features
-                if self.useShapeFeats!='only':
+                if self.useShapeFeats!='only'  and self.useShapeFeats != 'only for edge':
                     if (random.random()<0.5 and flip is None and  not self.debug) or flip:
                         pass
                         #TODO
@@ -2586,7 +2591,7 @@ class PairingGroupingGraph(BaseModel):
                 if not merge_only or self.merge_use_mask:
                     #t#tic2=timeit.default_timer()#t#
                     for i,(index1, index2) in enumerate(b_edges):
-                        if self.useShapeFeats!='only':
+                        if self.useShapeFeats!='only' and self.useShapeFeats != 'only for edge':
                             if self.useCurvedBBs:
                                 if merge_only:
                                     #since each bb fragment is an axis aligned rect, we'll speed things up
@@ -2791,7 +2796,7 @@ class PairingGroupingGraph(BaseModel):
 
 
             #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
-            if self.useShapeFeats!='only':
+            if self.useShapeFeats!='only' and self.useShapeFeats != 'only for edge':
                 if self.splitFeatures:
                     if not merge_only or self.merge_use_mask:
                         stackedEdgeFeatWindows2 = torch.cat((stackedEdgeFeatWindows2,masks.to(stackedEdgeFeatWindows2.device)),dim=1)
@@ -2815,7 +2820,7 @@ class PairingGroupingGraph(BaseModel):
             #print('b_relFeats {}'.format(b_relFeats.size()))
             #print('shapeFeats {}',format(shapeFeats.size()))
             if self.useShapeFeats:
-                if self.useShapeFeats=='only':
+                if self.useShapeFeats=='only' or self.useShapeFeats=='only for edge':
                     b_relFeats = shapeFeats.to(features.device)
                 else:
                     b_relFeats = torch.cat((b_relFeats,shapeFeats.to(features.device)),dim=1)
@@ -4224,6 +4229,7 @@ class PairingGroupingGraph(BaseModel):
         #t#tic=timeit.default_timer()#t#
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
         graph,edgeIndexes,rel_prop_scores,last_node_visual_feats,last_edge_visual_feats,keep_edges = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,image=image)
+        #print('edgeIndexes: {}'.format(len(edgeIndexes)))
 
         #print('createGraph')
         #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
