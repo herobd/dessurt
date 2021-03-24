@@ -27,10 +27,10 @@ except:
 
 def normalize_bbox(bbox, width, height):
      return [
-         max(int(1000 * (bbox[0] / width)),0),
-         max(int(1000 * (bbox[1] / height)),0),
-         min(int(1000 * (bbox[2] / width)),1000),
-         min(int(1000 * (bbox[3] / height)),1000),
+         max(min(int(1000 * (bbox[0] / width)),1000),0),
+         max(min(int(1000 * (bbox[1] / height)),1000),0),
+         max(min(int(1000 * (bbox[2] / width)),1000),0),
+         max(min(int(1000 * (bbox[3] / height)),1000),0),
      ]
 
 class PairingGGraphLayoutLM(PairingGroupingGraph):
@@ -197,7 +197,9 @@ class PairingGGraphLayoutLM(PairingGroupingGraph):
         if inputs['input_ids'].size(1)<self.max_token_len:
             inputs = {k:i.to(device) for k,i in inputs.items()}
             input_bbs = input_bbs.to(device)
-            assert inputs['input_ids'].size(1)==input_bbs.size(1)
+            #assert inputs['input_ids'].size(1)==input_bbs.size(1)
+            #print('input {} {} {}'.format(inputs['input_ids'].size(),inputs['input_ids'].max(),inputs['input_ids'].min()))
+            #print('bb    {} {} {}'.format(input_bbs.size(),input_bbs.max(),input_bbs.min()))
             lm_out = self.layoutlm(**inputs,bbox=input_bbs).last_hidden_state[0] #get rid of batch dim
 
         else:

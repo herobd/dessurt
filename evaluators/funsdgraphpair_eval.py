@@ -57,7 +57,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
     imageName = instance['imgName']
     scale = instance['scale']
     target_num_neighbors = instance['num_neighbors']
-    if not trainer.model.detector.predNumNeighbors:
+    if not trainer.model.detector_predNumNeighbors:
         instance['num_neighbors']=None
 
 

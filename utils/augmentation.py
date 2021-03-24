@@ -16,6 +16,7 @@ def tensmeyer_brightness(img, foreground=0, background=0):
     if img.shape[2]==3:
         th = th[...,None]
 
+
     img = img.astype(np.float32)
     img = img + (1.0 - th) * foreground
     img = img + th * background
@@ -27,8 +28,12 @@ def tensmeyer_brightness(img, foreground=0, background=0):
 
 def apply_tensmeyer_brightness(img, sigma=20, **kwargs):
     random_state = np.random.RandomState(kwargs.get("random_seed", None))
-    foreground = random_state.normal(0,sigma)
-    background = random_state.normal(0,sigma)
+    if kwargs.get("better",False):
+        foreground = (random_state.beta(1.2,2)-0.1)*256/0.9
+        background = ((-random_state.beta(1.2,2))+0.1)*256/0.9
+    else:
+        foreground = random_state.normal(0,sigma)
+        background = random_state.normal(0,sigma)
     #print('fore {}, back {}'.format(foreground,background))
 
     img = tensmeyer_brightness(img, foreground, background)
