@@ -49,6 +49,9 @@ class GraphPairDataset(torch.utils.data.Dataset):
                     os.mkdir(self.cache_path)
         else:
             self.cache_resized = False
+        self.aug_params = config['additional_aug_params'] if 'additional_aug_params' in config else {}
+
+
         self.pixel_count_thresh = config['pixel_count_thresh'] if 'pixel_count_thresh' in config else 10000000
         self.max_dim_thresh = config['max_dim_thresh'] if 'max_dim_thresh' in config else 2700
 
@@ -193,9 +196,9 @@ class GraphPairDataset(torch.utils.data.Dataset):
             ##tic=timeit.default_timer()
             if np_img.shape[2]==3:
                 np_img = augmentation.apply_random_color_rotation(np_img)
-                np_img = augmentation.apply_tensmeyer_brightness(np_img)
+                np_img = augmentation.apply_tensmeyer_brightness(np_img,**self.aug_params)
             else:
-                np_img = augmentation.apply_tensmeyer_brightness(np_img)
+                np_img = augmentation.apply_tensmeyer_brightness(np_img,**self.aug_params)
             ##print('augmentation: {}'.format(timeit.default_timer()-tic))
         newGroups = []
         for group in groups:

@@ -1577,8 +1577,9 @@ class GraphPairTrainer(BaseTrainer):
                 gtTrans = instance['form_metadata']['word_trans']
             else:
                 gtTrans = instance['transcription']
-            if (gtTrans)==0:
-                gtTrans=None
+            #if (gtTrans)==0:
+            #    gtTrans=None
+            
         else:
             gtTrans = None
         #t#tic=timeit.default_timer()#t##t#
