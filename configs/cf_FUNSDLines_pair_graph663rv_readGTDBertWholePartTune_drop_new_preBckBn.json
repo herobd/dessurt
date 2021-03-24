@@ -1,5 +1,5 @@
 {
-    "name": "FUNSDLines_pair_graph663rv_readGTDBertWholePartTune_drop_new",
+    "name": "FUNSDLines_pair_graph663rv_readGTDBertWholePartTune_drop_new_preBckBn",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",

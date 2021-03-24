@@ -900,7 +900,7 @@ class PairingGroupingGraph(BaseModel):
                     bbTrans,
                     embeddings,
                     merge_first_only,
-                    zero_embeddings = self.training and not useGTBBs and self.no_text_during_no_gt>random.random())
+                    zero_embeddings = self.training and not useGTBBs and self.no_text_during_no_gt is not None and self.no_text_during_no_gt>random.random())
 
             return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final
 
