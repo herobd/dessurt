@@ -1,5 +1,5 @@
 {
-    "name": "FUNSDLines_pair_graph663rv_new",
+    "name": "FUNSDLines_pair_graphTree663rv_new",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",

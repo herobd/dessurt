@@ -91,7 +91,10 @@
         "slow_param_names": ["languagemodel.transformer.layer.5"],
         "slower_param_names": ["languagemodel.transformer.layer.4"],
 
-        "use_learning_schedule": true,
+        "use_learning_schedule": "multi_rise then ramp_to_swa",
+        "ramp_down_steps": 10000,
+        "warmup_steps": [1000],
+        "swa_lr_mul": 0.1,
         "adapt_lr": false,
 
         "use_gt_trans": true
