@@ -1,5 +1,5 @@
 {
-    "name": "FUNSDLines_pair_graph77rv_ablate",
+    "name": "FUNSDLines_pair_graph663rv_readGTDBertWholePartTune_drop_new_preBckBn",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -83,6 +83,12 @@
         "max_use_pred": 0.5,
         "use_all_bb_pred_for_rel_loss": true,
 
+	"freeze_param_names": ["text_rec","languagemodel.transformer.layer.0","languagemodel.transformer.layer.1","languagemodel.transformer.layer.2"],
+	"slow_param_names": ["languagemodel.transformer.layer.4"],
+        "slower_param_names": ["languagemodel.transformer.layer.3"],
+
+        "use_gt_trans": true,
+
         "use_learning_schedule": "multi_rise then ramp_to_swa",
 "ramp_down_steps": 10000,
         "warmup_steps": [1000],
@@ -91,7 +97,25 @@
     },
     "arch": "PairingGroupingGraph", 
     "model": {
-        "detector_checkpoint": "saved/FUNSDLines_detect_augR_staggerLighter/checkpoint-iteration250000.pth",
+        "detector_config": {
+                "arch": "YoloBoxDetector",
+                "color":false,
+                "pred_num_neighbors": true,
+                "number_of_box_types": 4,
+                "number_of_point_types": 0,
+                "number_of_pixel_types": 0,
+                "norm_type": "group_norm",
+                "dropout": true,
+                "down_layers_cfg": [1,"k5-32", "M",
+                                        64, 64,  "M",
+                                        "hd2-128", "vd1-128", "hd4-128", 128,  "M",
+                                        "hd4-128", "vd1-128", "hd8-128", 128,  "M",
+                                        "hd8-256","vd2-256","hd16-256",256, 256],
+                "up_layers_cfg":[],
+                "anchors_file": "FUNSDLines_anchors_noRot_25.json",
+                "rotation":false
+            },
+        "pretrained_backbone_checkpoint": "saved/FUNSDLines_pair_graph663rvCon4_smallContext_prop_readGTDBert/checkpoint-iteration700000.pth",
         "detect_conf_thresh": 0.5,
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
@@ -125,12 +149,12 @@
         "fix_bi_dir": true,
         "reintroduce_visual_features": "fixed map",
         "graph_config": [
-        {
+	    {
             "arch": "MetaGraphNet",
-            "in_channels": 256,
+            "in_channels": 512,
             "node_out": 5,
             "edge_out": 5,
-            "num_layers": 7,
+            "num_layers": 6,
             "num_heads": 4,
             "repetitions": 1,
             "use_repetition_res": false,
@@ -139,15 +163,32 @@
             "node_att_thinker": "cat",
             "att_mod": "fixed",
             "merge_thresh": 0.8,
+            "group_thresh": 0.95,
+            "keep_edge_thresh": 0.1
+        },
+        {
+            "arch": "MetaGraphNet",
+            "in_channels": 512,
+            "node_out": 5,
+            "edge_out": 5,
+            "num_layers": 6,
+            "num_heads": 4,
+            "repetitions": 1,
+            "use_repetition_res": false,
+            "encode_type": "attention",
+            "better_norm_attention": true,
+            "node_att_thinker": "cat",
+            "att_mod": "fixed",
+            "merge_thresh": 0.9,
             "group_thresh": 0.9,
             "keep_edge_thresh": 0.1
         },
         {
             "arch": "MetaGraphNet",
-            "in_channels": 256,
+            "in_channels": 512,
             "node_out": 5,
             "edge_out": 5,
-            "num_layers": 7,
+            "num_layers": 3,
             "num_heads": 4,
             "repetitions": 1,
             "use_repetition_res": false,
@@ -159,6 +200,23 @@
             "group_thresh": 0.6,
             "keep_edge_thresh": 0.5
         }
-        ]
+        ],
+
+	"blind_during_gt": 0.5,
+	"no_text_during_no_gt": 0.5,
+
+        "text_rec": {
+            "model": "SmallCRNN",
+            "num_char": 131,
+            "norm": "batch",
+            "use_softmax": true,
+            "batch_size": 8,
+            "pad_text_height": true,
+            "hw_with_style_file": "saved/allfontSmall_ocr_softmax/checkpoint-latest.pth",
+            "input_height": 24,
+            "char_set": "../data/english_char_set.json",
+            "embedding": "DistilBertWhole",
+            "num_feats": 256
+        }
     }
 }

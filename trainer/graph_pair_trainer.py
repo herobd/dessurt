@@ -165,6 +165,8 @@ class GraphPairTrainer(BaseTrainer):
             self.characterization_form=defaultdict(list)
             self.characterization_hist=defaultdict(list)
 
+        self.model_ref.used_threshConf=0.5
+
     def _to_tensor(self, instance):
         image = instance['img']
         bbs = instance['bb_gt']
@@ -385,7 +387,7 @@ class GraphPairTrainer(BaseTrainer):
 
         with torch.no_grad():
             for batch_idx, instance in enumerate(self.valid_data_loader):
-                if not self.model_ref.detector.predNumNeighbors:
+                if not self.model_ref.detector_predNumNeighbors:
                     instance['num_neighbors']=None
                 if not self.logged:
                     print('iter:{} valid batch: {}/{}'.format(self.iteration,batch_idx,len(self.valid_data_loader)), end='\r')
@@ -1496,7 +1498,7 @@ class GraphPairTrainer(BaseTrainer):
                 log['class loss improvement (neg is good)'] = losses['classFinalLoss'].item()-class_loss
 
         if 'bb_stats' in get:
-            if self.model_ref.detector.predNumNeighbors:
+            if self.model_ref.detector_predNumNeighbors:
                 outputBoxes=torch.cat((outputBoxes[:,0:6],outputBoxes[:,7:]),dim=1) #throw away NN pred
             if targetBoxes is not None:
                 targetBoxes = targetBoxes.cpu()
@@ -1575,8 +1577,9 @@ class GraphPairTrainer(BaseTrainer):
                 gtTrans = instance['form_metadata']['word_trans']
             else:
                 gtTrans = instance['transcription']
-            if (gtTrans)==0:
-                gtTrans=None
+            #if (gtTrans)==0:
+            #    gtTrans=None
+            
         else:
             gtTrans = None
         #t#tic=timeit.default_timer()#t##t#
