@@ -1,5 +1,5 @@
 {
-    "name": "NAFBlank_pair_os98k_graph663rv_new_preBckBn",
+    "name": "NAFblank_pair_os100k2_graph663rv_new_preBckBn",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -95,7 +95,6 @@
         "partial_from_gt": 0,
         "stop_from_gt": 2,
         "max_use_pred": 0.5,
-        "use_word_bbs_gt": 0.5,
         "use_all_bb_pred_for_rel_loss": true,
 
         "use_learning_schedule": "multi_rise then ramp_to_swa",
