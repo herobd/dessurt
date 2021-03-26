@@ -4188,7 +4188,7 @@ class PairingGroupingGraph(BaseModel):
                     keep_edges=keep_edges,
                     gt_groups=gtGroups if gIter==0 else ([[g] for g in range(len(groups))] if gtGroups is not None else None))
             if zero_embeddings:
-                embeddings.zero_()
+                embeddings=embeddings.new_zeros(embeddings.size())
 
 
             if self.reintroduce_features:
