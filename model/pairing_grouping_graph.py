@@ -4089,7 +4089,7 @@ class PairingGroupingGraph(BaseModel):
                 if not self.useCurvedBBs and self.detector_predNumNeighbors:
                     #Discard NN prediction. We don't use it anymore
                     allOutputBoxes = [ torch.cat([outBs[:,:6],outBs[:,7:]],dim=1) for outBs in allOutputBoxes]
-                return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, None, merge_prop_scores, None
+                return allOutputBoxes, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, None, merge_prop_scores, None
 
             if bbTrans is not None:
                 if gtTrans is not None:

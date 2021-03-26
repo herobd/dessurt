@@ -1611,7 +1611,7 @@ class GraphPairTrainer(BaseTrainer):
                         targetBoxes_changed[:,:,3][targetBoxes_changed[:,:,3]<1]=1
                         targetBoxes_changed[:,:,4][targetBoxes_changed[:,:,4]<1]=1
 
-            elif self.model_ref.useCurvedBBs:# and 'only_space' not in useGT:#not useOnlyGTSpace:
+            elif self.model_ref.useCurvedBBs and targetBoxes is not None:# and 'only_space' not in useGT:#not useOnlyGTSpace:
                 #build targets of GT to pass as detections
                 ph_boxes = [torch.zeros(1,1,1,1,1)]*3
                 ph_cls = [torch.zeros(1,1,1,1,1)]*3
