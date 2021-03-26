@@ -16,7 +16,7 @@ def display(data):
 
     #print (data['img'].size())
     #img = (data['img'][0].permute(1,2,0)+1)/2.0
-    img = (data['img'][b].permute(1,2,0)+1)/2.0
+    img = (1-data['img'][b].permute(1,2,0))/2.0
     #print(img.shape)
     #print(data['pixel_gt']['table_pixels'].shape)
     print(data['imgName'])
@@ -31,7 +31,7 @@ def display(data):
 
     ax_im = plt.subplot()
     ax_im.set_axis_off()
-    ax_im.imshow(img[:,:,0])
+    ax_im.imshow(img[:,:,0],cmap='gray')
 
     colors = {  'text_start_gt':'g-',
                 'text_end_gt':'b-',
@@ -125,7 +125,6 @@ if __name__ == "__main__":
     data=FUNSDGraphPair(dirPath=dirPath,split='train',config={
         'color':False,
         'rescale_range':[0.8,1.2],
-        '#rescale_range':[0.4,0.65],
         'crop_params':{
             "crop_size":[1000,700],
             "pad":70,

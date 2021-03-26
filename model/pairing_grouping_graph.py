@@ -106,6 +106,7 @@ class PairingGroupingGraph(BaseModel):
         super(PairingGroupingGraph, self).__init__(config)
         self.useCurvedBBs=False
         self.legacy= 'legacy' in config and config['legacy']
+        self.legacy_read= 'legacy_read' in config and config['legacy_read']
 
         if 'detector_checkpoint' in config:
             if os.path.exists(config['detector_checkpoint']):
@@ -279,13 +280,17 @@ class PairingGroupingGraph(BaseModel):
                 graph_in_channels = config['graph_config'][0]['in_channels'] if 'in_channels' in config['graph_config'][0] else 1
             else:
                 graph_in_channels = config['graph_config']['in_channels'] if 'in_channels' in config['graph_config'] else 1
-            self.merge_embedding_layer = nn.Sequential(nn.ReLU(True),nn.Linear(graph_in_channels+self.numTextFeats,graph_in_channels))
+
+            if self.legacy_read:
+                self.merge_embedding_layer = nn.Sequential(nn.ReLU(True),nn.Linear(graph_in_channels+self.numTextFeats,graph_in_channels))
         else:
             self.text_rec=None
             self.numTextFeats = 0
 
 
         self.add_noise_to_word_embeddings = config['add_noise_to_word_embeddings'] if 'add_noise_to_word_embeddings' in config else 0
+        self.blind_during_gt = config['blind_during_gt'] if 'blind_during_gt' in config else None
+        self.no_text_during_no_gt = config['no_text_during_no_gt'] if 'no_text_during_no_gt' in config else None
 
         self.buildNet(config,detectorSavedFeatSize,detectorSavedFeatSize2,detect_save_scale,detect_save2_scale)
     
@@ -328,20 +333,22 @@ class PairingGroupingGraph(BaseModel):
         self.useShapeFeats= config['use_shape_feats'] if 'use_shape_feats' in config else False
 
         if self.useShapeFeats!='only':
-            self.pool_h = config['featurizer_start_h']
-            self.pool_w = config['featurizer_start_w']
+            if self.useShapeFeats!='only for edge':
+                self.pool_h = config['featurizer_start_h']
+                self.pool_w = config['featurizer_start_w']
+                self.pool2_h=self.pool_h
+                self.pool2_w=self.pool_w
+
             self.poolBB_h = config['featurizer_bb_start_h'] if 'featurizer_bb_start_h' in config else 2
             self.poolBB_w = config['featurizer_bb_start_w'] if 'featurizer_bb_start_w' in config else 3
 
-            self.pool2_h=self.pool_h
-            self.pool2_w=self.pool_w
             self.poolBB2_h=self.poolBB_h
             self.poolBB2_w=self.poolBB_w
 
         self.merge_pool_h = self.merge_pool2_h = config['merge_featurizer_start_h'] if 'merge_featurizer_start_h' in config else None
         self.merge_pool_w = self.merge_pool2_w = config['merge_featurizer_start_w'] if 'merge_featurizer_start_w' in config else None
 
-        self.reintroduce_visual_features = config['reintroduce_visual_features'] if 'reintroduce_visual_features' in config else False #"fixed map"
+        self.reintroduce_features = config['reintroduce_features'] if 'reintroduce_features' in config else  (config['reintroduce_visual_features'] if 'reintroduce_visual_features' in config else False) #"fixed map"
 
         self.splitFeatures= config['split_features_scale'] if 'split_features_scale' in config else False
 
@@ -385,15 +392,9 @@ class PairingGroupingGraph(BaseModel):
             config['graph_config']['num_shape_feats']=self.numShapeFeats
         featurizer_fc = config['featurizer_fc'] if 'featurizer_fc' in config else []
         if self.useShapeFeats!='only':
-
-            self.expandedRelContext = config['expand_rel_context'] if 'expand_rel_context' in config else None
             if self.merge_first:
                 self.expandedMergeContextY,self.expandedMergeContextX = config['expand_merge_context']
 
-            if self.expandedRelContext is not None:
-                bbMasks=3
-            else:
-                bbMasks=2
             self.expandedBBContext = config['expand_bb_context'] if 'expand_bb_context' in config else None
             if self.expandedBBContext is not None:
                 bbMasks_bb=2
@@ -403,13 +404,41 @@ class PairingGroupingGraph(BaseModel):
             self.splitFeatureRes = config['split_feature_res'] if 'split_feature_res' in config else False
 
             feat_norm = config['feat_norm'] if 'feat_norm' in config else 'group_norm' #detector_config['norm_type'] #if 'norm_type' in detector_config else None
-            featurizer_conv = config['featurizer_conv'] if 'featurizer_conv' in config else [512,'M',512]
-            if self.splitFeatures:
-                featurizer_conv2 = config['featurizer_conv_first'] if 'featurizer_conv_first' in config else None
-                featurizer_conv2 = [backboneSavedFeatSize2+bbMasks] + featurizer_conv2 #bbMasks are appended
+            if self.useShapeFeats!='only for edge':
+                self.expandedRelContext = config['expand_rel_context'] if 'expand_rel_context' in config else None
+                if self.expandedRelContext is not None:
+                    bbMasks=3
+                else:
+                    bbMasks=2
+                featurizer_conv = config['featurizer_conv'] if 'featurizer_conv' in config else [512,'M',512]
+                if self.splitFeatures:
+                    featurizer_conv2 = config['featurizer_conv_first'] if 'featurizer_conv_first' in config else None
+                    featurizer_conv2 = [backboneSavedFeatSize2+bbMasks] + featurizer_conv2 #bbMasks are appended
+                    scaleX=1
+                    scaleY=1
+                    for a in featurizer_conv2:
+                        if a=='M' or (type(a) is str and a[0]=='D'):
+                            scaleX*=2
+                            scaleY*=2
+                        elif type(a) is str and a[0]=='U':
+                            scaleX/=2
+                            scaleY/=2
+                        elif type(a) is str and a[0:4]=='long': #long pool
+                            scaleX*=3
+                            scaleY*=2
+                    assert(scaleX==scaleY)
+                    splitScaleDiff=scaleX
+                    self.pool_h = self.pool_h//splitScaleDiff
+                    self.pool_w = self.pool_w//splitScaleDiff
+                    layers, last_ch_relC = make_layers(featurizer_conv2,norm=feat_norm,dropout=True)
+                    self.relFeaturizerConv2 = nn.Sequential(*layers)
+
+                    featurizer_conv = [backboneSavedFeatSize+last_ch_relC] + featurizer_conv
+                else:
+                    featurizer_conv = [backboneSavedFeatSize+bbMasks] + featurizer_conv #bbMasks are appended
                 scaleX=1
                 scaleY=1
-                for a in featurizer_conv2:
+                for a in featurizer_conv:
                     if a=='M' or (type(a) is str and a[0]=='D'):
                         scaleX*=2
                         scaleY*=2
@@ -419,48 +448,35 @@ class PairingGroupingGraph(BaseModel):
                     elif type(a) is str and a[0:4]=='long': #long pool
                         scaleX*=3
                         scaleY*=2
-                assert(scaleX==scaleY)
-                splitScaleDiff=scaleX
-                self.pool_h = self.pool_h//splitScaleDiff
-                self.pool_w = self.pool_w//splitScaleDiff
-                layers, last_ch_relC = make_layers(featurizer_conv2,norm=feat_norm,dropout=True)
-                self.relFeaturizerConv2 = nn.Sequential(*layers)
+                #self.scale=(scaleX,scaleY) this holds scale for detector
+                fsizeX = self.pool_w//scaleX
+                fsizeY = self.pool_h//scaleY
+                if 'featurizer_conv_auto' in config and config['featurizer_conv_auto']:
+                    featurizer_conv.append(graph_in_channels-self.numShapeFeats)
+                    assert featurizer_fc is None
+                layers, last_ch_relC = make_layers(featurizer_conv,norm=feat_norm,dropout=True) 
+                if featurizer_fc is None: #we don't have a FC layer, so channels need to be the same as graph model expects
+                    if last_ch_relC+self.numShapeFeats!=graph_in_channels:
+                        new_layer = [last_ch_relC,'k1-{}'.format(graph_in_channels-self.numShapeFeats)]
+                        print('WARNING: featurizer_conv did not line up with graph_in_channels, adding layer k1-{}'.format(graph_in_channels-self.numShapeFeats))
+                        #new_layer = last_ch_relC,'C3-{}'.format(graph_in_channels-self.numShapeFeats)]
+                        new_layer, last_ch_relC = make_layers(new_layer,norm=feat_norm,dropout=True) 
+                        layers+=new_layer
+                layers.append( nn.AvgPool2d((fsizeY,fsizeX)) )
+                self.relFeaturizerConv = nn.Sequential(*layers)
+                rel_featurizer_conv_last = last_ch_relC
 
-                featurizer_conv = [backboneSavedFeatSize+last_ch_relC] + featurizer_conv
+                #self.roi_align = RoIAlign(self.pool_h,self.pool_w,1.0/backbone_save_scale) Facebook implementation
+                self.roi_align = RoIAlign((self.pool_h,self.pool_w),1.0/backbone_save_scale,-1)
+                if self.use2ndFeatures:
+                    #self.roi_align2 = RoIAlign(self.pool2_h,self.pool2_w,1.0/backbone_save2_scale)
+                    self.roi_align2 = RoIAlign((self.pool2_h,self.pool2_w),1.0/backbone_save2_scale,-1)
+                else:
+                    last_ch_relC=0
             else:
-                featurizer_conv = [backboneSavedFeatSize+bbMasks] + featurizer_conv #bbMasks are appended
-            scaleX=1
-            scaleY=1
-            for a in featurizer_conv:
-                if a=='M' or (type(a) is str and a[0]=='D'):
-                    scaleX*=2
-                    scaleY*=2
-                elif type(a) is str and a[0]=='U':
-                    scaleX/=2
-                    scaleY/=2
-                elif type(a) is str and a[0:4]=='long': #long pool
-                    scaleX*=3
-                    scaleY*=2
-            #self.scale=(scaleX,scaleY) this holds scale for detector
-            fsizeX = self.pool_w//scaleX
-            fsizeY = self.pool_h//scaleY
-            if 'featurizer_conv_auto' in config and config['featurizer_conv_auto']:
-                featurizer_conv.append(graph_in_channels-self.numShapeFeats)
-                assert featurizer_fc is None
-            layers, last_ch_relC = make_layers(featurizer_conv,norm=feat_norm,dropout=True) 
-            if featurizer_fc is None: #we don't have a FC layer, so channels need to be the same as graph model expects
-                if last_ch_relC+self.numShapeFeats!=graph_in_channels:
-                    new_layer = [last_ch_relC,'k1-{}'.format(graph_in_channels-self.numShapeFeats)]
-                    print('WARNING: featurizer_conv did not line up with graph_in_channels, adding layer k1-{}'.format(graph_in_channels-self.numShapeFeats))
-                    #new_layer = last_ch_relC,'C3-{}'.format(graph_in_channels-self.numShapeFeats)]
-                    new_layer, last_ch_relC = make_layers(new_layer,norm=feat_norm,dropout=True) 
-                    layers+=new_layer
-            layers.append( nn.AvgPool2d((fsizeY,fsizeX)) )
-            self.relFeaturizerConv = nn.Sequential(*layers)
-            rel_featurizer_conv_last = last_ch_relC
-
-            #self.roi_align = RoIAlign(self.pool_h,self.pool_w,1.0/backbone_save_scale) Facebook implementation
-            self.roi_align = RoIAlign((self.pool_h,self.pool_w),1.0/backbone_save_scale,-1)
+                rel_featurizer_conv_last = 0
+                last_ch_relC=0
+                self.expandedRelContext=None
         else:
             rel_featurizer_conv_last = 0
 
@@ -497,7 +513,7 @@ class PairingGroupingGraph(BaseModel):
             self.mergeFeaturizerConv = nn.Sequential(*layers)
             if 'merge_pred_net' in config:
                 merge_pred_desc = config['merge_pred_net']#TODO
-                if self.reintroduce_visual_features=='map':
+                if self.reintroduce_features=='map':
                     merge_pred_desc = [last_ch_relC+self.numShapeFeats]+merge_pred_desc+['FCnR1']
                 else:
                     merge_pred_desc = [last_ch_relC+self.numShapeFeats,'ReLU']+merge_pred_desc+['FCnR1']
@@ -510,16 +526,10 @@ class PairingGroupingGraph(BaseModel):
                         nn.ReLU(True),
                         nn.Linear(last_ch_relC+self.numShapeFeats,1)
                         ]
-                if self.reintroduce_visual_features!='map':
+                if self.reintroduce_features!='map':
                     layers = [nn.ReLU(True)]+layers
                 self.mergepred = nn.Sequential(*layers)
 
-        if self.use2ndFeatures:
-            #self.roi_align2 = RoIAlign(self.pool2_h,self.pool2_w,1.0/backbone_save2_scale)
-            self.roi_align2 = RoIAlign((self.pool2_h,self.pool2_w),1.0/backbone_save2_scale,-1)
-        else:
-            last_ch_relC=0
-        if self.merge_first:
             self.merge_roi_align = RoIAlign((self.merge_pool_h,self.merge_pool_w),1.0/backbone_save_scale,-1)
             if self.use2ndFeatures:
                 self.merge_roi_align2 = RoIAlign((self.merge_pool2_h,self.merge_pool2_w),1.0/backbone_save2_scale,-1)
@@ -530,7 +540,7 @@ class PairingGroupingGraph(BaseModel):
         feat_norm_fc = 'group_norm'
 
         if featurizer_fc is not None:
-            if type(self.reintroduce_visual_features) is str and 'map' in self.reintroduce_visual_features:
+            if type(self.reintroduce_features) is str and 'map' in self.reintroduce_features:
                 featurizer_fc = [rel_featurizer_conv_last+self.numShapeFeats] + featurizer_fc + ['FC{}'.format(graph_in_channels)]
             else:
                 featurizer_fc = [rel_featurizer_conv_last+self.numShapeFeats] + featurizer_fc + ['FCnR{}'.format(graph_in_channels)]
@@ -582,7 +592,7 @@ class PairingGroupingGraph(BaseModel):
                     else:
                         featurizer_conv = [backboneSavedFeatSize+bbMasks_bb] + featurizer
                     if featurizer_fc is None:
-                        if type(self.reintroduce_visual_features) is str and 'map' in self.reintroduce_visual_features:
+                        if type(self.reintroduce_features) is str and 'map' in self.reintroduce_features:
                             featurizer_conv += [convOut]
                         else:
                             featurizer_conv += ['C3-{}'.format(convOut)]
@@ -615,7 +625,7 @@ class PairingGroupingGraph(BaseModel):
             else:
                 featurizer_fc = [self.numShapeFeatsBB+self.numTextFeats]+featurizer_fc
             if featurizer_fc is not None:
-                if type(self.reintroduce_visual_features) is str and 'map' in self.reintroduce_visual_features:
+                if type(self.reintroduce_features) is str and 'map' in self.reintroduce_features:
                     featurizer_fc = featurizer_fc + ['FC{}'.format(graph_in_channels)] #the noRelu is handeled in remap
                 else:
                     featurizer_fc = featurizer_fc + ['FCnR{}'.format(graph_in_channels)]
@@ -646,7 +656,7 @@ class PairingGroupingGraph(BaseModel):
                 self.keepEdgeThresh.append(graphconfig['keep_edge_thresh'] if 'keep_edge_thresh' in graphconfig else 0.4)
             self.pairer = None
 
-            if type(self.reintroduce_visual_features) is str and 'map' in self.reintroduce_visual_features:
+            if type(self.reintroduce_features) is str and 'map' in self.reintroduce_features:
                 self.reintroduce_node_visual_maps = nn.ModuleList()
                 self.reintroduce_edge_visual_maps = nn.ModuleList()
                 self.reintroduce_node_visual_maps.append(nn.Linear(graph_in_channels,graph_in_channels))
@@ -654,7 +664,7 @@ class PairingGroupingGraph(BaseModel):
                 for i in range(len(self.graphnets)-1):
                     self.reintroduce_node_visual_maps.append(nn.Linear(graph_in_channels*2,graph_in_channels))
                     self.reintroduce_edge_visual_maps.append(nn.Linear(graph_in_channels*2,graph_in_channels))
-                if 'fixed' in self.reintroduce_visual_features:
+                if 'fixed' in self.reintroduce_features:
                     self.reintroduce_node_visual_activations =nn.ModuleList()
                     self.reintroduce_node_visual_activations.append(None)
                     self.reintroduce_edge_visual_activations =nn.ModuleList()
@@ -824,138 +834,18 @@ class PairingGroupingGraph(BaseModel):
 
 
         if useGTBBs and  gtBBs is not None:
-            #We'll correct the box predictions using the GT BBs, but no class/other GT
-            useBBs = []
-            gtBBs=gtBBs[0]
-
-
-            #perform greedy alignment of gt and predicted. Only keep aligned predictions
-            if not bbPredictions.is_cuda:
-                gtBBs=gtBBs.cpu()
-            if 'word_bbs' in useGTBBs or self.useCurvedBBs:
-                ious = allIO_clipU(gtBBs,bbPredictions[:,1:],x1y1x2y2=self.useCurvedBBs) #iou calculation, words are oversegmented lines
-            else:
-                ious = allIOU(gtBBs,bbPredictions[:,1:],x1y1x2y2=self.useCurvedBBs) #iou calculation
-            #if self.useCurvedBBs:
-            #    ious = allIO_clipU(
-            #else:
-            #    ious = allIOU(gtBBs,bbPredictions[:,1:])
-            #ious[ious<0.3]=0
-            ious=ious.cpu()
-            bbPredictions=bbPredictions.cpu()
-            gtBBs=gtBBs.cpu()
-            #sort, do highest ious first
-            gt_used = [False]*gtBBs.size(0)
-            num_gt_used = 0
-            pred_used = [False]*bbPredictions.size(0)
-            num_pred_used = 0
-            ious_list = [(ious[gt_i,p_i],gt_i,p_i) for gt_i,p_i in ious.triu(1).nonzero(as_tuple=False)]
-            ious=None
-            ious_list.sort(key=lambda a:a[0], reverse=True)
-            gt_parts=defaultdict(list)
-            gt_to_new = {}
-            for iou,gt_i,p_i in ious_list:
-                gt_i=gt_i.item()
-                if self.useCurvedBBs:
-                    gt_used[gt_i]=True
-                    gt_parts[gt_i].append((iou,bbPredictions[p_i,0:1],bbPredictions[p_i,6:]))
-                elif not gt_used[gt_i] and not pred_used[p_i]:
-                    gt_to_new[gt_i]=len(useBBs)
-                    useBBs.append(torch.cat((bbPredictions[p_i,0:1],gtBBs[gt_i,0:5],bbPredictions[p_i,6:]), dim=0))
-                    num_gt_used+=1
-                    if num_gt_used>=gtBBs.size(0):
-                        break
-                    gt_used[gt_i]=True
-
-                    if not pred_used[p_i]:
-                        num_pred_used+=1
-                        if num_pred_used>=bbPredictions.size(0) and not self.useCurvedBBs:
-                            break
-                        pred_used[p_i]=True
-            ious_list=None
-
-            if self.useCurvedBBs:
-                for gt_i,parts in gt_parts.items():
-                    ious,confs,clses = zip(*parts)
-                    ious = torch.FloatTensor(ious)
-                    confs = torch.cat(confs)
-                    clses = torch.stack(clses,dim=0)
-                    total_iou = ious.sum()
-                    conf = (confs*ious).sum()/total_iou
-                    cls = (clses*ious[:,None]).sum(dim=0)/total_iou
-                    gt_to_new[gt_i]=len(useBBs)
-                    useBBs.append(torch.cat((conf[None],gtBBs[gt_i,0:5],cls),dim=0))
-
-
-            #Add any undetected boxes.
-            for gt_i,used in enumerate(gt_used):
-                if not used:
-                    conf = torch.FloatTensor([1])
-                    cls = torch.FloatTensor(self.numBBTypes+(1 if self.detector_predNumNeighbors else 0)).fill_(0.5)
-                    gt_to_new[gt_i]=len(useBBs)
-                    useBBs.append(torch.cat((conf,gtBBs[gt_i,0:5],cls),dim=0))
-
-            if gtGroups is not None:
-                gtGroups = [[gt_to_new[gt_i] for gt_i in group] for group in gtGroups]
-
-            useBBs = torch.stack(useBBs,dim=0).to(saved_features.device)
-            assert self.training or useBBs.size(0) == gtBBs.size(0)
-            assert self.include_bb_conf or self.useCurvedBBs
-            #if self.useCurvedBBs and self.use_overseg_non_max_sup:
-            #    useBBs = non_max_sup_overseg(useBBs)
-            gtBBs=gtBBs[None,...]
+            useBBs, gtBBs, gtGroups, gt_to_new = self.alignGTBBs(useGTBBs,gtBBs,gtGroups,bbPredictions)
+            if self.training and self.blind_during_gt is not None and self.blind_during_gt>random.random():
+                saved_features = saved_features.new_zeros(saved_features.size())
+                if saved_features2 is not None:
+                    saved_features2 = saved_features2.new_zeros(saved_features2.size())
         else:
-
-
             if bbPredictions.size(0)==0:
                 return [bbPredictions], offsetPredictions, None, None, None, None, None, None, (None,None,None,None)
             if self.include_bb_conf or self.useCurvedBBs: 
                 useBBs = bbPredictions
             else:
                 useBBs = bbPredictions[:,1:] #remove confidence score
-        #elif useGTBBs=='saved':
-        #    if self.include_bb_conf or self.useCurvedBBs:
-        #        useBBs = gtBBs
-        #    else:
-        #        useBBs = gtBBs[:,1:]
-        #else:
-        #    #if gtBBs is None:
-        #    #    if self.text_rec is not None:
-        #    #        transcriptions = self.getTranscriptions(useBBs,image)
-        #    #    else:
-        #    #        transcriptions=None
-        #    #    return [bbPredictions], offsetPredictions, None, None, None, None, None, (useBBs.cpu().detach(),None,None,transcriptions)
-        #    if self.useCurvedBBs:
-        #        #useBBs = gtBBs[0,gtBBs[0,:,0]>0.5] #get rid of batch channel and select true boxes (by conf)
-        #        useBBs = gtBBs[0]
-        #    else:
-        #        useBBs = gtBBs[0,:,0:5]
-        #    if self.useShapeFeats or self.relationshipProposal=='feature_nn':
-        #        if self.useCurvedBBs:
-        #            classes = gtBBs[0,gtBBs[0,:,0]>0.5,6:]
-        #            classes += torch.rand_like(classes)*0.42 -0.2
-        #        else:
-        #            classes = gtBBs[0,:,13:]
-        #            #pos = random.uniform(0.51,0.99)
-        #            #neg = random.uniform(0.01,0.49)
-        #            #classes = torch.where(classes==0,torch.tensor(neg).to(classes.device),torch.tensor(pos).to(classes.device))
-        #            pos = torch.rand_like(classes)/2 +0.5
-        #            neg = torch.rand_like(classes)/2
-        #            classes = torch.where(classes==0,neg,pos)
-        #            if self.detector.predNumNeighbors:
-        #                nns = gtNNs.float()[0,:,None]
-        #                #nns += torch.rand_like(nns)/1.5
-        #                nns += (2*torch.rand_like(nns)-1)
-        #                useBBs = torch.cat((useBBs,nns,classes),dim=1)
-        #            else:
-        #                useBBs = torch.cat((useBBs,classes),dim=1)
-        #    if self.include_bb_conf:
-        #        if self.useCurvedBBs:
-        #            useBBs[:,0]+=torch.rand(useBBs.size(0)).to(useBBs.device)*0.45 - 0.2
-        #        else:
-        #            #fake some confifence values
-        #            conf = torch.rand(useBBs.size(0),1)*0.33 +0.66
-        #            useBBs = torch.cat((conf.to(useBBs.device),useBBs),dim=1)
 
         useBBs=useBBs.detach()
         #if useGTBBs and self.useCurvedBBs:
@@ -1009,7 +899,8 @@ class PairingGroupingGraph(BaseModel):
                     saved_features2,
                     bbTrans,
                     embeddings,
-                    merge_first_only)
+                    merge_first_only,
+                    zero_embeddings = self.training and not useGTBBs and self.no_text_during_no_gt is not None and self.no_text_during_no_gt>random.random())
 
             return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final
 
@@ -1053,8 +944,8 @@ class PairingGroupingGraph(BaseModel):
             node_visual_feats[new_id] = prev_node_visual_feats[old_id]
 
         if not all(has_feat):
-            assert (text_emb is not None) == (self.text_rec is not None)
-            if self.text_rec is not None:    
+            #assert (text_emb is not None) == (self.text_rec is not None)
+            if text_emb is not None: #self.text_rec is not None:    
                 need_new_ids,need_groups,need_text_emb = zip(* [(i,g,t) for i,(has,g,t) in enumerate(zip(has_feat,groups,text_emb)) if not has])
                 need_text_emb = torch.stack(need_text_emb,dim=0)
             else:
@@ -1097,7 +988,7 @@ class PairingGroupingGraph(BaseModel):
 
         #for now, we'll just sum the features.
         #new_graph = (torch.cat((node_features,node_visual_feats),dim=1),edge_indexes,torch.cat((edge_features,edge_visual_feats),dim=1),universal_features)
-        if self.reintroduce_visual_features=='fixed map':
+        if self.reintroduce_features=='fixed map':
             node_features_old=self.reintroduce_node_visual_activations[giter](node_features)
             edge_features_old=self.reintroduce_edge_visual_activations[giter](edge_features)
             cat_node_f = torch.cat((node_features_old,node_visual_feats),dim=1)
@@ -1114,7 +1005,7 @@ class PairingGroupingGraph(BaseModel):
                 #assert(edge_features.size(0)==0 or edge_features.max()<900)
             #assert(node_features.max()<900)
             
-        elif self.reintroduce_visual_features=='map':
+        elif self.reintroduce_features=='map':
             node_features_old=node_features
             edge_features_old=edge_features
             cat_node_f = torch.cat((node_features_old,node_visual_feats),dim=1)
@@ -1253,6 +1144,7 @@ class PairingGroupingGraph(BaseModel):
             oldUniversalFeats,
             oldBBs,
             oldBBTrans,
+            old_text_emb,
             image,
             skip_rec=False,
             merge_only=False,
@@ -1272,7 +1164,7 @@ class PairingGroupingGraph(BaseModel):
         if self.text_rec is not None and oldBBTrans is not None:
             bbTrans={i:v for i,v  in enumerate(oldBBTrans)}
         else:
-            bbTrans={}
+            bbTrans=None
         oldToNewBBIndexes={i:i for i in range(len(oldBBs))}
         #newBBs_line={}
         newBBIdCounter=0
@@ -1348,7 +1240,7 @@ class PairingGroupingGraph(BaseModel):
                         oldToNewBBIndexes = {k:(v if v!=newId1 else newId0) for k,v in oldToNewBBIndexes.items()}
                         del bbs[newId1]
                         #if self.text_rec is not None and not skip_rec:
-                        if oldBBTrans is not None:
+                        if bbTrans is not None:
                             del bbTrans[newId1]
                         mergedTo.add(newId0)
                         self.merges_performed+=1
@@ -1540,6 +1432,10 @@ class PairingGroupingGraph(BaseModel):
             newNodeFeats = torch.FloatTensor(len(workGroups),oldNodeFeats.size(1)).to(oldNodeFeats.device)
         else:
             newNodeFeats = None
+        if old_text_emb is not None and self.text_rec is None:
+            new_text_emb = torch.FloatTensor(len(workGroups),old_text_emb.size(1)).to(old_text_emb.device)
+        else:
+            new_text_emb = None
         oldToNewNodeIds_unchanged={}
         oldToNewIds_all={}
         newGroups=[]
@@ -1547,20 +1443,29 @@ class PairingGroupingGraph(BaseModel):
         for i,(idx,bbIds) in enumerate(workGroups.items()):
             newGroups.append([bbIdToPos[bbId] for bbId in bbIds])
             featsToCombine=[]
+            embeddings_to_combine=[]
             for oldNodeIdx in newGroupToOldGrouping[idx]:
                 oldToNewIds_all[oldNodeIdx]=i
                 featsToCombine.append(oldNodeFeats[oldNodeIdx] if oldNodeFeats is not None else None)
+                embeddings_to_combine.append(old_text_emb[oldNodeIdx] if old_text_emb is not None else None)
                 if oldNodeIdx in newGroupToOldMerge:
                     for mergedIdx in newGroupToOldMerge[oldNodeIdx]:
                         featsToCombine.append(oldNodeFeats[mergedIdx] if oldNodeFeats is not None else None)
+                        embeddings_to_combine.append(old_text_emb[mergedIdx] if old_text_emb is not None else None)
                         oldToNewIds_all[mergedIdx]=i
 
             if len(featsToCombine)==1:
                 oldToNewNodeIds_unchanged[oldNodeIdx]=i
                 if oldNodeFeats is not None:
                     newNodeFeats[i]=featsToCombine[0]
-            elif oldNodeFeats is not None:
-                newNodeFeats[i]=self.groupNodeFunc(featsToCombine)
+                if new_text_emb is not None and self.text_rec is None:
+                    new_text_emb[i]=embeddings_to_combine[0]
+            else:
+                if oldNodeFeats is not None:
+                    newNodeFeats[i]=self.groupNodeFunc(featsToCombine)
+                if new_text_emb is not None and self.text_rec is None:
+                    new_text_emb[i]=torch.stack(embeddings_to_combine,dim=0).mean(dim=0)
+
             #if oldNodeFeats is not None:
             #    #TEST#
             #    newNodeFeats=newNodeFeats.detach()
@@ -1622,8 +1527,12 @@ class PairingGroupingGraph(BaseModel):
         if self.text_rec is not None and oldNodeFeats is not None:
             newNodeEmbeddings = self.embedding_model(groupNodeTrans,oldNodeFeats.device)
             if self.add_noise_to_word_embeddings>0:
-                newNodeEmbeddings += torch.randn_like(newNodeEmbeddings).to(newNodeEmbeddings.device)*self.add_noise_to_word_embeddings
-            newNodeFeats = self.merge_embedding_layer(torch.cat((newNodeFeats,newNodeEmbeddings),dim=1))
+                newNodeEmbeddings += torch.randn_like(newNodeEmbeddings).to(newNodeEmbeddings.device)*self.add_noise_to_word_text_emb
+            if self.legacy_read:
+                newNodeFeats = self.merge_embedding_layer(torch.cat((newNodeFeats,newNodeEmbeddings),dim=1))
+                new_text_emb=old_text_emb
+            else:
+                new_text_emb = newNodeEmbeddings
 
         edges = newEdges
         newEdges = list(newEdges) + [(y,x) for x,y in newEdges] #add reverse edges so undirected/bidirectional
@@ -1651,7 +1560,7 @@ class PairingGroupingGraph(BaseModel):
         if not self.useCurvedBBs:
             newBBs = torch.stack(newBBs,dim=0)
 
-        return newBBs, newGraph, newGroups, edges, newBBTrans if self.text_rec is not None else None,  oldToNewNodeIds_unchanged, keep_edges
+        return newBBs, newGraph, newGroups, edges, newBBTrans if self.text_rec is not None else None, new_text_emb,  oldToNewNodeIds_unchanged, keep_edges
 
     def mergeAndGroupLegacy(self,mergeThresh,keepEdgeThresh,groupThresh,oldEdgeIndexes,edgePredictions,oldGroups,oldNodeFeats,oldEdgeFeats,oldUniversalFeats,oldBBs,bbTrans,image,skip_rec=False,merge_only=False,good_edges=None,keep_edges=None):
         if self.useCurvedBBs:
@@ -2262,7 +2171,7 @@ class PairingGroupingGraph(BaseModel):
             brX = brX.cpu()
             brY = brY.cpu()
         #build all-mask image, may want to move this up and use for relationship proposals
-        if self.expandedRelContext is not None:
+        if self.expandedRelContext is not None or self.expandedBBContext is not None:
             allMasks = torch.zeros(imageHeight,imageWidth)
             if merge_only:
                 #since each bb fragment is an axis aligned rect, we'll speed things up
@@ -2290,7 +2199,7 @@ class PairingGroupingGraph(BaseModel):
             pool_w=self.merge_pool_w
             pool2_h=self.merge_pool2_h
             pool2_w=self.merge_pool2_w
-        elif self.useShapeFeats != 'only':
+        elif self.useShapeFeats != 'only' and self.useShapeFeats != 'only for edge':
             pool_h=self.pool_h
             pool_w=self.pool_w
             pool2_h=self.pool2_h
@@ -2354,7 +2263,7 @@ class PairingGroupingGraph(BaseModel):
             groupIs_index1 = [ [b for b in groups[c[0]]] for c in edges ]
             groupIs_index2 = [ [b for b in groups[c[1]]] for c in edges ]
 
-        if self.useShapeFeats!='only':
+        if self.useShapeFeats!='only' and self.useShapeFeats != 'only for edge':
             #get axis aligned rectangle from corners
             #t#tic2=timeit.default_timer()#t#
             rois = torch.zeros((len(edges),5)).to(features.device) #(batchIndex,x1,y1,x2,y2) as expected by ROI Align
@@ -2468,7 +2377,7 @@ class PairingGroupingGraph(BaseModel):
         #    img_f.waitKey()
 
         #build all-mask image, may want to move this up and use for relationship proposals
-        if (not merge_only and self.useShapeFeats!='only') or (merge_only and self.merge_use_mask):
+        if (not merge_only and self.useShapeFeats!='only' and self.useShapeFeats != 'only for edge') or (merge_only and self.merge_use_mask):
             if self.expandedRelContext is not None:
                 #We're going to add a third mask for all bbs
                 numMasks=3
@@ -2480,7 +2389,7 @@ class PairingGroupingGraph(BaseModel):
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
         relFeats=[] #where we'll store the feature of each batch
         
-        if self.useShapeFeats=='only':
+        if self.useShapeFeats=='only' or self.useShapeFeats=='only for edge':
             batch_size = len(edges)
         elif merge_only:
             batch_size = 2*self.roi_batch_size
@@ -2493,7 +2402,7 @@ class PairingGroupingGraph(BaseModel):
             #t#tic=timeit.default_timer()#t#
             if ib>0 and not self.all_grad:
                 torch.set_grad_enabled(False)
-            if self.useShapeFeats!='only' or merge_only:
+            if (self.useShapeFeats!='only' and self.useShapeFeats != 'only for edge') or merge_only:
                 b_rois = rois[b_start:b_end]
             b_edges = edges[b_start:b_end]
             b_groups_index1 = groups_index1[b_start:b_end]
@@ -2511,7 +2420,7 @@ class PairingGroupingGraph(BaseModel):
                 extraPred=0
 
             #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
-            if self.useShapeFeats!='only':
+            if self.useShapeFeats!='only' and self.useShapeFeats != 'only for edge':
                 if merge_only:
                     #o#stackedEdgeFeatWindows = self.merge_roi_align(features,b_rois.to(features.device))
                     stackedEdgeFeatWindows = self.merge_roi_align(features,b_rois)
@@ -2535,7 +2444,7 @@ class PairingGroupingGraph(BaseModel):
 
 
                 #make instance specific masks and make shape (spatial) features
-                if self.useShapeFeats!='only':
+                if self.useShapeFeats!='only'  and self.useShapeFeats != 'only for edge':
                     if (random.random()<0.5 and flip is None and  not self.debug) or flip:
                         pass
                         #TODO
@@ -2565,7 +2474,7 @@ class PairingGroupingGraph(BaseModel):
                 if not merge_only or self.merge_use_mask:
                     #t#tic2=timeit.default_timer()#t#
                     for i,(index1, index2) in enumerate(b_edges):
-                        if self.useShapeFeats!='only':
+                        if self.useShapeFeats!='only' and self.useShapeFeats != 'only for edge':
                             if self.useCurvedBBs:
                                 if merge_only:
                                     #since each bb fragment is an axis aligned rect, we'll speed things up
@@ -2770,7 +2679,7 @@ class PairingGroupingGraph(BaseModel):
 
 
             #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
-            if self.useShapeFeats!='only':
+            if self.useShapeFeats!='only' and self.useShapeFeats != 'only for edge':
                 if self.splitFeatures:
                     if not merge_only or self.merge_use_mask:
                         stackedEdgeFeatWindows2 = torch.cat((stackedEdgeFeatWindows2,masks.to(stackedEdgeFeatWindows2.device)),dim=1)
@@ -2794,7 +2703,7 @@ class PairingGroupingGraph(BaseModel):
             #print('b_relFeats {}'.format(b_relFeats.size()))
             #print('shapeFeats {}',format(shapeFeats.size()))
             if self.useShapeFeats:
-                if self.useShapeFeats=='only':
+                if self.useShapeFeats=='only' or self.useShapeFeats=='only for edge':
                     b_relFeats = shapeFeats.to(features.device)
                 else:
                     b_relFeats = torch.cat((b_relFeats,shapeFeats.to(features.device)),dim=1)
@@ -4114,7 +4023,11 @@ class PairingGroupingGraph(BaseModel):
         #self.relFeaturizerConv[0].register_forward_hook(save_layerFC)
 
 
-    def runGraph(self,gtGroups,gtTrans,image,useBBs,saved_features,saved_features2,bbTrans,embeddings,merge_first_only=False):
+    def runGraph(self,gtGroups,gtTrans,image,useBBs,saved_features,saved_features2,bbTrans,embeddings,merge_first_only=False,zero_embeddings=False):
+
+        if zero_embeddings:
+            embeddings=embeddings.new_zeros(embeddings.size())
+        
         groups=[[i] for i in range(len(useBBs))]
         if self.merge_first:
             assert gtGroups is None
@@ -4155,6 +4068,7 @@ class PairingGroupingGraph(BaseModel):
                         None,
                         useBBs,
                         bbTrans,
+                        embeddings,
                         image,
                         skip_rec=merge_first_only,
                         merge_only=True)
@@ -4185,6 +4099,8 @@ class PairingGroupingGraph(BaseModel):
                         justBBs = useBBs
                     bbTrans=correctTrans(bbTrans,justBBs,gtTrans,gtBBs)
                 embeddings = self.embedding_model(bbTrans,saved_features.device)
+                if zero_embeddings:
+                    embeddings=embeddings.new_zeros(embeddings.size())
                 if self.add_noise_to_word_embeddings:
                     embeddings += torch.randn_like(embeddings).to(embeddings.device)*self.add_noise_to_word_embeddings*embeddings.mean()
             else:
@@ -4202,6 +4118,7 @@ class PairingGroupingGraph(BaseModel):
         #t#tic=timeit.default_timer()#t#
         #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
         graph,edgeIndexes,rel_prop_scores,last_node_visual_feats,last_edge_visual_feats,keep_edges = self.createGraph(useBBs,saved_features,saved_features2,image.size(-2),image.size(-1),text_emb=embeddings,image=image)
+        #print('edgeIndexes: {}'.format(len(edgeIndexes)))
 
         #print('createGraph')
         #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
@@ -4218,7 +4135,7 @@ class PairingGroupingGraph(BaseModel):
             return [useBBs], None, None, None, None, rel_prop_scores, merge_prop_scores, (useBBs if self.useCurvedBBs else useBBs.cpu().detach(),None,None,bbTrans)
             return allOutputBoxes, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final
 
-        if self.reintroduce_visual_features=='map':
+        if self.reintroduce_features=='map':
             last_node_visual_feats = graph[0]
             last_edge_visual_feats = graph[2]
 
@@ -4253,7 +4170,7 @@ class PairingGroupingGraph(BaseModel):
                 good_edges=None
             #print('!D! {} before edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(gIter,edgeFeats.size(),len(useBBs),nodeFeats.size(),len(edgeIndexes)))
             #print('      graph num edges: {}'.format(graph[1].size()))
-            useBBs,graph,groups,edgeIndexes,bbTrans,same_node_map,keep_edges=self.mergeAndGroup(
+            useBBs,graph,groups,edgeIndexes,bbTrans,embeddings,same_node_map,keep_edges=self.mergeAndGroup(
                     self.mergeThresh[gIter],
                     self.keepEdgeThresh[gIter],
                     self.groupThresh[gIter],
@@ -4265,12 +4182,16 @@ class PairingGroupingGraph(BaseModel):
                     uniFeats,
                     useBBs,
                     bbTrans,
+                    embeddings,
                     image,
                     good_edges=good_edges,
                     keep_edges=keep_edges,
                     gt_groups=gtGroups if gIter==0 else ([[g] for g in range(len(groups))] if gtGroups is not None else None))
+            if zero_embeddings:
+                embeddings.zero_()
 
-            if self.reintroduce_visual_features:
+
+            if self.reintroduce_features:
                 graph,last_node_visual_feats,last_edge_visual_feats = self.appendVisualFeatures(
                         gIter if self.merge_first else gIter+1,
                         useBBs,
@@ -4307,7 +4228,7 @@ class PairingGroupingGraph(BaseModel):
 
         ##Final state of the graph
         #print('!D! F before edge size: {}, bbs: {}, node size: {}, edge I size: {}'.format(edgeFeats.size(),useBBs.size(),nodeFeats.size(),len(edgeIndexes)))
-        useBBs,graph,groups,edgeIndexes,bbTrans,same_node_map,keep_edges=self.mergeAndGroup(
+        useBBs,graph,groups,edgeIndexes,bbTrans,_,same_node_map,keep_edges=self.mergeAndGroup(
                 self.mergeThresh[-1],
                 self.keepEdgeThresh[-1],
                 self.groupThresh[-1],
@@ -4319,6 +4240,7 @@ class PairingGroupingGraph(BaseModel):
                 None,#uniFeats.detach() if uniFeats is not None else None,
                 useBBs,
                 bbTrans,
+                None,
                 image,
                 gt_groups=[[g] for g in range(len(groups))] if gtGroups is not None else None,
                 final=True)
@@ -4349,3 +4271,90 @@ class PairingGroupingGraph(BaseModel):
             #Discard NN prediction. We don't use it anymore
             allOutputBoxes = [ torch.cat([outBs[:,:6],outBs[:,7:]],dim=1) for outBs in allOutputBoxes]
         return allOutputBoxes, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, rel_prop_scores,merge_prop_scores, final
+
+
+
+    def alignGTBBs(self,useGTBBs,gtBBs,gtGroups,bbPredictions):
+            #We'll correct the box predictions using the GT BBs, but no class/other GT
+            useBBs = []
+            gtBBs=gtBBs[0]
+
+
+            #perform greedy alignment of gt and predicted. Only keep aligned predictions
+            if not bbPredictions.is_cuda:
+                gtBBs=gtBBs.cpu()
+            if 'word_bbs' in useGTBBs or self.useCurvedBBs:
+                ious = allIO_clipU(gtBBs,bbPredictions[:,1:],x1y1x2y2=self.useCurvedBBs) #iou calculation, words are oversegmented lines
+            else:
+                ious = allIOU(gtBBs,bbPredictions[:,1:],x1y1x2y2=self.useCurvedBBs) #iou calculation
+            #if self.useCurvedBBs:
+            #    ious = allIO_clipU(
+            #else:
+            #    ious = allIOU(gtBBs,bbPredictions[:,1:])
+            #ious[ious<0.3]=0
+            ious=ious.cpu()
+            bbPredictions=bbPredictions.cpu()
+            gtBBs=gtBBs.cpu()
+            #sort, do highest ious first
+            gt_used = [False]*gtBBs.size(0)
+            num_gt_used = 0
+            pred_used = [False]*bbPredictions.size(0)
+            num_pred_used = 0
+            ious_list = [(ious[gt_i,p_i],gt_i,p_i) for gt_i,p_i in ious.triu(1).nonzero(as_tuple=False)]
+            ious=None
+            ious_list.sort(key=lambda a:a[0], reverse=True)
+            gt_parts=defaultdict(list)
+            gt_to_new = {}
+            for iou,gt_i,p_i in ious_list:
+                gt_i=gt_i.item()
+                if self.useCurvedBBs:
+                    gt_used[gt_i]=True
+                    gt_parts[gt_i].append((iou,bbPredictions[p_i,0:1],bbPredictions[p_i,6:]))
+                elif not gt_used[gt_i] and not pred_used[p_i]:
+                    gt_to_new[gt_i]=len(useBBs)
+                    useBBs.append(torch.cat((bbPredictions[p_i,0:1],gtBBs[gt_i,0:5],bbPredictions[p_i,6:]), dim=0))
+                    num_gt_used+=1
+                    if num_gt_used>=gtBBs.size(0):
+                        break
+                    gt_used[gt_i]=True
+
+                    if not pred_used[p_i]:
+                        num_pred_used+=1
+                        if num_pred_used>=bbPredictions.size(0) and not self.useCurvedBBs:
+                            break
+                        pred_used[p_i]=True
+            ious_list=None
+
+            if self.useCurvedBBs:
+                for gt_i,parts in gt_parts.items():
+                    ious,confs,clses = zip(*parts)
+                    ious = torch.FloatTensor(ious)
+                    confs = torch.cat(confs)
+                    clses = torch.stack(clses,dim=0)
+                    total_iou = ious.sum()
+                    conf = (confs*ious).sum()/total_iou
+                    cls = (clses*ious[:,None]).sum(dim=0)/total_iou
+                    gt_to_new[gt_i]=len(useBBs)
+                    useBBs.append(torch.cat((conf[None],gtBBs[gt_i,0:5],cls),dim=0))
+
+
+            #Add any undetected boxes.
+            for gt_i,used in enumerate(gt_used):
+                if not used:
+                    conf = torch.FloatTensor([1])
+                    cls = torch.FloatTensor(self.numBBTypes+(1 if self.detector_predNumNeighbors else 0)).fill_(0.5)
+                    gt_to_new[gt_i]=len(useBBs)
+                    useBBs.append(torch.cat((conf,gtBBs[gt_i,0:5],cls),dim=0))
+
+            if gtGroups is not None:
+                gtGroups = [[gt_to_new[gt_i] for gt_i in group] for group in gtGroups]
+
+            useBBs = torch.stack(useBBs,dim=0).to(gtBBs.device)
+            assert self.training or useBBs.size(0) == gtBBs.size(0)
+            assert self.include_bb_conf or self.useCurvedBBs
+            #if self.useCurvedBBs and self.use_overseg_non_max_sup:
+            #    useBBs = non_max_sup_overseg(useBBs)
+            gtBBs=gtBBs[None,...]
+
+            return useBBs, gtBBs, gtGroups, gt_to_new
+            

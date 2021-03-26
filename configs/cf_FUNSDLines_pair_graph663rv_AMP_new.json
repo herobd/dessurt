@@ -15,7 +15,7 @@
         "color":false,
         "rescale_range": [0.8,1.2],
         "crop_params": {
-            "crop_size":[800,800],
+            "crop_size":[1000,800],
 	    "pad":50
         }
 
@@ -98,7 +98,7 @@
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
         "percent_rel_to_keep": 0.5,
-        "max_rel_to_keep": 400,
+        "max_rel_to_keep": 800,
         "roi_batch_size": 400,
 
 	"use_rel_shape_feats": "corner",

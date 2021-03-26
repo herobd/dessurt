@@ -69,11 +69,11 @@
         "monitor_mode": "none",
         "conf_thresh_init": 0.5,
         "conf_thresh_change_iters": 0,
-        "retry_count":1,
+        "retry_count":2,
 
         "mergeAndGroup": true,
 
-        "unfreeze_detector": 2000,
+        "unfreeze_detector": 1000,
         "partial_from_gt": null,
         "stop_from_gt": null,
         "use_word_bbs_gt": 1,
@@ -96,7 +96,7 @@
 	"prop_with_text_emb": true,
 	"prop_num_hidden": 128,
         "percent_rel_to_keep": 0.5,
-        "max_rel_to_keep": 800,
+        "max_rel_to_keep": 400,
         "roi_batch_size": 400,
 
 	"publaynet_model": "saved/publaynet_model_196000.pth",
