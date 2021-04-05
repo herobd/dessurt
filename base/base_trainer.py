@@ -379,10 +379,11 @@ class BaseTrainer:
             #VALIDATION
             if self.iteration%self.val_step==0:
                 if self.swa and self.iteration>=self.swa_start:
-                    temp_model = self.model
+                    temp_model = self.model.cpu()
                     self.model = self.swa_model
+                    self.bn_update()
                     val_result = self._valid_epoch()
-                    self.model = temp_model
+                    self.model = temp_model.cuda()
                     for key, value in val_result.items():
                         if 'metrics' in key:
                             for i, metric in enumerate(self.metrics):

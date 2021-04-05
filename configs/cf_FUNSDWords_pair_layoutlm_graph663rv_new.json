@@ -56,11 +56,11 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 700000,
+        "iterations": 300000,
         "swa": true,
-        "swa_start": 600000,
+        "swa_start": 200000,
         "save_dir": "saved/",
-        "val_step": 25000,
+        "val_step": 100000,
         "save_step": 50000,
         "save_step_minor": 200,
         "log_step": 250,
@@ -84,7 +84,7 @@
         "use_learning_schedule": "multi_rise then ramp_to_swa",
 "ramp_down_steps": 10000,
         "warmup_steps": [1000],
-        "swa_lr_mul": 0.1,
+        "swa_lr_mul": 0.01,
         "adapt_lr": false
     },
     "arch": "PairingGGraphLayoutLM", 
