@@ -4089,7 +4089,7 @@ class PairingGroupingGraph(BaseModel):
                 if not self.useCurvedBBs and self.detector_predNumNeighbors:
                     #Discard NN prediction. We don't use it anymore
                     allOutputBoxes = [ torch.cat([outBs[:,:6],outBs[:,7:]],dim=1) for outBs in allOutputBoxes]
-                return allOutputBoxes, offsetPredictions, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, None, merge_prop_scores, None
+                return allOutputBoxes, allEdgeOuts, allEdgeIndexes, allNodeOuts, allGroups, None, merge_prop_scores, None
 
             if bbTrans is not None:
                 if gtTrans is not None:
@@ -4188,7 +4188,7 @@ class PairingGroupingGraph(BaseModel):
                     keep_edges=keep_edges,
                     gt_groups=gtGroups if gIter==0 else ([[g] for g in range(len(groups))] if gtGroups is not None else None))
             if zero_embeddings:
-                embeddings.zero_()
+                embeddings=embeddings.new_zeros(embeddings.size())
 
 
             if self.reintroduce_features:
@@ -4348,8 +4348,8 @@ class PairingGroupingGraph(BaseModel):
 
             if gtGroups is not None:
                 gtGroups = [[gt_to_new[gt_i] for gt_i in group] for group in gtGroups]
-
-            useBBs = torch.stack(useBBs,dim=0).to(gtBBs.device)
+            if len(useBBs)>0:
+                useBBs = torch.stack(useBBs,dim=0).to(gtBBs.device)
             assert self.training or useBBs.size(0) == gtBBs.size(0)
             assert self.include_bb_conf or self.useCurvedBBs
             #if self.useCurvedBBs and self.use_overseg_non_max_sup:

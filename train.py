@@ -1,3 +1,4 @@
+from skimage import filters as filters #this needs to be here on noahsark for some unknown reason
 import os
 import sys
 import signal
@@ -17,6 +18,7 @@ import warnings
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel
+
 
 try: 
     from knockknock import slack_sender
@@ -106,6 +108,11 @@ def main(rank,config, resume,world_size=None):
 
     if rank is not None and rank!=0:
         trainer.side_process=True #this tells the trainer not to log or validate on this thread
+    else:
+        def handleSIGINT(sig, frame):
+            trainer.save()
+            sys.exit(0)
+        signal.signal(signal.SIGINT, handleSIGINT)
 
     print("Begin training")
     #warnings.filterwarnings("error")
