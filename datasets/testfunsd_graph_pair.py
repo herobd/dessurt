@@ -25,6 +25,9 @@ def display(data):
     #ws.append(img.shape[1])
     #return
 
+    for q,a in zip(data['questions'],data['answers']):
+        print(q+' '+a)
+
 
 
     fig = plt.figure()
@@ -130,6 +133,7 @@ if __name__ == "__main__":
             "pad":70,
             "xxrot_degree_std_dev": 0.7}, 
         'split_to_lines': True,
+        'questions':5
 })
 
     dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False, num_workers=0, collate_fn=funsd_graph_pair.collate)
