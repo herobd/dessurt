@@ -31,6 +31,7 @@ class GraphPairDataset(torch.utils.data.Dataset):
         #    self.augmentation_params=config['augmentation_params']
         #else:
         #    self.augmentation_params=None
+        self.questions = config['questions'] if 'questions' in config else False
         self.color = config['color'] if 'color' in config else True
         self.rotate = config['rotation'] if 'rotation' in config else False
         #patchSize=config['patch_size']
@@ -273,6 +274,14 @@ class GraphPairDataset(torch.utils.data.Dataset):
             targetIndexToGroup={}
             for groupId,bbIds in enumerate(groups):
                 targetIndexToGroup.update({bbId:groupId for bbId in bbIds})
+        
+        transcription = [trans[id] for id in ids]
+        if self.questions:
+            questions,answers = self.makeQuestions(bbs,transcription,groups,groups_adj)
+        else:
+            questions=None
+            answers=None
+
         return {
                 "img": img,
                 "bb_gt": bbs,
@@ -281,12 +290,14 @@ class GraphPairDataset(torch.utils.data.Dataset):
                 "imgName": imageName,
                 "scale": s,
                 "cropPoint": cropPoint,
-                "transcription": [trans[id] for id in ids],
+                "transcription": transcription,
                 "metadata": [metadata[id] for id in ids if id in metadata],
                 "form_metadata": form_metadata,
                 "gt_groups": groups,
                 "targetIndexToGroup":targetIndexToGroup,
-                "gt_groups_adj": groups_adj
+                "gt_groups_adj": groups_adj,
+                "questions": questions,
+                "answers": answers
                 }
 
 

@@ -5,7 +5,7 @@ import json
 #from skimage import draw
 #import skimage.transform as sktransform
 import os
-import math
+import math, random
 from collections import defaultdict, OrderedDict
 from utils.funsd_annotations import createLines
 import timeit
@@ -97,6 +97,12 @@ class FUNSDGraphPair(GraphPairDataset):
                 'answer': 18,
                 'other': 19
                 }
+        self.index_class_map=[
+                'header',
+                'question',
+                'answer',
+                'other'
+                ]
 
 
 
@@ -244,7 +250,200 @@ class FUNSDGraphPair(GraphPairDataset):
                     cto.append(id1)
             return cto
 
+    def makeQuestions(self,bbs,transcription,groups,groups_adj):
+        bbs=bbs[0]
+        #get all question-answer relationships
+        questions_gs=set()
+        answers_gs=set()
+        headers_gs=set()
+        all_trans={}
+        group_count = len(groups)
+        for gi,group in enumerate(groups):
+            cls = bbs[group[0],13:].argmax()
+            trans_bb = []
+            for bbi in group:
+                trans_bb.append((bbs[bbi,1],transcription[bbi]))
+                #if fullyKnown(transcription[bbi]): #need this for NAF
+                #    trans_bb.append((bbs[bbi,1],transcription[bbi]))
+                #else:
+                #    continue
 
+            trans_bb.sort(key=lambda a:a[0] )
+            trans=trans_bb[0][1]
+            for y,t in trans_bb[1:]:
+                trans+=' '+t
+            all_trans[gi]=trans
+            #print('c:{} {},{} full group trans: {}'.format(cls,bbs[group[0],0],bbs[group[0],1],trans))
+
+            if self.index_class_map[cls] == 'question':
+                questions_gs.add(gi)
+            elif self.index_class_map[cls] == 'answer':
+                answers_gs.add(gi)
+            elif self.index_class_map[cls] == 'header':
+                headers_gs.add(gi)
+
+
+        relationships_h_q=defaultdict(list)
+        relationships_q_h={}
+        for h_gi in headers_gs:
+            for gi1,gi2 in groups_adj:
+                if gi1 == h_gi and gi2 in questions_gs:
+                    relationships_h_q[h_gi].append(gi2)
+                    relationships_q_h[gi2]=h_gi
+                elif gi2 == h_gi and gi1 in questions_gs:
+                    relationships_h_q[h_gi].append(gi1)
+                    relationships_q_h[gi1]=h_gi
+
+        relationships_q_a=defaultdict(list)
+        relationships_a_q=defaultdict(list)
+        for q_gi in questions_gs:
+            found=False
+            for gi1,gi2 in groups_adj:
+                if gi1 == q_gi and gi2 in answers_gs:
+                    #q_a_pairs.append((gi1,gi2))
+                    relationships_q_a[q_gi].append(gi2)
+                    relationships_a_q[gi2].append(q_gi)
+                    found=True
+                elif gi2 == q_gi and gi1 in answers_gs:
+                    #q_a_pairs.append((gi2,gi1))
+                    relationships_q_a[q_gi].append(gi1)
+                    relationships_a_q[gi1].append(q_gi)
+                    found=True
+            if not found:
+                #q_a_pairs.append((q_gi,None))
+                relationships_q_a[q_gi].append(None)
+
+
+        #find duplicate labels and differentiate using header
+        ambiguous=set()
+        trans_to_gi=defaultdict(list)
+        for gi,trans in all_trans.items():
+            trans_to_gi[trans].append(gi)
+
+        for trans,i_list in trans_to_gi.items():
+            if len(i_list)>1:
+                if all(gi in questions_gs for gi in i_list):
+                    got=0
+                    for gi in i_list:
+                        if gi in relationships_q_h:
+                            got+=1
+                            hi = relationships_q_h[gi]
+                            all_trans[gi]= all_trans[hi]+' '+all_trans[gi]
+                    if got<len(i_list)-1:
+                        ambiguous.add(trans)
+                else:
+                    ambiguous.add(trans)
+
+
+        q_a_pairs=[]
+        table_map = {}
+        tables=[]
+
+        for qi,ais in relationships_q_a.items():
+            if qi in table_map:
+                continue
+            if len(ais)==1:
+                ai=ais[0]
+                if ai is None or len(relationships_a_q[ai])==1:
+                    q_a_pairs.append((qi,ai))
+                else:
+                    #this is probably part of a table with single row/col
+                    assert len(relationships_a_q[ai])==2
+                    q1,q2 = relationships_a_q[ai]
+                    if q1==qi:
+                        other_qi = q2
+                    else:
+                        other_qi = q1
+                    if len(relationships_q_a[other_qi])>1: #be sure this is the non-single index
+                        assert ai not in table_map
+                        addTable(tables,table_map,goups,bbs,qi,ais,relationships_q_a,relationships_a_q)
+                    else:
+                        #broken label?
+                        gi = group_count
+                        trans_bb = []
+                        for qqi in [qi,other_qi]:
+                            assert len(groups[qqi])==1
+                            bbi = groups[qqi][0]
+                            trans_bb.append((bbs[bbi,1],transcription[bbi]))
+                        trans_bb.sort(key=lambda a:a[0] )
+                        trans=trans_bb[0][1]
+                        for y,t in trans_bb[1:]:
+                            trans+=' '+t
+                        all_trans[gi]=trans
+                        group_count+=1
+
+                        q_a_pairs.append((gi,ai))
+            else:
+                #is this a misslabled multiline answer or a table?
+                if len(relationships_a_q[ais[0]])==1:
+                    #if must be a multiline answer
+                    for ai in ais[1:]:
+                        assert len(relationships_a_q[ai])==1
+                    #greate a "new group"
+                    gi = group_count
+                    trans_bb = []
+                    for ai in ais:
+                        #assert len(groups[ai])==1 this can be a list, in which  case we lose new lines
+                        bbi = groups[ai][0]
+                        trans_bb.append((bbs[bbi,1],transcription[bbi]))
+                    trans_bb.sort(key=lambda a:a[0] )
+                    trans=trans_bb[0][1]
+                    for y,t in trans_bb[1:]:
+                        trans+=' '+t
+                    all_trans[gi]=trans
+                    group_count+=1
+
+                    q_a_pairs.append((qi,gi))
+                else:
+                    assert qi not in table_map
+                    addTable(tables,table_map,groups,bbs,qi,ais,relationships_q_a,relationships_a_q)
+
+        all_q_a=[]
+
+        for qi,ai in q_a_pairs:
+            if ai is not None:
+                if qi not in ambiguous:
+                    all_q_a.append(('value for "{}"?'.format(all_trans[qi]),all_trans[ai]))
+                if ai not in ambiguous:
+                    all_q_a.append(('label of "{}"?'.format(all_trans[ai]),all_trans[qi]))
+            else:
+                all_q_a.append(('value for "{}"?'.format(all_trans[qi]),'blank'))
+
+        print(tables)
+        for table in tables:
+            for row_h in table['row_headers']:
+                if row_h in ambiguous:
+                    continue
+                q='row for "{}"?'.format(all_trans[row_h])
+                a=''
+                for col_h in table['col_header']:
+                    v = table['values'][(col_h,row_h)]
+                    a+='{}: {}, '.format(all_trans[col_h],all_trans[v])
+                    if v not in ambiguous:
+                        all_q_a.append(('row that "{}" is in?'.format(all_trans[v]),all_trans[row_h]))
+                a=a[:-2]#remove last ", "
+                all_q_a.append((q,a))
+            for col_h in table['col_headers']:
+                if col_h in ambiguous:
+                    continue
+                q='column for "{}"?'.format(all_trans[col_h])
+                a=''
+                for row_h in table['row_header']:
+                    v = table['values'][(col_h,row_h)]
+                    a+='{}: {}, '.format(all_trans[row_h],all_trans[v])
+                    if v not in ambiguous:
+                        all_q_a.append(('column that "{}" is in?'.format(all_trans[v]),all_trans[col_h]))
+                a=a[:-2]#remove last ", "
+                all_q_a.append((q,a))
+
+            for (col_h,row_h),v in table['values'].items():
+                all_q_a.append(('value of "{}" and "{}"'.format(all_trans[row_h],all_trans[col_h]),all_trans[v]))
+                all_q_a.append(('value of "{}" and "{}"'.format(all_trans[col_h],all_trans[row_h]),all_trans[v]))
+
+
+        selected = random.choices(all_q_a,k=self.questions)
+
+        return zip(*selected)
 
 
 def getWidthFromBB(bb):
@@ -319,3 +518,78 @@ def lineIntersection(lineA, lineB, threshA_low=10, threshA_high=10, threshB_low=
             return point
     return None
 
+def addTable(tables,table_map,groups,bbs,qi,ais,relationships_q_a,relationships_a_q):
+    other_qis=[]
+    for ai in ais:
+        assert len(relationships_a_q[ai])==2
+        q1,q2 = relationships_a_q[ai]
+        if q1==qi:
+            x,y = bbs[groups[q2][0],0:2]
+            other_qis.append((q2,x,y))
+        else:
+            x,y = bbs[groups[q1][0],0:2]
+            other_qis.append((q1,x,y))
+    
+    my_qis=[]
+    debug_hit=False
+    for ai in relationships_q_a[other_qis[0]]:
+        assert len(relationships_a_q[ai])==2
+        q1,q2 = relationships_a_q[ai]
+        if q1==other_qis[0]:
+            x,y = bbs[groups[q2][0],0:2]
+            my_qis.append((q2,x,y))
+            if q2==qi:
+                debug_hit=True
+        else:
+            x,y = bbs[groups[q1][0],0:2]
+            my_qis.append((q1,x,y))
+            if q1==qi:
+                debug_hit=True
+    assert debug_hit
+
+    #which are rows, which are cols?
+    other_mean_x = np.mean([q[1] for q in other_qis])
+    other_mean_y = np.mean([q[2] for q in other_qis])
+    my_mean_x = np.mean([q[1] for q in my_qis])
+    my_mean_y = np.mean([q[2] for q in my_qis])
+
+    if my_mean_x<other_mean_x and my_mean_y>other_mean_y:
+        #my is row headers
+        my_qis.sort(key=lambda a:a[2]) #sort by y
+        other_qis.sort(key=lambda a:a[1]) #sort by x
+        row_hs = [q[0] for q in my_qis]
+        col_hs = [q[0] for q in other_qis]
+        
+    elif my_mean_x>other_mean_x and my_mean_y<other_mean_y:
+        #my is col headers
+        my_qis.sort(key=lambda a:a[1]) #sort by x
+        other_qis.sort(key=lambda a:a[2]) #sort by y
+        col_hs = [q[0] for q in my_qis]
+        row_hs = [q[0] for q in other_qis]
+    else:
+        assert False, 'unknown case'
+
+
+    values={}
+    for row_h in row_hs:
+        vs = relationships_q_a[row_h]
+        for v in vs:
+            q1,q2 = relationships_a_q[v]
+            if q1==row_h:
+                col_h=q2
+            else:
+                col_h=q1
+            values[(col_h,row_h)] = v
+
+    table = {
+            "row_headers": row_hs,
+            "col_headers": col_hs,
+            "values": values
+            }
+    tables.append(table)
+    for row_h in row_hs:
+        table_map[row_h]=table
+    for col_h in col_hs:
+        table_map[col_h]=table
+    for v in values.values():
+        table_map[v]=table
