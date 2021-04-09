@@ -322,25 +322,32 @@ class FUNSDGraphPair(GraphPairDataset):
 
         for trans,i_list in trans_to_gi.items():
             if len(i_list)>1:
-                if all(gi in questions_gs for gi in i_list):
-                    got=0
-                    for gi in i_list:
-                        if gi in relationships_q_h:
-                            got+=1
-                            hi = relationships_q_h[gi]
-                            all_trans[gi]= all_trans[hi]+' '+all_trans[gi]
-                    if got<len(i_list)-1:
-                        ambiguous.add(trans)
-                else:
+                print('possible ambig: {}'.format(trans))
+                got=0
+                for gi in i_list:
+                    if gi in relationships_q_h:
+                        got+=1
+                        hi = relationships_q_h[gi]
+                        all_trans[gi]= all_trans[hi]+' '+all_trans[gi]
+                        print('  ambig rename: {}'.format(all_trans[gi]))
+                if got<len(i_list)-1:
                     ambiguous.add(trans)
+                else:
+                    print('  saved!')
 
 
         q_a_pairs=[]
-        table_map = {}
-        tables=[]
+        #table_map = {}
+        #tables=[]
+        table_values={}
+        row_headers=set()
+        col_headers=set()
+        skip=set()
 
         for qi,ais in relationships_q_a.items():
-            if qi in table_map:
+            #if qi in table_map:
+            #    continue
+            if qi in skip:
                 continue
             if len(ais)==1:
                 ai=ais[0]
@@ -348,16 +355,19 @@ class FUNSDGraphPair(GraphPairDataset):
                     q_a_pairs.append((qi,ai))
                 else:
                     #this is probably part of a table with single row/col
-                    assert len(relationships_a_q[ai])==2
+                    if len(relationships_a_q[ai])>2:
+                        continue #too many question links, label error
                     q1,q2 = relationships_a_q[ai]
                     if q1==qi:
                         other_qi = q2
                     else:
                         other_qi = q1
-                    if len(relationships_q_a[other_qi])>1: #be sure this is the non-single index
-                        assert ai not in table_map
-                        addTable(tables,table_map,goups,bbs,qi,ais,relationships_q_a,relationships_a_q)
-                    else:
+                    success = addTableElement(table_values,row_headers,col_headers,ai,q1,q2,groups,bbs)
+                    #if len(relationships_q_a[other_qi])>1: #be sure this is the non-single index
+                    #    #assert ai not in table_map
+                    #    #addTable(tables,table_map,goups,bbs,qi,ais,relationships_q_a,relationships_a_q)
+                    #    addTableElement(table_values,row_headers,col_headers,ai,q1,q2,groups,bbs)
+                    if not success and len(relationships_q_a[other_qi])==1:
                         #broken label?
                         gi = group_count
                         trans_bb = []
@@ -373,13 +383,11 @@ class FUNSDGraphPair(GraphPairDataset):
                         group_count+=1
 
                         q_a_pairs.append((gi,ai))
+                        skip.add(other_qi)
             else:
                 #is this a misslabled multiline answer or a table?
-                if len(relationships_a_q[ais[0]])==1:
+                if all(len(relationships_a_q[ai])==1 for ai in ais):
                     #if must be a multiline answer
-                    for ai in ais[1:]:
-                        assert len(relationships_a_q[ai])==1
-                    #greate a "new group"
                     gi = group_count
                     trans_bb = []
                     for ai in ais:
@@ -395,53 +403,102 @@ class FUNSDGraphPair(GraphPairDataset):
 
                     q_a_pairs.append((qi,gi))
                 else:
-                    assert qi not in table_map
-                    addTable(tables,table_map,groups,bbs,qi,ais,relationships_q_a,relationships_a_q)
+                    #assert qi not in table_map
+                    #addTable(tables,table_map,groups,bbs,qi,ais,relationships_q_a,relationships_a_q)
+                    for ai in ais:
+                        if len(relationships_a_q[ai])==2:
+                            q1,q2 = relationships_a_q[ai]
+                        elif len(relationships_a_q[ai])==1:
+                            q1 = relationships_a_q[ai][0]
+                            q2 = None
+                        addTableElement(table_values,row_headers,col_headers,ai,q1,q2,groups,bbs)
 
         all_q_a=[]
 
         for qi,ai in q_a_pairs:
+            trans_qi = all_trans[qi]
             if ai is not None:
-                if qi not in ambiguous:
-                    all_q_a.append(('value for "{}"?'.format(all_trans[qi]),all_trans[ai]))
-                if ai not in ambiguous:
-                    all_q_a.append(('label of "{}"?'.format(all_trans[ai]),all_trans[qi]))
-            else:
-                all_q_a.append(('value for "{}"?'.format(all_trans[qi]),'blank'))
+                trans_ai = all_trans[ai]
+                if trans_qi not in ambiguous:
+                    all_q_a.append(('value for "{}"?'.format(trans_qi),trans_ai))
+                if trans_ai not in ambiguous:
+                    all_q_a.append(('label of "{}"?'.format(trans_ai),trans_qi))
+            elif trans_qi not in ambiguous:
+                all_q_a.append(('value for "{}"?'.format(trans_qi),'blank'))
 
-        print(tables)
-        for table in tables:
-            for row_h in table['row_headers']:
-                if row_h in ambiguous:
-                    continue
-                q='row for "{}"?'.format(all_trans[row_h])
-                a=''
-                for col_h in table['col_header']:
-                    v = table['values'][(col_h,row_h)]
-                    a+='{}: {}, '.format(all_trans[col_h],all_trans[v])
-                    if v not in ambiguous:
-                        all_q_a.append(('row that "{}" is in?'.format(all_trans[v]),all_trans[row_h]))
-                a=a[:-2]#remove last ", "
-                all_q_a.append((q,a))
-            for col_h in table['col_headers']:
-                if col_h in ambiguous:
-                    continue
-                q='column for "{}"?'.format(all_trans[col_h])
-                a=''
-                for row_h in table['row_header']:
-                    v = table['values'][(col_h,row_h)]
-                    a+='{}: {}, '.format(all_trans[row_h],all_trans[v])
-                    if v not in ambiguous:
-                        all_q_a.append(('column that "{}" is in?'.format(all_trans[v]),all_trans[col_h]))
-                a=a[:-2]#remove last ", "
-                all_q_a.append((q,a))
+        #addTable can cause two tables to be made in odd cases (uneven rows, etc), so we'll simply combine all the table information and generate questions from it.
+        #print(tables)
+        #for table in tables:
+        #    for row_h in table['row_headers']:
+        #        if row_h in ambiguous:
+        #            continue
+        #        q='row for "{}"?'.format(all_trans[row_h])
+        #        a=''
+        #        for col_h in table['col_headers']:
+        #            v = table['values'][(col_h,row_h)]
+        #            a+='{}: {}, '.format(all_trans[col_h],all_trans[v])
+        #            if v not in ambiguous:
+        #                all_q_a.append(('row that "{}" is in?'.format(all_trans[v]),all_trans[row_h]))
+        #        a=a[:-2]#remove last ", "
+        #        all_q_a.append((q,a))
+        #    for col_h in table['col_headers']:
+        #        if col_h in ambiguous:
+        #            continue
+        #        q='column for "{}"?'.format(all_trans[col_h])
+        #        a=''
+        #        for row_h in table['row_headers']:
+        #            v = table['values'][(col_h,row_h)]
+        #            a+='{}: {}, '.format(all_trans[row_h],all_trans[v])
+        #            if v not in ambiguous:
+        #                all_q_a.append(('column that "{}" is in?'.format(all_trans[v]),all_trans[col_h]))
+        #        a=a[:-2]#remove last ", "
+        #        all_q_a.append((q,a))
 
-            for (col_h,row_h),v in table['values'].items():
-                all_q_a.append(('value of "{}" and "{}"'.format(all_trans[row_h],all_trans[col_h]),all_trans[v]))
-                all_q_a.append(('value of "{}" and "{}"'.format(all_trans[col_h],all_trans[row_h]),all_trans[v]))
+        #    for (col_h,row_h),v in table['values'].items():
+        #        all_q_a.append(('value of "{}" and "{}"'.format(all_trans[row_h],all_trans[col_h]),all_trans[v]))
+        #        all_q_a.append(('value of "{}" and "{}"'.format(all_trans[col_h],all_trans[row_h]),all_trans[v]))
+
+        #we we'll aggregate the information and just make the questions
+        col_vs=defaultdict(list)
+        row_vs=defaultdict(list)
+        for (col_h,row_h),v in table_values.items():
+            if col_h is not None and row_h is not None:
+                all_q_a.append(('value of "{}" and "{}"?'.format(all_trans[row_h],all_trans[col_h]),all_trans[v]))
+                all_q_a.append(('value of "{}" and "{}"?'.format(all_trans[col_h],all_trans[row_h]),all_trans[v]))
+            if all_trans[v] not in ambiguous:
+                if row_h is not None:
+                    all_q_a.append(('row that "{}" is in?'.format(all_trans[v]),all_trans[row_h]))
+                if col_h is not None:
+                    all_q_a.append(('column that "{}" is in?'.format(all_trans[v]),all_trans[col_h]))
+
+            x,y = bbs[groups[v][0],0:2]
+            if col_h is not None:
+                col_vs[col_h].append((v,y))
+            if row_h is not None:
+                row_vs[row_h].append((v,x))
+
+        for row_h, vs in row_vs.items():
+            trans_row_h = all_trans[row_h]
+            if trans_row_h not in ambiguous:
+                vs.sort(key=lambda a:a[1])
+                a=all_trans[vs[0][0]]
+                for v,x in vs[1:]:
+                    a+=', '+all_trans[v]
+                all_q_a.append(('all values in row {}?'.format(trans_row_h),a))
+        for col_h, vs in col_vs.items():
+            trans_col_h = all_trans[col_h]
+            if trans_col_h not in ambiguous:
+                vs.sort(key=lambda a:a[1])
+                a=all_trans[vs[0][0]]
+                for v,y in vs[1:]:
+                    a+=', '+all_trans[v]
+                all_q_a.append(('all values in column {}?'.format(trans_col_h),a))
 
 
-        selected = random.choices(all_q_a,k=self.questions)
+        if len(all_q_a) > self.questions:
+            selected = random.sample(all_q_a,k=self.questions)
+        else:
+            selected = all_q_a
 
         return zip(*selected)
 
@@ -521,31 +578,53 @@ def lineIntersection(lineA, lineB, threshA_low=10, threshA_high=10, threshB_low=
 def addTable(tables,table_map,groups,bbs,qi,ais,relationships_q_a,relationships_a_q):
     other_qis=[]
     for ai in ais:
-        assert len(relationships_a_q[ai])==2
-        q1,q2 = relationships_a_q[ai]
-        if q1==qi:
-            x,y = bbs[groups[q2][0],0:2]
-            other_qis.append((q2,x,y))
+        if len(relationships_a_q[ai])==2:
+            q1,q2 = relationships_a_q[ai]
+            if q1==qi:
+                cls = bbs[groups[q2],13:].argmax()
+                assert cls == 1
+                x,y = bbs[groups[q2][0],0:2]
+                other_qis.append((q2,x,y))
+            else:
+                cls = bbs[groups[q1],13:].argmax()
+                assert cls == 1
+                x,y = bbs[groups[q1][0],0:2]
+                other_qis.append((q1,x,y))
         else:
-            x,y = bbs[groups[q1][0],0:2]
-            other_qis.append((q1,x,y))
+            assert len(relationships_a_q[ai])==1 #blank row/column header. Skipping for now
+
+    other_set = set(q[0] for q in other_qis)
+    if len(other_set)<len(other_qis):
+        import pdb;pdb.set_trace()
+        return #label error
     
     my_qis=[]
     debug_hit=False
-    for ai in relationships_q_a[other_qis[0]]:
-        assert len(relationships_a_q[ai])==2
-        q1,q2 = relationships_a_q[ai]
-        if q1==other_qis[0]:
-            x,y = bbs[groups[q2][0],0:2]
-            my_qis.append((q2,x,y))
-            if q2==qi:
-                debug_hit=True
+    for ai in relationships_q_a[other_qis[0][0]]:
+        if len(relationships_a_q[ai])==2:
+            q1,q2 = relationships_a_q[ai]
+            if q1==other_qis[0][0]:
+                if q2 in other_set:
+                    return
+                cls = bbs[groups[q2],13:].argmax()
+                assert cls == 1
+                x,y = bbs[groups[q2][0],0:2]
+                my_qis.append((q2,x,y))
+                if q2==qi:
+                    debug_hit=True
+            else:
+                if q1 in other_set:
+                    return
+                cls = bbs[groups[q1],13:].argmax()
+                assert cls == 1
+                x,y = bbs[groups[q1][0],0:2]
+                my_qis.append((q1,x,y))
+                if q1==qi:
+                    debug_hit=True
         else:
-            x,y = bbs[groups[q1][0],0:2]
-            my_qis.append((q1,x,y))
-            if q1==qi:
-                debug_hit=True
+            assert len(relationships_a_q[ai])==1
     assert debug_hit
+
 
     #which are rows, which are cols?
     other_mean_x = np.mean([q[1] for q in other_qis])
@@ -574,22 +653,65 @@ def addTable(tables,table_map,groups,bbs,qi,ais,relationships_q_a,relationships_
     for row_h in row_hs:
         vs = relationships_q_a[row_h]
         for v in vs:
-            q1,q2 = relationships_a_q[v]
-            if q1==row_h:
-                col_h=q2
-            else:
-                col_h=q1
-            values[(col_h,row_h)] = v
+            try:
+                q1,q2 = relationships_a_q[v]
+                if q1==row_h:
+                    col_h=q2
+                else:
+                    col_h=q1
+                values[(col_h,row_h)] = v
+            except ValueError:
+                pass
 
     table = {
             "row_headers": row_hs,
             "col_headers": col_hs,
             "values": values
             }
-    tables.append(table)
     for row_h in row_hs:
-        table_map[row_h]=table
+        #assert row_h not in table_map
+        table_map[row_h]=len(tables)
     for col_h in col_hs:
-        table_map[col_h]=table
+        #assert col_h not in table_map
+        table_map[col_h]=len(tables)
     for v in values.values():
-        table_map[v]=table
+        #assert v not in table_map
+        table_map[v]=len(tables)
+    tables.append(table)
+
+def addTableElement(table_values,row_headers,col_headers,ai,qi1,qi2,groups,bbs,threshold=5):
+    ele_x,ele_y = bbs[groups[ai][0],0:2]
+    q1_x,q1_y = bbs[groups[qi1][0],0:2]
+    x_diff_1 = abs(ele_x-q1_x)
+    y_diff_1 = abs(ele_y-q1_y)
+    if qi2 is not None:
+        #which question is the row, which is the header?
+        q2_x,q2_y = bbs[groups[qi2][0],0:2]
+        x_diff_2 = abs(ele_x-q2_x)
+        y_diff_2 = abs(ele_y-q2_y)
+
+        if abs(q1_x-q2_x)<threshold or abs(q1_y-q2_y)<threshold:
+            return False
+
+        if (x_diff_1<y_diff_1 or y_diff_2<x_diff_2) and y_diff_1>threshold and x_diff_2>threshold:
+            row_h = qi2
+            col_h = qi1
+        elif (x_diff_2<y_diff_2 or y_diff_1<x_diff_1) and y_diff_2>threshold and x_diff_1>threshold:
+            row_h = qi1
+            col_h = qi2
+        else:
+            #IDK
+            import pdb;pdb.set_trace()
+            return False
+        
+        table_values[(col_h,row_h)]=ai
+        row_headers.add(row_h)
+        col_headers.add(col_h)
+    else:
+        if x_diff_1>y_diff_1:
+            row_headers.add(qi1)
+            table_values[(None,qi1)]=ai
+        elif x_diff_1<y_diff_1:
+            col_headers.add(qi1)
+            table_values[(qi1,None)]=ai
+    return True

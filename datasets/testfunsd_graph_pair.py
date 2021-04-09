@@ -29,7 +29,6 @@ def display(data):
         print(q+' '+a)
 
 
-
     fig = plt.figure()
 
     ax_im = plt.subplot()
@@ -133,7 +132,7 @@ if __name__ == "__main__":
             "pad":70,
             "xxrot_degree_std_dev": 0.7}, 
         'split_to_lines': True,
-        'questions':5
+        'questions':50
 })
 
     dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False, num_workers=0, collate_fn=funsd_graph_pair.collate)
