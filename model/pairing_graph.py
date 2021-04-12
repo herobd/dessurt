@@ -63,6 +63,7 @@ class PairingGraph(BaseModel):
             detectorSavedFeatSize += detectorSavedFeatSize2
             
         self.detector.setForGraphPairing(useBeginningOfLast,useFeatsLayer,useFeatsScale,useFLayer2,useFScale2)
+        self.detector_predNumNeighbors = self.detector.predNumNeighbors
 
 
         self.no_grad_feats = config['no_grad_feats'] if 'no_grad_feats' in config else False

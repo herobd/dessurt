@@ -4350,6 +4350,8 @@ class PairingGroupingGraph(BaseModel):
                 gtGroups = [[gt_to_new[gt_i] for gt_i in group] for group in gtGroups]
             if len(useBBs)>0:
                 useBBs = torch.stack(useBBs,dim=0).to(gtBBs.device)
+            else:
+                useBBs = torch.FloatTensor(0).to(gtBBs.device)
             assert self.training or useBBs.size(0) == gtBBs.size(0)
             assert self.include_bb_conf or self.useCurvedBBs
             #if self.useCurvedBBs and self.use_overseg_non_max_sup:
