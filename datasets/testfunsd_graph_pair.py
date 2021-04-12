@@ -65,28 +65,28 @@ def display(data):
         br = (math.cos(rot)*w-math.sin(rot)*-h +xc, math.sin(rot)*w+math.cos(rot)*-h +yc)
         bl = (math.cos(rot)*-w-math.sin(rot)*-h +xc, math.sin(rot)*-w+math.cos(rot)*-h +yc)
         #print([tr,tl,br,bl])
-    for i in range(data['form_metadata']['word_boxes'].size(0)):
-        word_bbs = data['form_metadata']['word_boxes']
-        xc=word_bbs[i,0]
-        yc=word_bbs[i,1]
-        rot=word_bbs[i,2]
-        h=word_bbs[i,3]
-        w=word_bbs[i,4]
-        color = 'r-'
-        tr = (math.cos(rot)*w-math.sin(rot)*h +xc, math.sin(rot)*w+math.cos(rot)*h +yc)
-        tl = (math.cos(rot)*-w-math.sin(rot)*h +xc, math.sin(rot)*-w+math.cos(rot)*h +yc)
-        br = (math.cos(rot)*w-math.sin(rot)*-h +xc, math.sin(rot)*w+math.cos(rot)*-h +yc)
-        bl = (math.cos(rot)*-w-math.sin(rot)*-h +xc, math.sin(rot)*-w+math.cos(rot)*-h +yc)
+    #for i in range(data['form_metadata']['word_boxes'].size(0)):
+    #    word_bbs = data['form_metadata']['word_boxes']
+    #    xc=word_bbs[i,0]
+    #    yc=word_bbs[i,1]
+    #    rot=word_bbs[i,2]
+    #    h=word_bbs[i,3]
+    #    w=word_bbs[i,4]
+    #    color = 'r-'
+    #    tr = (math.cos(rot)*w-math.sin(rot)*h +xc, math.sin(rot)*w+math.cos(rot)*h +yc)
+    #    tl = (math.cos(rot)*-w-math.sin(rot)*h +xc, math.sin(rot)*-w+math.cos(rot)*h +yc)
+    #    br = (math.cos(rot)*w-math.sin(rot)*-h +xc, math.sin(rot)*w+math.cos(rot)*-h +yc)
+    #    bl = (math.cos(rot)*-w-math.sin(rot)*-h +xc, math.sin(rot)*-w+math.cos(rot)*-h +yc)
 
-        ax_im.plot([tr[0],tl[0],bl[0],br[0],tr[0]],[tr[1],tl[1],bl[1],br[1],tr[1]],color)
-    for ind1,ind2 in data['adj']:
-        x1=data['bb_gt'][b,ind1,0]
-        y1=data['bb_gt'][b,ind1,1]
-        x2=data['bb_gt'][b,ind2,0]
-        y2=data['bb_gt'][b,ind2,1]
+    #    ax_im.plot([tr[0],tl[0],bl[0],br[0],tr[0]],[tr[1],tl[1],bl[1],br[1],tr[1]],color)
+    #for ind1,ind2 in data['adj']:
+    #    x1=data['bb_gt'][b,ind1,0]
+    #    y1=data['bb_gt'][b,ind1,1]
+    #    x2=data['bb_gt'][b,ind2,0]
+    #    y2=data['bb_gt'][b,ind2,1]
 
-        ax_im.plot([x1,x2],[y1,y2],'m-')
-        #print('{} to {}, {} - {}'.format(ind1,ind2,(x1,y1),(x2,y2)))
+    #    ax_im.plot([x1,x2],[y1,y2],'m-')
+    #    #print('{} to {}, {} - {}'.format(ind1,ind2,(x1,y1),(x2,y2)))
 
     groupCenters=[]
     for group in data['gt_groups']:
@@ -103,7 +103,7 @@ def display(data):
             maxY=max(maxY,yc+h)
             minX=min(minX,xc-w)
             minY=min(minY,yc-h)
-        #ax_im.plot([minX,maxX,maxX,minX,minX],[minY,minY,maxY,maxY,minY],'c:')
+        ax_im.plot([minX,maxX,maxX,minX,minX],[minY,minY,maxY,maxY,minY],'c:')
         groupCenters.append(((minX+maxX)//2, (minY+minY)//2) )
 
     for g1,g2 in data['gt_groups_adj']:

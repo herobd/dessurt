@@ -5,7 +5,7 @@ import json
 #from skimage import draw
 #import skimage.transform as sktransform
 import os
-import math
+import math, random
 from utils.crop_transform import CropBoxTransform
 from utils import augmentation
 from collections import defaultdict, OrderedDict
@@ -143,6 +143,36 @@ class GraphPairDataset(torch.utils.data.Dataset):
         #pixel_gt = table_pixels
 
         ##ticTr=timeit.default_timer()
+        if self.questions: #we need to do questions before crop to have full context
+            #we have to relationships to get questions
+            pairs=set()
+            for index1,id in enumerate(ids): #updated
+                responseBBIdList = self.getResponseBBIdList(id,annotations)
+                for bbId in responseBBIdList:
+                    try:
+                        index2 = ids.index(bbId)
+                        pairs.add((min(index1,index2),max(index1,index2)))
+                    except ValueError:
+                        pass
+            groups_adj = set()
+            if groups is not None:
+                for n0,n1 in pairs:
+                    g0=-1
+                    g1=-1
+                    for i,ns in enumerate(groups):
+                        if n0 in ns:
+                            g0=i
+                            if g1!=-1:
+                                break
+                        if n1 in ns:
+                            g1=i
+                            if g0!=-1:
+                                break
+                    if g0!=g1:
+                        groups_adj.add((min(g0,g1),max(g0,g1)))
+            questions_and_answers = self.makeQuestions(bbs,trans,groups,groups_adj)
+        else:
+            questions_and_answers=None
 
         if self.transform is not None:
             if 'word_boxes' in form_metadata:
@@ -189,7 +219,18 @@ class GraphPairDataset(torch.utils.data.Dataset):
                 form_metadata['word_trans'] = [form_metadata['word_trans'][int(id[4:])] for id in word_ids]
             else:
                 bbs = out['bb_gt']
-                ids= out['bb_auxs']
+                ids= out['bb_auxs'] 
+
+            if questions_and_answers is not None:
+                questions=[]
+                answers=[]
+                questions_and_answers = [(q,a,qids) for q,a,qids in questions_and_answers if all((i in ids) for i in qids)]
+        if questions_and_answers is not None:
+            if len(questions_and_answers) > self.questions:
+                questions_and_answers = random.sample(questions_and_answers,k=self.questions)
+            questions,answers,_ = zip(*questions_and_answers)
+        else:
+            questions=answers=None
 
 
 
@@ -276,11 +317,6 @@ class GraphPairDataset(torch.utils.data.Dataset):
                 targetIndexToGroup.update({bbId:groupId for bbId in bbIds})
         
         transcription = [trans[id] for id in ids]
-        if self.questions:
-            questions,answers = self.makeQuestions(bbs,transcription,groups,groups_adj)
-        else:
-            questions=None
-            answers=None
 
         return {
                 "img": img,

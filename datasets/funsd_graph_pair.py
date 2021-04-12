@@ -259,7 +259,7 @@ class FUNSDGraphPair(GraphPairDataset):
         all_trans={}
         group_count = len(groups)
         for gi,group in enumerate(groups):
-            cls = bbs[group[0],13:].argmax()
+            cls = bbs[group[0],16:].argmax()
             trans_bb = []
             for bbi in group:
                 trans_bb.append((bbs[bbi,1],transcription[bbi]))
@@ -322,18 +322,18 @@ class FUNSDGraphPair(GraphPairDataset):
 
         for trans,i_list in trans_to_gi.items():
             if len(i_list)>1:
-                print('possible ambig: {}'.format(trans))
+                #print('possible ambig: {}'.format(trans))
                 got=0
                 for gi in i_list:
                     if gi in relationships_q_h:
                         got+=1
                         hi = relationships_q_h[gi]
                         all_trans[gi]= all_trans[hi]+' '+all_trans[gi]
-                        print('  ambig rename: {}'.format(all_trans[gi]))
+                        #print('  ambig rename: {}'.format(all_trans[gi]))
                 if got<len(i_list)-1:
                     ambiguous.add(trans)
                 else:
-                    print('  saved!')
+                    #print('  saved!')
 
 
         q_a_pairs=[]
@@ -381,6 +381,8 @@ class FUNSDGraphPair(GraphPairDataset):
                             trans+=' '+t
                         all_trans[gi]=trans
                         group_count+=1
+                        bb_ids = groups[qi]+groups[other_qi]
+                        groups = groups+[bb_ids]
 
                         q_a_pairs.append((gi,ai))
                         skip.add(other_qi)
@@ -390,16 +392,19 @@ class FUNSDGraphPair(GraphPairDataset):
                     #if must be a multiline answer
                     gi = group_count
                     trans_bb = []
+                    bb_ids = []
                     for ai in ais:
                         #assert len(groups[ai])==1 this can be a list, in which  case we lose new lines
                         bbi = groups[ai][0]
                         trans_bb.append((bbs[bbi,1],transcription[bbi]))
+                        bb_ids += groups[ai]
                     trans_bb.sort(key=lambda a:a[0] )
                     trans=trans_bb[0][1]
                     for y,t in trans_bb[1:]:
                         trans+=' '+t
                     all_trans[gi]=trans
                     group_count+=1
+                    groups = groups+[bb_ids]
 
                     q_a_pairs.append((qi,gi))
                 else:
@@ -417,14 +422,16 @@ class FUNSDGraphPair(GraphPairDataset):
 
         for qi,ai in q_a_pairs:
             trans_qi = all_trans[qi]
+            #if 'Group' in trans_qi:
+            #    import pdb;pdb.set_trace()
             if ai is not None:
                 trans_ai = all_trans[ai]
                 if trans_qi not in ambiguous:
-                    all_q_a.append(('value for "{}"?'.format(trans_qi),trans_ai))
+                    all_q_a.append(('value for "{}"?'.format(trans_qi),trans_ai,[qi,ai]))
                 if trans_ai not in ambiguous:
-                    all_q_a.append(('label of "{}"?'.format(trans_ai),trans_qi))
+                    all_q_a.append(('label of "{}"?'.format(trans_ai),trans_qi,[qi,ai]))
             elif trans_qi not in ambiguous:
-                all_q_a.append(('value for "{}"?'.format(trans_qi),'blank'))
+                all_q_a.append(('value for "{}"?'.format(trans_qi),'blank',[qi]))
 
         #addTable can cause two tables to be made in odd cases (uneven rows, etc), so we'll simply combine all the table information and generate questions from it.
         #print(tables)
@@ -463,13 +470,13 @@ class FUNSDGraphPair(GraphPairDataset):
         row_vs=defaultdict(list)
         for (col_h,row_h),v in table_values.items():
             if col_h is not None and row_h is not None:
-                all_q_a.append(('value of "{}" and "{}"?'.format(all_trans[row_h],all_trans[col_h]),all_trans[v]))
-                all_q_a.append(('value of "{}" and "{}"?'.format(all_trans[col_h],all_trans[row_h]),all_trans[v]))
+                all_q_a.append(('value of "{}" and "{}"?'.format(all_trans[row_h],all_trans[col_h]),all_trans[v],[col_h,row_h,v]))
+                all_q_a.append(('value of "{}" and "{}"?'.format(all_trans[col_h],all_trans[row_h]),all_trans[v],[col_h,row_h,v]))
             if all_trans[v] not in ambiguous:
                 if row_h is not None:
-                    all_q_a.append(('row that "{}" is in?'.format(all_trans[v]),all_trans[row_h]))
+                    all_q_a.append(('row that "{}" is in?'.format(all_trans[v]),all_trans[row_h],[v,row_h]))
                 if col_h is not None:
-                    all_q_a.append(('column that "{}" is in?'.format(all_trans[v]),all_trans[col_h]))
+                    all_q_a.append(('column that "{}" is in?'.format(all_trans[v]),all_trans[col_h],[v,col_h]))
 
             x,y = bbs[groups[v][0],0:2]
             if col_h is not None:
@@ -484,7 +491,7 @@ class FUNSDGraphPair(GraphPairDataset):
                 a=all_trans[vs[0][0]]
                 for v,x in vs[1:]:
                     a+=', '+all_trans[v]
-                all_q_a.append(('all values in row {}?'.format(trans_row_h),a))
+                all_q_a.append(('all values in row {}?'.format(trans_row_h),a,[row_h,vs[0][0]]))
         for col_h, vs in col_vs.items():
             trans_col_h = all_trans[col_h]
             if trans_col_h not in ambiguous:
@@ -492,15 +499,15 @@ class FUNSDGraphPair(GraphPairDataset):
                 a=all_trans[vs[0][0]]
                 for v,y in vs[1:]:
                     a+=', '+all_trans[v]
-                all_q_a.append(('all values in column {}?'.format(trans_col_h),a))
+                all_q_a.append(('all values in column {}?'.format(trans_col_h),a,[col_h,vs[0][0]]))
 
-
-        if len(all_q_a) > self.questions:
-            selected = random.sample(all_q_a,k=self.questions)
-        else:
-            selected = all_q_a
-
-        return zip(*selected)
+        new_all_q_a =[]
+        for q,a,group_ids in all_q_a:
+            bb_ids=[]
+            for gid in group_ids:
+                bb_ids+=groups[gid]
+            new_all_q_a.append((q,a,bb_ids))
+        return new_all_q_a
 
 
 def getWidthFromBB(bb):
@@ -701,7 +708,7 @@ def addTableElement(table_values,row_headers,col_headers,ai,qi1,qi2,groups,bbs,t
             col_h = qi2
         else:
             #IDK
-            import pdb;pdb.set_trace()
+            #import pdb;pdb.set_trace()
             return False
         
         table_values[(col_h,row_h)]=ai
