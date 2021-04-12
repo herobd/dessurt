@@ -41,6 +41,32 @@ def maxRelScoreIsHit(child_groups,parent_groups,edgeIndexes,edgePred):
                     max_score_is_hit = False
     return max_score_is_hit
 
+def _check_bn_apply(module, flag):
+    if issubclass(module.__class__, torch.nn.modules.batchnorm._BatchNorm):
+        flag[0] = True
+
+
+def _check_bn(model):
+    flag = [False]
+    model.apply(lambda module: _check_bn_apply(module, flag))
+    return flag[0]
+
+
+def _reset_bn(module):
+    if issubclass(module.__class__, torch.nn.modules.batchnorm._BatchNorm):
+        module.running_mean = torch.zeros_like(module.running_mean)
+        module.running_var = torch.ones_like(module.running_var)
+
+
+def _get_momenta(module, momenta):
+    if issubclass(module.__class__, torch.nn.modules.batchnorm._BatchNorm):
+        momenta[module] = module.momentum
+
+
+def _set_momenta(module, momenta):
+    if issubclass(module.__class__, torch.nn.modules.batchnorm._BatchNorm):
+        module.momentum = momenta[module]
+
 class GraphPairTrainer(BaseTrainer):
     """
     Trainer class
@@ -302,6 +328,7 @@ class GraphPairTrainer(BaseTrainer):
             loss += losses[name]
             losses[name] = losses[name].item()
         if len(losses)>0:
+            assert not torch.isnan(loss)
             if self.accum_grad_steps>1:
                 loss /= self.accum_grad_steps
             if self.amp:
@@ -316,6 +343,7 @@ class GraphPairTrainer(BaseTrainer):
                 continue
             count+=1
             meangrad+=m.grad.data.mean().cpu().item()
+            assert not torch.isnan(m.grad.data).any()
         if count!=0:
             meangrad/=count
         if self.accum_grad_steps<2 or iteration%self.accum_grad_steps==0:
@@ -420,7 +448,7 @@ class GraphPairTrainer(BaseTrainer):
 
         for val_name in val_metrics:
             if val_count[val_name]>0:
-                val_metrics[val_name] /= val_count[val_name]
+                val_metrics[val_name] =  val_count[val_name]/val_count[val_name]
         return val_metrics
 
     def alignEdgePred(self,targetBoxes,adj,outputBoxes,relPred,relIndexes,rel_prop_pred):
@@ -1563,7 +1591,7 @@ class GraphPairTrainer(BaseTrainer):
 
 
 
-    def newRun(self,instance,useGT,threshIntur=None,get=[]):#,useOnlyGTSpace=False,useGTGroups=False):
+    def newRun(self,instance,useGT,threshIntur=None,get=[],forward_only=False):#,useOnlyGTSpace=False,useGTGroups=False):
         assert(not self.model_ref.predNN)
         numClasses = len(self.classMap)
         image, targetBoxes, adj, target_num_neighbors = self._to_tensor(instance)
@@ -1735,6 +1763,8 @@ class GraphPairTrainer(BaseTrainer):
                     gtTrans = gtTrans,
                     merge_first_only = self.iteration<self.merge_first_only_until)
             #gtPairing,predPairing = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred)
+        if forward_only:
+            return
         #t#self.opt_history['run model'].append(timeit.default_timer()-tic)#t#
         #t#tic=timeit.default_timer()#t##t#
         ### TODO code prealigned
@@ -3549,3 +3579,44 @@ class GraphPairTrainer(BaseTrainer):
             decision=decision.to(relPred.device)
             relPred[keep] = torch.where(0==decision,relPred[keep]-1,relPred[keep]+self.thresh_rel)
             relPred[~keep] -=1
+
+    def bn_update(self):
+        r"""Updates BatchNorm running_mean, running_var buffers in the model.
+        It performs one pass over data in `loader` to estimate the activation
+        statistics for BatchNorm layers in the model.
+        Args:
+            loader (torch.utils.data.DataLoader): dataset loader to compute the
+                activation statistics on. Each data batch should be either a
+                tensor, or a list/tuple whose first element is a tensor
+                containing data.
+            model (torch.nn.Module): model for which we seek to update BatchNorm
+                statistics.
+            device (torch.device, optional): If set, data will be trasferred to
+                :attr:`device` before being passed into :attr:`model`.
+        """
+        model=self.model
+        loader=self.data_loader
+        if not _check_bn(model):
+            return
+        print('updating bn')
+        was_training = model.training
+        model.train()
+        momenta = {}
+        #model.apply(_reset_bn)
+        #model.apply(lambda module: _get_momenta(module, momenta))
+        n = 0
+        with torch.no_grad():
+            for instance in loader:
+
+                b = 1#input.size(0)
+
+                momentum = b / float(n + b)
+                #for module in momenta.keys():
+                #    module.momentum = momentum
+
+                self.newRun(instance,self.useGT(self.iteration),forward_only=True)
+                n += b
+
+        #model.apply(lambda module: _set_momenta(module, momenta))
+        #model.train(was_training)
+
