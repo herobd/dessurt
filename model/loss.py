@@ -36,3 +36,41 @@ def detect_alignment_loss_points(predictions, target,label_sizes,alpha_alignment
 def CTCLoss(input,target,input_len,target_len):
     ret = F.ctc_loss(input,target,input_len,target_len)
     return torch.where(torch.isinf(ret), torch.zeros_like(ret), ret)
+
+class LabelSmoothing(nn.Module):
+    "Implement label smoothing."
+    "From the Annotated Transformer: https://nlp.seas.harvard.edu/2018/04/03/attention.html"
+    def __init__(self, size, padding_idx, smoothing=0.0):
+        super(LabelSmoothing, self).__init__()
+        self.criterion = nn.KLDivLoss(size_average=False)
+        self.padding_idx = padding_idx
+        self.confidence = 1.0 - smoothing
+        self.smoothing = smoothing
+        self.size = size
+        self.true_dist = None
+
+    def forward(self, x, target):
+        
+        assert x.size(1) == self.size
+        true_dist = x.data.clone()
+        true_dist.fill_(self.smoothing / (self.size - 2))
+        true_dist.scatter_(1, target.data.unsqueeze(1), self.confidence)
+        true_dist[:, self.padding_idx] = 0
+        mask = torch.nonzero(target.data == self.padding_idx)
+        if mask.dim() > 0:
+            true_dist.index_fill_(0, mask.squeeze(), 0.0)
+        self.true_dist = true_dist
+        return self.criterion(x, true_dist)
+
+def label_smoothing(self, x, target, padding_idx=0, smoothing=0.0): #huggingface padds with 0
+    
+    size = x.size(1)
+    confidence = 1.0 - smoothing
+    true_dist = x.data.clone()
+    true_dist.fill_(smoothing / (size - 2))
+    true_dist.scatter_(1, target.data.unsqueeze(1), confidence)
+    true_dist[:, padding_idx] = 0
+    mask = torch.nonzero(target.data == padding_idx)
+    if mask.dim() > 0:
+        true_dist.index_fill_(0, mask.squeeze(), 0.0)
+    return F.kl_div(x, true_dist,size_average=False)

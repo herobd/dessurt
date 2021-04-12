@@ -5,6 +5,10 @@ import torch.nn.functional as F
 import numpy as np
 from model.pairing_g_graph_layoutlm import PairingGGraphLayoutLM
 
+try:
+    from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
+except:
+    pass
 
 
 class DecoderOnPairing(BaseModel):
@@ -21,13 +25,18 @@ class DecoderOnPairing(BaseModel):
                 )
 
     def forward(image,gtBBs,gtTrans,questions,answers=None):
-        layoutlm_feats = runLayoutLM(image.size(),gtBBs,gtTrans,image.device,self.layoutlm_tokenizer,self.layoutlm,keep_ends=True)
+        layoutlm_feats = runLayoutLM(image.size(),gtBBs[0],gtTrans,image.device,self.layoutlm_tokenizer,self.layoutlm,keep_ends=True) #this assumes a single batch
+
+        layoutlm_feats =self.change_layoutlm(layoutlm_feats)
+        #Maybe pos encode layoutlm as well, to account for times its been processed in two batches
+        #acutally, it encodes x,y poisition...
 
         if self.pairing_model is not None:
             with torch.no_grad(): #I'm going to freeze it
-                graph_feats = self.pairing_model(image,gtBBs=gtBBs,useGTBBs=True,gtTrans=gtTrans,return_feats=True)
+                graph_feats, node_cords = self.pairing_model(image,gtBBs=gtBBs,useGTBBs=True,gtTrans=gtTrans,return_feats=True)
             graph_feats = self.change_graph(graph_feats)
-            TODO position encoding, at least for graph
+            #TODO position encoding, at least for graph
+            graph_feats = self.graph_pos_enc(graph_feats,node_cords)
 
             document_feats = torch.cat((layoutlm_feats,graph_feats),dim=2)#place the graph_feats between so it gets put between the SEP and START tokens
         else:
@@ -35,11 +44,10 @@ class DecoderOnPairing(BaseModel):
         
 
 
-        layoutlm_feats =self.change_layoutlm(layoutlm_feats)
-        Maybe pos encode layoutlm as well, to account for times its been processed in two batches
-
+        memory_feats_b = [] #make a batcj
+        max_len=0
         for qi,question in enumerate(questions):
-            answer = answers[qi] is answers is not None else None
+            #answer = answers[qi] is answers is not None else None
 
             inputs = self.question_tokenizer(question, return_tensors="pt", padding=True)
             inputs = {k:i.to(device) for k,i in inputs.items()}
@@ -47,33 +55,55 @@ class DecoderOnPairing(BaseModel):
             question_feats = self.change_question(question_feats)
 
 
-            memory_feats = torch.cat((document_feats,question_feats),dim=2) #place the graph_feats between so it gets put between the SEP and START tokens
+            memory_feats = torch.cat((document_feats,question_feats),dim=1) #place the graph_feats between so it gets put between the SEP and START tokens
+            memory_feats_b.append(memory_feats)
+            max_len = max(max_len,memory_feats.size(1))
 
-            memory_feats = self.encoder(memory_feats)
+        memory_padding_mask = torch.BoolTensor(len(questions),max_len).zero_()
+        for i in range(len(questions)):
+            diff = max_len-memory_feats_b[i].size(1)
+            if diff>0:
+                memory_padding_mask[memory_feats_b[i].size(1):]=1
+                memory_feats_b[i] = torch.pad(memory_feats_b[i],(0,0,0,diff))
+        memory_feats_b = torch.cat(memory_feats_b,dim=0)
+        memory_feats_b = self.encoder(memory_feats_b)
 
-            if answer is not None: #we are training
-                answer = self.tokenizer(answer,return_tensors="pt")['input_ids']
-                answer_emb = self.answer_embedding(answer)
-                response = self.decoder(
-                        answer_emb,
-                        memory_feats,
-                        tgt_mask=self.decoder.generate_square_subsequent_mask(answer.size(0))
-                        )
-                        #We don't need padding as we only deal with batches of size 1
-                        #memory_mask=None,
-                        #tgt_key_padding_mask=question_padding_mask,
-                        #memory_key_padding_mask=memory_padding_mask)
-            else: #we need to do this autoregressively
-                p_answer = torch.FloatTensor(1,1).fill_(self.CLS_TOKEN).to(memory_feats.device)
-                p_answer_emb = self.answer_embedding(p_answer)
-                while True:
-                    p_response = self.decoder(
-                            p_answer_emb,
-                            memory_feats)
-                    p_decoded = self.answer_decode(p_response)
-                    last_token = p_decoded[-1,0].argmax() #last token prob, batchsize of 1, greedy
-                    last_token = last_token[None,None]
-                    last_token_emb = self.answer_embedding(last_token)
-                    p_answer_emb = torch.cat((p_answer_emb,last_token_emb),dim=-1)
+        
 
 
+        if answers is not None: #we are training
+            answers_t = self.tokenizer(answers,return_tensors="pt",padding=True)
+            answers_emb = self.answer_embedding(answers_t['input_ids'].to(device)) #needs to do position
+            answers_emb = answers_emb.permute(1,0,2) #batch,len,feat -> len,batch,feat
+            answer_padding_mask = (1-answers_t['attention_mask']).bool().to(device)
+            response = self.decoder(
+                    answers_emb,
+                    memory_feats_b.expand(-1,len(questions),-1), #expand batch dim to match questions
+                    tgt_mask=self.decoder.generate_square_subsequent_mask(answes.size(1))
+                    tgt_key_padding_mask=answer_padding_mask,
+                    memory_key_padding_mask=memory_padding_mask)
+            response_decoded = self.answer_decode(response)
+            #sep = torch.LongTensor(len(questions),1).fill_(self.SEP_TOKEN)
+            target_decoded = answers_t[1:].permute(1,0,2) #put batch first. This has the SEP tokens (and padding)
+            target_mask = answer_padding_mask[:,1:]
+        else: #we need to do this autoregressively
+            #This is not efficeint
+            TODO() #how do I freeze the already run activations?
+            p_answer_t = torch.LongTensor(len(questions),1).fill_(self.CLS_TOKEN).to(memory_feats.device)
+            p_answer_emb = self.answer_embedding(p_answer_t)
+            p_answers_emb = p_answers_emb.permute(1,0,2) #batch,len,feat -> len,batch,feat
+            cont=True
+            while cont:
+                p_response = self.decoder(
+                        p_answer_emb,
+                        memory_feats_b,
+                        memory_key_padding_mask=memory_padding_mask)
+                p_decoded = self.answer_decode(p_response)
+                last_token = p_decoded[-1].argmax(dim=2) #last token prob,  greedy
+                if (last_token== self.SEP_TOKEN).all():
+                    cont=False
+                last_token = last_token[None,None]
+                last_token_emb = self.answer_embedding(last_token,pos=p_answer_emb.size(-1))
+                p_answer_emb = torch.cat((p_answer_emb,last_token_emb),dim=-1)
+
+            #response_d = ?
