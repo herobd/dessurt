@@ -280,6 +280,7 @@ class BaseTrainer:
         self.monitor_best = math.inf if self.monitor_mode == 'min' else -math.inf
         self.retry_count = config['trainer']['retry_count'] if 'retry_count' in config['trainer'] else 1
         self.start_iteration = 1
+        self.iteration=self.start_iteration
         self.checkpoint_dir = os.path.join(config['trainer']['save_dir'], self.name)
         ensure_dir(self.checkpoint_dir)
         json.dump(config, open(os.path.join(self.checkpoint_dir, 'config.json'), 'w'),
@@ -521,6 +522,7 @@ class BaseTrainer:
             self.config = checkpoint['config']
         if not self.reset_iteration:
             self.start_iteration = checkpoint['iteration'] + 1
+            self.iteration=self.start_iteration
         self.monitor_best = checkpoint['monitor_best']
         #print(checkpoint['state_dict'].keys())
         if ('save_mode' not in self.config or self.config['save_mode']=='state_dict') and 'state_dict' in checkpoint:
