@@ -82,6 +82,9 @@ class QATrainer(BaseTrainer):
         self.accum_grad_steps = config['trainer']['accum_grad_steps'] if 'accum_grad_steps' in config['trainer'] else 1
 
 
+        self.print_pred_every = config['trainer']['print_pred_every'] if  'print_pred_every' in config['trainer'] else 200
+
+
 
 
     def _to_tensor(self, instance):
