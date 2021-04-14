@@ -96,7 +96,7 @@ class DecoderOnPairing(BaseModel):
         document_feats_len = document_feats.size(0)
         document_feats = document_feats[None,...].expand(len(questions),-1,-1)
         memory_feats = torch.cat((document_feats,question_feats),dim=1)
-        memory_padding_mask = torch.cat((torch.BoolTensor(len(questions),document_feats_len).zero_(),1-q_inputs['attention_mask']),dim=1)
+        memory_padding_mask = torch.cat((torch.BoolTensor(len(questions),document_feats_len).zero_().to(device),~q_inputs['attention_mask'].bool()),dim=1)
 
         memory_feats = memory_feats.permute(1,0,2)
 
@@ -113,7 +113,7 @@ class DecoderOnPairing(BaseModel):
             response = self.decoder(
                     answers_emb,
                     memory_feats.expand(-1,len(questions),-1), #expand batch dim to match questions
-                    tgt_mask=nn.Transformer.generate_square_subsequent_mask(None,answers_emb.size(0)),
+                    tgt_mask=nn.Transformer.generate_square_subsequent_mask(None,answers_emb.size(0)).to(device),
                     tgt_key_padding_mask=answer_padding_mask,
                     memory_key_padding_mask=memory_padding_mask)
             response_decoded = self.answer_decode(response.view(-1,response.size(2)))
@@ -125,7 +125,7 @@ class DecoderOnPairing(BaseModel):
             string_response=[]
             for b in range(len(questions)):
                 string_response.append(self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(response_greedy_tokens[b],skip_special_tokens=True)))
-            return response_decoded, target_decoded, string_response
+            return response_decoded, target_decoded.to(device), string_response
         else: #we need to do this autoregressively
             #This is not efficeint
             TODO() #how do I freeze the already run activations?

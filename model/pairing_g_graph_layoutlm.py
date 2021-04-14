@@ -247,11 +247,11 @@ def runLayoutLM(image_size,gtBBs,gtTrans,device,tokenizer,layoutlm,useCurvedBBs=
             prev_end=end
 
         num_batches = len(starts)
-        print('split to {} batches'.format(num_batches))
+        #print('split to {} batches'.format(num_batches))
         
         #cat the batch together, and add start/end CLS and SEP tokens
         input_ids = torch.cat(batch_ids,dim=0)
-        LLM_start_token = torch.LongTensor(num_batches,1).fill_(LLM_CLS)
+        start_token = torch.LongTensor(num_batches,1).fill_(LLM_CLS)
         end_token = torch.LongTensor(num_batches,1).fill_(LLM_SEP)
         input_ids = torch.cat([start_token,input_ids,end_token],dim=1).to(device)
 
@@ -264,7 +264,7 @@ def runLayoutLM(image_size,gtBBs,gtTrans,device,tokenizer,layoutlm,useCurvedBBs=
         sep_bbs = torch.LongTensor(num_batches,1,4).fill_(1000)
         batch_bbs = torch.cat([cls_bbs,batch_bbs,sep_bbs],dim=1).to(device)
 
-        print('input_ids:{}, attention_mask:{}, batch_bbs:{}'.format(input_ids.size(),attention_mask.size(),batch_bbs.size()))
+        #print('input_ids:{}, attention_mask:{}, batch_bbs:{}'.format(input_ids.size(),attention_mask.size(),batch_bbs.size()))
 
         #batch = {'input_ids':torch.cat(batch_ids,dim=0).to(device), 'attention_mask':torch.cat(batch_mask,dim=0).to(device)}
         outputs = layoutlm(input_ids=input_ids,attention_mask=attention_mask,bbox=batch_bbs).last_hidden_state
@@ -277,7 +277,7 @@ def runLayoutLM(image_size,gtBBs,gtTrans,device,tokenizer,layoutlm,useCurvedBBs=
 
         prev_out=None
         prev_start=None
-        print('begin remerge')
+        #print('begin remerge')
         for b in range(num_batches):
             start=starts[b]
             end=ends[b]
@@ -305,7 +305,7 @@ def runLayoutLM(image_size,gtBBs,gtTrans,device,tokenizer,layoutlm,useCurvedBBs=
                 full_output.append(output[prev_end-start+1:]) #this includes last SEP token
         lm_out = torch.cat(full_output,dim=0)
         assert lm_out.size(0) == inputs['input_ids'].size(1)
-        print('finished remerge')
+        #print('finished remerge')
 
 
     #We'll now average the features for tokens from the same word-bb
