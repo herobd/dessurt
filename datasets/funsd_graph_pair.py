@@ -332,7 +332,7 @@ class FUNSDGraphPair(GraphPairDataset):
                         #print('  ambig rename: {}'.format(all_trans[gi]))
                 if got<len(i_list)-1:
                     ambiguous.add(trans)
-                else:
+                #else:
                     #print('  saved!')
 
 

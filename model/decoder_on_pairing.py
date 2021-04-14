@@ -3,20 +3,31 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from model.pairing_g_graph_layoutlm import PairingGGraphLayoutLM
-
+from model.pairing_g_graph_layoutlm import  runLayoutLM
 try:
     from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
+    from transformers import LayoutLMTokenizer, LayoutLMModel
 except:
     pass
 
 
 class DecoderOnPairing(BaseModel):
-    def __init__(self):
+    def __init__(self,config):
+        super(DecoderOnPairing, self).__init__(config)
+        d_model = config['decode_dim']
+        dim_ff = config['dim_ff']
+        nhead = config['decode_num_heads']
+        num_layers = config['decode_layers']
+        num_e_layers = config['encode_layers']
         self.pairing_model = None
 
         self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-        
+
+        self.question_languagemodel = DistilBertModel.from_pretrained('distilbert-base-uncased')
+        self.change_question = nn.Linear(768,d_model)
+
+    
+        decoder_layer = nn.TransformerDecoderLayer(d_model,nhead,dim_ff)
         self.decoder = nn.TransformerDecoder(decoder_layer,num_layers,nn.LayerNorm(d_model))
         self.answer_embedding = nn.Embedding(self.tokenizer.vocab_size, d_model)
         self.answer_decode = nn.Sequential(
@@ -24,7 +35,16 @@ class DecoderOnPairing(BaseModel):
                 nn.Softmax(dim=-1)
                 )
 
-    def forward(image,gtBBs,gtTrans,questions,answers=None):
+        encoder_layer= nn.TransformerEncoderLayer(d_model,nhead,dim_ff)
+        self.encoder = nn.TransformerEncoder(encoder_layer,num_e_layers,nn.LayerNorm(d_model))
+
+        self.layoutlm_tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        self.layoutlm = LayoutLMModel.from_pretrained("microsoft/layoutlm-base-uncased")
+        self.change_layoutlm = nn.Linear(768,d_model)
+
+
+    def forward(self,image,gtBBs,gtTrans,questions,answers=None):
+        device = image.device
         layoutlm_feats = runLayoutLM(image.size(),gtBBs[0],gtTrans,image.device,self.layoutlm_tokenizer,self.layoutlm,keep_ends=True) #this assumes a single batch
 
         layoutlm_feats =self.change_layoutlm(layoutlm_feats)
@@ -49,7 +69,7 @@ class DecoderOnPairing(BaseModel):
         for qi,question in enumerate(questions):
             #answer = answers[qi] is answers is not None else None
 
-            inputs = self.question_tokenizer(question, return_tensors="pt", padding=True)
+            inputs = self.tokenizer(question, return_tensors="pt", padding=True)
             inputs = {k:i.to(device) for k,i in inputs.items()}
             question_feats = self.question_languagemodel(**inputs).last_hidden_state
             question_feats = self.change_question(question_feats)
@@ -73,19 +93,25 @@ class DecoderOnPairing(BaseModel):
 
         if answers is not None: #we are training
             answers_t = self.tokenizer(answers,return_tensors="pt",padding=True)
-            answers_emb = self.answer_embedding(answers_t['input_ids'].to(device)) #needs to do position
+            answers_emb = self.answer_embedding(answers_t['input_ids'][:-1].to(device)) #Remove end (SEP) token, as it doesn't need to predict anythin after that. emb needs to do position
             answers_emb = answers_emb.permute(1,0,2) #batch,len,feat -> len,batch,feat
-            answer_padding_mask = (1-answers_t['attention_mask']).bool().to(device)
+            answer_padding_mask = (1-answers_t['attention_mask'][:-1]).bool().to(device)
             response = self.decoder(
                     answers_emb,
                     memory_feats_b.expand(-1,len(questions),-1), #expand batch dim to match questions
-                    tgt_mask=self.decoder.generate_square_subsequent_mask(answes.size(1))
+                    tgt_mask=self.decoder.generate_square_subsequent_mask(answes.size(1)),
                     tgt_key_padding_mask=answer_padding_mask,
                     memory_key_padding_mask=memory_padding_mask)
-            response_decoded = self.answer_decode(response)
-            #sep = torch.LongTensor(len(questions),1).fill_(self.SEP_TOKEN)
-            target_decoded = answers_t[1:].permute(1,0,2) #put batch first. This has the SEP tokens (and padding)
-            target_mask = answer_padding_mask[:,1:]
+            response_decoded = self.answer_decode(response.view(-1,response.size(2)))
+            response_decoded = response_decoded.view(answers_emb.size(0),len(questions),-1)
+            response_decoded = response_decoded.permute(1,0,2) #put batch dim first
+            target_decoded = answers_t['input_ids'][1:]# This has the SEP tokens (and padding)
+            #target_mask = answer_padding_mask[:,1:]
+            response_greedy_tokens = response_decoded.argmax(dim=2)
+            string_response=[]
+            for b in range(len(questions)):
+                string_response.append(self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(response_greedy_tokens[b],skip_special_tokens=True)))
+            return response_decoded, target_decoded, string_response
         else: #we need to do this autoregressively
             #This is not efficeint
             TODO() #how do I freeze the already run activations?
