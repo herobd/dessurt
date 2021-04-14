@@ -1,3 +1,4 @@
+import torch
 import torch.nn.functional as F
 import utils
 #import torch.nn as nn
@@ -62,10 +63,10 @@ def CTCLoss(input,target,input_len,target_len):
 #        self.true_dist = true_dist
 #        return self.criterion(x, true_dist)
 
-def label_smoothing(self, x, target, padding_idx=0, smoothing=0.0): #huggingface padds with 0
+def label_smoothing(x, target, padding_idx=0, smoothing=0.0): #huggingface padds with 0
     if len(x.size())==3:
-        x = x.view(-1,x.size(3))
-        target = target.view(-1)
+        x = x.contiguous().view(-1,x.size(2))
+        target = target.contiguous().view(-1)
     
     size = x.size(1)
     confidence = 1.0 - smoothing

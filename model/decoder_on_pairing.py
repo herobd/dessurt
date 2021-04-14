@@ -64,48 +64,62 @@ class DecoderOnPairing(BaseModel):
         
 
 
-        memory_feats_b = [] #make a batcj
-        max_len=0
-        for qi,question in enumerate(questions):
-            #answer = answers[qi] is answers is not None else None
+        #memory_feats_b = [] #make a batcj
+        #max_len=0
+        #for qi,question in enumerate(questions):
+        #    #answer = answers[qi] is answers is not None else None
 
-            inputs = self.tokenizer(question, return_tensors="pt", padding=True)
-            inputs = {k:i.to(device) for k,i in inputs.items()}
-            question_feats = self.question_languagemodel(**inputs).last_hidden_state
-            question_feats = self.change_question(question_feats)
+        #    inputs = self.tokenizer(question, return_tensors="pt", padding=True)
+        #    inputs = {k:i.to(device) for k,i in inputs.items()}
+        #    question_feats = self.question_languagemodel(**inputs).last_hidden_state
+        #    question_feats = self.change_question(question_feats)
 
 
-            memory_feats = torch.cat((document_feats,question_feats),dim=1) #place the graph_feats between so it gets put between the SEP and START tokens
-            memory_feats_b.append(memory_feats)
-            max_len = max(max_len,memory_feats.size(1))
+        #    memory_feats = torch.cat((document_feats,question_feats),dim=1) #place the graph_feats between so it gets put between the SEP and START tokens
+        #    memory_feats_b.append(memory_feats)
+        #    max_len = max(max_len,memory_feats.size(1))
 
-        memory_padding_mask = torch.BoolTensor(len(questions),max_len).zero_()
-        for i in range(len(questions)):
-            diff = max_len-memory_feats_b[i].size(1)
-            if diff>0:
-                memory_padding_mask[memory_feats_b[i].size(1):]=1
-                memory_feats_b[i] = torch.pad(memory_feats_b[i],(0,0,0,diff))
-        memory_feats_b = torch.cat(memory_feats_b,dim=0)
-        memory_feats_b = self.encoder(memory_feats_b)
+        #memory_padding_mask = torch.BoolTensor(len(questions),max_len).zero_()
+        #for i in range(len(questions)):
+        #    diff = max_len-memory_feats_b[i].size(1)
+        #    if diff>0:
+        #        memory_padding_mask[memory_feats_b[i].size(1):]=1
+        #        memory_feats_b[i] = torch.pad(memory_feats_b[i],(0,0,0,diff))
+        #memory_feats_b = torch.cat(memory_feats_b,dim=0)
+        #memory_feats_b = self.encoder(memory_feats_b)
 
         
+        q_inputs = self.tokenizer(questions, return_tensors="pt", padding=True)
+        q_inputs = {k:i.to(device) for k,i in q_inputs.items()}
+        question_feats = self.question_languagemodel(**q_inputs).last_hidden_state
+        question_feats = self.change_question(question_feats)
+        document_feats_len = document_feats.size(0)
+        document_feats = document_feats[None,...].expand(len(questions),-1,-1)
+        memory_feats = torch.cat((document_feats,question_feats),dim=1)
+        memory_padding_mask = torch.cat((torch.BoolTensor(len(questions),document_feats_len).zero_(),1-q_inputs['attention_mask']),dim=1)
+
+        memory_feats = memory_feats.permute(1,0,2)
+
+        memory_feats = self.encoder(
+                memory_feats,
+                src_key_padding_mask=memory_padding_mask)
 
 
         if answers is not None: #we are training
             answers_t = self.tokenizer(answers,return_tensors="pt",padding=True)
-            answers_emb = self.answer_embedding(answers_t['input_ids'][:-1].to(device)) #Remove end (SEP) token, as it doesn't need to predict anythin after that. emb needs to do position
+            answers_emb = self.answer_embedding(answers_t['input_ids'][:,:-1].to(device)) #Remove end (SEP) token, as it doesn't need to predict anythin after that. emb needs to do position
             answers_emb = answers_emb.permute(1,0,2) #batch,len,feat -> len,batch,feat
-            answer_padding_mask = (1-answers_t['attention_mask'][:-1]).bool().to(device)
+            answer_padding_mask = (1-answers_t['attention_mask'][:,:-1]).bool().to(device)
             response = self.decoder(
                     answers_emb,
-                    memory_feats_b.expand(-1,len(questions),-1), #expand batch dim to match questions
-                    tgt_mask=self.decoder.generate_square_subsequent_mask(answes.size(1)),
+                    memory_feats.expand(-1,len(questions),-1), #expand batch dim to match questions
+                    tgt_mask=nn.Transformer.generate_square_subsequent_mask(None,answers_emb.size(0)),
                     tgt_key_padding_mask=answer_padding_mask,
                     memory_key_padding_mask=memory_padding_mask)
             response_decoded = self.answer_decode(response.view(-1,response.size(2)))
             response_decoded = response_decoded.view(answers_emb.size(0),len(questions),-1)
             response_decoded = response_decoded.permute(1,0,2) #put batch dim first
-            target_decoded = answers_t['input_ids'][1:]# This has the SEP tokens (and padding)
+            target_decoded = answers_t['input_ids'][:,1:]# This has the SEP tokens (and padding)
             #target_mask = answer_padding_mask[:,1:]
             response_greedy_tokens = response_decoded.argmax(dim=2)
             string_response=[]
