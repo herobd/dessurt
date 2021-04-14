@@ -15,6 +15,15 @@ def my_loss(y_input, y_target):
 
 def sigmoid_BCE_loss(y_input, y_target):
     return F.binary_cross_entropy_with_logits(y_input, y_target)
+def cross_entropy(x,target):
+    if len(x.size())==3:
+        batchsize = x.size(0)
+        lenn = x.size(1)
+        x = x.contiguous().view(-1,x.size(2))
+        target = target.contiguous().view(-1)
+    else:
+        batchsize=1
+    return F.cross_entropy(x,target)
 def MSE(y_input, y_target):
     return F.mse_loss(y_input, y_target.float())
 
@@ -65,8 +74,12 @@ def CTCLoss(input,target,input_len,target_len):
 
 def label_smoothing(x, target, padding_idx=0, smoothing=0.0): #huggingface padds with 0
     if len(x.size())==3:
+        batchsize = x.size(0)
+        lenn = x.size(1)
         x = x.contiguous().view(-1,x.size(2))
         target = target.contiguous().view(-1)
+    else:
+        batchsize=1
     
     size = x.size(1)
     confidence = 1.0 - smoothing
@@ -77,4 +90,4 @@ def label_smoothing(x, target, padding_idx=0, smoothing=0.0): #huggingface padds
     mask = torch.nonzero(target.data == padding_idx)
     if mask.dim() > 0:
         true_dist.index_fill_(0, mask.squeeze(), 0.0)
-    return F.kl_div(x, true_dist,size_average=False)
+    return F.kl_div(x.view(batchsize,lenn,size), true_dist.view(batchsize,lenn,size),reduction='batchmean')

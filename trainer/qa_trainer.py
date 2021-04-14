@@ -95,9 +95,6 @@ class QATrainer(BaseTrainer):
             image = image.to(self.gpu)
             if bbs is not None:
                 bbs = bbs.to(self.gpu)
-            if num_neighbors is not None:
-                num_neighbors = num_neighbors.to(self.gpu)
-            #adjacenyMatrix = adjacenyMatrix.to(self.gpu)
         return image, bbs
 
     def _eval_metrics(self, typ,name,output, target):
@@ -186,7 +183,7 @@ class QATrainer(BaseTrainer):
             if m.grad is None:
                 continue
             count+=1
-            meangrad+=m.grad.data.mean().cpu().item()
+            meangrad+=abs(m.grad.data.mean().cpu().item())
             assert not torch.isnan(m.grad.data).any()
         if count!=0:
             meangrad/=count
@@ -202,7 +199,7 @@ class QATrainer(BaseTrainer):
             loss = loss.item()
         #print('loss:{}, mean grad:{}'.format(loss,meangrad))
         log = {
-            'mean grad': meangrad,
+            'mean abs grad': meangrad,
             'loss': loss,
             **losses,
             #'edgePredLens':np.array([numEdgePred,numBoxPred,numEdgePred+numBoxPred,-1],dtype=np.float),

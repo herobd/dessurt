@@ -27,6 +27,7 @@ def display(data):
 
     for q,a in zip(data['questions'],data['answers']):
         print(q+' '+a)
+    return
 
 
     fig = plt.figure()
@@ -128,8 +129,8 @@ if __name__ == "__main__":
         'color':False,
         'rescale_range':[0.8,1.2],
         'crop_params':{
-            "crop_size":[1000,700],
-            "pad":70,
+            "crop_size":[800,800],
+            "pad":50,
             "xxrot_degree_std_dev": 0.7}, 
         'split_to_lines': True,
         'questions':50

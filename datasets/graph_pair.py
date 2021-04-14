@@ -228,7 +228,10 @@ class GraphPairDataset(torch.utils.data.Dataset):
         if questions_and_answers is not None:
             if len(questions_and_answers) > self.questions:
                 questions_and_answers = random.sample(questions_and_answers,k=self.questions)
-            questions,answers,_ = zip(*questions_and_answers)
+            if len(questions_and_answers)>0:
+                questions,answers,_ = zip(*questions_and_answers)
+            else:
+                return self.getitem((index+1)%len(self))
         else:
             questions=answers=None
 
