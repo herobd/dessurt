@@ -114,7 +114,7 @@ class PairingGGraphLayoutLM(PairingGroupingGraph):
         self.merges_performed=0 #just tracking to see if it's working
         gtBBs=gtBBs[0]
 
-        lm_out = self.runLayoutLM(image.size(),gtBBs,gtTrans,device)
+        lm_out = runLayoutLM(image.size(),gtBBs,gtTrans,device,self.tokenizer,self.layoutlm,self.useCurvedBBs)
         lm_out = self.reduce_lm(lm_out)
 
         init_class_pred = self.init_class_layer(lm_out)
@@ -171,13 +171,13 @@ class PairingGGraphLayoutLM(PairingGroupingGraph):
             return [bbPredictions], init_class_pred, None, None, None, None, None, None, (useBBs if self.useCurvedBBs else useBBs.cpu().detach(),None,None,transcriptions)
 
 
-def runLayoutLM(image_size,gtBBs,gtTrans,device,tokenizer,layoutlm,):
+def runLayoutLM(image_size,gtBBs,gtTrans,device,tokenizer,layoutlm,useCurvedBBs=False,keep_ends=False):
     #input_ids = []
     input_bbs = [[0,0,0,0]]
     total_string=''
     word_token_map=[]
     for i,(word,bb) in enumerate(zip(gtTrans,gtBBs)):
-        if self.useCurvedBBs:
+        if useCurvedBBs:
             x1,y1,x2,y2,r=bb[:5]
         else:
             xc,yc,r,h,w=bb[:5]
@@ -194,6 +194,9 @@ def runLayoutLM(image_size,gtBBs,gtTrans,device,tokenizer,layoutlm,):
     input_bbs.append([1000,1000,1000,1000])
     inputs = tokenizer(total_string,return_tensors="pt")
     input_bbs = torch.LongTensor([input_bbs])
+
+    if keep_ends:
+        word_token_map = [[0]] + word_token_map + [[len(input_bbs)-1]]
 
     if inputs['input_ids'].size(1)<LLM_MAX_TOKEN_LEN:
         inputs = {k:i.to(device) for k,i in inputs.items()}

@@ -20,5 +20,6 @@ from model.meta_graph_net import MetaGraphNet
 from model.line_follower import LineFollower
 from model.simpleNN import SimpleNN
 from model.tesseract_wrap import TesseractWrap
+from model.decoder_on_pairing import DecoderOnPairing
 #from .roi_align import ROIAlign
 #from .roi_align import roi_align
