@@ -29,7 +29,7 @@ def padded_seq_cross_entropy(x,target):
     
     #average each by their respective len
     ce = ce.view(batchsize,lenn)
-    import pdb;pdb.set_trace()
+    #import pdb;pdb.set_trace()
     ce = ce.sum(dim=1)/(target!=0).sum(dim=1)
     
     #then average the batch
