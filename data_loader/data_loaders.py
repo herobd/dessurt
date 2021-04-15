@@ -8,6 +8,7 @@ from datasets.forms_detect import FormsDetect
 from datasets import forms_box_detect
 from datasets.forms_box_detect import FormsBoxDetect
 from datasets import ai2d_box_detect
+from datasets import nobrain_graph_pair
 from datasets import forms_graph_pair
 from datasets import forms_box_pair
 from datasets import funsd_graph_pair
@@ -110,6 +111,8 @@ def getDataLoader(config,split,rank=None,world_size=None):
             return withCollate(ai2d_box_detect.AI2DBoxDetect,ai2d_box_detect.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='FormsBoxPair':
             return withCollate(FormsBoxPair,forms_box_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='NobrainGraphPair':
+            return withCollate(nobrain_graph_pair.NobrainGraphPair,nobrain_graph_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='FormsGraphPair':
             return withCollate(forms_graph_pair.FormsGraphPair,forms_graph_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='FUNSDBoxDetect':

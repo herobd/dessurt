@@ -15,15 +15,26 @@ def my_loss(y_input, y_target):
 
 def sigmoid_BCE_loss(y_input, y_target):
     return F.binary_cross_entropy_with_logits(y_input, y_target)
-def cross_entropy(x,target):
-    if len(x.size())==3:
-        batchsize = x.size(0)
-        lenn = x.size(1)
-        x = x.contiguous().view(-1,x.size(2))
-        target = target.contiguous().view(-1)
-    else:
-        batchsize=1
-    return F.cross_entropy(x,target)
+def padded_seq_cross_entropy(x,target):
+    batchsize = x.size(0)
+    lenn = x.size(1)
+    x_o = x
+    x = x.contiguous().view(-1,x.size(2))
+    target_flat = target.contiguous().view(-1)
+
+    ce = F.cross_entropy(x,target_flat,reduction='none')
+
+    #zero padding
+    ce[target_flat==0]=0
+    
+    #average each by their respective len
+    ce = ce.view(batchsize,lenn)
+    import pdb;pdb.set_trace()
+    ce = ce.sum(dim=1)/(target!=0).sum(dim=1)
+    
+    #then average the batch
+    return ce.sum()/batchsize
+
 def MSE(y_input, y_target):
     return F.mse_loss(y_input, y_target.float())
 

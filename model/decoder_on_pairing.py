@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from model.pairing_g_graph_layoutlm import  runLayoutLM
+from model.pos_encode import PositionalEncoding
 try:
     from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
     from transformers import LayoutLMTokenizer, LayoutLMModel
@@ -29,10 +30,13 @@ class DecoderOnPairing(BaseModel):
     
         decoder_layer = nn.TransformerDecoderLayer(d_model,nhead,dim_ff)
         self.decoder = nn.TransformerDecoder(decoder_layer,num_layers,nn.LayerNorm(d_model))
-        self.answer_embedding = nn.Embedding(self.tokenizer.vocab_size, d_model)
+        self.answer_embedding = nn.Sequential(
+                nn.Embedding(self.tokenizer.vocab_size, d_model),
+                PositionalEncoding(d_model,dropout=0.1,max_len=1000)
+                )
         self.answer_decode = nn.Sequential(
                 nn.Linear(d_model,self.tokenizer.vocab_size),
-                nn.Softmax(dim=-1)
+                #nn.Softmax(dim=-1)
                 )
 
         encoder_layer= nn.TransformerEncoderLayer(d_model,nhead,dim_ff)
@@ -92,6 +96,7 @@ class DecoderOnPairing(BaseModel):
         q_inputs = self.tokenizer(questions, return_tensors="pt", padding=True)
         q_inputs = {k:i.to(device) for k,i in q_inputs.items()}
         question_feats = self.question_languagemodel(**q_inputs).last_hidden_state
+        import pdb;pdb.set_trace()
         question_feats = self.change_question(question_feats)
         document_feats_len = document_feats.size(0)
         document_feats = document_feats[None,...].expand(len(questions),-1,-1)
@@ -100,9 +105,9 @@ class DecoderOnPairing(BaseModel):
 
         memory_feats = memory_feats.permute(1,0,2)
 
-        memory_feats = self.encoder(
-                memory_feats,
-                src_key_padding_mask=memory_padding_mask)
+        #memory_feats = self.encoder(
+        #        memory_feats,
+        #        src_key_padding_mask=memory_padding_mask)
 
 
         if answers is not None: #we are training

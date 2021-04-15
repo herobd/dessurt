@@ -1,11 +1,12 @@
 {
-    "name": "FUNSDWords_qa_testmodel",
+    "name": "FUNSDWordsOverfit_qa_testmodel",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
         "data_set_name": "FUNSDGraphPair",
+        "overfit": true,
         "data_dir": "../data/FUNSD",
         "batch_size": 1,
         "shuffle": true,
@@ -34,7 +35,7 @@
  
     "optimizer_type": "AdamW",
     "optimizer": {
-        "lr": 0.04,
+        "lr": 0.05,
         "weight_decay": 0.01
     },
     "loss": {

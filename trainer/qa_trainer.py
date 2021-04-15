@@ -179,7 +179,9 @@ class QATrainer(BaseTrainer):
 
         meangrad=0
         count=0
-        for m in self.model.parameters():
+        for n,m in self.model.named_parameters():
+            #if 'answer_decode' in n:
+            #    import pdb;pdb.set_trace()
             if m.grad is None:
                 continue
             count+=1
@@ -255,11 +257,9 @@ class QATrainer(BaseTrainer):
 
         with torch.no_grad():
             for batch_idx, instance in enumerate(self.valid_data_loader):
-                if not self.model_ref.detector_predNumNeighbors:
-                    instance['num_neighbors']=None
                 if not self.logged:
                     print('iter:{} valid batch: {}/{}'.format(self.iteration,batch_idx,len(self.valid_data_loader)), end='\r')
-                losses,log_run, out = self.newRun(instance)
+                losses,log_run, out = self.run(instance)
 
                 for name,value in log_run.items():
                     if value is not None:
@@ -309,7 +309,7 @@ class QATrainer(BaseTrainer):
             gtTrans = instance['transcription']
         #t#tic=timeit.default_timer()#t##t#
         if self.ocr_word_bbs: #useOnlyGTSpace and self.use_word_bbs_gt:
-            word_boxes = instance['form_metadata']['word_boxes'][None,:,:,].to(targetBoxes.device) #I can change this as it isn't used later
+            word_boxes = instance['form_metadata']['word_boxes'][None,:,:,].to(image.device) #I can change this as it isn't used later
             targetBoxes_changed=word_boxes
             if self.model.training:
                 targetBoxes_changed[:,:,0] += torch.randn_like(targetBoxes_changed[:,:,0])
@@ -357,6 +357,7 @@ class QATrainer(BaseTrainer):
 
 
         if self.print_pred_every>0 and self.iteration%self.print_pred_every==0:
+            print('iteration {}'.format(self.iteration))
             for question,answer,pred in zip(questions,answers,string_a):
                 print('[Q]:{} [A]:{} [P]:{}'.format(question,answer,pred))
 
