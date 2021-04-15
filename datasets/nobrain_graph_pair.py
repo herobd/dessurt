@@ -32,7 +32,7 @@ class NobrainGraphPair(GraphPairDataset):
         super(NobrainGraphPair, self).__init__(dirPath,split,config,images)
 
         self.images=[]
-        self.images.append({'id':'0', 'imagePath':'../data/art/Abstract_gallery/Abstract_image_1038.jpg', 'annotationPath':'../data/english_char_set.json', 'rescaled':1.0, 'imageName':'0'})
+        self.images.append({'id':'0', 'imagePath':'../data/FUNSD/training_data/images/12825369.png', 'annotationPath':'../data/english_char_set.json', 'rescaled':1.0, 'imageName':'0'})
 
 
 
