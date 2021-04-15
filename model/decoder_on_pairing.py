@@ -5,11 +5,8 @@ import torch.nn.functional as F
 import numpy as np
 from model.pairing_g_graph_layoutlm import  runLayoutLM
 from model.pos_encode import PositionalEncoding
-try:
-    from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
-    from transformers import LayoutLMTokenizer, LayoutLMModel
-except:
-    pass
+from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
+from transformers import LayoutLMTokenizer, LayoutLMModel
 
 
 class DecoderOnPairing(BaseModel):
