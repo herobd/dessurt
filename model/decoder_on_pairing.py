@@ -93,7 +93,6 @@ class DecoderOnPairing(BaseModel):
         q_inputs = self.tokenizer(questions, return_tensors="pt", padding=True)
         q_inputs = {k:i.to(device) for k,i in q_inputs.items()}
         question_feats = self.question_languagemodel(**q_inputs).last_hidden_state
-        import pdb;pdb.set_trace()
         question_feats = self.change_question(question_feats)
         document_feats_len = document_feats.size(0)
         document_feats = document_feats[None,...].expand(len(questions),-1,-1)
