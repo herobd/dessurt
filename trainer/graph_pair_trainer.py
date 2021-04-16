@@ -3620,3 +3620,10 @@ class GraphPairTrainer(BaseTrainer):
         #model.apply(lambda module: _set_momenta(module, momenta))
         #model.train(was_training)
 
+    def update_swa_batch_norm(self):
+        #update_bn(self.data_loader,self.swa_model)
+        tmp=self.model.cpu()
+        self.model=self.swa_model.train()
+        for instance in self.data_loader:
+            self.newRun(instance,self.useGT(self.iteration),forward_only=True)
+        self.model=tmp
