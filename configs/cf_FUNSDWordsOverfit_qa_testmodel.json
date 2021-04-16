@@ -35,20 +35,18 @@
  
     "optimizer_type": "AdamW",
     "optimizer": {
-        "lr": 0.05,
+        "lr": 0.01,
         "weight_decay": 0.01
     },
     "loss": {
-	"answer": "padded_seq_cross_entropy",
-	"xanswer": "label_smoothing"
+	"answer": "label_smoothing"
     },
     "loss_weights": {
         "answer": 1
     },
     "loss_params": 
         {
-            "answer": {},
-	    "xanswer": {"smoothing":0.1}
+	    "answer": {"smoothing":0.1}
         },
     "metrics": [],
     "trainer": {
@@ -83,7 +81,7 @@
 	    "decode_dim": 512,
 	    "dim_ff": 2048,
 	    "decode_num_heads": 8,
-	    "decode_layers": 5,
-	    "encode_layers": 2
+	    "decode_layers": 3,
+	    "encode_layers": 3
     }
 }
