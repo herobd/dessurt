@@ -357,7 +357,6 @@ class QATrainer(BaseTrainer):
 
 
         if self.print_pred_every>0 and self.iteration%self.print_pred_every==0:
-            import pdb;pdb.set_trace()
             print('iteration {}'.format(self.iteration))
             for question,answer,pred in zip(questions,answers,string_a):
                 print('[Q]:{} [A]:{} [P]:{}'.format(question,answer,pred))
