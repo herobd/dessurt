@@ -573,6 +573,14 @@ class BaseTrainer:
         self.train_logger = checkpoint['logger']
         self.logger.info("Checkpoint '{}' (iteration {}) loaded".format(resume_path, self.start_iteration))
 
+    def update_swa_batch_norm(self):
+        #update_bn(self.data_loader,self.swa_model)
+        tmp=self.model.cpu()
+        self.model=self.swa_model.train()
+        for instance in self.data_loader:
+            self.run(instance)
+        self.model=tmp
+
 def moving_average(net1, net2, alpha=1):
     for param1, param2 in zip(net1.parameters(), net2.parameters()):
         param1.data *= (1.0 - alpha)
