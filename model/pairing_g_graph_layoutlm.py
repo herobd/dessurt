@@ -198,7 +198,7 @@ def runLayoutLM(image_size,gtBBs,gtTrans,device,tokenizer,layoutlm,useCurvedBBs=
     if keep_ends:
         word_token_map = [[0]] + word_token_map + [[len(input_bbs)-1]]
 
-    if inputs['input_ids'].size(1)<LLM_MAX_TOKEN_LEN:
+    if inputs['input_ids'].size(1)<=LLM_MAX_TOKEN_LEN:
         inputs = {k:i.to(device) for k,i in inputs.items()}
         input_bbs = input_bbs.to(device)
         #assert inputs['input_ids'].size(1)==input_bbs.size(1)
