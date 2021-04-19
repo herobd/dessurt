@@ -37,15 +37,26 @@ class DecoderOnPairing(BaseModel):
                 nn.Linear(d_model,self.tokenizer.vocab_size),
                 nn.LogSoftmax(dim=-1) #except
                 )
-
-        encoder_layer= nn.TransformerEncoderLayer(d_model,nhead,dim_ff)
-        self.encoder = nn.TransformerEncoder(encoder_layer,num_e_layers,nn.LayerNorm(d_model))
+        if num_e_layers>0:
+            encoder_layer= nn.TransformerEncoderLayer(d_model,nhead,dim_ff)
+            self.encoder = nn.TransformerEncoder(encoder_layer,num_e_layers,nn.LayerNorm(d_model))
+        else:
+            self.encoder = None
 
         self.layoutlm_tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
         self.layoutlm = LayoutLMModel.from_pretrained("microsoft/layoutlm-base-uncased")
         self.change_layoutlm = nn.Linear(768,d_model)
 
         self.mem_pos_enc = PositionalEncoding(d_model,dropout=0.1,max_len=5000)
+
+        self.doc_skip = config['doc_skip'] if 'doc_skip' in config else False
+        self.q_skip = config['q_skip'] if 'q_skip' in config else False
+        if self.doc_skip:
+            self.skip_embedding = nn.Embedding(self.layoutlm_tokenizer.vocab_size, d_model)
+            if self.q_skip:
+                self.skip_q_embedding = nn.Embedding(self.tokenizer.vocab_size, d_model)
+        else:
+            assert not self.q_skip
 
         #def show_self_att(m,i,o):
         #    print('self attn in:')
@@ -64,7 +75,10 @@ class DecoderOnPairing(BaseModel):
 
     def forward(self,image,gtBBs,gtTrans,questions,answers=None):
         device = image.device
-        layoutlm_feats = runLayoutLM(image.size(),gtBBs[0],gtTrans,image.device,self.layoutlm_tokenizer,self.layoutlm,keep_ends=True) #this assumes a single batch
+        if self.layoutlm is not None:
+            layoutlm_feats = runLayoutLM(image.size(),gtBBs[0],gtTrans,image.device,self.layoutlm_tokenizer,self.layoutlm,keep_ends=True,all_tokens=self.doc_skip) #this assumes a single batch
+        else:
+            layoutlm_feats = self.layout_model(image.size(),gtBBs[0],gtTrans,image.device)
 
         layoutlm_feats =self.change_layoutlm(layoutlm_feats)
         #Maybe pos encode layoutlm as well, to account for times its been processed in two batches
@@ -121,10 +135,25 @@ class DecoderOnPairing(BaseModel):
         memory_feats = self.mem_pos_enc(memory_feats)
         memory_feats = memory_feats.permute(1,0,2) #batch,len,feat -> len,batch,feat
     
+        if self.encoder is not None:
+            memory_feats = self.encoder(
+                    memory_feats,
+                    src_key_padding_mask=memory_padding_mask)
 
-        memory_feats = self.encoder(
-                memory_feats,
-                src_key_padding_mask=memory_padding_mask)
+        if self.doc_skip:
+            total_string = ' '.join(gtTrans)
+            doc_tok = self.layoutlm_tokenizer(total_string,return_tensors="pt")
+            assert self.pairing_model is None
+            doc_emb = self.skip_embedding(doc_tok['input_ids'].to(device))
+            doc_emb = doc_emb.expand(len(questions),-1,-1)
+            doc_emb = doc_emb.permute(1,0,2)
+            if self.q_skip:
+                q_emb = self.skip_q_embedding(q_inputs['input_ids'].to(device)).permute(1,0,2)
+                doc_emb = torch.cat([doc_emb, q_emb],dim=0)
+            else:
+                doc_emb = torch.cat([doc_emb, torch.zeros(diff_len,len(questions),doc_emb.size(2))],dim=0)
+            memory_feats += doc_emb
+
 
 
         if answers is not None: #we are training
