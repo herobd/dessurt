@@ -45,6 +45,7 @@ class DecoderOnPairing(BaseModel):
         self.layoutlm = LayoutLMModel.from_pretrained("microsoft/layoutlm-base-uncased")
         self.change_layoutlm = nn.Linear(768,d_model)
 
+        self.mem_pos_enc = PositionalEncoding(d_model,dropout=0.1,max_len=5000)
 
         #def show_self_att(m,i,o):
         #    print('self attn in:')
@@ -116,10 +117,11 @@ class DecoderOnPairing(BaseModel):
         memory_feats = torch.cat((document_feats,question_feats),dim=1)
         memory_padding_mask = torch.cat((torch.BoolTensor(len(questions),document_feats_len).zero_().to(device),~q_inputs['attention_mask'].bool()),dim=1)
 
-        memory_feats = memory_feats.permute(1,0,2)
+
+        memory_feats = self.mem_pos_enc(memory_feats)
+        memory_feats = memory_feats.permute(1,0,2) #batch,len,feat -> len,batch,feat
     
 
-        #!!! DEBUG, UNCOMMENT WHEN DONE!!!
         memory_feats = self.encoder(
                 memory_feats,
                 src_key_padding_mask=memory_padding_mask)
