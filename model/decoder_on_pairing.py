@@ -58,6 +58,8 @@ class DecoderOnPairing(BaseModel):
         else:
             assert not self.q_skip
 
+        self.only_q = config['only_q'] if 'only_q' in config else False
+
         #def show_self_att(m,i,o):
         #    print('self attn in:')
         #    print(i)
@@ -75,61 +77,41 @@ class DecoderOnPairing(BaseModel):
 
     def forward(self,image,gtBBs,gtTrans,questions,answers=None):
         device = image.device
-        if self.layoutlm is not None:
-            layoutlm_feats = runLayoutLM(image.size(),gtBBs[0],gtTrans,image.device,self.layoutlm_tokenizer,self.layoutlm,keep_ends=True,all_tokens=self.doc_skip) #this assumes a single batch
-        else:
-            layoutlm_feats = self.layout_model(image.size(),gtBBs[0],gtTrans,image.device)
+        if not self.only_q:
+            if self.layoutlm is not None:
+                layoutlm_feats = runLayoutLM(image.size(),gtBBs[0],gtTrans,image.device,self.layoutlm_tokenizer,self.layoutlm,keep_ends=True,all_tokens=self.doc_skip) #this assumes a single batch
+            else:
+                layoutlm_feats = self.layout_model(image.size(),gtBBs[0],gtTrans,image.device)
 
-        layoutlm_feats =self.change_layoutlm(layoutlm_feats)
-        #Maybe pos encode layoutlm as well, to account for times its been processed in two batches
-        #acutally, it encodes x,y poisition...
+            layoutlm_feats =self.change_layoutlm(layoutlm_feats)
+            #Maybe pos encode layoutlm as well, to account for times its been processed in two batches
+            #acutally, it encodes x,y poisition...
 
-        if self.pairing_model is not None:
-            with torch.no_grad(): #I'm going to freeze it
-                graph_feats, node_cords = self.pairing_model(image,gtBBs=gtBBs,useGTBBs=True,gtTrans=gtTrans,return_feats=True)
-            graph_feats = self.change_graph(graph_feats)
-            #TODO position encoding, at least for graph
-            graph_feats = self.graph_pos_enc(graph_feats,node_cords)
+            if self.pairing_model is not None:
+                with torch.no_grad(): #I'm going to freeze it
+                    graph_feats, node_cords = self.pairing_model(image,gtBBs=gtBBs,useGTBBs=True,gtTrans=gtTrans,return_feats=True)
+                graph_feats = self.change_graph(graph_feats)
+                #TODO position encoding, at least for graph
+                graph_feats = self.graph_pos_enc(graph_feats,node_cords)
 
-            document_feats = torch.cat((layoutlm_feats,graph_feats),dim=2)#place the graph_feats between so it gets put between the SEP and START tokens
-        else:
-            document_feats = layoutlm_feats
+                document_feats = torch.cat((layoutlm_feats,graph_feats),dim=2)#place the graph_feats between so it gets put between the SEP and START tokens
+            else:
+                document_feats = layoutlm_feats
         
 
 
-        #memory_feats_b = [] #make a batcj
-        #max_len=0
-        #for qi,question in enumerate(questions):
-        #    #answer = answers[qi] is answers is not None else None
-
-        #    inputs = self.tokenizer(question, return_tensors="pt", padding=True)
-        #    inputs = {k:i.to(device) for k,i in inputs.items()}
-        #    question_feats = self.question_languagemodel(**inputs).last_hidden_state
-        #    question_feats = self.change_question(question_feats)
-
-
-        #    memory_feats = torch.cat((document_feats,question_feats),dim=1) #place the graph_feats between so it gets put between the SEP and START tokens
-        #    memory_feats_b.append(memory_feats)
-        #    max_len = max(max_len,memory_feats.size(1))
-
-        #memory_padding_mask = torch.BoolTensor(len(questions),max_len).zero_()
-        #for i in range(len(questions)):
-        #    diff = max_len-memory_feats_b[i].size(1)
-        #    if diff>0:
-        #        memory_padding_mask[memory_feats_b[i].size(1):]=1
-        #        memory_feats_b[i] = torch.pad(memory_feats_b[i],(0,0,0,diff))
-        #memory_feats_b = torch.cat(memory_feats_b,dim=0)
-        #memory_feats_b = self.encoder(memory_feats_b)
-
-        
         q_inputs = self.tokenizer(questions, return_tensors="pt", padding=True)
         q_inputs = {k:i.to(device) for k,i in q_inputs.items()}
         question_feats = self.question_languagemodel(**q_inputs).last_hidden_state
         question_feats = self.change_question(question_feats)
-        document_feats_len = document_feats.size(0)
-        document_feats = document_feats[None,...].expand(len(questions),-1,-1)
-        memory_feats = torch.cat((document_feats,question_feats),dim=1)
-        memory_padding_mask = torch.cat((torch.BoolTensor(len(questions),document_feats_len).zero_().to(device),~q_inputs['attention_mask'].bool()),dim=1)
+        if self.only_q:
+            memory_feats = question_feats
+            memory_padding_mask = ~q_inputs['attention_mask'].bool()
+        else:
+            document_feats_len = document_feats.size(0)
+            document_feats = document_feats[None,...].expand(len(questions),-1,-1)
+            memory_feats = torch.cat((document_feats,question_feats),dim=1)
+            memory_padding_mask = torch.cat((torch.BoolTensor(len(questions),document_feats_len).zero_().to(device),~q_inputs['attention_mask'].bool()),dim=1)
 
 
         memory_feats = self.mem_pos_enc(memory_feats)
