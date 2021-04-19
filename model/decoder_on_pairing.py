@@ -133,7 +133,8 @@ class DecoderOnPairing(BaseModel):
                 q_emb = self.skip_q_embedding(q_inputs['input_ids'].to(device)).permute(1,0,2)
                 doc_emb = torch.cat([doc_emb, q_emb],dim=0)
             else:
-                doc_emb = torch.cat([doc_emb, torch.zeros(diff_len,len(questions),doc_emb.size(2))],dim=0)
+                diff_len = memory_feats.size(0)-doc_emb.size(0)
+                doc_emb = torch.cat([doc_emb, torch.zeros(diff_len,len(questions),doc_emb.size(2)).to(device)],dim=0)
             memory_feats += doc_emb
 
 
