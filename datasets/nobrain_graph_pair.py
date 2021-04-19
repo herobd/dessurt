@@ -42,6 +42,8 @@ class NobrainGraphPair(GraphPairDataset):
         else:
             self.words = None
 
+        self.repeat_after_me=config['repeat_after_me'] if 'repeat_after_me' in config else False
+
 
 
     def parseAnn(self,annotations,s):
@@ -179,7 +181,7 @@ class NobrainGraphPair(GraphPairDataset):
                 bb[14]=s*rX
                 bb[15]=s*(tY+bY)/2.0
                 word_boxes.append(bb)
-                word_trans.append(q)
+                word_trans.append('['+q+']')
 
                 bb=[None]*16
                 lX=10
@@ -204,6 +206,9 @@ class NobrainGraphPair(GraphPairDataset):
                 bb[15]=s*(tY+bY)/2.0
                 word_boxes.append(bb)
                 word_trans.append(a)
+
+                if self.repeat_after_me:
+                    a=q
 
                 self.qa.append((q,a,None))
 
