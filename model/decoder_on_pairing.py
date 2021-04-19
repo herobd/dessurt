@@ -47,7 +47,12 @@ class DecoderOnPairing(BaseModel):
         self.layoutlm = LayoutLMModel.from_pretrained("microsoft/layoutlm-base-uncased")
         self.change_layoutlm = nn.Linear(768,d_model)
 
-        self.mem_pos_enc = PositionalEncoding(d_model,dropout=0.1,max_len=5000)
+        self.half_mem_pos = config['half_mem_pos'] if 'half_mem_pos' in config else False
+        self.no_mem_pos = config['no_mem_pos'] if 'no_mem_pos' in config else False
+        if self.half_mem_pos:
+            self.mem_pos_enc = PositionalEncoding(d_model//2,dropout=0.1,max_len=5000)
+        elif not self.no_mem_pos:
+            self.mem_pos_enc = PositionalEncoding(d_model,dropout=0.1,max_len=5000)
 
         self.doc_skip = config['doc_skip'] if 'doc_skip' in config else False
         self.q_skip = config['q_skip'] if 'q_skip' in config else False
@@ -113,8 +118,11 @@ class DecoderOnPairing(BaseModel):
             memory_feats = torch.cat((document_feats,question_feats),dim=1)
             memory_padding_mask = torch.cat((torch.BoolTensor(len(questions),document_feats_len).zero_().to(device),~q_inputs['attention_mask'].bool()),dim=1)
 
-
-        memory_feats = self.mem_pos_enc(memory_feats)
+            if self.half_mem_pos:
+                memory_feats_h = self.mem_pos_enc(memory_feats[:,:,:memory_feats.size(2)//2])
+                memory_feats = torch.cat([memory_feats_h,memory_feats[:,:,memory_feats.size(2)//2:]],dim=2)
+            elif not self.no_mem_pos:
+                memory_feats = self.mem_pos_enc(memory_feats)
         memory_feats = memory_feats.permute(1,0,2) #batch,len,feat -> len,batch,feat
     
         if self.encoder is not None:
