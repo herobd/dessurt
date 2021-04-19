@@ -155,9 +155,9 @@ class NobrainGraphPair(GraphPairDataset):
             self.qa=[]
             cY=0
             for i in range(self.questions):
-                words = random.sample(self.words,k=4)
-                q = words[0]+' '+words[1]
-                a = words[2]+' '+words[3]
+                words = random.sample(self.words,k=2)
+                q = words[0]#+' '+words[1]
+                a = words[1]#+' '+words[3]
 
                 bb=[None]*16
                 lX=0

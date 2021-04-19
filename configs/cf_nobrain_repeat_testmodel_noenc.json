@@ -1,5 +1,5 @@
 {
-    "name": "nobrain_repeat_testmodel",
+    "name": "nobrain_repeat_testmodel_noenc",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
