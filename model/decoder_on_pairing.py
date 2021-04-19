@@ -76,7 +76,7 @@ class DecoderOnPairing(BaseModel):
     def forward(self,image,gtBBs,gtTrans,questions,answers=None):
         device = image.device
         if self.layoutlm is not None:
-            layoutlm_feats = runLayoutLM(image.size(),gtBBs[0],gtTrans,image.device,self.layoutlm_tokenizer,self.layoutlm,keep_ends=True,all_tokens=self.doc_skip) #this assumes a single batch
+            layoutlm_feats = runLayoutLM(image.size(),gtBBs[0],gtTrans,image.device,self.layoutlm_tokenizer,self.layoutlm,keep_ends=True,all_tokens=True) #this assumes a single batch
         else:
             layoutlm_feats = self.layout_model(image.size(),gtBBs[0],gtTrans,image.device)
 
