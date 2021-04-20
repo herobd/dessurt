@@ -43,6 +43,7 @@ class NobrainGraphPair(GraphPairDataset):
             self.words = None
 
         self.repeat_after_me=config['repeat_after_me'] if 'repeat_after_me' in config else False
+        self.not_present_freq=0.5
 
 
 
@@ -154,67 +155,78 @@ class NobrainGraphPair(GraphPairDataset):
         else:
             self.qa=[]
             cY=0
+            questions=[]
+            skipped=[]
             for i in range(self.questions):
                 words = random.sample(self.words,k=2)
-                q = words[0]#+' '+words[1]
-                a = words[1]#+' '+words[3]
-
-                bb=[None]*16
-                lX=0
-                rX=10
-                tY=cY
-                bY=cY+10
-                bb[0]=lX*s
-                bb[1]=bY*s
-                bb[2]=lX*s
-                bb[3]=tY*s
-                bb[4]=rX*s
-                bb[5]=tY*s
-                bb[6]=rX*s
-                bb[7]=bY*s
-                bb[8]=s*(lX+rX)/2.0
-                bb[9]=s*bY
-                bb[10]=s*(lX+rX)/2.0
-                bb[11]=s*tY
-                bb[12]=s*lX
-                bb[13]=s*(tY+bY)/2.0
-                bb[14]=s*rX
-                bb[15]=s*(tY+bY)/2.0
-                word_boxes.append(bb)
-                word_trans.append('['+q+']')
-
-                bb=[None]*16
-                lX=10
-                rX=20
-                tY=cY
-                bY=cY+10
-                bb[0]=lX*s
-                bb[1]=bY*s
-                bb[2]=lX*s
-                bb[3]=tY*s
-                bb[4]=rX*s
-                bb[5]=tY*s
-                bb[6]=rX*s
-                bb[7]=bY*s
-                bb[8]=s*(lX+rX)/2.0
-                bb[9]=s*bY
-                bb[10]=s*(lX+rX)/2.0
-                bb[11]=s*tY
-                bb[12]=s*lX
-                bb[13]=s*(tY+bY)/2.0
-                bb[14]=s*rX
-                bb[15]=s*(tY+bY)/2.0
-                word_boxes.append(bb)
-                word_trans.append(a)
-
-                if self.repeat_after_me:
-                    a=q
+                if random.random()<self.not_present_freq:
+                    skipped+=words
                 else:
-                    a=q+' -> '+a
+                    q = words[0]#+' '+words[1]
+                    a = words[1]#+' '+words[3]
 
-                self.qa.append((q,a,None))
 
-                cY+=11
+                    bb=[None]*16
+                    lX=0
+                    rX=10
+                    tY=cY
+                    bY=cY+10
+                    bb[0]=lX*s
+                    bb[1]=bY*s
+                    bb[2]=lX*s
+                    bb[3]=tY*s
+                    bb[4]=rX*s
+                    bb[5]=tY*s
+                    bb[6]=rX*s
+                    bb[7]=bY*s
+                    bb[8]=s*(lX+rX)/2.0
+                    bb[9]=s*bY
+                    bb[10]=s*(lX+rX)/2.0
+                    bb[11]=s*tY
+                    bb[12]=s*lX
+                    bb[13]=s*(tY+bY)/2.0
+                    bb[14]=s*rX
+                    bb[15]=s*(tY+bY)/2.0
+                    word_boxes.append(bb)
+                    word_trans.append('['+q+']')
+
+                    bb=[None]*16
+                    lX=10
+                    rX=20
+                    tY=cY
+                    bY=cY+10
+                    bb[0]=lX*s
+                    bb[1]=bY*s
+                    bb[2]=lX*s
+                    bb[3]=tY*s
+                    bb[4]=rX*s
+                    bb[5]=tY*s
+                    bb[6]=rX*s
+                    bb[7]=bY*s
+                    bb[8]=s*(lX+rX)/2.0
+                    bb[9]=s*bY
+                    bb[10]=s*(lX+rX)/2.0
+                    bb[11]=s*tY
+                    bb[12]=s*lX
+                    bb[13]=s*(tY+bY)/2.0
+                    bb[14]=s*rX
+                    bb[15]=s*(tY+bY)/2.0
+                    word_boxes.append(bb)
+                    word_trans.append(a)
+
+                    if self.repeat_after_me:
+                        a=q
+                    else:
+                        a='{} -> {}'.format(len(questions),a)
+                        questions.append(q)
+
+                    self.qa.append((q,a,None))
+
+                    cY+=11
+            not_present = [w for w in skipped if w not in questions]
+            for w in not_present[:len(skipped)//2]:
+                self.qa.append((w,'~',None))
+
 
         word_boxes = np.array(word_boxes)
         trans = []
