@@ -115,7 +115,8 @@ class DecoderOnPairing(BaseModel):
         else:
             document_feats_len = document_feats.size(0)
             document_feats = document_feats[None,...].expand(len(questions),-1,-1)
-            memory_feats = torch.cat((document_feats,question_feats),dim=1)
+            sep_feat = torch.FloatTensor(len(questions),1,document_feats.size(2)).zero_().to(device)
+            memory_feats = torch.cat((document_feats,sep_feats,question_feats),dim=1)
             memory_padding_mask = torch.cat((torch.BoolTensor(len(questions),document_feats_len).zero_().to(device),~q_inputs['attention_mask'].bool()),dim=1)
 
             if self.half_mem_pos:
