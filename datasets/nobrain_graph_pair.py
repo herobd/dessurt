@@ -38,7 +38,7 @@ class NobrainGraphPair(GraphPairDataset):
             with open(config['textfile']) as f:
                 text = f.read()
             text=re.sub('\s+',' ',text)
-            self.words = text.strip().split(' ')
+            self.words = text.strip().lower().split(' ')
         else:
             self.words = None
 
