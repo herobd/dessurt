@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import numpy as np
 from model.pairing_g_graph_layoutlm import  runLayoutLM
 from model.pos_encode import PositionalEncoding
+from model.layout_transformer import LayoutTransformer
 from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
 from transformers import LayoutLMTokenizer, LayoutLMModel
 
@@ -43,9 +44,16 @@ class DecoderOnPairing(BaseModel):
         else:
             self.encoder = None
 
-        self.layoutlm_tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
-        self.layoutlm = LayoutLMModel.from_pretrained("microsoft/layoutlm-base-uncased")
-        self.change_layoutlm = nn.Linear(768,d_model)
+        if 'layout' not in config:
+            self.layoutlm_tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+            self.layoutlm = LayoutLMModel.from_pretrained("microsoft/layoutlm-base-uncased")
+            self.change_layoutlm = nn.Linear(768,d_model)
+        else:
+            config['layout']['d_model']=d_model
+            config['layout']['dim_ff']=dim_ff
+            self.layout_model = LayoutTransformer(config['layout'])
+            self.layoutlm = None
+            self.change_layoutlm = nn.Identity()
 
         self.half_mem_pos = config['half_mem_pos'] if 'half_mem_pos' in config else False
         self.no_mem_pos = config['no_mem_pos'] if 'no_mem_pos' in config else False
@@ -116,8 +124,8 @@ class DecoderOnPairing(BaseModel):
             document_feats_len = document_feats.size(0)
             document_feats = document_feats[None,...].expand(len(questions),-1,-1)
             sep_feat = torch.FloatTensor(len(questions),1,document_feats.size(2)).zero_().to(device)
-            memory_feats = torch.cat((document_feats,sep_feats,question_feats),dim=1)
-            memory_padding_mask = torch.cat((torch.BoolTensor(len(questions),document_feats_len).zero_().to(device),~q_inputs['attention_mask'].bool()),dim=1)
+            memory_feats = torch.cat((document_feats,sep_feat,question_feats),dim=1)
+            memory_padding_mask = torch.cat((torch.BoolTensor(len(questions),document_feats_len+1).zero_().to(device),~q_inputs['attention_mask'].bool()),dim=1)
 
             if self.half_mem_pos:
                 memory_feats_h = self.mem_pos_enc(memory_feats[:,:,:memory_feats.size(2)//2])
@@ -140,7 +148,7 @@ class DecoderOnPairing(BaseModel):
             doc_emb = doc_emb.permute(1,0,2)
             if self.q_skip:
                 q_emb = self.skip_q_embedding(q_inputs['input_ids'].to(device)).permute(1,0,2)
-                doc_emb = torch.cat([doc_emb, q_emb],dim=0)
+                doc_emb = torch.cat([doc_emb,sep_feat, q_emb],dim=0)
             else:
                 diff_len = memory_feats.size(0)-doc_emb.size(0)
                 doc_emb = torch.cat([doc_emb, torch.zeros(diff_len,len(questions),doc_emb.size(2)).to(device)],dim=0)

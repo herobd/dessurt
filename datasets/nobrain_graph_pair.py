@@ -209,8 +209,8 @@ class NobrainGraphPair(GraphPairDataset):
 
                 if self.repeat_after_me:
                     a=q
-                #else self.repeat_q:
-                #    a=q+' -> '+a
+                else:
+                    a=q+' -> '+a
 
                 self.qa.append((q,a,None))
 
