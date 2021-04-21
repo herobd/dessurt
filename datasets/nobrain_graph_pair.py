@@ -35,8 +35,11 @@ class NobrainGraphPair(GraphPairDataset):
         self.images.append({'id':'0', 'imagePath':'../data/FUNSD/training_data/images/12825369.png', 'annotationPath':'../data/english_char_set.json', 'rescaled':1.0, 'imageName':'0'})
 
         if 'textfile' in config:
-            with open(config['textfile']) as f:
-                text = f.read()
+            if 'textfile' in config:
+                with open(config['textfile']) as f:
+                    text = f.read()
+            else:
+                text = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque faucibus ligula accumsan dui hendrerit, sit amet egestas risus suscipit. Mauris vel euismod lacus. Quisque fermentum sed tortor eleifend congue. Donec at odio non diam rutrum posuere at bibendum erat. Sed id tempus ligula. Proin nec elit eget ligula dignissim varius a in libero. Integer scelerisque sem iaculis magna lobortis, non porta dui auctor. Integer efficitur quam vel ex fermentum sagittis. Donec quis pharetra mi. Vestibulum fringilla vitae tellus vel volutpat. Nam augue felis, lacinia quis mi a, semper dictum justo. Maecenas varius sollicitudin augue, nec pellentesque orci faucibus et. Praesent eget quam nibh. Fusce euismod neque sit amet mollis finibus. Cras posuere purus non diam cursus vestibulum. Cras ut posuere diam, et facilisis eros.'
             text=re.sub('\s+',' ',text)
             self.words = text.strip().lower().split(' ')
         else:
