@@ -38,7 +38,8 @@ class NobrainGraphPair(GraphPairDataset):
             with open(config['textfile']) as f:
                 text = f.read()
         else:
-            text = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque faucibus ligula accumsan dui hendrerit, sit amet egestas risus suscipit. Mauris vel euismod lacus. Quisque fermentum sed tortor eleifend congue. Donec at odio non diam rutrum posuere at bibendum erat. Sed id tempus ligula. Proin nec elit eget ligula dignissim varius a in libero. Integer scelerisque sem iaculis magna lobortis, non porta dui auctor. Integer efficitur quam vel ex fermentum sagittis. Donec quis pharetra mi. Vestibulum fringilla vitae tellus vel volutpat. Nam augue felis, lacinia quis mi a, semper dictum justo. Maecenas varius sollicitudin augue, nec pellentesque orci faucibus et. Praesent eget quam nibh. Fusce euismod neque sit amet mollis finibus. Cras posuere purus non diam cursus vestibulum. Cras ut posuere diam, et facilisis eros.'
+            #text = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque faucibus ligula accumsan dui hendrerit, sit amet egestas risus suscipit. Mauris vel euismod lacus. Quisque fermentum sed tortor eleifend congue. Donec at odio non diam rutrum posuere at bibendum erat. Sed id tempus ligula. Proin nec elit eget ligula dignissim varius a in libero. Integer scelerisque sem iaculis magna lobortis, non porta dui auctor. Integer efficitur quam vel ex fermentum sagittis. Donec quis pharetra mi. Vestibulum fringilla vitae tellus vel volutpat. Nam augue felis, lacinia quis mi a, semper dictum justo. Maecenas varius sollicitudin augue, nec pellentesque orci faucibus et. Praesent eget quam nibh. Fusce euismod neque sit amet mollis finibus. Cras posuere purus non diam cursus vestibulum. Cras ut posuere diam, et facilisis eros.'
+            text='this is some sample text and should be very easy to solve just do it already please I am rather frustrated with you music dog cat train girl boy food'
         text=re.sub('\s+',' ',text)
         self.words = text.strip().lower().split(' ')
         #else:
@@ -161,13 +162,12 @@ class NobrainGraphPair(GraphPairDataset):
             cY=0
             questions=[]
             skipped=[]
-            for i in range(self.questions):
-                words = random.sample(self.words,k=2)
+            q_s = random.sample(self.words,k=self.questions)
+            a_s = random.sample(self.words,k=self.questions)
+            for q,a in zip(q_s,a_s):
                 if random.random()<self.not_present_freq:
-                    skipped+=words
+                    skipped.append(q)
                 else:
-                    q = words[0]#+' '+words[1]
-                    a = words[1]#+' '+words[3]
 
 
                     bb=[None]*16
@@ -192,31 +192,34 @@ class NobrainGraphPair(GraphPairDataset):
                     bb[14]=s*rX
                     bb[15]=s*(tY+bY)/2.0
                     word_boxes.append(bb)
-                    word_trans.append('['+q+']')
+                    if self.only_present:
+                        word_trans.append(q)
+                    else:
+                        word_trans.append('['+q+']')
 
-                    bb=[None]*16
-                    lX=10
-                    rX=20
-                    tY=cY
-                    bY=cY+10
-                    bb[0]=lX*s
-                    bb[1]=bY*s
-                    bb[2]=lX*s
-                    bb[3]=tY*s
-                    bb[4]=rX*s
-                    bb[5]=tY*s
-                    bb[6]=rX*s
-                    bb[7]=bY*s
-                    bb[8]=s*(lX+rX)/2.0
-                    bb[9]=s*bY
-                    bb[10]=s*(lX+rX)/2.0
-                    bb[11]=s*tY
-                    bb[12]=s*lX
-                    bb[13]=s*(tY+bY)/2.0
-                    bb[14]=s*rX
-                    bb[15]=s*(tY+bY)/2.0
-                    word_boxes.append(bb)
-                    word_trans.append(a)
+                        bb=[None]*16
+                        lX=10
+                        rX=20
+                        tY=cY
+                        bY=cY+10
+                        bb[0]=lX*s
+                        bb[1]=bY*s
+                        bb[2]=lX*s
+                        bb[3]=tY*s
+                        bb[4]=rX*s
+                        bb[5]=tY*s
+                        bb[6]=rX*s
+                        bb[7]=bY*s
+                        bb[8]=s*(lX+rX)/2.0
+                        bb[9]=s*bY
+                        bb[10]=s*(lX+rX)/2.0
+                        bb[11]=s*tY
+                        bb[12]=s*lX
+                        bb[13]=s*(tY+bY)/2.0
+                        bb[14]=s*rX
+                        bb[15]=s*(tY+bY)/2.0
+                        word_boxes.append(bb)
+                        word_trans.append(a)
 
                     if self.repeat_after_me:
                         a=q
