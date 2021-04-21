@@ -355,6 +355,11 @@ class QATrainer(BaseTrainer):
 
         losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
 
+        cor_present=0
+        for answer,pred in zip(answers,string_a):
+            if answer[0]==pred[0]:
+                cor_present+=1
+        log['present acc']=cor_present/len(answers)
 
         if self.print_pred_every>0 and self.iteration%self.print_pred_every==0:
             print('iteration {}'.format(self.iteration))
