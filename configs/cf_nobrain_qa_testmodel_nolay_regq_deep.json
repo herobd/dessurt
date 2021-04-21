@@ -1,5 +1,5 @@
 {
-    "name": "nobrain_qa_testmodel_nolay_regq",
+    "name": "nobrain_qa_testmodel_nolay_regq_deep",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -29,7 +29,7 @@
  
     "optimizer_type": "AdamW",
     "optimizer": {
-        "lr": 0.00001,
+        "lr": 0.00005,
         "weight_decay": 0.01
     },
     "loss": {
@@ -80,7 +80,7 @@
 	    "encode_layers": 0,
 	    "half_mem_pos": false,
 	    "layout": {
-		    "num_layers": 3,
+		    "num_layers": 4,
 		    "nhead": 4
 	    }
     }
