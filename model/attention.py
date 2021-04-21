@@ -158,6 +158,8 @@ class PosBiasedMultiHeadedAttention(nn.Module):
         y_diff = query_y[:,None,:].expand(-1,nkey,-1) - key_y[:,:,None].expand(-1,-1,nquery)
         pos_emb = self.x_emb(x_diff) + self.y_emb(y_diff)
         pos_emb = pos_emb.reshape(nbatches,nkey,nquery,self.h,self.pos_d_k) #reshape to heads
+        att_bias = torch.matmul(pos_emb, pos_emb.transpose(-2, -1)) \
+                 / math.sqrt(self.pos_d_k)
 
         if self.none:
             key = torch.cat((key,torch.ones(key.size(0),1,key.size(2)).to(key.device)),dim=1)
