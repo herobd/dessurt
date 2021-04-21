@@ -119,7 +119,7 @@ class DecoderOnPairing(BaseModel):
             document_feats_len = document_feats.size(0)
             document_feats = document_feats[None,...].expand(len(questions),-1,-1)
             memory_feats = document_feats
-            memory_padding_mask = torch.BoolTensor(len(questions),document_feats_len).zero_().to(device)
+            memory_padding_mask = None#torch.BoolTensor(len(questions),document_feats_len).zero_().to(device)
         else:
             q_inputs = self.tokenizer(questions, return_tensors="pt", padding=True)
             q_inputs = {k:i.to(device) for k,i in q_inputs.items()}
