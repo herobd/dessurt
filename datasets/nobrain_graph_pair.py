@@ -234,7 +234,8 @@ class NobrainGraphPair(GraphPairDataset):
 
                     cY+=11
             not_present = [w for w in skipped if w not in questions]
-            for w in not_present[:len(skipped)//2]:
+            diff = self.questions - len(self.qa)
+            for w in not_present[:diff]:
                 self.qa.append((w,'~',None))
 
 
