@@ -11,9 +11,9 @@
         "num_workers": 0,
         "rescale_range": [1.0,1.0],
         "crop_params": null,
-	"questions": 74,
+	"questions": 30,
         "shuffle": false,
-        "textfile":"../hw_with_style/data/lotr.txt"
+        "#textfile":"../hw_with_style/data/lotr.txt"
 
 
     },
