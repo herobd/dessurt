@@ -24,8 +24,10 @@ class DecoderOnPairing(BaseModel):
         self.SEP_TOKEN= 102
         self.CLS_TOKEN= 101
 
-        self.question_languagemodel = DistilBertModel.from_pretrained('distilbert-base-uncased')
-        self.change_question = nn.Linear(768,d_model)
+        self.regress_from_question = config['regress_from_question'] if 'regress_from_question' in config else False
+        if not self.regress_from_question:
+            self.question_languagemodel = DistilBertModel.from_pretrained('distilbert-base-uncased')
+            self.change_question = nn.Linear(768,d_model)
 
     
         decoder_layer = nn.TransformerDecoderLayer(d_model,nhead,dim_ff)
@@ -113,50 +115,58 @@ class DecoderOnPairing(BaseModel):
         
 
 
-        q_inputs = self.tokenizer(questions, return_tensors="pt", padding=True)
-        q_inputs = {k:i.to(device) for k,i in q_inputs.items()}
-        question_feats = self.question_languagemodel(**q_inputs).last_hidden_state
-        question_feats = self.change_question(question_feats)
-        if self.only_q:
-            memory_feats = question_feats
-            memory_padding_mask = ~q_inputs['attention_mask'].bool()
-        else:
+        if self.regress_from_question:
             document_feats_len = document_feats.size(0)
             document_feats = document_feats[None,...].expand(len(questions),-1,-1)
-            sep_feat = torch.FloatTensor(len(questions),1,document_feats.size(2)).zero_().to(device)
-            memory_feats = torch.cat((document_feats,sep_feat,question_feats),dim=1)
-            memory_padding_mask = torch.cat((torch.BoolTensor(len(questions),document_feats_len+1).zero_().to(device),~q_inputs['attention_mask'].bool()),dim=1)
-
-            if self.half_mem_pos:
-                memory_feats_h = self.mem_pos_enc(memory_feats[:,:,:memory_feats.size(2)//2])
-                memory_feats = torch.cat([memory_feats_h,memory_feats[:,:,memory_feats.size(2)//2:]],dim=2)
-            elif not self.no_mem_pos:
-                memory_feats = self.mem_pos_enc(memory_feats)
-        memory_feats = memory_feats.permute(1,0,2) #batch,len,feat -> len,batch,feat
-    
-        if self.encoder is not None:
-            memory_feats = self.encoder(
-                    memory_feats,
-                    src_key_padding_mask=memory_padding_mask)
-
-        if self.doc_skip:
-            total_string = ' '.join(gtTrans)
-            doc_tok = self.layoutlm_tokenizer(total_string,return_tensors="pt")
-            assert self.pairing_model is None
-            doc_emb = self.skip_embedding(doc_tok['input_ids'].to(device))
-            doc_emb = doc_emb.expand(len(questions),-1,-1)
-            doc_emb = doc_emb.permute(1,0,2)
-            if self.q_skip:
-                q_emb = self.skip_q_embedding(q_inputs['input_ids'].to(device)).permute(1,0,2)
-                doc_emb = torch.cat([doc_emb,sep_feat, q_emb],dim=0)
+            memory_feats = document_feats
+            memory_padding_mask = torch.BoolTensor(len(questions),document_feats_len).zero_().to(device)
+        else:
+            q_inputs = self.tokenizer(questions, return_tensors="pt", padding=True)
+            q_inputs = {k:i.to(device) for k,i in q_inputs.items()}
+            question_feats = self.question_languagemodel(**q_inputs).last_hidden_state
+            question_feats = self.change_question(question_feats)
+            if self.only_q:
+                memory_feats = question_feats
+                memory_padding_mask = ~q_inputs['attention_mask'].bool()
             else:
-                diff_len = memory_feats.size(0)-doc_emb.size(0)
-                doc_emb = torch.cat([doc_emb, torch.zeros(diff_len,len(questions),doc_emb.size(2)).to(device)],dim=0)
-            memory_feats += doc_emb
+                document_feats_len = document_feats.size(0)
+                document_feats = document_feats[None,...].expand(len(questions),-1,-1)
+                sep_feat = torch.FloatTensor(len(questions),1,document_feats.size(2)).zero_().to(device)
+                memory_feats = torch.cat((document_feats,sep_feat,question_feats),dim=1)
+                memory_padding_mask = torch.cat((torch.BoolTensor(len(questions),document_feats_len+1).zero_().to(device),~q_inputs['attention_mask'].bool()),dim=1)
+
+                if self.half_mem_pos:
+                    memory_feats_h = self.mem_pos_enc(memory_feats[:,:,:memory_feats.size(2)//2])
+                    memory_feats = torch.cat([memory_feats_h,memory_feats[:,:,memory_feats.size(2)//2:]],dim=2)
+                elif not self.no_mem_pos:
+                    memory_feats = self.mem_pos_enc(memory_feats)
+            memory_feats = memory_feats.permute(1,0,2) #batch,len,feat -> len,batch,feat
+        
+            if self.encoder is not None:
+                memory_feats = self.encoder(
+                        memory_feats,
+                        src_key_padding_mask=memory_padding_mask)
+
+            if self.doc_skip:
+                total_string = ' '.join(gtTrans)
+                doc_tok = self.layoutlm_tokenizer(total_string,return_tensors="pt")
+                assert self.pairing_model is None
+                doc_emb = self.skip_embedding(doc_tok['input_ids'].to(device))
+                doc_emb = doc_emb.expand(len(questions),-1,-1)
+                doc_emb = doc_emb.permute(1,0,2)
+                if self.q_skip:
+                    q_emb = self.skip_q_embedding(q_inputs['input_ids'].to(device)).permute(1,0,2)
+                    doc_emb = torch.cat([doc_emb,sep_feat, q_emb],dim=0)
+                else:
+                    diff_len = memory_feats.size(0)-doc_emb.size(0)
+                    doc_emb = torch.cat([doc_emb, torch.zeros(diff_len,len(questions),doc_emb.size(2)).to(device)],dim=0)
+                memory_feats += doc_emb
 
 
 
         if answers is not None: #we are training
+            if self.regress_from_question:
+                answers = [q+'[SEP]'+a for q,a in zip(questions,answers)]
             answers_t = self.tokenizer(answers,return_tensors="pt",padding=True)
             answers_emb = self.answer_embedding(answers_t['input_ids'][:,:-1].to(device)) #Remove end (SEP) token, as it doesn't need to predict anythin after that. emb needs to do position
             answers_emb = answers_emb.permute(1,0,2) #batch,len,feat -> len,batch,feat
@@ -182,15 +192,26 @@ class DecoderOnPairing(BaseModel):
             response_decoded = self.answer_decode(response.view(-1,response.size(2)))
             response_decoded = response_decoded.view(answers_emb.size(0),len(questions),-1)
             response_decoded = response_decoded.permute(1,0,2) #put batch dim first
-            target_decoded = answers_t['input_ids'][:,1:]# This has the SEP tokens (and padding)
             #target_mask = answer_padding_mask[:,1:]
             response_greedy_tokens = response_decoded.argmax(dim=2)
+
+            if self.regress_from_question:
+                locs = (answers_t['input_ids']==self.SEP_TOKEN).nonzero(as_tuple=False)[::2,1] #get first SEP, not second
+                for b,loc in enumerate(locs):
+                    #for the question (before SEP)
+                    answers_t['input_ids'][b,:loc]=0 #zero GT
+                    #response[:loc,b]*=0 #zero pred
+            target_decoded = answers_t['input_ids'][:,1:]# This has the SEP tokens (and padding), but not CLS (start) token
+
             string_response=[]
             for b in range(len(questions)):
-                pred_stop = response_greedy_tokens[b]==self.SEP_TOKEN
+                response_greedy_tokens_b = response_greedy_tokens[b]
+                if self.regress_from_question:
+                    response_greedy_tokens_b = response_greedy_tokens_b[locs[b]:]
+                pred_stop = response_greedy_tokens_b==self.SEP_TOKEN
                 if pred_stop.any():
                     stop_index = pred_stop.nonzero(as_tuple=False)[0][0].item()
-                    response_greedy_tokens[b][stop_index:]=self.SEP_TOKEN
+                    response_greedy_tokens_b[stop_index:]=self.SEP_TOKEN
                 string_response.append(self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(response_greedy_tokens[b],skip_special_tokens=True)))
             return response_decoded, target_decoded.to(device), string_response
         else: #we need to do this autoregressively
