@@ -11,7 +11,7 @@
         "num_workers": 0,
         "rescale_range": [1.0,1.0],
         "crop_params": null,
-	"questions": 30,
+	"questions": 40,
         "shuffle": false,
         "#textfile":"../hw_with_style/data/lotr.txt",
 	"only_present": true
