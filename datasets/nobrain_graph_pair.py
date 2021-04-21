@@ -45,6 +45,8 @@ class NobrainGraphPair(GraphPairDataset):
         self.repeat_after_me=config['repeat_after_me'] if 'repeat_after_me' in config else False
         self.not_present_freq=0.5
 
+        self.only_present = config['only_present'] if 'only_present' in config else False
+
 
 
     def parseAnn(self,annotations,s):
@@ -216,6 +218,9 @@ class NobrainGraphPair(GraphPairDataset):
 
                     if self.repeat_after_me:
                         a=q
+                    elif self.only_present:
+                        a='>'
+                        questions.append(q)
                     else:
                         a='> {}'.format(a)
                         questions.append(q)
