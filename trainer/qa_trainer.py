@@ -366,7 +366,8 @@ class QATrainer(BaseTrainer):
                     cor_pair+=1
                 total_pair+=1
         log['present_acc']=cor_present/len(answers)
-        log['pair_acc']=cor_pair/total_pair
+        if total_pair>0:
+            log['pair_acc']=cor_pair/total_pair
 
         if self.print_pred_every>0 and self.iteration%self.print_pred_every==0:
             print('iteration {}'.format(self.iteration))
