@@ -76,12 +76,15 @@ class LayoutTransformer(BaseModel):
         #inputs = tokenizer(total_string,return_tensors="pt")
         #input_bbs = torch.LongTensor([input_bbs])
 
-        total_string = ' '.join(gtTrans)
+        total_strings = [' '.join(gtT) for gtT in gtTrans]
 
-        inputs = self.tokenizer(total_string,return_tensors="pt")
+        inputs = self.tokenizer(total_strings,return_tensors="pt",padding=True)
 
         embedded = self.embedding(inputs['input_ids'].to(device))
 
         embedded = embedded.permute(1,0,2) #batch,len,feat -> len,batch,feat
+        padding_mask = ~inputs['attention_mask'].bool().to(device)
 
-        return self.encoder(embedded)[:,0] #remove batch dim   #.permute(1,0,2) #len,batch,feat -> batch,len,feat
+        return (
+                self.encoder(embedded,src_key_padding_mask=padding_mask).permute(1,0,2), 
+                padding_mask) #len,batch,feat -> batch,len,feat

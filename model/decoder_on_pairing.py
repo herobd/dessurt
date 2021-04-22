@@ -26,7 +26,16 @@ class DecoderOnPairing(BaseModel):
 
         self.regress_from_question = config['regress_from_question'] if 'regress_from_question' in config else False
         if not self.regress_from_question:
-            self.question_languagemodel = DistilBertModel.from_pretrained('distilbert-base-uncased')
+            if 'custom_question_lm' in config:
+                qlm_config = DistilBertConfig.from_pretrained('distilbert-base-uncased')
+                qlm_config.n_layers=config['custom_question_lm']
+                #qlm_config.hidden_dim=dim_ff
+                #qlm_config.dim=d_model
+
+                self.question_languagemodel = DistilBertModel(qlm_config)
+                self.change_question = nn.Identity()
+            else:
+                self.question_languagemodel = DistilBertModel.from_pretrained('distilbert-base-uncased')
             self.change_question = nn.Linear(768,d_model)
 
     
@@ -91,12 +100,17 @@ class DecoderOnPairing(BaseModel):
 
 
     def forward(self,image,gtBBs,gtTrans,questions,answers=None):
+        if type(gtTrans[0]) is str:
+                gtTrans = [gtTrans]
+                questions = [questions]
+                if answers is not None:
+                    answers = [answers]
         device = image.device
         if not self.only_q:
             if self.layoutlm is not None:
-                layoutlm_feats = runLayoutLM(image.size(),gtBBs[0],gtTrans,image.device,self.layoutlm_tokenizer,self.layoutlm,keep_ends=True,all_tokens=True) #this assumes a single batch
+                layoutlm_feats = runLayoutLM(image.size(),gtBBs,gtTrans,image.device,self.layoutlm_tokenizer,self.layoutlm,keep_ends=True,all_tokens=True) #this assumes a single batch
             else:
-                layoutlm_feats = self.layout_model(image.size(),gtBBs[0],gtTrans,image.device)
+                layoutlm_feats,layout_padding = self.layout_model(image.size(),gtBBs[0],gtTrans,image.device)
 
             layoutlm_feats =self.change_layoutlm(layoutlm_feats)
             #Maybe pos encode layoutlm as well, to account for times its been processed in two batches
@@ -112,14 +126,20 @@ class DecoderOnPairing(BaseModel):
                 document_feats = torch.cat((layoutlm_feats,graph_feats),dim=2)#place the graph_feats between so it gets put between the SEP and START tokens
             else:
                 document_feats = layoutlm_feats
+                document_padding = layout_padding
         
 
+        repeats = [len(q) for q in questions] #different elements in batch may have different numbers of questions
+        document_feats = torch.repeat_interleave(document_feats,torch.tensor(repeats).to(device),dim=0)
+        document_padding = torch.repeat_interleave(document_padding,torch.tensor(repeats).to(device),dim=0)
+        questions=[q for bq in questions for q in bq]
+        answers=[a for ba in answers for a in ba]
 
         if self.regress_from_question:
-            document_feats_len = document_feats.size(0)
-            document_feats = document_feats[None,...].expand(len(questions),-1,-1)
+            document_feats_len = document_feats.size(1)
+            #document_feats = document_feats[None,...].expand(len(questions),-1,-1)
             memory_feats = document_feats
-            memory_padding_mask = None#torch.BoolTensor(len(questions),document_feats_len).zero_().to(device)
+            memory_padding_mask = document_padding# torch.BoolTensor(len(questions),document_feats_len).zero_().to(device)
         else:
             q_inputs = self.tokenizer(questions, return_tensors="pt", padding=True)
             q_inputs = {k:i.to(device) for k,i in q_inputs.items()}
@@ -129,11 +149,11 @@ class DecoderOnPairing(BaseModel):
                 memory_feats = question_feats
                 memory_padding_mask = ~q_inputs['attention_mask'].bool()
             else:
-                document_feats_len = document_feats.size(0)
-                document_feats = document_feats[None,...].expand(len(questions),-1,-1)
+                #document_feats_len = document_feats.size(0)
+                #document_feats = document_feats[None,...].expand(len(questions),-1,-1)
                 sep_feat = torch.FloatTensor(len(questions),1,document_feats.size(2)).zero_().to(device)
                 memory_feats = torch.cat((document_feats,sep_feat,question_feats),dim=1)
-                memory_padding_mask = torch.cat((torch.BoolTensor(len(questions),document_feats_len+1).zero_().to(device),~q_inputs['attention_mask'].bool()),dim=1)
+                memory_padding_mask = torch.cat((document_padding,torch.BoolTensor(len(questions),1).zero_().to(device),~q_inputs['attention_mask'].bool()),dim=1)
 
                 if self.half_mem_pos:
                     memory_feats_h = self.mem_pos_enc(memory_feats[:,:,:memory_feats.size(2)//2])
@@ -213,7 +233,12 @@ class DecoderOnPairing(BaseModel):
                     stop_index = pred_stop.nonzero(as_tuple=False)[0][0].item()
                     response_greedy_tokens_b[stop_index:]=self.SEP_TOKEN
                 string_response.append(self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(response_greedy_tokens[b],skip_special_tokens=True)))
-            return response_decoded, target_decoded.to(device), string_response
+            batch_string_response=[]
+            cur_pos=0
+            for r in repeats:
+                batch_string_response.append(string_response[cur_pos:cur_pos+r])
+                cur_pos+=r
+            return response_decoded, target_decoded.to(device), batch_string_response
         else: #we need to do this autoregressively
             #This is not efficeint
             TODO() #how do I freeze the already run activations?

@@ -304,12 +304,13 @@ class QATrainer(BaseTrainer):
         #-all missing (none)
         
         if self.ocr_word_bbs:
-            gtTrans = instance['form_metadata']['word_trans']
+            gtTrans = [form_metadata['word_trans'] for form_metadata in instance['form_metadata']]
         else:
             gtTrans = instance['transcription']
         #t#tic=timeit.default_timer()#t##t#
         if self.ocr_word_bbs: #useOnlyGTSpace and self.use_word_bbs_gt:
-            word_boxes = instance['form_metadata']['word_boxes'][None,:,:,].to(image.device) #I can change this as it isn't used later
+            word_boxes = torch.stack([form_metadata['word_boxes'] for form_metadata in instance['form_metadata']],dim=0)
+            word_boxes = word_boxes.to(image.device) #I can change this as it isn't used later
             targetBoxes_changed=word_boxes
             if self.model.training:
                 targetBoxes_changed[:,:,0] += torch.randn_like(targetBoxes_changed[:,:,0])
@@ -356,23 +357,27 @@ class QATrainer(BaseTrainer):
         losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
 
         cor_present=0
+        total_present=0
         cor_pair=0
         total_pair=0
-        for answer,pred in zip(answers,string_a):
-            if len(pred)>0 and answer[0]==pred[0]:
-                cor_present+=1
-            if len(answer)>2:
-                if answer[2:]==pred[2:]:
-                    cor_pair+=1
-                total_pair+=1
-        log['present_acc']=cor_present/len(answers)
+        for b_answers,b_pred in zip(answers,string_a):
+            for answer,pred in zip(b_answers,b_pred):
+                if len(pred)>0 and answer[0]==pred[0]:
+                    cor_present+=1
+                total_present+=1
+                if len(answer)>2:
+                    if answer[2:]==pred[2:]:
+                        cor_pair+=1
+                    total_pair+=1
+        log['present_acc']=cor_present/total_present
         if total_pair>0:
             log['pair_acc']=cor_pair/total_pair
 
         if self.print_pred_every>0 and self.iteration%self.print_pred_every==0:
             print('iteration {}'.format(self.iteration))
-            for question,answer,pred in zip(questions,answers,string_a):
-                print('[Q]:{} [A]:{} [P]:{}'.format(question,answer,pred))
+            for b,(b_question,b_answer,b_pred) in enumerate(zip(questions,answers,string_a)):
+                for question,answer,pred in zip(b_question,b_answer,b_pred):
+                    print('{} [Q]:{}\t[A]:{}\t[P]:{}'.format(b,question,answer,pred))
 
 
 

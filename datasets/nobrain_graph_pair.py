@@ -18,8 +18,29 @@ ONE_DONE=[]
 
 
 def collate(batch):
-    assert(len(batch)==1)
-    return batch[0]
+
+    #bb_gt = [b['bb_gt'] for b in batch]
+    #max_bb_len = max(bgt.size(1) for bgt in bb_gt if bgt is not None)
+
+    #bb_gt_tensor = torch.FloatTensor(len(batch),max_bb_len,bb_gt[0].size(2)).zero()
+
+    return {
+            'img': torch.cat([b['img'] for b in batch],dim=0),
+            'bb_gt': None, #torch.cat([b['bb_gt'] for b in batch],dim=0),
+            'num_neighbors': None,
+            'adj': [b['adj'] for b in batch],
+            'imgName': [b['imgName'] for b in batch],
+            'scale': [b['scale'] for b in batch],
+            'cropPoint': [b['cropPoint'] for b in batch],
+            'transcription': [b['transcription'] for b in batch],
+            'metadata': [b['metadata'] for b in batch],
+            'form_metadata': [b['form_metadata'] for b in batch],
+            'gt_groups': [b['gt_groups'] for b in batch],
+            'targetIndexToGroup': [b['targetIndexToGroup'] for b in batch],
+            'gt_groups_adj': [b['gt_groups_adj'] for b in batch],
+            'questions': [b['questions'] for b in batch],
+            'answers': [b['answers'] for b in batch]
+            }
 
 
 class NobrainGraphPair(GraphPairDataset):
@@ -32,7 +53,8 @@ class NobrainGraphPair(GraphPairDataset):
         super(NobrainGraphPair, self).__init__(dirPath,split,config,images)
 
         self.images=[]
-        self.images.append({'id':'0', 'imagePath':'../data/FUNSD/training_data/images/12825369.png', 'annotationPath':'../data/english_char_set.json', 'rescaled':1.0, 'imageName':'0'})
+        for i in range(config['batch_size']):
+            self.images.append({'id':'{}'.format(i), 'imagePath':'../data/FUNSD/training_data/images/12825369.png', 'annotationPath':'../data/english_char_set.json', 'rescaled':1.0, 'imageName':'0'})
 
         if 'textfile' in config:
             with open(config['textfile']) as f:
@@ -49,6 +71,8 @@ class NobrainGraphPair(GraphPairDataset):
         self.not_present_freq=0.5
 
         self.only_present = config['only_present'] if 'only_present' in config else False
+
+        self.lm = False
 
 
 
@@ -162,8 +186,17 @@ class NobrainGraphPair(GraphPairDataset):
             cY=0
             questions=[]
             skipped=[]
-            q_s = random.sample(self.words,k=2*self.questions)
-            a_s = random.sample(self.words,k=2*self.questions)
+            if self.lm:
+                q_s=[]
+                a_s=[]
+                for i in range(self.questions):
+                    start_i = random.randrange(0,len(self.words)-self.lm)
+                    end_i = start_i+self.lm
+                    q_s.append(self.words[start_i])
+                    a_s.append(' '.join(self.words[start_i+1,end_i]))
+            else:
+                q_s = random.sample(self.words,k=2*self.questions)
+                a_s = random.sample(self.words,k=2*self.questions)
             for i in range(self.questions):
                 q=q_s[i]
                 a=a_s[i]
@@ -225,6 +258,8 @@ class NobrainGraphPair(GraphPairDataset):
 
                     if self.repeat_after_me:
                         a=q
+                    elif self.lm:
+                        a=a
                     elif self.only_present:
                         a='>'
                         questions.append(q)
