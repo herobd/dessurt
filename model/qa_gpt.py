@@ -101,7 +101,7 @@ class QAGPT(BaseModel):
             if pred_stop.any():
                 stop_index = pred_stop.nonzero(as_tuple=False)[0][0].item()
                 response_greedy_tokens_b[stop_index:]=self.SEP_TOKEN
-            string_response.append(self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(response_greedy_tokens[b],skip_special_tokens=True)))
+            string_response.append(self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(response_greedy_tokens_b,skip_special_tokens=True)))
 
         #reshape strings into batches
         batch_string_response=[]
