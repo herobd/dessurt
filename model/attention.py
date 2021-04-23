@@ -2,6 +2,7 @@ import math,copy
 import torch
 import torch.nn.functional as F
 from torch import nn
+from .pos_encode import RealEmbedding
 
 #These are taken from the Annotated Transformer (http://nlp.seas.harvard.edu/2018/04/03/attention.html#attention)
 def clones(module, N):
@@ -120,7 +121,7 @@ class MultiHeadedAttention(nn.Module):
 
 
 class PosBiasedMultiHeadedAttention(nn.Module):
-    def __init__(self, h, d_model, dropout=0.1, mod=None):
+    def __init__(self, h, d_model, max_dist, dropout=0.1, mod=None):
         "Take in model size and number of heads."
         super(MultiHeadedAttention, self).__init__()
         assert d_model % h == 0
@@ -131,18 +132,10 @@ class PosBiasedMultiHeadedAttention(nn.Module):
         self.attn = None
         self.dropout = nn.Dropout(p=dropout)
         self.mod=mod if mod else '' #learned: use network for attention instead of dot product, half: use only half of query/keys for dot product
-        if 'learned' in self.mod:
-            self.learned=True
-            self.attNet = nn.Sequential(
-                    #nn.GroupNorm(getGroupSize(self.d_k*2),self.d_k*2),
-                    nn.ReLU(inplace=True),
-                    nn.Linear(self.d_k*2,self.d_k//4),
-                    #nn.GroupNorm(getGroupSize(self.d_k//4),self.d_k//4),
-                    nn.ReLU(inplace=True),
-                    nn.Linear(self.d_k//4,1) 
-                    )
-        else:
-            self.learned=False
+
+        assert d_model//4>=16
+        self.x_emb = RealEmbedding(d_model//4,max_dist,20)
+        self.y_emb = RealEmbedding(d_model//4,max_dist,20)
         
         
     def forward(self, query, key, value, query_x, query_y, key_x, key_y, mask=None):
@@ -160,11 +153,6 @@ class PosBiasedMultiHeadedAttention(nn.Module):
         pos_emb = pos_emb.reshape(nbatches,nkey,nquery,self.h,self.pos_d_k) #reshape to heads
         att_bias = torch.matmul(pos_emb, pos_emb.transpose(-2, -1)) \
                  / math.sqrt(self.pos_d_k)
-
-        if self.none:
-            key = torch.cat((key,torch.ones(key.size(0),1,key.size(2)).to(key.device)),dim=1)
-            value = torch.cat((value,torch.zeros(value.size(0),1,value.size(2)).to(value.device)),dim=1)
-            mask = torch.cat((mask,torch.ones(1,1,mask.size(2),1).to(mask.device)),dim=3)
         
         # 1) Do all the linear projections in batch from d_model => h x d_k 
         query, key, value = \

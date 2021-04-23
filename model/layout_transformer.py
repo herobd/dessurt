@@ -34,7 +34,7 @@ def normalize_bbox(bbox, width, height):
      ]
 
 class LayoutTransformer(BaseModel):
-    def __init__(self, config):
+    def __init__(self, config, dropout=0.1):
         super(LayoutTransformer, self).__init__(config) #call super of parent.
 
         d_model = config['d_model']
@@ -44,7 +44,7 @@ class LayoutTransformer(BaseModel):
 
         self.tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
 
-        encoder_layer= nn.TransformerEncoderLayer(d_model,nhead,dim_ff)
+        encoder_layer= nn.TransformerEncoderLayer(d_model,nhead,dim_ff,dropout=dropout)
         self.encoder = nn.TransformerEncoder(encoder_layer,num_e_layers,nn.LayerNorm(d_model))
 
         self.embedding =  nn.Sequential(
