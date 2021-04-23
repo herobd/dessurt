@@ -110,11 +110,14 @@ class QAFromQ(BaseModel):
 
         response_greedy_tokens = response_decoded.argmax(dim=2)
         locs = (answers_t['input_ids']==self.SEP_TOKEN).nonzero(as_tuple=False)[::2,1] #get first SEP, not second
+        mask_response = torch.ones(response_decoded.size())
         for b,loc in enumerate(locs):
             #for the question (before SEP)
             answers_t['input_ids'][b,:loc]=0 #zero GT where question is (we don't want to train that)
-            #response[:loc,b]*=0 #zero pred
+            mask_response[b,:loc]*=0
+        response_decoded = response_decoded*mask_response.to(device)
         target_decoded = answers_t['input_ids'][:,1:]# This has the SEP tokens (and padding), but not CLS (start) token
+
 
         #decode the prediction to string
         string_response=[]
@@ -125,7 +128,7 @@ class QAFromQ(BaseModel):
             if pred_stop.any():
                 stop_index = pred_stop.nonzero(as_tuple=False)[0][0].item()
                 response_greedy_tokens_b[stop_index:]=self.SEP_TOKEN
-            string_response.append(self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(response_greedy_tokens[b],skip_special_tokens=True)))
+            string_response.append(self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(response_greedy_tokens_b,skip_special_tokens=True)))
 
         #reshape strings into batches
         batch_string_response=[]
