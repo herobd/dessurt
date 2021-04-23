@@ -11,7 +11,7 @@
         "num_workers": 0,
         "rescale_range": [1.0,1.0],
         "crop_params": null,
-	"questions": 98,
+	"questions": 74,
         "shuffle": false,
         "textfile":"../hw_with_style/data/lotr.txt"
 
@@ -29,7 +29,7 @@
  
     "optimizer_type": "AdamW",
     "optimizer": {
-        "lr": 0.01,
+        "lr": 0.00001,
         "weight_decay": 0.01
     },
     "loss": {
@@ -54,8 +54,8 @@
         "val_step": 50000,
         "save_step": 25000,
         "save_step_minor": 200,
-        "log_step": 25,
-        "print_pred_every": 50,
+        "log_step": 100,
+        "print_pred_every": 100,
         "verbosity": 1,
         "monitor": "loss",
         "monitor_mode": "none",
@@ -72,10 +72,11 @@
     },
     "arch": "DecoderOnPairing", 
     "model": {
-	    "decode_dim": 256,
-	    "dim_ff": 512,
-	    "decode_num_heads": 1,
+	    "decode_dim": 512,
+	    "dim_ff": 750,
+	    "decode_num_heads": 4,
 	    "decode_layers": 2,
-	    "encode_layers": 2
+	    "encode_layers": 2,
+	    "half_mem_pos": false
     }
 }
