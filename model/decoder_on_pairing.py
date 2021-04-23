@@ -8,6 +8,9 @@ from model.pos_encode import PositionalEncoding
 from model.layout_transformer import LayoutTransformer
 from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
 from transformers import LayoutLMTokenizer, LayoutLMModel
+from collections import defaultdict
+
+import timeit
 
 
 class DecoderOnPairing(BaseModel):
@@ -38,8 +41,8 @@ class DecoderOnPairing(BaseModel):
                 self.question_languagemodel = DistilBertModel.from_pretrained('distilbert-base-uncased')
             self.change_question = nn.Linear(768,d_model)
 
-    
-        decoder_layer = nn.TransformerDecoderLayer(d_model,nhead,dim_ff)
+        dropout = 0 if 'no_dropout' in config and  config['no_dropout'] else 0.1
+        decoder_layer = nn.TransformerDecoderLayer(d_model,nhead,dim_ff,dropout=dropout)
         self.decoder = nn.TransformerDecoder(decoder_layer,num_layers,nn.LayerNorm(d_model))
         self.answer_embedding = nn.Sequential(
                 nn.Embedding(self.tokenizer.vocab_size, d_model),
@@ -62,7 +65,7 @@ class DecoderOnPairing(BaseModel):
         else:
             config['layout']['d_model']=d_model
             config['layout']['dim_ff']=dim_ff
-            self.layout_model = LayoutTransformer(config['layout'])
+            self.layout_model = LayoutTransformer(config['layout'],dropout)
             self.layoutlm = None
             self.change_layoutlm = nn.Identity()
 
@@ -96,10 +99,11 @@ class DecoderOnPairing(BaseModel):
         #    print(o)
         #self.decoder.layers[0].self_attn.register_forward_hook(show_self_att)
         #self.decoder.layers[0].multihead_attn.register_forward_hook(show_mem_att)
-
+        self.opt_history=defaultdict(list)#t#
 
 
     def forward(self,image,gtBBs,gtTrans,questions,answers=None):
+        ticA=timeit.default_timer()#t#
         if type(gtTrans[0]) is str:
                 gtTrans = [gtTrans]
                 questions = [questions]
@@ -215,6 +219,10 @@ class DecoderOnPairing(BaseModel):
             #target_mask = answer_padding_mask[:,1:]
             response_greedy_tokens = response_decoded.argmax(dim=2)
 
+            time = timeit.default_timer()-ticA#t#
+            self.opt_history['transformers'].append(time)#t#
+            tic=timeit.default_timer()#t#
+
             if self.regress_from_question:
                 locs = (answers_t['input_ids']==self.SEP_TOKEN).nonzero(as_tuple=False)[::2,1] #get first SEP, not second
                 for b,loc in enumerate(locs):
@@ -238,6 +246,12 @@ class DecoderOnPairing(BaseModel):
             for r in repeats:
                 batch_string_response.append(string_response[cur_pos:cur_pos+r])
                 cur_pos+=r
+
+            timeA = timeit.default_timer()-ticA#t#
+            time = timeit.default_timer()-tic#t#
+            self.opt_history['decode'].append(time)#t#
+            self.opt_history['full forward'].append(timeA)#t#
+            self.print_opt_times()#t#
             return response_decoded, target_decoded.to(device), batch_string_response
         else: #we need to do this autoregressively
             #This is not efficeint
@@ -260,3 +274,11 @@ class DecoderOnPairing(BaseModel):
                 p_answer_emb = torch.cat((p_answer_emb,last_token_emb),dim=-1)
 
             #response_d = ?
+
+    def print_opt_times(self):#t#
+        for name,times in self.opt_history.items():#t#
+            print('time {}({}): {}'.format(name,len(times),np.mean(times)))#t#
+            if len(times)>300: #t#
+                times.pop(0)   #t#
+                if len(times)>600:#t#
+                    times.pop(0)#t#

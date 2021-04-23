@@ -70,7 +70,7 @@ class QATrainer(BaseTrainer):
         self.data_loader_iter = iter(data_loader)
         self.valid_data_loader = valid_data_loader
 
-        self.ocr_word_bbs = config['trainer']['word_bbs']
+        self.ocr_word_bbs = config['trainer']['word_bbs'] if 'word_bbs' in config['trainer'] else False
 
         self.debug = 'DEBUG' in  config['trainer']
 
@@ -83,7 +83,8 @@ class QATrainer(BaseTrainer):
 
 
         self.print_pred_every = config['trainer']['print_pred_every'] if  'print_pred_every' in config['trainer'] else 200
-
+        
+        #t#self.opt_history = defaultdict(list)#t#
 
 
 
@@ -128,21 +129,23 @@ class QATrainer(BaseTrainer):
 
             The metrics in log must have the key 'metrics'.
         """
+        #t#ticAll=timeit.default_timer()#t#
+
         self.model.train()
         #self.model.eval()
         #print("WARNING EVAL")
 
-        #t#ticAll=timeit.default_timer()#t##t#
+        #t##t#ticAll=timeit.default_timer()#t##t#
         batch_idx = (iteration-1) % len(self.data_loader)
         try:
             thisInstance = self.data_loader_iter.next()
         except StopIteration:
             self.data_loader_iter = iter(self.data_loader)
             thisInstance = self.data_loader_iter.next()
-        ##toc=timeit.default_timer()
         #t#self.opt_history['get data'].append(timeit.default_timer()-ticAll)#t#
+
+
         
-        #t#tic=timeit.default_timer()#t##t#
         if self.accum_grad_steps<2 or iteration%self.accum_grad_steps==1:
             self.optimizer.zero_grad()
 
@@ -151,9 +154,9 @@ class QATrainer(BaseTrainer):
         #loss = self.loss(output, target)
         index=0
         losses={}
-        #t###tic=timeit.default_timer()#t#
 
 
+        #t#tic=timeit.default_timer()#t#
         #print('\t\t\t\t{} {}'.format(iteration,thisInstance['imgName']))
         if self.amp:
             with torch.cuda.amp.autocast():
@@ -307,7 +310,7 @@ class QATrainer(BaseTrainer):
             gtTrans = [form_metadata['word_trans'] for form_metadata in instance['form_metadata']]
         else:
             gtTrans = instance['transcription']
-        #t#tic=timeit.default_timer()#t##t#
+        #t##t#tic=timeit.default_timer()#t##t#
         if self.ocr_word_bbs: #useOnlyGTSpace and self.use_word_bbs_gt:
             word_boxes = torch.stack([form_metadata['word_boxes'] for form_metadata in instance['form_metadata']],dim=0)
             word_boxes = word_boxes.to(image.device) #I can change this as it isn't used later
@@ -349,13 +352,14 @@ class QATrainer(BaseTrainer):
 
         if forward_only:
             return
-        #t#self.opt_history['run model'].append(timeit.default_timer()-tic)#t#
-        #t#tic=timeit.default_timer()#t##t#
+        #t##t#self.opt_history['run model'].append(timeit.default_timer()-tic)#t#
+        #t##t#tic=timeit.default_timer()#t##t#
         losses=defaultdict(lambda:0)
         log={}
 
         losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
 
+        #t#tic=timeit.default_timer()#t#
         cor_present=0
         total_present=0
         cor_pair=0
@@ -372,6 +376,7 @@ class QATrainer(BaseTrainer):
         log['present_acc']=cor_present/total_present
         if total_pair>0:
             log['pair_acc']=cor_pair/total_pair
+        #t#self.opt_history['score'].append(timeit.default_timer()-tic)#t#
 
         if self.print_pred_every>0 and self.iteration%self.print_pred_every==0:
             print('iteration {}'.format(self.iteration))
