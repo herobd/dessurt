@@ -57,6 +57,10 @@ class NobrainQA(QADataset):
         #else:
         #    self.words = None
 
+        self.additional_doc_len = config['additional_doc_len'] if 'additional_doc_len' in config else 0
+
+        self.shuffle_doc = config['shuffle_doc'] if 'shuffle_doc' in config else False
+
         self.repeat_after_me=config['repeat_after_me'] if 'repeat_after_me' in config else False
         self.not_present_freq=0.5
 
@@ -183,8 +187,8 @@ class NobrainQA(QADataset):
                     q_s.append(self.words[start_i])
                     a_s.append(' '.join(self.words[start_i+1,end_i]))
             else:
-                q_s = random.sample(self.words,k=2*self.questions)
-                a_s = random.sample(self.words,k=2*self.questions)
+                q_s = random.sample(self.words,k=2*self.questions + self.additional_doc_len)
+                a_s = random.sample(self.words,k=2*self.questions + self.additional_doc_len)
             for i in range(self.questions):
                 q=q_s[i]
                 a=a_s[i]
@@ -260,7 +264,7 @@ class NobrainQA(QADataset):
                     cY+=11
 
             #keep document size the same by adding redherring words
-            for i in range(len(skipped)):
+            for i in range(len(skipped)+self.additional_doc_len):
                 q=q_s[-(i+1)]
                 a=a_s[-(i+1)]
                 bb=[None]*16
@@ -320,6 +324,19 @@ class NobrainQA(QADataset):
             for w in not_present[:diff]:
                 self.qa.append((w,'~',None))
 
+        if self.shuffle_doc=='pairs':
+            pairs = [(word_boxes[a],word_boxes[a+1],word_trans[a],word_trans[a+1]) for a in range(0,len(word_boxes),2)]
+            random.shuffle(pairs)
+            word_boxes1, word_boxes2, word_trans1, word_trans2 = zip(*pairs)
+            word_boxes=[]
+            word_trans=[]
+            for b1,b2,t1,t2 in pairs:
+                word_boxes+=(b1,b2)
+                word_trans+=(t1,t2)
+        elif  self.shuffle_doc:
+            b_and_t = zip(word_boxes,word_trans)
+            random.shuffle(b_and_t)
+            word_boxes,word_trans = zip(*b_and_t)
 
 
         word_boxes = np.array(word_boxes)
