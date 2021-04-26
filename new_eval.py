@@ -486,17 +486,17 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
 
 
                 print('----PER DOCUMENT------')
-                print('BROS relationship Recall Prec F1: {:.2f} & {:.2f} & {:.2f}'.format(100*BROS_recall,100*BROS_prec,100*BROS_Fm))
+                print('BROS relationship Recall Prec F1: {:.2f} , {:.2f} , {:.2f}'.format(100*BROS_recall,100*BROS_prec,100*BROS_Fm))
                 print('----OVERALL------')
                 BROS_recall = rel_BROS_TP/rel_gt_count
                 BROS_prec = rel_BROS_TP/rel_pred_count
-                print('BROS relationships Recall Prec F1: {:.2f} & {:.2f} & {:.2f}'.format(100*BROS_recall,100*BROS_prec,100*2*BROS_recall*BROS_prec/(BROS_prec+BROS_recall)))
+                print('BROS relationships Recall Prec F1: {:.2f} , {:.2f} , {:.2f}'.format(100*BROS_recall,100*BROS_prec,100*2*BROS_recall*BROS_prec/(BROS_prec+BROS_recall)))
                 strict_recall = rel_strict_TP/rel_gt_count
                 strict_prec = rel_strict_TP/rel_pred_count
-                print('strict relationships Recall Prec F1: {:.2f} & {:.2f} & {:.2f}'.format(100*strict_recall,100*strict_prec,100*2*strict_recall*strict_prec/(strict_prec+strict_recall)))
+                print('strict relationships Recall Prec F1: {:.2f} , {:.2f} , {:.2f}'.format(100*strict_recall,100*strict_prec,100*2*strict_recall*strict_prec/(strict_prec+strict_recall)))
                 group_recall = group_TP/group_gt_count
                 group_prec = group_TP/group_pred_count
-                print('entity Recall Prec F1: {:.2f} & {:.2f} & {:.2f}'.format(100*group_recall,100*group_prec,100*2*group_recall*group_prec/(group_prec+group_recall)))
+                print('entity Recall Prec F1: {:.2f} , {:.2f} , {:.2f}'.format(100*group_recall,100*group_prec,100*2*group_recall*group_prec/(group_prec+group_recall)))
 
             if 'save_nns' in config:
                 pickle.dump(nns,open(config['save_nns'],'wb'))
