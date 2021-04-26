@@ -55,12 +55,11 @@ class QAFromQ(BaseModel):
                     PositionalEncoding(d_model,dropout=dropout,max_len=1000)
                     )
         self.answer_decode = nn.Sequential(
-                nn.Linear(d_model,self.tokenizer.vocab_size),
+                nn.Linear(d_model,self.tokenizer.vocab_size,bias=not share_embeddings),
                 nn.LogSoftmax(dim=-1)
                 )
         if share_embeddings:
             self.answer_decode[0].weight = self.doc_embedding[0].weight #num,dim
-            self.answer_decode[0].bias.zero_()
         #t#self.opt_history=defaultdict(list)#t#
 
 
