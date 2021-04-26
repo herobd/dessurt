@@ -16,7 +16,8 @@ import json
 from utils.forms_annotations import fixAnnotations, getBBInfo
 from evaluators.draw_graph import draw_graph
 
-
+def NobrainGraphPair_eval(config,instance, trainer, metrics, outDir=None, startIndex=None, lossFunc=None, toEval=None):
+    return NobrainQA_eval(config,instance, trainer, metrics, outDir, startIndex, lossFunc, toEval)
 
 def NobrainQA_eval(config,instance, trainer, metrics, outDir=None, startIndex=None, lossFunc=None, toEval=None):
     losses,run_log,out = trainer.run(instance,get=['strings'])

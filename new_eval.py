@@ -557,8 +557,11 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
             else:
                 print('{} not found! (on {})'.format(index,instance['imgName']))
                 print('{} not found! (on {})'.format(index,instance['imgName']))
-
-    if trainer.do_characterization:
+    try:
+        do =trainer.do_characterization
+    except:
+        do = False
+    if do:
         trainer.displayCharacterization()
 
 
