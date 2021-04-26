@@ -317,10 +317,12 @@ class BaseTrainer:
                     print(err)
                     torch.cuda.empty_cache() #this is primarily to catch rare CUDA out of memory errors
                     lastErr = err
+
             if result is None:
-                if self.retry_count>1:
-                    print('Failed all {} times!'.format(self.retry_count))
-                raise lastErr
+                result = self._train_iteration(self.iteration)
+                #if self.retry_count>1:
+                #    print('Failed all {} times!'.format(self.retry_count))
+                #raise lastErr
 
             elapsed_time = timeit.default_timer() - t
             sumLog['sec_per_iter'] += elapsed_time

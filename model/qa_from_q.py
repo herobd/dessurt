@@ -20,6 +20,7 @@ class QAFromQ(BaseModel):
         dim_ff = config['dim_ff']
         nhead = config['decode_num_heads']
         num_layers = config['decode_layers']
+        share_embeddings = config['share_embeddings'] if 'share_embeddings' in config else False
 
         self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
         self.SEP_TOKEN= 102
@@ -29,20 +30,16 @@ class QAFromQ(BaseModel):
         dropout = 0 if 'no_dropout' in config and  config['no_dropout'] else 0.1
         decoder_layer = nn.TransformerDecoderLayer(d_model,nhead,dim_ff,dropout=dropout)
         self.decoder = nn.TransformerDecoder(decoder_layer,num_layers,nn.LayerNorm(d_model))
-        self.answer_embedding = nn.Sequential(
-                nn.Embedding(self.tokenizer.vocab_size, d_model),
-                PositionalEncoding(d_model,dropout=0.1,max_len=1000)
-                )
-        self.answer_decode = nn.Sequential(
-                nn.Linear(d_model,self.tokenizer.vocab_size),
-                nn.LogSoftmax(dim=-1) #except
-                )
+
 
         #config['layout']['d_model']=d_model
         #config['layout']['dim_ff']=dim_ff
         num_e_layers = config['layout']['num_layers']
         #self.layout_model = LayoutTransformer(config['layout'],dropout)
-        self.doc_tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        if share_embeddings:
+            self.doc_tokenizer = self.tokenizer
+        else:
+            self.doc_tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
         self.doc_embedding =  nn.Sequential(
                 nn.Embedding(self.doc_tokenizer.vocab_size, d_model),
                 PositionalEncoding(d_model,dropout=dropout,max_len=5000)
@@ -50,7 +47,19 @@ class QAFromQ(BaseModel):
         encoder_layer= nn.TransformerEncoderLayer(d_model,nhead,dim_ff,dropout=dropout)
         self.doc_encoder = nn.TransformerEncoder(encoder_layer,num_e_layers,nn.LayerNorm(d_model))
 
-
+        if share_embeddings:
+            self.answer_embedding = self.doc_embedding
+        else:
+            self.answer_embedding = nn.Sequential(
+                    nn.Embedding(self.tokenizer.vocab_size, d_model),
+                    PositionalEncoding(d_model,dropout=dropout,max_len=1000)
+                    )
+        self.answer_decode = nn.Sequential(
+                nn.Linear(d_model,self.tokenizer.vocab_size,bias=not share_embeddings),
+                nn.LogSoftmax(dim=-1)
+                )
+        if share_embeddings:
+            self.answer_decode[0].weight = self.doc_embedding[0].weight #num,dim
         #t#self.opt_history=defaultdict(list)#t#
 
 
