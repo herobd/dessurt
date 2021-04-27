@@ -347,6 +347,7 @@ class QATrainer(BaseTrainer):
         else:
             ocr_changed = None
 
+        #import pdb;pdb.set_trace()
         pred_a, target_a, string_a = self.model(image,targetBoxes_changed,ocr_changed,questions,answers)
 
 
