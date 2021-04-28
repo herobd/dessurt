@@ -13,6 +13,7 @@
         "crop_params": null,
 	"questions": 5,
         "shuffle": false,
+	"shuffle_doc": "pairs",
         "#textfile":"../hw_with_style/data/lotr.txt"
 
 
