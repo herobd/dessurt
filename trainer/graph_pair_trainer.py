@@ -1492,6 +1492,37 @@ class GraphPairTrainer(BaseTrainer):
                 'rel_Fm': 2*(fullPrec*eRecall)/(eRecall+fullPrec) if eRecall+fullPrec>0 else 0
                 }
 
+        ######Adding "BROS" (it has single groups, so BROS doesn't actual make a difference)
+        #make pred pairs
+        act_relPred = torch.sigmoid(relPred)
+        predPairs=[]
+        somethreshold=0.5
+        for pi, score in enumerate(act_relPred):
+            n1,n2 = relIndexes[pi]
+            if score>somethreshold:
+                predPairs.append((min(n1,n2),max(n1,n2)))
+
+        gtRelHit_BROS=set()
+        relPrec_BROS=0
+        for pi,(n0,n1) in enumerate(predPairs):
+            BROS_gtG0 = bbAlignment[n0].item()
+            BROS_gtG1 = bbAlignment[n1].item()
+            hit=False
+            if BROS_gtG0>=0 and BROS_gtG1>=0:
+                pair_id = (min(BROS_gtG0,BROS_gtG1),max(BROS_gtG0,BROS_gtG1))
+                if pair_id in adj:
+                    hit=True
+                    relPrec_BROS+=1
+                    gtRelHit_BROS.add((min(BROS_gtG0,BROS_gtG1),max(BROS_gtG0,BROS_gtG1)))
+    
+        log['final_rel_XX_BROS_TP']=relPrec_BROS
+        log['final_rel_XX_predCount']=len(predPairs)
+        log['final_rel_XX_gtCount']=len(adj)
+        ######%^
+
+
+
+
         gt_hit = [False]*targetBoxes.size(1)
         if self.model_ref.predNN:
             start=7
@@ -1504,6 +1535,10 @@ class GraphPairTrainer(BaseTrainer):
                 if targetBoxes[0,bbAlignment[ni],13+p_cls]==1:
                     ed_true_pos+=1
                     gt_hit[bbAlignment[ni]]=True
+        log['ED_TP_XX'] = ed_true_pos
+        log['ED_true_count_XX'] = targetBoxes.size(1)
+        log['ED_pred_count_XX'] = outputBoxes.size(0)
+        
         if targetBoxes.size(1)>0:
             log['ED_recall'] = ed_true_pos/targetBoxes.size(1)
         else:
@@ -3620,3 +3655,10 @@ class GraphPairTrainer(BaseTrainer):
         #model.apply(lambda module: _set_momenta(module, momenta))
         #model.train(was_training)
 
+    def update_swa_batch_norm(self):
+        #update_bn(self.data_loader,self.swa_model)
+        tmp=self.model.cpu()
+        self.model=self.swa_model.train()
+        for instance in self.data_loader:
+            self.newRun(instance,self.useGT(self.iteration),forward_only=True)
+        self.model=tmp

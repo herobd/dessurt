@@ -70,7 +70,7 @@ class QATrainer(BaseTrainer):
         self.data_loader_iter = iter(data_loader)
         self.valid_data_loader = valid_data_loader
 
-        self.ocr_word_bbs = config['trainer']['word_bbs']
+        self.ocr_word_bbs = config['trainer']['word_bbs'] if 'word_bbs' in config['trainer'] else False
 
         self.debug = 'DEBUG' in  config['trainer']
 
@@ -83,7 +83,8 @@ class QATrainer(BaseTrainer):
 
 
         self.print_pred_every = config['trainer']['print_pred_every'] if  'print_pred_every' in config['trainer'] else 200
-
+        
+        #t#self.opt_history = defaultdict(list)#t#
 
 
 
@@ -128,21 +129,23 @@ class QATrainer(BaseTrainer):
 
             The metrics in log must have the key 'metrics'.
         """
+        #t#ticAll=timeit.default_timer()#t#
+
         self.model.train()
         #self.model.eval()
         #print("WARNING EVAL")
 
-        #t#ticAll=timeit.default_timer()#t##t#
+        #t##t#ticAll=timeit.default_timer()#t##t#
         batch_idx = (iteration-1) % len(self.data_loader)
         try:
             thisInstance = self.data_loader_iter.next()
         except StopIteration:
             self.data_loader_iter = iter(self.data_loader)
             thisInstance = self.data_loader_iter.next()
-        ##toc=timeit.default_timer()
         #t#self.opt_history['get data'].append(timeit.default_timer()-ticAll)#t#
+
+
         
-        #t#tic=timeit.default_timer()#t##t#
         if self.accum_grad_steps<2 or iteration%self.accum_grad_steps==1:
             self.optimizer.zero_grad()
 
@@ -151,9 +154,9 @@ class QATrainer(BaseTrainer):
         #loss = self.loss(output, target)
         index=0
         losses={}
-        #t###tic=timeit.default_timer()#t#
 
 
+        #t#tic=timeit.default_timer()#t#
         #print('\t\t\t\t{} {}'.format(iteration,thisInstance['imgName']))
         if self.amp:
             with torch.cuda.amp.autocast():
@@ -285,7 +288,7 @@ class QATrainer(BaseTrainer):
 
         for val_name in val_metrics:
             if val_count[val_name]>0:
-                val_metrics[val_name] =  val_count[val_name]/val_count[val_name]
+                val_metrics[val_name] =  val_metrics[val_name]/val_count[val_name]
         return val_metrics
 
 
@@ -304,12 +307,13 @@ class QATrainer(BaseTrainer):
         #-all missing (none)
         
         if self.ocr_word_bbs:
-            gtTrans = instance['form_metadata']['word_trans']
+            gtTrans = [form_metadata['word_trans'] for form_metadata in instance['form_metadata']]
         else:
             gtTrans = instance['transcription']
-        #t#tic=timeit.default_timer()#t##t#
+        #t##t#tic=timeit.default_timer()#t##t#
         if self.ocr_word_bbs: #useOnlyGTSpace and self.use_word_bbs_gt:
-            word_boxes = instance['form_metadata']['word_boxes'][None,:,:,].to(image.device) #I can change this as it isn't used later
+            word_boxes = torch.stack([form_metadata['word_boxes'] for form_metadata in instance['form_metadata']],dim=0)
+            word_boxes = word_boxes.to(image.device) #I can change this as it isn't used later
             targetBoxes_changed=word_boxes
             if self.model.training:
                 targetBoxes_changed[:,:,0] += torch.randn_like(targetBoxes_changed[:,:,0])
@@ -343,24 +347,43 @@ class QATrainer(BaseTrainer):
         else:
             ocr_changed = None
 
+        #import pdb;pdb.set_trace()
         pred_a, target_a, string_a = self.model(image,targetBoxes_changed,ocr_changed,questions,answers)
 
 
         if forward_only:
             return
-        #t#self.opt_history['run model'].append(timeit.default_timer()-tic)#t#
-        #t#tic=timeit.default_timer()#t##t#
+        #t##t#self.opt_history['run model'].append(timeit.default_timer()-tic)#t#
+        #t##t#tic=timeit.default_timer()#t##t#
         losses=defaultdict(lambda:0)
         log={}
 
         losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
 
+        #t#tic=timeit.default_timer()#t#
+        cor_present=0
+        total_present=0
+        cor_pair=0
+        total_pair=0
+        for b_answers,b_pred in zip(answers,string_a):
+            for answer,pred in zip(b_answers,b_pred):
+                if len(pred)>0 and answer[0]==pred[0]:
+                    cor_present+=1
+                total_present+=1
+                if len(answer)>2:
+                    if answer[2:]==pred[2:]:
+                        cor_pair+=1
+                    total_pair+=1
+        log['present_acc']=cor_present/total_present
+        if total_pair>0:
+            log['pair_acc']=cor_pair/total_pair
+        #t#self.opt_history['score'].append(timeit.default_timer()-tic)#t#
 
         if self.print_pred_every>0 and self.iteration%self.print_pred_every==0:
-            import pdb;pdb.set_trace()
             print('iteration {}'.format(self.iteration))
-            for question,answer,pred in zip(questions,answers,string_a):
-                print('[Q]:{} [A]:{} [P]:{}'.format(question,answer,pred))
+            for b,(b_question,b_answer,b_pred) in enumerate(zip(questions,answers,string_a)):
+                for question,answer,pred in zip(b_question,b_answer,b_pred):
+                    print('{} [Q]:{}\t[A]:{}\t[P]:{}'.format(b,question,answer,pred))
 
 
 
@@ -368,8 +391,14 @@ class QATrainer(BaseTrainer):
 
         got={}
         for name in get:
-            #else
-            raise NotImplementedError('Cannot get [{}], unknown'.format(name))
+            if 'strings'==name:
+                ret=[]
+                for b,(b_question,b_answer,b_pred) in enumerate(zip(questions,answers,string_a)):
+                    for question,answer,pred in zip(b_question,b_answer,b_pred):
+                        ret.append('{} [Q]:{}\t[A]:{}\t[P]:{}'.format(b,question,answer,pred))
+                got[name]=ret
+            else:
+                raise NotImplementedError('Cannot get [{}], unknown'.format(name))
         return losses, log, got
 
     def bn_update(self):

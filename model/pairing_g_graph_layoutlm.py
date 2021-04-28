@@ -171,7 +171,7 @@ class PairingGGraphLayoutLM(PairingGroupingGraph):
             return [bbPredictions], init_class_pred, None, None, None, None, None, None, (useBBs if self.useCurvedBBs else useBBs.cpu().detach(),None,None,transcriptions)
 
 
-def runLayoutLM(image_size,gtBBs,gtTrans,device,tokenizer,layoutlm,useCurvedBBs=False,keep_ends=False):
+def runLayoutLM(image_size,gtBBs,gtTrans,device,tokenizer,layoutlm,useCurvedBBs=False,keep_ends=False,all_tokens=False):
     #input_ids = []
     input_bbs = [[0,0,0,0]]
     total_string=''
@@ -198,7 +198,7 @@ def runLayoutLM(image_size,gtBBs,gtTrans,device,tokenizer,layoutlm,useCurvedBBs=
     if keep_ends:
         word_token_map = [[0]] + word_token_map + [[len(input_bbs)-1]]
 
-    if inputs['input_ids'].size(1)<LLM_MAX_TOKEN_LEN:
+    if inputs['input_ids'].size(1)<=LLM_MAX_TOKEN_LEN:
         inputs = {k:i.to(device) for k,i in inputs.items()}
         input_bbs = input_bbs.to(device)
         #assert inputs['input_ids'].size(1)==input_bbs.size(1)
@@ -307,7 +307,8 @@ def runLayoutLM(image_size,gtBBs,gtTrans,device,tokenizer,layoutlm,useCurvedBBs=
         assert lm_out.size(0) == inputs['input_ids'].size(1)
         #print('finished remerge')
 
-
+    if all_tokens:
+        return lm_out
     #We'll now average the features for tokens from the same word-bb
     #  This also discards the class and sep token's features.
     new_lm_out = lm_out.new_zeros(len(word_token_map),lm_out.size(1))
