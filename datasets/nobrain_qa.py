@@ -9,51 +9,41 @@ import math, random
 from collections import defaultdict, OrderedDict
 from utils.funsd_annotations import createLines
 import timeit
-from .graph_pair import GraphPairDataset
+from .qa import QADataset
 
 import utils.img_f as img_f
 
 SKIP=['174']#['193','194','197','200']
 ONE_DONE=[]
 
-
 def collate(batch):
 
-    #bb_gt = [b['bb_gt'] for b in batch]
-    #max_bb_len = max(bgt.size(1) for bgt in bb_gt if bgt is not None)
-
-    #bb_gt_tensor = torch.FloatTensor(len(batch),max_bb_len,bb_gt[0].size(2)).zero()
 
     return {
             'img': torch.cat([b['img'] for b in batch],dim=0),
-            'bb_gt': None, #torch.cat([b['bb_gt'] for b in batch],dim=0),
-            'num_neighbors': None,
-            #'adj': [b['adj'] for b in batch],
-            #'imgName': [b['imgName'] for b in batch],
-            #'scale': [b['scale'] for b in batch],
-            #'cropPoint': [b['cropPoint'] for b in batch],
-            #'transcription': [b['transcription'] for b in batch],
+            'bb_gt': torch.cat([b['bb_gt'] for b in batch],dim=0),
+            'imgName': [b['imgName'] for b in batch],
+            'scale': [b['scale'] for b in batch],
+            'cropPoint': [b['cropPoint'] for b in batch],
+            'transcription': [b['transcription'] for b in batch],
             'metadata': [b['metadata'] for b in batch],
             'form_metadata': [b['form_metadata'] for b in batch],
-            #'gt_groups': [b['gt_groups'] for b in batch],
-            #'targetIndexToGroup': [b['targetIndexToGroup'] for b in batch],
-            #'gt_groups_adj': [b['gt_groups_adj'] for b in batch],
             'questions': [b['questions'] for b in batch],
             'answers': [b['answers'] for b in batch]
             }
 
 
-class NobrainGraphPair(GraphPairDataset):
+class NobrainQA(QADataset):
     """
     Class for reading forms dataset and creating starting and ending gt
     """
 
 
     def __init__(self, dirPath=None, split=None, config=None, images=None):
-        super(NobrainGraphPair, self).__init__(dirPath,split,config,images)
+        super(NobrainQA, self).__init__(dirPath,split,config,images)
 
         self.images=[]
-        for i in range(config['batch_size']):
+        for i in range(config['batch_size']*100):
             self.images.append({'id':'{}'.format(i), 'imagePath':'../data/FUNSD/training_data/images/12825369.png', 'annotationPath':'../data/english_char_set.json', 'rescaled':1.0, 'imageName':'0'})
 
         if 'textfile' in config:
@@ -67,6 +57,10 @@ class NobrainGraphPair(GraphPairDataset):
         #else:
         #    self.words = None
 
+        self.additional_doc_len = config['additional_doc_len'] if 'additional_doc_len' in config else 0
+
+        self.shuffle_doc = config['shuffle_doc'] if 'shuffle_doc' in config else False
+
         self.repeat_after_me=config['repeat_after_me'] if 'repeat_after_me' in config else False
         self.not_present_freq=0.5
 
@@ -77,9 +71,7 @@ class NobrainGraphPair(GraphPairDataset):
 
 
     def parseAnn(self,annotations,s):
-        numClasses=4
 
-        bbs = np.empty((1,0, 8+8+numClasses), dtype=np.float32) #2x4 corners, 2x4 cross-points, n classes
 
 
         word_boxes=[]
@@ -195,8 +187,8 @@ class NobrainGraphPair(GraphPairDataset):
                     q_s.append(self.words[start_i])
                     a_s.append(' '.join(self.words[start_i+1,end_i]))
             else:
-                q_s = random.sample(self.words,k=2*self.questions)
-                a_s = random.sample(self.words,k=2*self.questions)
+                q_s = random.sample(self.words,k=2*self.questions + self.additional_doc_len)
+                a_s = random.sample(self.words,k=2*self.questions + self.additional_doc_len)
             for i in range(self.questions):
                 q=q_s[i]
                 a=a_s[i]
@@ -272,7 +264,7 @@ class NobrainGraphPair(GraphPairDataset):
                     cY+=11
 
             #keep document size the same by adding redherring words
-            for i in range(len(skipped)):
+            for i in range(len(skipped)+self.additional_doc_len):
                 q=q_s[-(i+1)]
                 a=a_s[-(i+1)]
                 bb=[None]*16
@@ -332,34 +324,26 @@ class NobrainGraphPair(GraphPairDataset):
             for w in not_present[:diff]:
                 self.qa.append((w,'~',None))
 
+        if self.shuffle_doc=='pairs':
+            pairs = [(word_boxes[a],word_boxes[a+1],word_trans[a],word_trans[a+1]) for a in range(0,len(word_boxes),2)]
+            random.shuffle(pairs)
+            word_boxes1, word_boxes2, word_trans1, word_trans2 = zip(*pairs)
+            word_boxes=[]
+            word_trans=[]
+            for b1,b2,t1,t2 in pairs:
+                word_boxes+=(b1,b2)
+                word_trans+=(t1,t2)
+        elif  self.shuffle_doc:
+            b_and_t = zip(word_boxes,word_trans)
+            random.shuffle(b_and_t)
+            word_boxes,word_trans = zip(*b_and_t)
+
 
         word_boxes = np.array(word_boxes)
-        trans = []
-        groups = []
+        #trans = []
+        #groups = []
 
-        return bbs, list(range(bbs.shape[1])), numClasses, trans, groups, {}, {'word_boxes':word_boxes, 'word_trans':word_trans}
+        bbs=word_boxes[None,...]
+        trans=word_trans
 
-
-    def getResponseBBIdList(self,queryId,annotations):
-        if self.split_to_lines:
-            return annotations['linking'][queryId]
-        else:
-            boxes=annotations['form']
-            cto=[]
-            boxinfo = boxes[queryId]
-            for id1,id2 in boxinfo['linking']:
-                if id1==queryId:
-                    cto.append(id2)
-                else:
-                    cto.append(id1)
-            return cto
-
-    def makeQuestions(self,bbs,transcription,groups,groups_adj):
-        if self.words is not None:
-            return self.qa
-        new_all_q_a=[]
-        new_all_q_a.append(('name:','skynet',None))
-        new_all_q_a.append(('month:','may',None))
-        return new_all_q_a
-
-
+        return bbs, list(range(bbs.shape[1])), trans, {}, {}, self.qa

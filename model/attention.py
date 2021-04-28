@@ -2,12 +2,13 @@ import math,copy
 import torch
 import torch.nn.functional as F
 from torch import nn
+from .pos_encode import RealEmbedding
 
 #These are taken from the Annotated Transformer (http://nlp.seas.harvard.edu/2018/04/03/attention.html#attention)
 def clones(module, N):
     "Produce N identical layers."
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
-def attention(query, key, value, mask=None, dropout=None,fixed=False):
+def attention(query, key, value, mask=None, dropout=None,fixed=False,att_bias=None):
     "Compute 'Scaled Dot Product Attention'"
     d_k = query.size(-1)
     scores = torch.matmul(query, key.transpose(-2, -1)) \
@@ -15,6 +16,8 @@ def attention(query, key, value, mask=None, dropout=None,fixed=False):
     ###
     #scores.fill_(0.1)
     ###
+    if att_bias is not None:
+        scores+=att_bias
     if mask is not None:
         if torch.is_autocast_enabled():
             scores = scores.masked_fill(mask == 0, -1e4)
@@ -108,6 +111,57 @@ class MultiHeadedAttention(nn.Module):
         else:
             x, self.attn = attention(query, key, value, mask=mask, 
                                      dropout=self.dropout,fixed=self.fixed)
+        
+        # 3) "Concat" using a view and apply a final linear. 
+        x = x.transpose(1, 2).contiguous() \
+             .view(nbatches, -1, self.h * self.d_k)
+        return self.linears[-1](x)
+
+
+
+
+class PosBiasedMultiHeadedAttention(nn.Module):
+    def __init__(self, h, d_model, max_dist, dropout=0.1, mod=None):
+        "Take in model size and number of heads."
+        super(MultiHeadedAttention, self).__init__()
+        assert d_model % h == 0
+        # We assume d_v always equals d_k
+        self.d_k = d_model // h
+        self.h = h
+        self.linears = clones(nn.Linear(d_model, d_model), 4) #W_q W_k W_v W_o
+        self.attn = None
+        self.dropout = nn.Dropout(p=dropout)
+        self.mod=mod if mod else '' #learned: use network for attention instead of dot product, half: use only half of query/keys for dot product
+
+        assert d_model//4>=16
+        self.x_emb = RealEmbedding(d_model//4,max_dist,20)
+        self.y_emb = RealEmbedding(d_model//4,max_dist,20)
+        
+        
+    def forward(self, query, key, value, query_x, query_y, key_x, key_y, mask=None):
+        "Implements Figure 2"
+        if mask is not None:
+            # Same mask applied to all h heads.
+            mask = mask[None,None,...]#mask.unsqueeze(1)
+        nbatches = query.size(0)
+
+        nquery = query.size(1)
+        nkey = key.size(1)
+        x_diff = query_x[:,None,:].expand(-1,nkey,-1) - key_x[:,:,None].expand(-1,-1,nquery)
+        y_diff = query_y[:,None,:].expand(-1,nkey,-1) - key_y[:,:,None].expand(-1,-1,nquery)
+        pos_emb = self.x_emb(x_diff) + self.y_emb(y_diff)
+        pos_emb = pos_emb.reshape(nbatches,nkey,nquery,self.h,self.pos_d_k) #reshape to heads
+        att_bias = torch.matmul(pos_emb, pos_emb.transpose(-2, -1)) \
+                 / math.sqrt(self.pos_d_k)
+        
+        # 1) Do all the linear projections in batch from d_model => h x d_k 
+        query, key, value = \
+            [l(x).view(nbatches, -1, self.h, self.d_k).transpose(1, 2)
+             for l, x in zip(self.linears, (query, key, value))]
+        
+        # 2) Apply attention on all the projected vectors in batch. 
+        x, self.attn = attention(query, key, value, mask=mask, 
+                                     dropout=self.dropout,fixed=True,att_bias=att_bias)
         
         # 3) "Concat" using a view and apply a final linear. 
         x = x.transpose(1, 2).contiguous() \
