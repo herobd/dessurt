@@ -21,5 +21,7 @@ from model.line_follower import LineFollower
 from model.simpleNN import SimpleNN
 from model.tesseract_wrap import TesseractWrap
 from model.decoder_on_pairing import DecoderOnPairing
+from model.qa_from_q import QAFromQ
+from model.qa_gpt import QAGPT
 #from .roi_align import ROIAlign
 #from .roi_align import roi_align

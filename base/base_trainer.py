@@ -310,7 +310,6 @@ class BaseTrainer:
             if self.useLearningSchedule:
                 self.lr_schedule.step()
             for attempt in range(self.retry_count):
-                #result = self._train_iteration(self.iteration)
                 try:
                     result = self._train_iteration(self.iteration)
                     break
@@ -318,10 +317,12 @@ class BaseTrainer:
                     print(err)
                     torch.cuda.empty_cache() #this is primarily to catch rare CUDA out of memory errors
                     lastErr = err
+
             if result is None:
-                if self.retry_count>1:
-                    print('Failed all {} times!'.format(self.retry_count))
-                raise lastErr
+                result = self._train_iteration(self.iteration)
+                #if self.retry_count>1:
+                #    print('Failed all {} times!'.format(self.retry_count))
+                #raise lastErr
 
             elapsed_time = timeit.default_timer() - t
             sumLog['sec_per_iter'] += elapsed_time
@@ -573,6 +574,14 @@ class BaseTrainer:
             self.lr_schedule.load_state_dict(checkpoint['lr_schedule'])
         self.train_logger = checkpoint['logger']
         self.logger.info("Checkpoint '{}' (iteration {}) loaded".format(resume_path, self.start_iteration))
+
+    def update_swa_batch_norm(self):
+        #update_bn(self.data_loader,self.swa_model)
+        tmp=self.model.cpu()
+        self.model=self.swa_model.train()
+        for instance in self.data_loader:
+            self.run(instance)
+        self.model=tmp
 
 def moving_average(net1, net2, alpha=1):
     for param1, param2 in zip(net1.parameters(), net2.parameters()):

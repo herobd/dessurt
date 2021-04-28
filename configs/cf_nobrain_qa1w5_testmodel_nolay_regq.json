@@ -1,25 +1,19 @@
 {
-    "name": "FUNSDWordsOverfit_qa_testmodel",
+    "name": "nobrain_qa1w5_testmodel_nolay_regq",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
-        "data_set_name": "FUNSDGraphPair",
-        "overfit": true,
+        "data_set_name": "NobrainQA",
         "data_dir": "../data/FUNSD",
-        "batch_size": 1,
-        "shuffle": true,
-        "num_workers": 4,
-        "split_to_lines": true,
-        "crop_to_page":false,
-        "color":true,
-        "rescale_range": [0.8,1.2],
-        "crop_params": {
-            "crop_size":[800,800],
-	    "pad":50
-        },
-	"questions": 20
+        "batch_size": 300,
+        "num_workers": 0,
+        "rescale_range": [1.0,1.0],
+        "crop_params": null,
+	"questions": 1,
+        "shuffle": false,
+        "textfile":"fivewords.txt"
 
 
     },
@@ -35,10 +29,11 @@
  
     "optimizer_type": "AdamW",
     "optimizer": {
-        "lr": 0.01,
+        "lr": 0.00001,
         "weight_decay": 0.01
     },
     "loss": {
+	"xanswer": "padded_seq_cross_entropy",
 	"answer": "label_smoothing"
     },
     "loss_weights": {
@@ -46,25 +41,24 @@
     },
     "loss_params": 
         {
+            "xanswer": {},
 	    "answer": {"smoothing":0.1}
         },
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 300000,
-	"accum_grad_steps": 5,
+        "iterations": 100000,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
-        "val_step": 50000,
-        "save_step": 25000,
+        "val_step": 10000,
+        "save_step": 10000,
         "save_step_minor": 200,
-        "log_step": 50,
+        "log_step": 100,
+        "print_pred_every": 100,
         "verbosity": 1,
         "monitor": "loss",
         "monitor_mode": "none",
-        "conf_thresh_init": 0.5,
-        "conf_thresh_change_iters": 0,
         "retry_count":2,
 
 
@@ -72,16 +66,20 @@
         "use_learning_schedule": "multi_rise",
         "warmup_steps": [1000],
 	"#ramp_down_steps": 10000,
-        "#swa_lr_mul": 0.01,
+        "#swa_lr_mul": 0.01
 
-	"word_bbs": true
     },
-    "arch": "DecoderOnPairing", 
+    "arch": "QAFromQ", 
     "model": {
-	    "decode_dim": 512,
-	    "dim_ff": 2048,
-	    "decode_num_heads": 8,
-	    "decode_layers": 3,
-	    "encode_layers": 3
+	    "regress_from_question": true,
+	    "decode_dim": 128,
+	    "dim_ff": 256,
+	    "decode_num_heads": 4,
+	    "decode_layers": 2,
+	    "layout": {
+		    "num_layers": 2,
+		    "nhead": 4
+	    },
+	    "no_dropout": true
     }
 }
