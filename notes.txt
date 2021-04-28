@@ -6,8 +6,9 @@ cf_NAFblank_pair_binary333rv_prev.json
 cf_NAFblank_pair_graph663rv_new.json <- jareditebarge
 cf_NAF_pair_binary333rv_new.json
 cf_NAF_pair_graph663rv_new.json
+NAF_pair_graph663rv_new4 <- jareditebarge
 cf_NAFsimple_pair_binary333rv_new.json
-cf_NAFsimple_pair_graph663rv_new.json
+cf_NAFsimple_pair_graph663rv_new.json <- jareditebarge
 cf_FUNSDLines_pair_binary333rv_prev.json
 cf_NAFblank_pair_binary333rv_prev.json
 cf_NAF_pair_binary333rv_prev.json
@@ -19,6 +20,7 @@ cf_FUNSDLines_pair_graph77rv_ablate.json
 cf_FUNSDLines_pair_graph9rv_ablate.json
 cf_FUNSDWords_pair_graph663rv_new.json <- oldshipzion
 cf_FUNSDLinesAndWords_pair_graph663rv_new.json
+FUNSDLinesAndWords_pair_graph663rv_new_short <- jareditebarge
 
 
 maybe later:
