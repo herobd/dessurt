@@ -69,6 +69,7 @@ class QAFromQ(BaseModel):
     def forward(self,image,gtBBs,gtTrans,questions,answers=None):
         #t#ticA=timeit.default_timer()#t#
         device = image.device
+        #batch_size = len(questions)
 
 
         #layoutlm_feats,layout_padding = self.layout_model(image.size(),gtBBs[0],gtTrans,image.device)
@@ -89,11 +90,12 @@ class QAFromQ(BaseModel):
         document_padding = torch.repeat_interleave(document_padding,torch.tensor(repeats).to(device),dim=0)
         questions=[q for bq in questions for q in bq]
         answers=[a for ba in answers for a in ba]
+        new_batch_size = len(questions)
 
         document_feats_len = document_feats.size(1)
-        #document_feats = document_feats[None,...].expand(len(questions),-1,-1)
+        #document_feats = document_feats[None,...].expand(batch_size,-1,-1)
         memory_feats = document_feats
-        memory_padding_mask = document_padding# torch.BoolTensor(len(questions),document_feats_len).zero_().to(device)
+        memory_padding_mask = document_padding# torch.BoolTensor(batch_size,document_feats_len).zero_().to(device)
 
 
         #Append question before answer
@@ -102,19 +104,20 @@ class QAFromQ(BaseModel):
         #run question+answer through decoder
         answers_t = self.tokenizer(answers,return_tensors="pt",padding=True)
         answers_emb = self.answer_embedding(answers_t['input_ids'][:,:-1].to(device)) #Remove end (SEP) token, as it doesn't need to predict anythin after that. emb needs to do position
-        answers_emb = answers_emb.permute(1,0,2) #batch,len,feat -> len,batch,feat
+        #answers_emb = answers_emb.permute(1,0,2) #batch,len,feat -> len,batch,feat
+        answers_len = answers_emb.size(1)
         answer_padding_mask = (1-answers_t['attention_mask'][:,:-1]).bool().to(device)
         response = self.decoder(
-                answers_emb,
-                memory_feats, 
-                tgt_mask=nn.Transformer.generate_square_subsequent_mask(None,answers_emb.size(0)).to(device),
+                answers_emb.permute(1,0,2),
+                memory_feats.permute(1,0,2), 
+                tgt_mask=nn.Transformer.generate_square_subsequent_mask(None,answers_len).to(device),
                 tgt_key_padding_mask=answer_padding_mask,
                 memory_key_padding_mask=memory_padding_mask
-                )
+                ).permute(1,0,2)
+        #import pdb;pdb.set_trace()
 
-        response_decoded = self.answer_decode(response.view(-1,response.size(2)))
-        response_decoded = response_decoded.view(answers_emb.size(0),len(questions),-1)
-        response_decoded = response_decoded.permute(1,0,2) #put batch dim first
+        response_decoded = self.answer_decode(response.reshape(-1,response.size(2)))
+        response_decoded = response_decoded.view(new_batch_size,answers_len,-1)
 
         #t#time = timeit.default_timer()-ticA#t#
         #t#self.opt_history['transformers'].append(time)#t#
@@ -133,7 +136,7 @@ class QAFromQ(BaseModel):
 
         #decode the prediction to string
         string_response=[]
-        for b in range(len(questions)):
+        for b in range(new_batch_size):
             response_greedy_tokens_b = response_greedy_tokens[b]
             response_greedy_tokens_b = response_greedy_tokens_b[locs[b]:] #only take response
             pred_stop = response_greedy_tokens_b==self.SEP_TOKEN
