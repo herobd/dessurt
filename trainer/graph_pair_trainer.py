@@ -1494,8 +1494,8 @@ class GraphPairTrainer(BaseTrainer):
 
         ######Adding "BROS" (it has single groups, so BROS doesn't actual make a difference)
         #make pred pairs
-        outputBoxes_nn_removed = torch.cat((outputBoxes[:,:6],outputBoxes[:,-numClasses:]),dim=1)
-        pred_to_gt = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes_nn_removed,self.final_bb_iou_thresh,numClasses,False)
+        outputBoxes_nn_removed = torch.cat((outputBoxes[:,:6].cpu(),outputBoxes[:,-numClasses:].cpu()),dim=1)
+        pred_to_gt = newGetTargIndexForPreds_iou(targetBoxes[0].cpu(),outputBoxes_nn_removed,self.final_bb_iou_thresh,numClasses,False)
         #pred_to_gt2 = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,False)
         #targIndex_hard, _ = getTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.5,numClasses,hard_thresh=True,fixed=self.fixedAlign)
         #targIndex, fullHit = getTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,hard_thresh=False,fixed=self.fixedAlign)
@@ -1541,11 +1541,14 @@ class GraphPairTrainer(BaseTrainer):
             start=6
         ed_true_pos=0
         for ni in range(outputBoxes.size(0)):
-            if bbAlignment[ni]>-1 and bbFullHit[ni] and not gt_hit[bbAlignment[ni]]:
-                p_cls = outputBoxes[ni,start:start+self.model_ref.numBBTypes].argmax().item()
-                if targetBoxes[0,bbAlignment[ni],13+p_cls]==1:
-                    ed_true_pos+=1
-                    gt_hit[bbAlignment[ni]]=True
+            #if bbAlignment[ni]>-1 and bbFullHit[ni] and not gt_hit[bbAlignment[ni]]:
+            #    p_cls = outputBoxes[ni,start:start+self.model_ref.numBBTypes].argmax().item()
+            #    if targetBoxes[0,bbAlignment[ni],13+p_cls]==1:
+            #        ed_true_pos+=1
+            #        gt_hit[bbAlignment[ni]]=True
+            if pred_to_gt[ni]>-1 and not gt_hit[pred_to_gt[ni]]:
+                ed_true_pos+=1
+                gt_hit[bbAlignment[ni]]=True
         log['ED_TP_XX'] = ed_true_pos
         log['ED_true_count_XX'] = targetBoxes.size(1)
         log['ED_pred_count_XX'] = outputBoxes.size(0)
