@@ -1494,6 +1494,13 @@ class GraphPairTrainer(BaseTrainer):
 
         ######Adding "BROS" (it has single groups, so BROS doesn't actual make a difference)
         #make pred pairs
+        outputBoxes_nn_removed = torch.cat((outputBoxes[:,:6],outputBoxes[:,-numClasses:]),dim=1)
+        pred_to_gt = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes_nn_removed,self.final_bb_iou_thresh,numClasses,False)
+        #pred_to_gt2 = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,False)
+        #targIndex_hard, _ = getTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.5,numClasses,hard_thresh=True,fixed=self.fixedAlign)
+        #targIndex, fullHit = getTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,hard_thresh=False,fixed=self.fixedAlign)
+        #targIndex_ = targIndex*fullHit
+        #import pdb;pdb.set_trace()
         act_relPred = torch.sigmoid(relPred)
         predPairs=[]
         somethreshold=0.5
@@ -1505,8 +1512,8 @@ class GraphPairTrainer(BaseTrainer):
         gtRelHit_BROS=set()
         relPrec_BROS=0
         for pi,(n0,n1) in enumerate(predPairs):
-            BROS_gtG0 = bbAlignment[n0].item()
-            BROS_gtG1 = bbAlignment[n1].item()
+            BROS_gtG0 = pred_to_gt[n0].item()
+            BROS_gtG1 = pred_to_gt[n1].item()
             hit=False
             if BROS_gtG0>=0 and BROS_gtG1>=0:
                 pair_id = (min(BROS_gtG0,BROS_gtG1),max(BROS_gtG0,BROS_gtG1))
@@ -1518,6 +1525,10 @@ class GraphPairTrainer(BaseTrainer):
         log['final_rel_XX_BROS_TP']=relPrec_BROS
         log['final_rel_XX_predCount']=len(predPairs)
         log['final_rel_XX_gtCount']=len(adj)
+
+        log['final_rel_BROS_prec'] = relPrec_BROS/len(predPairs) if len(predPairs)>0 else 1
+        log['final_rel_BROS_recall'] = relPrec_BROS/len(adj) if len(adj)>0 else 1
+        log['final_rel_BROS_Fm'] = 2*log['final_rel_BROS_prec']*log['final_rel_BROS_recall']/(log['final_rel_BROS_recall']+log['final_rel_BROS_prec']) if log['final_rel_BROS_recall']+log['final_rel_BROS_prec']>0 else 0
         ######%^
 
 
