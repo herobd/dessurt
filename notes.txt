@@ -8,7 +8,7 @@ cf_NAF_pair_binary333rv_new.json
 cf_NAF_pair_graph663rv_new.json <-oldshipzion
 NAF_pair_graph663rv_new2 <- oldshipzion
 NAF_pair_graph663rv_new3 <- nephisboat
-NAF_pair_graph663rv_new4 <- jareditebarge
+NAF_pair_graph663rv_new4 
 cf_NAFsimple_pair_binary333rv_new.json
 cf_NAFsimple_pair_graph663rv_new.json <- jareditebarge
 cf_FUNSDLines_pair_binary333rv_prev.json
