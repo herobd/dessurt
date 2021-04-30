@@ -1,5 +1,5 @@
 {
-    "name": "nobrain_qa5_testmodel_nolay_regq_small",
+    "name": "nobrain_qa1w5_testmodel_nolay_regq",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -11,10 +11,9 @@
         "num_workers": 0,
         "rescale_range": [1.0,1.0],
         "crop_params": null,
-	"questions": 5,
+	"questions": 1,
         "shuffle": false,
-	"shuffle_doc": "pairs",
-        "#textfile":"../hw_with_style/data/lotr.txt"
+        "textfile":"fivewords.txt"
 
 
     },
