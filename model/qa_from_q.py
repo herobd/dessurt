@@ -111,7 +111,21 @@ class QAFromQ(BaseModel):
                 tgt_key_padding_mask=answer_padding_mask,
                 memory_key_padding_mask=memory_padding_mask
                 ).permute(1,0,2)
-        #import pdb;pdb.set_trace()
+        #responseA = self.decoder(
+        #        answers_emb[0:1].permute(1,0,2),
+        #        memory_feats[0:1].permute(1,0,2), 
+        #        tgt_mask=nn.Transformer.generate_square_subsequent_mask(None,answers_len).to(device),
+        #        tgt_key_padding_mask=answer_padding_mask[0:1],
+        #        memory_key_padding_mask=memory_padding_mask[0:1]
+        #        ).permute(1,0,2)
+        #responseB = self.decoder(
+        #        answers_emb[1:2].permute(1,0,2),
+        #        memory_feats[1:2].permute(1,0,2), 
+        #        tgt_mask=nn.Transformer.generate_square_subsequent_mask(None,answers_len).to(device),
+        #        tgt_key_padding_mask=answer_padding_mask[1:2],
+        #        memory_key_padding_mask=memory_padding_mask[1:2]
+        #        ).permute(1,0,2)
+        #response = torch.cat((responseA,responseB),dim=0)
 
         response_decoded = self.answer_decode(response.reshape(-1,response.size(2)))
         response_decoded = response_decoded.view(new_batch_size,answers_len,-1)
@@ -129,6 +143,8 @@ class QAFromQ(BaseModel):
             mask_response[b,:loc]*=0
         response_decoded = response_decoded*mask_response.to(device)
         target_decoded = answers_t['input_ids'][:,1:]# This has the SEP tokens (and padding), but not CLS (start) token
+
+        #import pdb;pdb.set_trace()
 
 
         #decode the prediction to string
