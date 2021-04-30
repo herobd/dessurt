@@ -6,8 +6,11 @@ import numpy as np
 from model.pairing_g_graph_layoutlm import  runLayoutLM
 from model.pos_encode import PositionalEncoding
 from model.layout_transformer import LayoutTransformer
-from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
-from transformers import LayoutLMTokenizer, LayoutLMModel
+try:
+    from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
+    from transformers import LayoutLMTokenizer, LayoutLMModel
+except:
+    pass
 from collections import defaultdict
 
 import timeit
