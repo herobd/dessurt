@@ -255,7 +255,11 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         #print('\n{} ap:{}\tnumMissedByDetect:{}\tmissedByHuer:{}'.format(imageName,rel_ap,numMissedByDetect,numMissedByHeur))
 
     if outDir is not None:
-        path = os.path.join(outDir,'{}_final_relFm:{:.2}_r+p:{:.2}+{:.2}_EDFm:{:.2}_r+p:{:.2}+{:.2}.png'.format(imageName,float(log['final_rel_Fm']),float(log['final_rel_recall']),float(log['final_rel_prec']),float(log['final_group_ED_F1']),float(log['final_group_ED_recall']),float(log['final_group_ED_precision'])))
+        if 'final_rel_Fm' in log:
+            path = os.path.join(outDir,'{}_final_relFm:{:.2}_r+p:{:.2}+{:.2}_EDFm:{:.2}_r+p:{:.2}+{:.2}.png'.format(imageName,float(log['final_rel_Fm']),float(log['final_rel_recall']),float(log['final_rel_prec']),float(log['final_group_ED_F1']),float(log['final_group_ED_recall']),float(log['final_group_ED_precision'])))
+        else:
+            path = os.path.join(outDir,'{}_relFm:{:.2}_r+p:{:.2}+{:.2}_EDFm:{:.2}_r+p:{:.2}+{:.2}.png'.format(imageName,float(log['final_rel_BROS_F']),float(log['final_rel_BROS_recall']),float(log['final_rel_BROS_prec']),float(log['ED_F1']),float(log['ED_recall']),float(log['ED_prec'])))
+
         finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = out['final']
         draw_graph(finalOutputBoxes,trainer.model.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,data,out['final_edgePredTypes'],out['final_missedRels'],out['final_missedGroups'],targetBoxes,trainer.classMap,path,bbTrans=finalBBTrans,useTextLines=trainer.model.useCurvedBBs,targetGroups=instance['gt_groups'],targetPairs=instance['gt_groups_adj'],verbosity=draw_verbosity)
 
