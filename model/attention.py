@@ -18,6 +18,7 @@ def attention(query, key, value, mask=None, key_padding_mask=None, dropout=None,
     ###
     #scores.fill_(0.1)
     ###
+    #scores.size() = (batch heads queries keys)
     if att_bias is not None:
         scores+=att_bias
     if mask is not None:
@@ -26,8 +27,9 @@ def attention(query, key, value, mask=None, key_padding_mask=None, dropout=None,
         else:
             scores = scores.masked_fill(mask == 0, -1e9)
     if key_padding_mask is not None:
+        #import pdb;pdb.set_trace()
         #tgt_len = query.size(2)
-        #scores = scores.view(bsz, num_heads, tgt_len, src_len)
+        #scores = scores.view(bsz, num_heads, tgt_len, src_len
         scores = scores.masked_fill(
             key_padding_mask.unsqueeze(1).unsqueeze(2),
             float("-inf"),
@@ -132,7 +134,7 @@ class MultiHeadedAttention(nn.Module):
 
 
 class PosBiasedMultiHeadedAttention(nn.Module):
-    def __init__(self, h, d_model, max_dist, dropout=0.1, mod=None):
+    def __init__(self, h, d_model, max_dist, dropout=0.1):
         "Take in model size and number of heads."
         super(PosBiasedMultiHeadedAttention, self).__init__()
         assert d_model % h == 0
@@ -143,7 +145,6 @@ class PosBiasedMultiHeadedAttention(nn.Module):
         self.linears = clones(nn.Linear(d_model, d_model), 4) #W_q W_k W_v W_o
         self.attn = None
         self.dropout = nn.Dropout(p=dropout)
-        self.mod=mod if mod else '' #learned: use network for attention instead of dot product, half: use only half of query/keys for dot product
 
         assert d_model//4>=16
         self.x_emb = RealEmbedding(d_model//4,max_dist,20)
@@ -155,7 +156,23 @@ class PosBiasedMultiHeadedAttention(nn.Module):
         
         
     def forward(self, query, key, value, query_x, query_y, key_x, key_y, mask=None, key_padding_mask=None):
-        "Implements Figure 2"
+        """
+        query:  B x Lq x D
+        key:    B x Lk x D
+        value:  B x Lk x D
+        query_x:B x Lq
+        query_y:B x Lq 
+        key_x:  B x Lk
+        key_y:  B x Lk
+        mask:   Lq x Lk
+        key_padding_mask: B x Lk (False=normal, True=masked out)
+
+        B = batch size
+        Lq = num queries
+        Lk = num keys
+        D = model dim
+        """
+
         if mask is not None:
             # Same mask applied to all h heads.
             mask = mask[None,None,...]#mask.unsqueeze(1)
@@ -163,12 +180,12 @@ class PosBiasedMultiHeadedAttention(nn.Module):
 
         nquery = query.size(1)
         nkey = key.size(1)
-        x_diff = query_x[:,None,:].expand(-1,nkey,-1) - key_x[:,:,None].expand(-1,-1,nquery)
-        y_diff = query_y[:,None,:].expand(-1,nkey,-1) - key_y[:,:,None].expand(-1,-1,nquery)
+        x_diff = query_x[:,:,None].expand(-1,-1,nkey) - key_x[:,None,:].expand(-1,nquery,-1)
+        y_diff = query_y[:,:,None].expand(-1,-1,nkey) - key_y[:,None,:].expand(-1,nquery,-1)
         pos_emb = self.x_emb(x_diff) + self.y_emb(y_diff)
-        pos_emb = pos_emb.reshape((nbatches*nkey*nquery*self.h),self.pos_d_k) #reshape to heads
+        pos_emb = pos_emb.reshape((nbatches*nquery*nkey*self.h),self.pos_d_k) #reshape to heads
         att_bias = self.bias_net(pos_emb)
-        att_bias = att_bias.view(nbatches,nkey,nquery,self.h).permute(0,3,1,2)
+        att_bias = att_bias.view(nbatches,nquery,nkey,self.h).permute(0,3,1,2)
         #att_bias = torch.matmul(pos_emb, pos_emb.transpose(-2, -1)) \
         #         / math.sqrt(self.pos_d_k)
         

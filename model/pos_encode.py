@@ -23,7 +23,7 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 class PositiveRealEmbedding(nn.Module):
-    "Embeds a real-value"
+    "Embeds a real-value, with higher resolution on smaller values"
     def __init__(self,dim,min_v,max_v,resolution):
         super(PositiveRealEmbedding,self).__init__()
         self.linear = nn.Linear(resolution,dim)
@@ -53,3 +53,32 @@ class RealEmbedding(nn.Module):
 
     def forward(self,x):
         return (self.positive(x) + self.negative(-x))/2
+
+
+class UniformRealEmbedding(nn.Module):
+    "Embeds a real-value"
+    def __init__(self,dim,min_v,max_v,resolution):
+        super(UniformRealEmbedding,self).__init__()
+        self.min_v = min_v
+        self.max_v = max_v
+        dist = max_v-min_v
+        chunk = dist/resolution
+        self.range1 = torch.arange(0,resolution).float()
+        self.range2 = torch.arange(0,resolution+1).float()-0.5
+        self.linear1 = nn.Linear(resolution,dim)
+        self.linear2 = nn.Linear(resolution+1,dim)
+
+        self.range1 = self.range1[None,...]
+        self.range2 = self.range2[None,...]
+
+    def forward(self, x):
+        x_shape = x.size()
+        x=x.view(-1,1)-self.min_v
+        p1 = 1-torch.abs(self.range1-x)
+        p1[p1<0]=0
+        p2 = 1-torch.abs(self.range2-x)
+        p2[p2<0]=0
+        res = self.linear1(p1) + self.linear2(p2)
+        new_shape = x_shape+(res.size(-1),)
+        return res.view(new_shape)
+
