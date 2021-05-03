@@ -17,6 +17,7 @@ from collections import defaultdict
 import utils.img_f as img_f
 
 from model.pos_encode import PositionalEncoding
+from model.transformer_encoder import RelativePositionTransformerEncoderLayer, PositionBiasedTransformerEncoder
 
 LLM_MAX_TOKEN_LEN = 512
 LLM_SEP=102
@@ -50,15 +51,15 @@ class LayoutTransformer(BaseModel):
         nhead = config['nhead']
 
         self.tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
-
-        encoder_layer= nn.TransformerEncoderLayer(d_model,nhead,dim_ff,dropout=dropout)
-        self.encoder = nn.TransformerEncoder(encoder_layer,num_e_layers,nn.LayerNorm(d_model))
+        max_dist=1000
+        encoder_layer= RelativePositionTransformerEncoderLayer(d_model,nhead,max_dist,dim_ff,dropout=dropout)
+        self.encoder = PositionBiasedTransformerEncoder(encoder_layer,num_e_layers,nn.LayerNorm(d_model))
 
         self.embedding = nn.Embedding(self.tokenizer.vocab_size, d_model)
         
-        self.pos_enc = PositionalEncoding(d_model,dropout=0.1,max_len=5000)
-        self.pos_emb_x = PositiveRealEmbedding(d_model,0,1000,100)
-        self.pos_emb_y = PositiveRealEmbedding(d_model,0,1000,100)
+        #self.pos_enc = PositionalEncoding(d_model,dropout=0.1,max_len=5000)
+        self.pos_emb_x = UniformRealEmbedding(d_model,0,1000,100)
+        self.pos_emb_y = UniformRealEmbedding(d_model,0,1000,100)
         self.pos_emb_w = PositiveRealEmbedding(d_model,0,500,30)
         self.pos_emb_h = PositiveRealEmbedding(d_model,0,300,30)
                 
@@ -99,10 +100,10 @@ class LayoutTransformer(BaseModel):
         for b,input_bbs in enumerate(all_input_bbs):
             bbs[b,0:len(input_bbs),:] = torch.FloatTensor(input_bbs)
         bbs=bbs.to(device)
-        xs=bbs[:,0]
-        ys=bbs[:,1]
-        ws=bbs[:,2]
-        hs=bbs[:,3]
+        xs=bbs[:,:,0]
+        ys=bbs[:,:,1]
+        ws=bbs[:,:,2]
+        hs=bbs[:,:,3]
 
         #inputs = tokenizer(total_string,return_tensors="pt")
         #input_bbs = torch.LongTensor([input_bbs])
@@ -115,10 +116,10 @@ class LayoutTransformer(BaseModel):
         #embedded = self.pos_enc(embedded)
         embedded += self.pos_emb_x(xs) + self.pos_emb_y(ys) + self.pos_emb_w(ws) + self.pos_emb_h(hs)
 
-        embedded = embedded.permute(1,0,2) #batch,len,feat -> len,batch,feat
+        #embedded = embedded.permute(1,0,2) #batch,len,feat -> len,batch,feat
         padding_mask = ~inputs['attention_mask'].bool().to(device)
 
-        encoded = self.encoder(embedded,src_key_padding_mask=padding_mask).permute(1,0,2) #len,batch,feat -> batch,len,feat
+        encoded = self.encoder(embedded,xs,ys,src_key_padding_mask=padding_mask)#.permute(1,0,2) #len,batch,feat -> batch,len,feat
 
         return (
                 encoded, 
