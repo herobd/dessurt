@@ -33,7 +33,7 @@ class QAGPT(BaseModel):
         self.decoder = nn.TransformerEncoder(decoder_layer,num_layers,nn.LayerNorm(d_model))
         self.answer_embedding = nn.Sequential(
                 nn.Embedding(self.tokenizer.vocab_size, d_model),
-                PositionalEncoding(d_model,dropout=0.1,max_len=1000)
+                PositionalEncoding(d_model,dropout=dropout,max_len=1000)
                 )
         self.answer_decode = nn.Sequential(
                 nn.Linear(d_model,self.tokenizer.vocab_size),
@@ -61,6 +61,8 @@ class QAGPT(BaseModel):
         questions=[q for bq in questions for q in bq]
         answers=[a for ba in answers for a in ba]
 
+        new_batch_size = len(questions)
+
         #Append question before answer
         answers = [doc+':'+q+'[SEP]'+a for doc,q,a in zip(repeat_docs,questions,answers)]
 
@@ -68,17 +70,19 @@ class QAGPT(BaseModel):
         answers_t = self.tokenizer(answers,return_tensors="pt",padding=True)
         answers_to_emb = answers_t['input_ids'][:,:-1].detach().to(device)
         answers_emb = self.answer_embedding(answers_to_emb) #Remove end (SEP) token, as it doesn't need to predict anythin after that. emb needs to do position
-        answers_emb = answers_emb.permute(1,0,2) #batch,len,feat -> len,batch,feat
+        answers_len = answers_emb.size(1)
+        #answers_emb = answers_emb.permute(1,0,2) #batch,len,feat -> len,batch,feat
         answer_padding_mask = (1-answers_t['attention_mask'][:,:-1]).bool().to(device)
         response = self.decoder(
-                answers_emb,
-                mask=nn.Transformer.generate_square_subsequent_mask(None,answers_emb.size(0)).to(device),
+                answers_emb.permute(1,0,2),
+                mask=nn.Transformer.generate_square_subsequent_mask(None,answers_len).to(device),
                 src_key_padding_mask=answer_padding_mask
-                )
+                ).permute(1,0,2)
 
-        response_decoded = self.answer_decode(response.view(-1,response.size(2)))
-        response_decoded = response_decoded.view(answers_emb.size(0),len(questions),-1)
-        response_decoded = response_decoded.permute(1,0,2) #put batch dim first
+
+        response_decoded = self.answer_decode(response.reshape(-1,response.size(2)))
+        response_decoded = response_decoded.view(new_batch_size,answers_len,-1)
+
 
         #t#time = timeit.default_timer()-ticA#t#
         #t#self.opt_history['transformers'].append(time)#t#
