@@ -1,0 +1,153 @@
+{
+    "name": "FUNSDLines_pair_binary33rv_ablate_new",
+    "cuda": true,
+    "gpu": 0,
+    "save_mode": "state_dict",
+    "override": true,
+    "data_loader": {
+        "data_set_name": "FUNSDGraphPair",
+        "data_dir": "../data/FUNSD",
+        "batch_size": 1,
+        "shuffle": true,
+        "num_workers": 3,
+        "split_to_lines": true,
+        "crop_to_page":false,
+        "color":false,
+        "rescale_range": [0.8,1.2],
+        "crop_params": {
+            "crop_size":[800,800],
+	    "pad":50
+        }
+
+
+    },
+    "validation": {
+        "shuffle": false,
+        "rescale_range": [1,1],
+        "crop_params": null,
+        "batch_size": 1
+    },
+
+    
+    "lr_scheduler_type": "none",
+ 
+    "optimizer_type": "AdamW",
+    "optimizer": {
+        "lr": 0.001,
+        "weight_decay": 0.01
+    },
+    "loss": {
+        "box": "YoloLoss",
+        "rel": "sigmoid_BCE_loss",
+        "propRel": "sigmoid_BCE_loss",
+        "classFinal": "sigmoid_BCE_loss",
+        "confFinal": "sigmoid_BCE_loss"
+    },
+    "loss_weights": {
+        "box": 1.0,
+        "rel": 0.5,
+        "propRel": 0.5,
+        "classFinal": 0.5,
+        "confFinal": 0.5
+    },
+    "loss_params": 
+        {
+            "box": {"ignore_thresh": 0.5,
+                    "bad_conf_weight": 20.0,
+                    "multiclass":true}
+        },
+    "metrics": [],
+    "trainer": {
+        "class": "GraphPairTrainer",
+        "iterations": 700000,
+        "swa": true,
+        "swa_start": 600000,
+        "save_dir": "saved/",
+        "val_step": 25000,
+        "save_step": 50000,
+        "save_step_minor": 200,
+        "log_step": 500,
+        "verbosity": 1,
+        "monitor": "loss",
+        "monitor_mode": "none",
+        "warmup_steps": 1000,
+        "conf_thresh_init": 0.5,
+        "conf_thresh_change_iters": 0,
+        "retry_count":1,
+
+
+        "mergeAndGroup": true,
+
+        "unfreeze_detector": 2000,
+        "partial_from_gt": 0,
+        "stop_from_gt": 2,
+        "max_use_pred": 0.5,
+        "use_all_bb_pred_for_rel_loss": true,
+
+        "use_learning_schedule": "multi_rise then ramp_to_swa",
+"ramp_down_steps": 10000,
+        "warmup_steps": [1000],
+        "swa_lr_mul": 0.1,
+        "adapt_lr": false
+    },
+    "arch": "PairingGroupingGraph", 
+    "model": {
+        "detector_checkpoint": "saved/FUNSDLines_detect_augR_staggerLighter/checkpoint-iteration250000.pth",
+        "conf_thresh": 0.5,
+        "start_frozen": true,
+        "relationship_proposal": "feature_nn",
+        "percent_rel_to_keep": 0.5,
+        "max_rel_to_keep": 400,
+        "roi_batch_size": 400,
+
+	"use_rel_shape_feats": "corner",
+        "use_detect_layer_feats": 16,
+        "use_2nd_detect_layer_feats": 0,
+        "use_2nd_detect_scale_feats": 2,
+        "use_2nd_detect_feats_size": 64,
+        "use_fixed_masks": true,
+        "no_grad_feats": true,
+        "feat_norm": "group_norm",
+
+        "expand_rel_context": 20,
+        "featurizer_start_h": 16,
+        "featurizer_start_w": 16,
+        "featurizer_conv": ["sep128","sep128","M","sep256","sep256","M"],
+        "featurizer_conv_auto": true,
+        "featurizer_fc": null,
+
+        "pred_nn": false,
+        "pred_class": true,
+        "expand_bb_context": 20,
+        "featurizer_bb_start_h": 10,
+        "featurizer_bb_start_w": 10,
+        "bb_featurizer_conv": ["sep64","sep64","M","sep128"],
+
+        "fix_bi_dir": true,
+        "reintroduce_visual_features": "fixed map",
+        "graph_config": [
+            {
+            "arch": "BinaryPairReal",
+            "in_channels": 512,
+            "node_out": 5,
+            "edge_out": 5,
+            "layers": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
+            "layers_bb": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
+            "merge_thresh": 0.8,
+            "group_thresh": 0.9,
+            "keep_edge_thresh": 0.1
+        },
+        {
+            "arch": "BinaryPairReal",
+            "in_channels": 512,
+            "node_out": 5,
+            "edge_out": 5,
+            "layers": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
+            "layers_bb": ["GroupNorm","ReLU","FC512","FC512","FCnR512"],
+            "merge_thresh": 0.9,
+            "group_thresh": 0.6,
+            "keep_edge_thresh": 0.5
+        }
+        ]
+    }
+}
