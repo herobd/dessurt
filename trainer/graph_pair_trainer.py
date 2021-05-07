@@ -448,7 +448,7 @@ class GraphPairTrainer(BaseTrainer):
 
         for val_name in val_metrics:
             if val_count[val_name]>0:
-                val_metrics[val_name] =  val_count[val_name]/val_count[val_name]
+                val_metrics[val_name] =  val_metrics[val_name]/val_count[val_name]
         return val_metrics
 
     def alignEdgePred(self,targetBoxes,adj,outputBoxes,relPred,relIndexes,rel_prop_pred):
