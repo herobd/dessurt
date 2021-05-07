@@ -291,6 +291,14 @@ class BaseTrainer:
         if resume:
             self._resume_checkpoint(resume)
 
+    def finishSetup(self):
+        """
+        things that slave processes shouldn't do
+        """
+        ensure_dir(self.checkpoint_dir)
+        json.dump(self.config, open(os.path.join(self.checkpoint_dir, 'config.json'), 'w'),
+                  indent=4, sort_keys=False)
+
     def train(self):
         """
         Full training logic
