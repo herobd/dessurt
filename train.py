@@ -60,6 +60,7 @@ def main(rank,config, resume,world_size=None):
     if rank is not None: #multiprocessing
         #print('Process {} can see these GPUs:'.format(rank,os.environ['CUDA_VISIBLE_DEVICES']))
         if 'distributed' in config:
+            print('env NCCL_SOCKET_IFNAME: {}'.format(os.environ['NCCL_SOCKET_IFNAME']))
             print('{} calling dist.init_process_group()'.format(rank))
             os.environ['CUDA_VISIBLE_DEVICES']='0'
             dist.init_process_group(
@@ -109,8 +110,9 @@ def main(rank,config, resume,world_size=None):
     supercomputer = config['super_computer'] if 'super_computer' in config else False
 
     if rank is not None and rank!=0:
-        trainer.side_process=True #this tells the trainer not to log or validate on this thread
+        trainer.side_process=rank #this tells the trainer not to log or validate on this thread
     else:
+        trainer.finishSetup()
         def handleSIGINT(sig, frame):
             trainer.save()
             sys.exit(0)
@@ -185,6 +187,7 @@ if __name__ == '__main__':
     set_procname(config['name'])
 
     if args.rank is not None:
+        print('Awesome, I have rank {}'.format(args.rank))
         config['distributed']=True
         with torch.cuda.device(config['gpu']):
             main(args.rank,config, args.resume, args.worldsize)
