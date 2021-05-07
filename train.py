@@ -60,12 +60,14 @@ def main(rank,config, resume,world_size=None):
     if rank is not None: #multiprocessing
         #print('Process {} can see these GPUs:'.format(rank,os.environ['CUDA_VISIBLE_DEVICES']))
         if 'distributed' in config:
+            print('{} calling dist.init_process_group()'.format(rank))
             os.environ['CUDA_VISIBLE_DEVICES']='0'
             dist.init_process_group(
                             "nccl",
                             init_method='file:///fslhome/brianld/job_comm/{}'.format(config['name']),
                             rank=rank,
                             world_size=world_size)
+            print('{} finished dist.init_process_group()'.format(rank))
         else:
             dist.init_process_group("gloo", rank=rank, world_size=world_size)
 
