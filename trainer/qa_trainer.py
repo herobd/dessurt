@@ -220,6 +220,9 @@ class QATrainer(BaseTrainer):
                 #t#if len(times)>600:#t#
                     #t#times.pop(0)#t#
         #t#print('--------------------------')#t#
+        if self.side_process:
+            with open('test/tmp_{}.txt'.format(self.side_process),'a') as f:
+                f.write('[{}] {}'.format(self.iteration,self.model_ref.decoder.layers[0].linear1.weight.data[0]))
         return log
 
     def _minor_log(self, log):
