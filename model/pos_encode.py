@@ -73,8 +73,8 @@ class UniformRealEmbedding(nn.Module):
         self.linear1 = nn.Linear(resolution,dim)
         self.linear2 = nn.Linear(resolution+1,dim)
 
-        self.range1 = self.range1[None,...]
-        self.range2 = self.range2[None,...]
+        self.range1 = nn.Parameter(self.range1[None,...],requires_grad=False)
+        self.range2 = nn.Parameter(self.range2[None,...],requires_grad=False)
 
     def forward(self, x):
         x_shape = x.size()

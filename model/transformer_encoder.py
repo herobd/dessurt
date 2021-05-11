@@ -55,7 +55,7 @@ class RelativePositionTransformerEncoderLayer(nn.Module):
             state['activation'] = F.relu
         super(RelativePositionTransformerEncoderLayer, self).__setstate__(state)
 
-    def forward(self, src: Tensor, src_x: Tensor, src_y: Tensor, src_mask = None, src_key_padding_mask= None) -> Tensor:
+    def forward(self, src: Tensor, src_x: Tensor, src_y: Tensor, src_mask = None, src_key_padding_mask= None,pos_mask=None) -> Tensor:
         r"""Pass the input through the encoder layer.
 
         Args:
@@ -70,8 +70,15 @@ class RelativePositionTransformerEncoderLayer(nn.Module):
         """
         assert (src.size(0)==src_x.size(0)) and (src.size(1)==src_x.size(1)) 
         assert src_x.size()==src_y.size()
+        if pos_mask is not None:
+            l = pos_mask.size(1)
+            assert l == src.size(1)
+            new_pos_mask = pos_mask[:,None,:].expand(-1,l,-1,1) * pos_mask[:,:,None].expand(-1,-1,l,1)
+        else:
+            new_pos_mask = None
+
         src2 = self.self_attn(src, src, src, src_x,src_y,src_x,src_y, mask=src_mask,
-                              key_padding_mask=src_key_padding_mask)
+                              key_padding_mask=src_key_padding_mask,pos_mask=new_pos_mask)
         src = src + self.dropout1(src2)
         src = self.norm1(src)
         src2 = self.linear2(self.dropout(self.activation(self.linear1(src))))
@@ -102,7 +109,7 @@ class PositionBiasedTransformerEncoder(nn.Module):
         self.num_layers = num_layers
         self.norm = norm
 
-    def forward(self, src: Tensor, src_x: Tensor, src_y: Tensor, mask = None, src_key_padding_mask = None) -> Tensor:
+    def forward(self, src: Tensor, src_x: Tensor, src_y: Tensor, mask = None, src_key_padding_mask = None, pos_mask=None) -> Tensor:
         r"""Pass the input through the encoder layers in turn.
 
         Args:
@@ -116,7 +123,7 @@ class PositionBiasedTransformerEncoder(nn.Module):
         output = src
 
         for mod in self.layers:
-            output = mod(output,src_x,src_y, src_mask=mask, src_key_padding_mask=src_key_padding_mask)
+            output = mod(output,src_x,src_y, src_mask=mask, src_key_padding_mask=src_key_padding_mask,pos_mask=pos_mask)
 
         if self.norm is not None:
             output = self.norm(output)

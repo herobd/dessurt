@@ -159,7 +159,7 @@ class PosBiasedMultiHeadedAttention(nn.Module):
         #self.non_position = nn.Param(torch.FloatTensor(1,d_model//4).normal_(std=0.1))
         
         
-    def forward(self, query, key, value, query_x, query_y, key_x, key_y, mask=None, key_padding_mask=None):
+    def forward(self, query, key, value, query_x, query_y, key_x, key_y, mask=None, key_padding_mask=None, pos_mask=None):
         """
         query:  B x Lq x D
         key:    B x Lk x D
@@ -170,6 +170,7 @@ class PosBiasedMultiHeadedAttention(nn.Module):
         key_y:  B x Lk
         mask:   Lq x Lk
         key_padding_mask: B x Lk (False=normal, True=masked out)
+        pos_mask: B x Lq x Lk x 1
 
         B = batch size
         Lq = num queries
@@ -200,7 +201,9 @@ class PosBiasedMultiHeadedAttention(nn.Module):
         #att_bias = att_bias.view(nbatches,nquery,nkey,self.h).permute(0,3,1,2)
         #att_bias[torch.isnan(att_bias)] = self.non_pos_bias
         #att_bias = torch.nan_to_num(att_bias,self.non_pos_bias)
-        att_bias = torch.where(torch.isnan(att_bias),self.non_pos_bias,att_bias)
+        #att_bias = torch.where(torch.isnan(att_bias),self.non_pos_bias,att_bias)
+        if pos_mask is not None:
+            att_bias = att_bias*pos_mask
         att_bias = att_bias.permute(0,3,1,2) #-> batch,h,nquery,nkey
         #att_bias = torch.matmul(pos_emb, pos_emb.transpose(-2, -1)) \
         #         / math.sqrt(self.pos_d_k)

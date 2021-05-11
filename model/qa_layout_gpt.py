@@ -125,18 +125,21 @@ class QALayoutGPT(BaseModel):
         ys=bbs[:,:,1]
         ws=bbs[:,:,2]
         hs=bbs[:,:,3]
+        qa_mask = qa_mask.to(device)
+        doc_mask = 1-qa_mask
 
-        input_emb = self.pos_1d_enc(input_emb,qa_mask.to(device)) #This only applies the 1d position embedding to the q+a part of the input
+        input_emb = self.pos_1d_enc(input_emb,qa_mask) #This only applies the 1d position embedding to the q+a part of the input
         answer_padding_mask = (1-input_t['attention_mask'][:,:-1]).bool().to(device)
 
-        input_emb += self.pos_emb_x(xs) + self.pos_emb_y(ys) + self.pos_emb_w(ws) + self.pos_emb_h(hs) #This only adds where the positions aren't NaN. (Otherwise adds 0)
+        input_emb += doc_mask*(self.pos_emb_x(xs) + self.pos_emb_y(ys) + self.pos_emb_w(ws) + self.pos_emb_h(hs))
 
         response = self.encoder(
                 input_emb,#.permute(1,0,2),
                 xs,
                 ys,
                 mask=nn.Transformer.generate_square_subsequent_mask(None,input_len).to(device),
-                src_key_padding_mask=answer_padding_mask
+                src_key_padding_mask=answer_padding_mask,
+                pos_mask=doc_mask
                 )#.permute(1,0,2)
 
 

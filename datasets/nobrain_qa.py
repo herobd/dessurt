@@ -66,6 +66,8 @@ class NobrainQA(QADataset):
 
         self.only_present = config['only_present'] if 'only_present' in config else False
 
+        self.difficulty = config['difficulty'] if 'difficulty' in config else 'easy'
+
         self.lm = False
 
 
@@ -196,12 +198,19 @@ class NobrainQA(QADataset):
                     skipped.append(q)
                 else:
 
+                    if self.difficulty=='easy':
+                        x=0
+                        y=cY
+                    else:
+                        x=random.randrange(0,1000-20)
+                        y=random.randrange(0,1000-10)
+
 
                     bb=[None]*16
-                    lX=0
-                    rX=10
-                    tY=cY
-                    bY=cY+10
+                    lX=x
+                    rX=x+10
+                    tY=y
+                    bY=y+10
                     bb[0]=lX*s
                     bb[1]=bY*s
                     bb[2]=lX*s
@@ -225,10 +234,10 @@ class NobrainQA(QADataset):
                         word_trans.append('['+q+']')
 
                         bb=[None]*16
-                        lX=10
-                        rX=20
-                        tY=cY
-                        bY=cY+10
+                        lX=x+10
+                        rX=x+20
+                        tY=y
+                        bY=y+10
                         bb[0]=lX*s
                         bb[1]=bY*s
                         bb[2]=lX*s
@@ -334,7 +343,7 @@ class NobrainQA(QADataset):
                 word_boxes+=(b1,b2)
                 word_trans+=(t1,t2)
         elif  self.shuffle_doc:
-            b_and_t = zip(word_boxes,word_trans)
+            b_and_t = list(zip(word_boxes,word_trans))
             random.shuffle(b_and_t)
             word_boxes,word_trans = zip(*b_and_t)
 
