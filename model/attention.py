@@ -150,9 +150,13 @@ class PosBiasedMultiHeadedAttention(nn.Module):
         self.x_emb = RealEmbedding(d_model//4,max_dist,20)
         self.y_emb = RealEmbedding(d_model//4,max_dist,20)
         self.bias_net = nn.Sequential(
-                nn.Linear(self.pos_d_k,1),
+                #nn.Linear(self.pos_d_k,1),
+                nn.Linear(d_model//4,h),
                 nn.Sigmoid()
                 )
+
+        self.non_pos_bias = nn.Parameter(torch.FloatTensor(1,1,1).zero_())
+        #self.non_position = nn.Param(torch.FloatTensor(1,d_model//4).normal_(std=0.1))
         
         
     def forward(self, query, key, value, query_x, query_y, key_x, key_y, mask=None, key_padding_mask=None):
@@ -183,9 +187,21 @@ class PosBiasedMultiHeadedAttention(nn.Module):
         x_diff = query_x[:,:,None].expand(-1,-1,nkey) - key_x[:,None,:].expand(-1,nquery,-1)
         y_diff = query_y[:,:,None].expand(-1,-1,nkey) - key_y[:,None,:].expand(-1,nquery,-1)
         pos_emb = self.x_emb(x_diff) + self.y_emb(y_diff)
-        pos_emb = pos_emb.reshape((nbatches*nquery*nkey*self.h),self.pos_d_k) #reshape to heads
-        att_bias = self.bias_net(pos_emb)
-        att_bias = att_bias.view(nbatches,nquery,nkey,self.h).permute(0,3,1,2)
+        
+        #not all elements in the set are going to be poisitioned (e.g. the question)
+        #We'll set these to a uniform embedding (close to zero) that is hopefully far away from the poisition embeddings
+        #pos_emb[torch.is_nan(pos_emb)] = self.non_position
+        #non_pos = torch.is_nan(pos_emb).max(dim=3)
+
+        #pos_emb = pos_emb.reshape((nbatches*nquery*nkey*self.h),self.pos_d_k) #reshape to heads
+
+        att_bias = self.bias_net(pos_emb) #batch,nquery,nkey,d -> batch,nq,nk,h
+        
+        #att_bias = att_bias.view(nbatches,nquery,nkey,self.h).permute(0,3,1,2)
+        #att_bias[torch.isnan(att_bias)] = self.non_pos_bias
+        #att_bias = torch.nan_to_num(att_bias,self.non_pos_bias)
+        att_bias = torch.where(torch.isnan(att_bias),self.non_pos_bias,att_bias)
+        att_bias = att_bias.permute(0,3,1,2) #-> batch,h,nquery,nkey
         #att_bias = torch.matmul(pos_emb, pos_emb.transpose(-2, -1)) \
         #         / math.sqrt(self.pos_d_k)
         
@@ -197,6 +213,7 @@ class PosBiasedMultiHeadedAttention(nn.Module):
         # 2) Apply attention on all the projected vectors in batch. 
         x, self.attn = attention(query, key, value, mask=mask, key_padding_mask=key_padding_mask,
                                      dropout=self.dropout,fixed=True,att_bias=att_bias)
+        assert not torch.isnan(x).any()
         
         # 3) "Concat" using a view and apply a final linear. 
         x = x.transpose(1, 2).contiguous() \
