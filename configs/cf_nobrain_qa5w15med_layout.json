@@ -1,5 +1,5 @@
 {
-    "name": "nobrain_qa1-5w15_gpt",
+    "name": "nobrain_qa5w15med_layout",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -7,14 +7,14 @@
     "data_loader": {
         "data_set_name": "NobrainQA",
         "data_dir": "../data/FUNSD",
-        "batch_size": 300,
+        "batch_size": 64,
         "num_workers": 2,
         "rescale_range": [1.0,1.0],
         "crop_params": null,
-	"questions": 1,
-	"additional_doc_len": 4,
+	"questions": 5,
         "shuffle": false,
-	"shuffle_doc": "pairs",
+	"shuffle_doc": "all",
+        "difficulty": "med",
         "textfile":"fifteenwords.txt"
 
 
@@ -31,7 +31,7 @@
  
     "optimizer_type": "AdamW",
     "optimizer": {
-        "lr": 0.00001,
+        "lr": 0.0001,
         "weight_decay": 0.01
     },
     "loss": {
@@ -49,7 +49,7 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 600000,
+        "iterations": 300000,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
@@ -71,7 +71,7 @@
         "#swa_lr_mul": 0.01
 
     },
-    "arch": "QAGPT", 
+    "arch": "QALayoutGPT", 
     "model": {
 	    "decode_dim": 128,
 	    "dim_ff": 256,

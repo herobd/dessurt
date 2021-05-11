@@ -109,7 +109,7 @@ class QADataset(torch.utils.data.Dataset):
         #        fx=partial_rescale,
         #        fy=partial_rescale,
         #)
-        np_img = np.array([[0,0],[0,0]])
+        np_img = np.zeros([1000,1000])
         s=1
 
         if len(np_img.shape)==2:
