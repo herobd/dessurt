@@ -1,5 +1,5 @@
 {
-    "name": "nobrain_qa5w40_gpt",
+    "name": "nobrain_qa5w15_gpt_evenfaster",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -14,7 +14,7 @@
 	"questions": 5,
         "shuffle": false,
 	"shuffle_doc": "pairs",
-        "#textfile":"fifteenwords.txt"
+        "textfile":"fifteenwords.txt"
 
 
     },
@@ -30,7 +30,7 @@
  
     "optimizer_type": "AdamW",
     "optimizer": {
-        "lr": 0.00001,
+        "lr": 0.001,
         "weight_decay": 0.01
     },
     "loss": {
@@ -48,15 +48,15 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 600000,
+        "iterations": 300000,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
         "val_step": 50000,
         "save_step": 25000,
         "save_step_minor": 200,
-        "log_step": 100,
-        "print_pred_every": 100,
+        "log_step": 200,
+        "print_pred_every": 500,
         "verbosity": 1,
         "monitor": "loss",
         "monitor_mode": "none",
@@ -72,8 +72,8 @@
     },
     "arch": "QAGPT", 
     "model": {
-	    "decode_dim": 256,
-	    "dim_ff": 512,
+	    "decode_dim": 128,
+	    "dim_ff": 256,
 	    "decode_num_heads": 4,
 	    "decode_layers": 4,
 	    "no_dropout": true
