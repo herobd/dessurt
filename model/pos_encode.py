@@ -18,8 +18,11 @@ class PositionalEncoding(nn.Module):
         pe = pe.unsqueeze(0)
         self.register_buffer('pe', pe)
         
-    def forward(self, x):
-        x = x + self.pe[:, :x.size(1)] 
+    def forward(self, x,mask=None):
+        if mask is None:
+            x = x + self.pe[:, :x.size(1)] 
+        else:
+            x = x + self.pe[:, :x.size(1)]*mask 
         return self.dropout(x)
 
 class PositiveRealEmbedding(nn.Module):
@@ -41,6 +44,8 @@ class PositiveRealEmbedding(nn.Module):
         broken = (x-self.min_v)*self.division.to(x.device)
         broken = torch.clamp(broken,0,1) #negative values set to 0
         res = self.linear(broken)
+        #res *= 1-torch.isnan(res)
+        res = torch.nan_to_num(res,0)
         new_shape = x_shape+(res.size(-1),)
         return res.view(new_shape)
 
@@ -79,6 +84,8 @@ class UniformRealEmbedding(nn.Module):
         p2 = 1-torch.abs(self.range2-x)
         p2[p2<0]=0
         res = self.linear1(p1) + self.linear2(p2)
+        #res *= 1-torch.isnan(res)
+        res = torch.nan_to_num(res,0)
         new_shape = x_shape+(res.size(-1),)
         return res.view(new_shape)
 
