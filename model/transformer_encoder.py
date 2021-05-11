@@ -4,14 +4,15 @@ from torch.nn import Linear, Dropout, LayerNorm
 from torch import Tensor
 import torch.nn.functional as F
 from .attention import PosBiasedMultiHeadedAttention
+from torch.nn.modules.transformer import _get_activation_fn, _get_clones
 
-def _get_activation_fn(activation):
-    if activation == "relu":
-        return F.relu
-    elif activation == "gelu":
-        return F.gelu
-
-    raise RuntimeError("activation should be relu/gelu, not {}".format(activation))
+#def _get_activation_fn(activation):
+#    if activation == "relu":
+#        return F.relu
+#    elif activation == "gelu":
+#        return F.gelu
+#
+#    raise RuntimeError("activation should be relu/gelu, not {}".format(activation))
 
 class RelativePositionTransformerEncoderLayer(nn.Module):
     r"""TransformerEncoderLayer is made up of self-attn and feedforward network.
@@ -52,7 +53,7 @@ class RelativePositionTransformerEncoderLayer(nn.Module):
     def __setstate__(self, state):
         if 'activation' not in state:
             state['activation'] = F.relu
-        super(TransformerEncoderLayer, self).__setstate__(state)
+        super(RelativePositionTransformerEncoderLayer, self).__setstate__(state)
 
     def forward(self, src: Tensor, src_x: Tensor, src_y: Tensor, src_mask = None, src_key_padding_mask= None) -> Tensor:
         r"""Pass the input through the encoder layer.
@@ -67,9 +68,9 @@ class RelativePositionTransformerEncoderLayer(nn.Module):
         Shape:
             see the docs in Transformer class.
         """
-        assert (src.size(0)==src_x.size(0)).all() and (src.size(1)==src_x.size(1)).all() 
+        assert (src.size(0)==src_x.size(0)) and (src.size(1)==src_x.size(1)) 
         assert src_x.size()==src_y.size()
-        src2 = self.self_attn(src, src, src, src_x,src_y,src_x,src_y, attn_mask=src_mask,
+        src2 = self.self_attn(src, src, src, src_x,src_y,src_x,src_y, mask=src_mask,
                               key_padding_mask=src_key_padding_mask)
         src = src + self.dropout1(src2)
         src = self.norm1(src)

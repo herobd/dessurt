@@ -60,7 +60,7 @@
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
-        "iterations": 18000,
+        "iterations": 180000,
         "accum_grad_steps": 5,
         "swa": true,
         "swa_start": 135000,
