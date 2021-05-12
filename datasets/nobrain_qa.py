@@ -211,6 +211,19 @@ class NobrainQA(QADataset):
                     rX=x+10
                     tY=y
                     bY=y+10
+                    if self.difficulty=='hard':
+                        lX+=random.gauss(0,2)
+                        rX+=random.gauss(0,2)
+                        tY+=random.gauss(0,2)
+                        bY+=random.gauss(0,2)
+                        if lX>rX:
+                            tmp=lX
+                            lX=rX
+                            rX=tmp
+                        if tY>bY:
+                            tmp=tY
+                            tY=bY
+                            bY=tmp
                     bb[0]=lX*s
                     bb[1]=bY*s
                     bb[2]=lX*s
@@ -231,13 +244,28 @@ class NobrainQA(QADataset):
                     if self.only_present:
                         word_trans.append(q)
                     else:
-                        word_trans.append('['+q+']')
 
                         bb=[None]*16
                         lX=x+10
                         rX=x+20
                         tY=y
                         bY=y+10
+                        if self.difficulty=='hard':
+                            lX+=random.gauss(0,2)
+                            rX+=random.gauss(0,2)
+                            tY+=random.gauss(0,2)
+                            bY+=random.gauss(0,2)
+                            if lX>rX:
+                                tmp=lX
+                                lX=rX
+                                rX=tmp
+                            if tY>bY:
+                                tmp=tY
+                                tY=bY
+                                bY=tmp
+                            word_trans.append(q)
+                        else:
+                            word_trans.append('['+q+']')
                         bb[0]=lX*s
                         bb[1]=bY*s
                         bb[2]=lX*s
@@ -277,10 +305,29 @@ class NobrainQA(QADataset):
                 q=q_s[-(i+1)]
                 a=a_s[-(i+1)]
                 bb=[None]*16
-                lX=0
-                rX=10
-                tY=cY
-                bY=cY+10
+                if self.difficulty=='easy':
+                    x=0
+                    y=cY
+                else:
+                    x=random.randrange(0,1000-20)
+                    y=random.randrange(0,1000-10)
+                lX=x
+                rX=x+10
+                tY=y
+                bY=y+10
+                if self.difficulty=='hard':
+                    lX+=random.gauss(0,2)
+                    rX+=random.gauss(0,2)
+                    tY+=random.gauss(0,2)
+                    bY+=random.gauss(0,2)
+                    if lX>rX:
+                        tmp=lX
+                        lX=rX
+                        rX=tmp
+                    if tY>bY:
+                        tmp=tY
+                        tY=bY
+                        bY=tmp
                 bb[0]=lX*s
                 bb[1]=bY*s
                 bb[2]=lX*s
@@ -301,13 +348,28 @@ class NobrainQA(QADataset):
                 if self.only_present:
                     word_trans.append(q)
                 else:
-                    word_trans.append('['+q+']')
 
                     bb=[None]*16
-                    lX=10
-                    rX=20
-                    tY=cY
-                    bY=cY+10
+                    lX=x+10
+                    rX=x+20
+                    tY=y
+                    bY=y+10
+                    if self.difficulty=='hard':
+                        lX+=random.gauss(0,2)
+                        rX+=random.gauss(0,2)
+                        tY+=random.gauss(0,2)
+                        bY+=random.gauss(0,2)
+                        if lX>rX:
+                            tmp=lX
+                            lX=rX
+                            rX=tmp
+                        if tY>bY:
+                            tmp=tY
+                            tY=bY
+                            bY=tmp
+                        word_trans.append(q)
+                    else:
+                        word_trans.append('['+q+']')
                     bb[0]=lX*s
                     bb[1]=bY*s
                     bb[2]=lX*s
