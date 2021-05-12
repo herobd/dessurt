@@ -64,7 +64,7 @@ class PositiveRealEmbedding(nn.Module):
         broken = torch.clamp(broken,0,1) #negative values set to 0
         res = self.linear(broken)
         #res *= 1-torch.isnan(res)
-        res = torch.nan_to_num(res,0)
+        #res = torch.nan_to_num(res,0)
         new_shape = x_shape+(res.size(-1),)
         return res.view(new_shape)
 
@@ -104,7 +104,7 @@ class UniformRealEmbedding(nn.Module):
         p2[p2<0]=0
         res = self.linear1(p1) + self.linear2(p2)
         #res *= 1-torch.isnan(res)
-        res = torch.nan_to_num(res,0)
+        #res = torch.nan_to_num(res,0)
         new_shape = x_shape+(res.size(-1),)
         return res.view(new_shape)
 
