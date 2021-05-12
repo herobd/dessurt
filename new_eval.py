@@ -453,6 +453,7 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                 BROS_prec=None
                 rel_BROS_TP=None
                 group_TP = None
+                DocStruct_hit = None
                 print('{} metrics'.format(validName))
                 for i in range(len(metrics)):
                     print(metrics[i].__name__ + ': '+str(val_metrics_sum[i]))
@@ -477,6 +478,11 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                         group_gt_count=sum(val_comb_metrics[typ])
                     elif 'ED_pred_count_XX'==typ:
                         group_pred_count=sum(val_comb_metrics[typ])
+                    elif 'DocStruct_hit_XX'==typ:
+                        DocStruct_hit=sum(val_comb_metrics[typ])
+                    elif 'DocStruct_count_XX'==typ:
+                        DocStruct_count=sum(val_comb_metrics[typ])
+
 
                     else:
                         assert 'XX' not in typ
@@ -505,6 +511,8 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                     #strict_recall = rel_strict_TP/rel_gt_count
                     #strict_prec = rel_strict_TP/rel_pred_count
                     #print('strict relationships Recall Prec F1: {:.2f} , {:.2f} , {:.2f}'.format(100*strict_recall,100*strict_prec,100*2*strict_recall*strict_prec/(strict_prec+strict_recall)))
+                if DocStruct_hit is not None:
+                    print('DocStruct hit@1 [overall]: {}'.format(DocStruct_hit/DocStruct_count))
                 if group_TP is not None:
                     group_recall = group_TP/group_gt_count
                     group_prec = group_TP/group_pred_count
