@@ -179,8 +179,12 @@ class PosBiasedMultiHeadedAttention(nn.Module):
         """
 
         if mask is not None:
-            # Same mask applied to all h heads.
-            mask = mask[None,None,...]#mask.unsqueeze(1)
+            if len(mask.size())==2:
+                # Same mask applied to all batches and heads.
+                mask = mask[None,None,...]#mask.unsqueeze(1)
+            else:
+                # Same mask applied to all h heads.
+                mask = mask[:,None,...]#mask.unsqueeze(1)
         nbatches = query.size(0)
 
         nquery = query.size(1)

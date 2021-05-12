@@ -13,12 +13,17 @@ ws=[]
 
 def display(data):
     b=0
+    bbs = data['bb_gt']
     for b in range(len(data['transcription'])):
-        print(' '.join(data['transcription'][b]))
+        #print(' '.join(data['transcription'][b]))
+        for bb,t in zip(bbs[b],data['transcription'][b]):
+            print('{} @ {}, {}'.format(t,bb[0],bb[1]))
         print('====')
 
         for q,a in zip(data['questions'][b],data['answers'][b]):
-            print(q+' '+a)
+            print(q+': '+a)
+        print('===========================')
+
     return
 
 
@@ -34,12 +39,14 @@ if __name__ == "__main__":
         repeat=1
     data=NobrainQA(dirPath=dirPath,split='train',config={
         'color':False,
-        'questions':1,
+        'questions':5,
         "rescale_range": 1.0,
         "crop_params": None,
-        "additional_doc_len": 4,
-        "shuffle_doc": "pairs",
-        "batch_size": 2
+        "additional_doc_len": 0,
+        "shuffle_doc": "all",
+        "difficulty": "hard",
+        "textfile":"fifteenwords.txt",
+        "batch_size": 2,
 
 })
 
