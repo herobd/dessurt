@@ -511,12 +511,12 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                     #strict_recall = rel_strict_TP/rel_gt_count
                     #strict_prec = rel_strict_TP/rel_pred_count
                     #print('strict relationships Recall Prec F1: {:.2f} , {:.2f} , {:.2f}'.format(100*strict_recall,100*strict_prec,100*2*strict_recall*strict_prec/(strict_prec+strict_recall)))
-                if DocStruct_hit is not None:
-                    print('DocStruct hit@1 [overall]: {}'.format(DocStruct_hit/DocStruct_count))
                 if group_TP is not None:
                     group_recall = group_TP/group_gt_count
                     group_prec = group_TP/group_pred_count
                     print('entity Recall Prec F1: {:.2f} , {:.2f} , {:.2f}'.format(100*group_recall,100*group_prec,100*2*group_recall*group_prec/(group_prec+group_recall)))
+                if DocStruct_hit is not None:
+                    print('DocStruct hit@1 [overall]: {}'.format(DocStruct_hit/DocStruct_count))
 
             if 'save_nns' in config:
                 pickle.dump(nns,open(config['save_nns'],'wb'))
