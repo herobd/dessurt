@@ -2248,6 +2248,8 @@ class GraphPairTrainer(BaseTrainer):
                         sum_hit+=0.5
             if len(gtGroupAdj)>0:
                 log['DocStruct redid hit@1'] = sum_hit/len(gtGroupAdj)
+                log['DocStruct_hit_XX'] = sum_hit
+                log['DocStruct_count_XX'] = len(gtGroupAdj)
 
             
             
