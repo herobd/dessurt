@@ -52,7 +52,7 @@ class QALayoutGPT(BaseModel):
                 nn.LogSoftmax(dim=-1) #except
                 )
 
-
+d
 
         #t#self.opt_history=defaultdict(list)#t#
 
