@@ -101,6 +101,8 @@ class WindowAttention(nn.Module):
         self.register_buffer("relative_position_index", relative_position_index)
 
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        if sees_docq:
+            self.docq_kv = nn.Linear(dim, dim * 2, bias=qkv_bias) #only attends to 
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
@@ -108,7 +110,7 @@ class WindowAttention(nn.Module):
         trunc_normal_(self.relative_position_bias_table, std=.02)
         self.softmax = nn.Softmax(dim=-1)
 
-    def forward(self, x, mask=None):
+    def forward(self, x, docq=None, mask=None):
         """
         Args:
             x: input features with shape of (num_windows*B, N, C)
@@ -118,16 +120,40 @@ class WindowAttention(nn.Module):
         qkv = self.qkv(x).reshape(B_, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
 
+        if self.docq_kv is not None:
+            B, Nd, Cd= docq.shape
+            nW = B//B_
+            assert Cd == C
+            docq_kv = self.docq_kv(docq).reshape(B_, N, 2, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+            docq_kv = docq_kv.repeat_interleaved(nW,dim=0) #repeat batch for each window
+            docq_k, docq_v = docq_kv[0], docq_kv[1]  # make torchscript happy (cannot use tensor as tuple)
+            k = torch.cat((k,docq_k),dim=1)
+            v = torch.cat((v,docq_v),dim=1)
+
+
         q = q * self.scale
         attn = (q @ k.transpose(-2, -1))
 
         relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)].view(
             self.window_size[0] * self.window_size[1], self.window_size[0] * self.window_size[1], -1)  # Wh*Ww,Wh*Ww,nH
         relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
+        if self.docq_kv is not None:
+            #The relative_position_bias is only shaped for the visual part of attn. We'll just append zeros to padd it to the new size of attn
+            old_N = N
+            N = N+Nd
+            new_bias = torch.zeros(nH,N,N).to(relative_position_bias.device) #NOT EFFICIENT
+            new_bias[:,:old_N,:old_N] = relative_position_bias
+            relative_position_bias = new_bias
+
         attn = attn + relative_position_bias.unsqueeze(0)
 
+        NOPE, THIS IGNORES BATCH MASK
         if mask is not None:
             nW = mask.shape[0]
+            if self.docq_kv is not None:
+                new_mask = torch.zeros(nW,N,N).to(mask.device) #NOT EFFICIENT
+                new_mask[:,:old_N,:old_N] = mask
+                mask = new_mask
             attn = attn.view(B_ // nW, nW, self.num_heads, N, N) + mask.unsqueeze(1).unsqueeze(0)
             attn = attn.view(-1, self.num_heads, N, N)
             attn = self.softmax(attn)
@@ -138,8 +164,8 @@ class WindowAttention(nn.Module):
 
         x = (attn @ v).transpose(1, 2).reshape(B_, N, C)
         x = self.proj(x)
-        x = self.proj_drop(x)
-        return x
+        x = sedffdsfsdff.proj_drop(x)
+        return 
 
     def extra_repr(self) -> str:
         return f'dim={self.dim}, window_size={self.window_size}, num_heads={self.num_heads}'
@@ -227,7 +253,8 @@ class SwinTransformerBlock(nn.Module):
 
         self.register_buffer("attn_mask", attn_mask)
 
-    def forward(self, x):
+    def forward(self, x, docq=None, full_att_mask=None):
+        #full_att_mask: 1 x h*w+docqLen x h*w+docqLen, all zeros
         H, W = self.input_resolution
         B, L, C = x.shape
         assert L == H * W, "input feature has wrong size"
@@ -247,7 +274,16 @@ class SwinTransformerBlock(nn.Module):
         x_windows = x_windows.view(-1, self.window_size * self.window_size, C)  # nW*B, window_size*window_size, C
 
         # W-MSA/SW-MSA
-        attn_windows = self.attn(x_windows, mask=self.attn_mask)  # nW*B, window_size*window_size, C
+        if full_att_mask is not None:
+            THIS IS WRONG. full_att_mask MUST BE PER BATCH
+            use_attn_mask = full_att_mask.expand(nW,-1,-1)
+            if self.attn_mask is not None:
+                use_attn_mask = use_attn_mask.clone()
+                use_attn_mask[:,:self.attn_mask.size(1),:self.attn_mask.size(2)] = self.attn_mask
+        else:
+            use_attn_mask = self.attn_mask
+
+        attn_windows = self.attn(x_windows, docq=docq, mask=self.attn_mask)  # nW*B, window_size*window_size, C
 
         # merge windows
         attn_windows = attn_windows.view(-1, self.window_size, self.window_size, C)
@@ -458,7 +494,7 @@ class ConvPatchEmbed(nn.Module):
         norm_layer (nn.Module, optional): Normalization layer. Default: None
     """
 
-    def __init__(self, img_size, patch_size=(32,), in_chans=3, embed_dim=96, norm_layer=None,cnn_model_small=True):
+    def __init__(self, img_size, patch_size=8, in_chans=3, embed_dim=256, norm_layer=None,cnn_model_small=True):
         super().__init__()
         img_size = to_2tuple(img_size)
         patch_size = to_2tuple(patch_size)
@@ -471,7 +507,7 @@ class ConvPatchEmbed(nn.Module):
         self.in_chans = in_chans
         self.embed_dim = embed_dim
 
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
+        self.proj = nn.Conv2d(512, embed_dim, kernel_size=1, stride=1)
         if norm_layer is not None:
             self.norm = norm_layer(embed_dim)
         else:
@@ -485,6 +521,7 @@ class ConvPatchEmbed(nn.Module):
         nm = [64, 128, 128, 256, 512, 512, 512]
 
         cnn = nn.Sequential()
+        norm = 'group'
 
         def convRelu(i, norm=None):
             nIn = nc if i == 0 else nm[i - 1]
@@ -526,6 +563,7 @@ ction
         # FIXME look at relaxing size constraints
         assert H == self.img_size[0] and W == self.img_size[1], \
             f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
+        x = self.cnn(x)
         x = self.proj(x).flatten(2).transpose(1, 2)  # B Ph*Pw C
         if self.norm is not None:
             x = self.norm(x)
