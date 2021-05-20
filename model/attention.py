@@ -161,21 +161,23 @@ class PosBiasedMultiHeadedAttention(nn.Module):
         
     def forward(self, query, key, value, query_x, query_y, key_x, key_y, mask=None, key_padding_mask=None, pos_mask=None):
         """
-        query:  B x Lq x D
-        key:    B x Lk x D
-        value:  B x Lk x D
-        query_x:B x Lq
-        query_y:B x Lq 
-        key_x:  B x Lk
-        key_y:  B x Lk
-        mask:   Lq x Lk
-        key_padding_mask: B x Lk (False=normal, True=masked out)
-        pos_mask: B x Lq x Lk x 1
+        Args:
+            query:  B x Lq x D
+            key:    B x Lk x D
+            value:  B x Lk x D
+            query_x:B x Lq
+            query_y:B x Lq 
+            key_x:  B x Lk
+            key_y:  B x Lk
+            mask:   Lq x Lk
+            key_padding_mask: B x Lk (False=normal, True=masked out)
+            pos_mask: B x Lq x Lk x 1
 
-        B = batch size
-        Lq = num queries
-        Lk = num keys
-        D = model dim
+        Where:
+            B = batch size
+            Lq = num queries
+            Lk = num keys
+            D = model dim
         """
 
         if mask is not None:

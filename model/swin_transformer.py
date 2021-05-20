@@ -110,11 +110,12 @@ class WindowAttention(nn.Module):
         trunc_normal_(self.relative_position_bias_table, std=.02)
         self.softmax = nn.Softmax(dim=-1)
 
-    def forward(self, x, docq=None, mask=None):
+    def forward(self, x, docq=None, mask=None, key_padding_mask=None):
         """
         Args:
             x: input features with shape of (num_windows*B, N, C)
             mask: (0/-inf) mask with shape of (num_windows, Wh*Ww, Wh*Ww) or None
+            key_padding_mask: (0/-inf) mask with shape (num_windows*B, N+Ndocq) or None
         """
         B_, N, C = x.shape
         qkv = self.qkv(x).reshape(B_, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
@@ -147,7 +148,6 @@ class WindowAttention(nn.Module):
 
         attn = attn + relative_position_bias.unsqueeze(0)
 
-        NOPE, THIS IGNORES BATCH MASK
         if mask is not None:
             nW = mask.shape[0]
             if self.docq_kv is not None:
@@ -156,9 +156,12 @@ class WindowAttention(nn.Module):
                 mask = new_mask
             attn = attn.view(B_ // nW, nW, self.num_heads, N, N) + mask.unsqueeze(1).unsqueeze(0)
             attn = attn.view(-1, self.num_heads, N, N)
-            attn = self.softmax(attn)
-        else:
-            attn = self.softmax(attn)
+
+        if key_padding_mask is not None:
+            attn += key_padding_mask.unsqueeze(1).unsqueeze(2)
+
+
+        attn = self.softmax(attn)
 
         attn = self.attn_drop(attn)
 
@@ -253,8 +256,13 @@ class SwinTransformerBlock(nn.Module):
 
         self.register_buffer("attn_mask", attn_mask)
 
-    def forward(self, x, docq=None, full_att_mask=None):
-        #full_att_mask: 1 x h*w+docqLen x h*w+docqLen, all zeros
+    def forward(self, x, docq=None, docq_padding_mask=None):
+        """
+        Args:
+            x: (B, H*W, C)
+            docq: (B, docqL, C)
+            docq_padding_mask: 0/-inf (B, docqL) #potentially could be full key_padding_mask 
+        """
         H, W = self.input_resolution
         B, L, C = x.shape
         assert L == H * W, "input feature has wrong size"
@@ -274,16 +282,16 @@ class SwinTransformerBlock(nn.Module):
         x_windows = x_windows.view(-1, self.window_size * self.window_size, C)  # nW*B, window_size*window_size, C
 
         # W-MSA/SW-MSA
-        if full_att_mask is not None:
-            THIS IS WRONG. full_att_mask MUST BE PER BATCH
-            use_attn_mask = full_att_mask.expand(nW,-1,-1)
-            if self.attn_mask is not None:
-                use_attn_mask = use_attn_mask.clone()
-                use_attn_mask[:,:self.attn_mask.size(1),:self.attn_mask.size(2)] = self.attn_mask
+        if docq_padding_mask is not None:
+            #This potentially could be done in parent module
+            nW = x_window.size()//B
+            image_padding_mask = torch.zeros(nW*B,self.window_size*self.window_size).to(docq_padding_mask.device)
+            docq_padding_mask = docq_padding_mask.repeat_interleaved(nW,dim=0) #repeat for windows
+            key_padding_mask = torch.cat((image_padding_mask,docq_padding_mask),dim=1)
         else:
-            use_attn_mask = self.attn_mask
+            key_padding_mask = None
 
-        attn_windows = self.attn(x_windows, docq=docq, mask=self.attn_mask)  # nW*B, window_size*window_size, C
+        attn_windows = self.attn(x_windows, docq=docq, mask=self.attn_mask, key_padding_mask=key_padding_mask)  # nW*B, window_size*window_size, C
 
         # merge windows
         attn_windows = attn_windows.view(-1, self.window_size, self.window_size, C)
