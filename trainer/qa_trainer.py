@@ -10,6 +10,7 @@ from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist,
 from utils.group_pairing import getGTGroup, pure, purity
 from datasets.testforms_graph_pair import display
 import random, os, math
+import editdistance
 
 from model.oversegment_loss import build_oversegmented_targets_multiscale
 from model.overseg_box_detector import build_box_predictions
@@ -368,6 +369,8 @@ class QATrainer(BaseTrainer):
         total_present=0
         cor_pair=0
         total_pair=0
+        score_ed = 0
+        total_score = 0
         for b_answers,b_pred in zip(answers,string_a):
             for answer,pred in zip(b_answers,b_pred):
                 if len(pred)>0 and answer[0]==pred[0]:
@@ -377,9 +380,14 @@ class QATrainer(BaseTrainer):
                     if answer[2:]==pred[2:]:
                         cor_pair+=1
                     total_pair+=1
+
+                score_ed += editdistance.eval(answer,pred)/((len(answer)+len(pred))/2)
+                total_score +=1
+                
         log['present_acc']=cor_present/total_present
         if total_pair>0:
             log['pair_acc']=cor_pair/total_pair
+        log['score_ed'] = score_ed/total_score
         #t#self.opt_history['score'].append(timeit.default_timer()-tic)#t#
 
         if self.print_pred_every>0 and self.iteration%self.print_pred_every==0:

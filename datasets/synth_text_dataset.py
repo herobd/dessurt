@@ -137,7 +137,7 @@ def create_image(x):
         break
     return gt,img
 
-class SynthTextDataset(Dataset):
+class SynthTextDataset(QADataset):
     def __init__(self, dirPath, split, config):
         from synthetic_text_gen import SyntheticText
         self.batch_size=1
@@ -265,195 +265,99 @@ class SynthTextDataset(Dataset):
 
 
 
-        batch=[]
-        for b in range(self.batch_size):
-            img_path = os.path.join(self.directory,'{}.png'.format(idx+b))
-            img = cv2.imread(img_path,0)
-            if img is None:
-                print('Error, could not read {}'.format(img_path))
-                return self[(idx+1)%len(self)]
-            
-            if self.blank_size is None:
-                if img.shape[0] != self.img_height:
-                    scale = float(self.img_height) / img.shape[0]
-                    if scale*img.shape[1] > self.max_width:
-                        scale = self.max_width/img.shape[1]
-                    img = cv2.resize(img, (0,0), fx=scale, fy=scale)
-                    if img.shape[0]<self.img_height: #it was too long. We need to pad it vertically
-                        diff = self.img_height-img.shape[0]
-                        img = np.pad(img,((diff//2,diff//2+diff%2),(0,0)),'constant',constant_values=255)
 
-                if self.augmentation=='affine':
-                    if img.shape[1]*strech > self.max_width:
-                        strech = self.max_width/img.shape[1]
-                if img.shape[1] > self.max_width:
-                    percent = float(self.max_width) / img.shape[1]
-                    img = cv2.resize(img, (0,0), fx=percent, fy=1)
+        img_path = os.path.join(self.directory,'{}.png'.format(idx+b))
+        img = cv2.imread(img_path,0)
+        if img is None:
+            print('Error, could not read {}'.format(img_path))
+            return self[(idx+1)%len(self)]
+        
+        if self.blank_size is None:
+            if img.shape[0] != self.img_height:
+                scale = float(self.img_height) / img.shape[0]
+                if scale*img.shape[1] > self.max_width:
+                    scale = self.max_width/img.shape[1]
+                img = cv2.resize(img, (0,0), fx=scale, fy=scale)
+                if img.shape[0]<self.img_height: #it was too long. We need to pad it vertically
+                    diff = self.img_height-img.shape[0]
+                    img = np.pad(img,((diff//2,diff//2+diff%2),(0,0)),'constant',constant_values=255)
 
-                if img.shape[1] > self.clip_width:
-                    img = img[:,:self.clip_width]
+            if self.augmentation=='affine':
+                if img.shape[1]*strech > self.max_width:
+                    strech = self.max_width/img.shape[1]
+            if img.shape[1] > self.max_width:
+                percent = float(self.max_width) / img.shape[1]
+                img = cv2.resize(img, (0,0), fx=percent, fy=1)
 
-            if self.use_fg_mask:
-                th,fg_mask = cv2.threshold(img,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-                fg_mask = 255-fg_mask
-                ele = cv2.getStructuringElement(  cv2.MORPH_ELLIPSE, (9,9) )
-                fg_mask = cv2.dilate(fg_mask,ele)
-                fg_mask = fg_mask/255
-            else:
-                fg_mask = None
+            if img.shape[1] > self.clip_width:
+                img = img[:,:self.clip_width]
 
-            if len(img.shape)==2:
-                img = img[...,None]
-            if self.augmentation is not None:
-                #img = augmentation.apply_random_color_rotation(img)
-                if 'affine' in self.augmentation:
-                    img,fg_mask = augmentation.affine_trans(img,fg_mask,skew,strech)
-                if 'brightness' in self.augmentation:
-                    img = augmentation.apply_tensmeyer_brightness(img)
-                    assert(fg_mask is None)
-                if 'warp' in self.augmentation and random.random()<self.warp_freq:
-                    try:
-                        img = grid_distortion.warp_image(img)
-                    except cv2.error as e:
-                        print(e)
-                        print(img.shape)
-                    assert(fg_mask is None)
-                if 'invert' in self.augmentation and random.random()<0.25:
-                    img = 1-img
-
-            if self.include_stroke_aug:
-                new_img = augmentation.change_thickness(img,thickness_change,fg_shade,bg_shade,blur_size,noise_sigma)
-                new_img = new_img*2 -1.0
-
-            if len(img.shape)==2:
-                img = img[...,None]
-
-
-            img = img.astype(np.float32)
-            img = 1.0 - img / 128.0
-            
-            if self.train:
-                gt = self.labels[idx]
-            else:
-                with open(self.gt_filename) as f:
-                    for i in range(0,idx+1):
-                        gt=f.readline()
-                gt=gt.strip()
-            if gt is None:
-                #metadata = pyexiv2.ImageMetadata(img_path)
-                #metadata.read()
-                #metadata = piexif.load(img_path)
-                #if 'gt' in metadata:
-                #    gt = metadata['gt']
-                #else:
-                print('Error unknown label for image: {}'.format(img_path))
-                return self.__getitem__((idx+7)%self.set_size)
-
-            gt_label = string_utils.str2label_single(gt, self.char_to_idx)
-
-            font_idx='?'
-            toRet= {
-                "image": img,
-                "gt": gt,
-                "gt_label": gt_label,
-                "author": font_idx,
-                "name": '{}_{}'.format(idx+b,font_idx),
-                "style": None,
-                "spaced_label": None
-            }
-            if self.use_fg_mask:
-                toRet['fg_mask'] = fg_mask
-            if self.include_stroke_aug:
-                toRet['changed_image'] = new_img
-            if self.single:
-                return toRet
-            batch.append(toRet)
-
-        dim0 = batch[0]['image'].shape[0]
-        dim1 = max([b['image'].shape[1] for b in batch])
-        dim2 = batch[0]['image'].shape[2]
-
-        all_labels = []
-        label_lengths = []
-        if self.spaced_by_name is not None:
-            spaced_labels = []
-        else:
-            spaced_labels = None
-        max_spaced_len=0
-
-        input_batch = np.full((len(batch), dim0, dim1, dim2), PADDING_CONSTANT).astype(np.float32)
         if self.use_fg_mask:
-            fg_masks = np.full((len(batch), dim0, dim1, 1), 0).astype(np.float32)
+            th,fg_mask = cv2.threshold(img,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+            fg_mask = 255-fg_mask
+            ele = cv2.getStructuringElement(  cv2.MORPH_ELLIPSE, (9,9) )
+            fg_mask = cv2.dilate(fg_mask,ele)
+            fg_mask = fg_mask/255
+        else:
+            fg_mask = None
+
+        if len(img.shape)==2:
+            img = img[...,None]
+        if self.augmentation is not None:
+            #img = augmentation.apply_random_color_rotation(img)
+            if 'affine' in self.augmentation:
+                img,fg_mask = augmentation.affine_trans(img,fg_mask,skew,strech)
+            if 'brightness' in self.augmentation:
+                img = augmentation.apply_tensmeyer_brightness(img)
+                assert(fg_mask is None)
+            if 'warp' in self.augmentation and random.random()<self.warp_freq:
+                try:
+                    img = grid_distortion.warp_image(img)
+                except cv2.error as e:
+                    print(e)
+                    print(img.shape)
+                assert(fg_mask is None)
+            if 'invert' in self.augmentation and random.random()<0.25:
+                img = 1-img
+
         if self.include_stroke_aug:
-            changed_batch = np.full((len(batch), dim0, dim1, dim2), PADDING_CONSTANT).astype(np.float32)
-        for i in range(len(batch)):
-            b_img = batch[i]['image']
-            toPad = (dim1-b_img.shape[1])
-            if 'center' in batch[0] and batch[0]['center']:
-                toPad //=2
-            else:
-                toPad = 0
-            input_batch[i,:,toPad:toPad+b_img.shape[1],:] = b_img
-            if self.use_fg_mask:
-                fg_masks[i,:,toPad:toPad+b_img.shape[1],0] = batch[i]['fg_mask']
-            if self.include_stroke_aug:
-                changed_batch[i,:,toPad:toPad+b_img.shape[1],0] = batch[i]['changed_image']
+            new_img = augmentation.change_thickness(img,thickness_change,fg_shade,bg_shade,blur_size,noise_sigma)
+            new_img = new_img*2 -1.0
 
-            l = batch[i]['gt_label']
-            all_labels.append(l)
-            label_lengths.append(len(l))
-
-            if spaced_labels is not None:
-                sl = batch[i]['spaced_label']
-                spaced_labels.append(sl)
-                max_spaced_len = max(max_spaced_len,sl.shape[0])
-
-        #all_labels = np.concatenate(all_labels)
-        label_lengths = torch.IntTensor(label_lengths)
-        max_len = label_lengths.max()
-        all_labels = [np.pad(l,((0,max_len-l.shape[0]),),'constant') for l in all_labels]
-        all_labels = np.stack(all_labels,axis=1)
-        if self.spaced_by_name is not None:
-            spaced_labels = [np.pad(l,((0,max_spaced_len-l.shape[0]),(0,0)),'constant') for l in spaced_labels]
-            ddd = spaced_labels
-            spaced_labels = np.concatenate(spaced_labels,axis=1)
-            spaced_labels = torch.from_numpy(spaced_labels)
-            assert(spaced_labels.size(1) == len(batch))
+        if len(img.shape)==2:
+            img = img[...,None]
 
 
-        images = input_batch.transpose([0,3,1,2])
-        images = torch.from_numpy(images)
-        labels = torch.from_numpy(all_labels.astype(np.int32))
-        #label_lengths = torch.from_numpy(label_lengths.astype(np.int32))
-        if self.use_fg_mask:
-            fg_masks = fg_masks.transpose([0,3,1,2])
-            fg_masks = torch.from_numpy(fg_masks)
-
-        if batch[0]['style'] is not None:
-            styles = np.stack([b['style'] for b in batch], axis=0)
-            styles = torch.from_numpy(styles).float()
+        img = img.astype(np.float32)
+        img = 1.0 - img / 128.0
+        
+        if self.train:
+            gt = self.labels[idx]
         else:
-            styles=None
-        #mask, top_and_bottom, center_line = makeMask(images,self.mask_post, self.mask_random)
+            with open(self.gt_filename) as f:
+                for i in range(0,idx+1):
+                    gt=f.readline()
+            gt=gt.strip()
+        if gt is None:
+            print('Error unknown label for image: {}'.format(img_path))
+            return self.__getitem__((idx+7)%self.set_size)
+
+        gt_label = string_utils.str2label_single(gt, self.char_to_idx)
+
+        font_idx='?'
         toRet= {
-            "image": images,
-            #"mask": mask,
-            #"top_and_bottom": top_and_bottom,
-            #"center_line": center_line,
-            "label": labels,
-            "style": styles,
-            "label_lengths": label_lengths,
-            "gt": [b['gt'] for b in batch],
-            "spaced_label": spaced_labels,
-            "name": [b['name'] for b in batch],
-            "author": [b['author'] for b in batch],
+            "image": img,
+            "gt": gt,
+            "gt_label": gt_label,
+            "author": font_idx,
+            "name": '{}_{}'.format(idx+b,font_idx),
+            "style": None,
+            "spaced_label": None
         }
         if self.use_fg_mask:
-            toRet['fg_mask'] = fg_masks
+            toRet['fg_mask'] = fg_mask
         if self.include_stroke_aug:
-            changed_images = changed_batch.transpose([0,3,1,2])
-            changed_images = torch.from_numpy(changed_images)
-            toRet['changed_image']=changed_images
+            toRet['changed_image'] = new_img
         return toRet
 
     def sample(self):

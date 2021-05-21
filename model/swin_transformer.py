@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
+from .net_builder import getGroupSize
 
 
 class Mlp(nn.Module):
@@ -74,7 +75,7 @@ class WindowAttention(nn.Module):
         proj_drop (float, optional): Dropout ratio of output. Default: 0.0
     """
 
-    def __init__(self, dim, window_size, num_heads, qkv_bias=True, qk_scale=None, attn_drop=0., proj_drop=0.):
+    def __init__(self, dim, window_size, num_heads, qkv_bias=True, qk_scale=None, attn_drop=0., proj_drop=0., sees_docq=False):
 
         super().__init__()
         self.dim = dim
@@ -123,13 +124,13 @@ class WindowAttention(nn.Module):
 
         if self.docq_kv is not None:
             B, Nd, Cd= docq.shape
-            nW = B//B_
+            nW = B_//B
             assert Cd == C
-            docq_kv = self.docq_kv(docq).reshape(B_, N, 2, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
-            docq_kv = docq_kv.repeat_interleaved(nW,dim=0) #repeat batch for each window
+            docq_kv = self.docq_kv(docq).reshape(B, Nd, 2, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+            docq_kv = docq_kv.repeat_interleave(nW,dim=1) #repeat batch for each window
             docq_k, docq_v = docq_kv[0], docq_kv[1]  # make torchscript happy (cannot use tensor as tuple)
-            k = torch.cat((k,docq_k),dim=1)
-            v = torch.cat((v,docq_v),dim=1)
+            k = torch.cat((k,docq_k),dim=2)
+            v = torch.cat((v,docq_v),dim=2)
 
 
         q = q * self.scale
@@ -140,10 +141,9 @@ class WindowAttention(nn.Module):
         relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
         if self.docq_kv is not None:
             #The relative_position_bias is only shaped for the visual part of attn. We'll just append zeros to padd it to the new size of attn
-            old_N = N
-            N = N+Nd
-            new_bias = torch.zeros(nH,N,N).to(relative_position_bias.device) #NOT EFFICIENT
-            new_bias[:,:old_N,:old_N] = relative_position_bias
+            all_N = N+Nd
+            new_bias = torch.zeros(self.num_heads,N,all_N).to(relative_position_bias.device) #NOT EFFICIENT
+            new_bias[:,:N,:N] = relative_position_bias
             relative_position_bias = new_bias
 
         attn = attn + relative_position_bias.unsqueeze(0)
@@ -151,11 +151,11 @@ class WindowAttention(nn.Module):
         if mask is not None:
             nW = mask.shape[0]
             if self.docq_kv is not None:
-                new_mask = torch.zeros(nW,N,N).to(mask.device) #NOT EFFICIENT
-                new_mask[:,:old_N,:old_N] = mask
+                new_mask = torch.zeros(nW,N,all_N).to(mask.device) #NOT EFFICIENT
+                new_mask[:,:N,:N] = mask
                 mask = new_mask
-            attn = attn.view(B_ // nW, nW, self.num_heads, N, N) + mask.unsqueeze(1).unsqueeze(0)
-            attn = attn.view(-1, self.num_heads, N, N)
+            attn = attn.view(B_ // nW, nW, self.num_heads, N, all_N) + mask.unsqueeze(1).unsqueeze(0)
+            attn = attn.view(-1, self.num_heads, N, all_N)
 
         if key_padding_mask is not None:
             attn += key_padding_mask.unsqueeze(1).unsqueeze(2)
@@ -167,8 +167,8 @@ class WindowAttention(nn.Module):
 
         x = (attn @ v).transpose(1, 2).reshape(B_, N, C)
         x = self.proj(x)
-        x = sedffdsfsdff.proj_drop(x)
-        return 
+        x = self.proj_drop(x)
+        return  x
 
     def extra_repr(self) -> str:
         return f'dim={self.dim}, window_size={self.window_size}, num_heads={self.num_heads}'
@@ -207,7 +207,7 @@ class SwinTransformerBlock(nn.Module):
 
     def __init__(self, dim, input_resolution, num_heads, window_size=7, shift_size=0,
                  mlp_ratio=4., qkv_bias=True, qk_scale=None, drop=0., attn_drop=0., drop_path=0.,
-                 act_layer=nn.GELU, norm_layer=nn.LayerNorm):
+                 act_layer=nn.GELU, norm_layer=nn.LayerNorm,sees_docq=False):
         super().__init__()
         self.dim = dim
         self.input_resolution = input_resolution
@@ -224,7 +224,8 @@ class SwinTransformerBlock(nn.Module):
         self.norm1 = norm_layer(dim)
         self.attn = WindowAttention(
             dim, window_size=to_2tuple(self.window_size), num_heads=num_heads,
-            qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
+            qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop,
+            sees_docq=sees_docq)
 
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = norm_layer(dim)
@@ -284,9 +285,9 @@ class SwinTransformerBlock(nn.Module):
         # W-MSA/SW-MSA
         if docq_padding_mask is not None:
             #This potentially could be done in parent module
-            nW = x_window.size()//B
+            nW = x_windows.size(0)//B
             image_padding_mask = torch.zeros(nW*B,self.window_size*self.window_size).to(docq_padding_mask.device)
-            docq_padding_mask = docq_padding_mask.repeat_interleaved(nW,dim=0) #repeat for windows
+            docq_padding_mask = docq_padding_mask.repeat_interleave(nW,dim=0) #repeat for windows
             key_padding_mask = torch.cat((image_padding_mask,docq_padding_mask),dim=1)
         else:
             key_padding_mask = None
@@ -502,7 +503,7 @@ class ConvPatchEmbed(nn.Module):
         norm_layer (nn.Module, optional): Normalization layer. Default: None
     """
 
-    def __init__(self, img_size, patch_size=8, in_chans=3, embed_dim=256, norm_layer=None,cnn_model_small=True):
+    def __init__(self, img_size, patch_size=8, in_chans=1, embed_dim=256, norm_layer=None,cnn_model_small=True):
         super().__init__()
         img_size = to_2tuple(img_size)
         patch_size = to_2tuple(patch_size)
@@ -530,6 +531,7 @@ class ConvPatchEmbed(nn.Module):
 
         cnn = nn.Sequential()
         norm = 'group'
+        nc = 1 #gray
 
         def convRelu(i, norm=None):
             nIn = nc if i == 0 else nm[i - 1]
@@ -543,14 +545,10 @@ class ConvPatchEmbed(nn.Module):
             elif norm:
                 cnn.add_module('batchnorm{0}'.format(i), nn.BatchNorm2d(nOut))
             cnn.add_module('dropout{0}'.format(i), nn.Dropout2d(p=0.1,inplace=True))
-            if leakyRelu:
-                cnn.add_module('relu{0}'.format(i),
-                               nn.LeakyReLU(0.2, inplace=True))
-            else:
-                cnn.add_module('relu{0}'.format(i), nn.ReLU(True))
+            cnn.add_module('relu{0}'.format(i), nn.ReLU(True))
 
         convRelu(0,norm) #32>16 or 64>32
-        if not small:
+        if not cnn_model_small:
             cnn.add_module('pooling{0}'.format(0), nn.MaxPool2d(2, 2))  # 64x16
         convRelu(1,norm)
         convRelu(2, norm)
@@ -561,8 +559,7 @@ class ConvPatchEmbed(nn.Module):
         convRelu(5,norm)                                           # 512x4
         #cnn.add_module('pooling{0}'.format(3),
         #               nn.MaxPool2d((2, 1), (2, 1)))  # 512x2x4
-        convRelu(6, norm)                                     #512x1x1 even 32x32 to 4x4, that's a 8 redu
-ction
+        convRelu(6, norm)                                     #512x1x1 even 32x32 to 4x4, that's a 8 reduction
 
         self.cnn = cnn
 

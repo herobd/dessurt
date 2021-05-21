@@ -113,7 +113,7 @@
         "use_2nd_detect_scale_feats": 2,
         "use_2nd_detect_feats_size": 64,
         "use_fixed_masks": true,
-        "no_grad_feats": true,
+        
         "feat_norm": "group_norm",
 
         "expand_rel_context": 20,

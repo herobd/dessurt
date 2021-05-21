@@ -73,16 +73,22 @@ class QADataset(torch.utils.data.Dataset):
         annotationPath = self.images[index]['annotationPath']
         #print(annotationPath)
         rescaled = self.images[index]['rescaled']
-        with open(annotationPath) as annFile:
-            annotations = json.loads(annFile.read())
+        if type(annotationPath) is int:
+            annotations = annotationPath
+        else:
+            with open(annotationPath) as annFile:
+                annotations = json.loads(annFile.read())
 
         #t#tic=timeit.default_timer()#t#
-        #np_img = img_f.imread(imagePath, 1 if self.color else 0)#*255.0
-        #if np_img.max()<=1:
-        #    np_img*=255
-        #if np_img is None or np_img.shape[0]==0:
-        #    print("ERROR, could not open "+imagePath)
-        #    return self.__getitem__((index+1)%self.__len__())
+        if imagePath is not None:
+            np_img = img_f.imread(imagePath, 1 if self.color else 0)#*255.0
+            if np_img.max()<=1:
+                np_img*=255
+            if np_img is None or np_img.shape[0]==0:
+                print("ERROR, could not open "+imagePath)
+                return self.__getitem__((index+1)%self.__len__())
+        else:
+            np_img = np.zeros([1000,1000])
         #if scaleP is None:
         #    s = np.random.uniform(self.rescale_range[0], self.rescale_range[1])
         #else:
@@ -109,7 +115,8 @@ class QADataset(torch.utils.data.Dataset):
         #        fx=partial_rescale,
         #        fy=partial_rescale,
         #)
-        np_img = np.zeros([1000,1000])
+
+        #np_img = np.zeros([1000,1000])
         s=1
 
         if len(np_img.shape)==2:
@@ -209,6 +216,8 @@ class QADataset(torch.utils.data.Dataset):
         #    pixel_gt = torch.from_numpy(pixel_gt)
 
         bbs = convertBBs(bbs,self.rotate,1)
+        if bbs is None:
+            bbs = torch.FloatTensor(1,0,5+8+1)
         #if 'word_boxes' in form_metadata:
         #     form_metadata['word_boxes'] = convertBBs(form_metadata['word_boxes'][None,...],self.rotate,0)[0,...]
 
