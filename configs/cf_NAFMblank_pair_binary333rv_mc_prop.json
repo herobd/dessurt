@@ -113,7 +113,7 @@
         "use_2nd_detect_scale_feats": 2,
         "use_2nd_detect_feats_size": 64,
         "use_fixed_masks": true,
-        "no_grad_feats": true,
+        
 
         "expand_rel_context": [75,150],
         "featurizer_start_h": 24,

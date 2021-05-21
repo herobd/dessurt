@@ -105,7 +105,7 @@
         "roi_batch_size": 400,
 
 	"use_rel_shape_feats": "only",
-        "no_grad_feats": true,
+        
         "feat_norm": "group_norm",
 
         "featurizer_fc": [],

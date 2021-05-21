@@ -179,7 +179,6 @@ class PairingGroupingGraph(BaseModel):
             detect_save2_scale = None
         #splitScaleDiff = config['split_features_scale_diff'] if 'split_features_scale_diff' in config else None
 
-        self.no_grad_feats = config['no_grad_feats'] if 'no_grad_feats' in config else False
 
         if (config['start_frozen'] if 'start_frozen' in config else False):
             for param in self.detector.parameters(): 
@@ -829,8 +828,6 @@ class PairingGroupingGraph(BaseModel):
         #I'm assuming batch size of one
         assert(len(bbPredictions)==1)
         bbPredictions=bbPredictions[0]
-        if self.no_grad_feats:
-            bbPredictions=bbPredictions.detach()
 
 
         if useGTBBs and  gtBBs is not None:
