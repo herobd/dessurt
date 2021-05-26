@@ -12,7 +12,7 @@ try:
     from transformers import LayoutLMTokenizer, LayoutLMModel
 except:
     pass
-from utils.character_tokenizer import CharaterTokenizer
+from utils.character_tokenizer import CharacterTokenizer
 from collections import defaultdict
 from timm.models.layers import trunc_normal_
 
