@@ -401,15 +401,16 @@ class QATrainer(BaseTrainer):
 
 
         got={}
-        for name in get:
-            if 'strings'==name:
-                ret=[]
-                for b,(b_question,b_answer,b_pred) in enumerate(zip(questions,answers,string_a)):
-                    for question,answer,pred in zip(b_question,b_answer,b_pred):
-                        ret.append('{} [Q]:{}\t[A]:{}\t[P]:{}'.format(b,question,answer,pred))
-                got[name]=ret
-            else:
-                raise NotImplementedError('Cannot get [{}], unknown'.format(name))
+        if get is not None:
+            for name in get:
+                if 'strings'==name:
+                    ret=[]
+                    for b,(b_question,b_answer,b_pred) in enumerate(zip(questions,answers,string_a)):
+                        for question,answer,pred in zip(b_question,b_answer,b_pred):
+                            ret.append('{} [Q]:{}\t[A]:{}\t[P]:{}'.format(b,question,answer,pred))
+                    got[name]=ret
+                else:
+                    raise NotImplementedError('Cannot get [{}], unknown'.format(name))
         return losses, log, got
 
     def bn_update(self):

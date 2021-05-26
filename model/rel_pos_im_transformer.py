@@ -64,7 +64,7 @@ class RelPosImTransformerLayer(nn.Module):
             docqa_x: the x position of each element of set (batch,length)
             docqa_y: the y position of each element of set (batch,length)
             docqa_mask: the mask for the docqa sequence (optional).
-            docqa_key_padding_mask: the mask for the docqa keys per batch (optional). 1/0 (batch,length)
+            docqa_key_padding_mask: the mask for the docqa keys per batch (optional). False/True (batch,length)
             pos_mask: mask for which places actually have a position 1/0 (batch,lengthDoc,lenfthDoc+Im,1)
 
         """
@@ -78,10 +78,26 @@ class RelPosImTransformerLayer(nn.Module):
         else:
             new_pos_mask = None
 
+        #def printDiff(a,b):
+        #    siz = int(im_tokens.size(1)**0.5)
+        #    diff = (torch.abs(im_tokens[a]-im_tokens[b]).max(dim=-1)[0]>0.01).view(siz,siz)
+        #    s=''
+        #    for y in range(diff.size(0)):
+        #        for x in range(diff.size(1)):
+        #            s+='d' if diff[y,x] else ' '
+        #        s+='\n'
+        #    print('diff {} and {}'.format(a,b))
+        #    print('='*diff.size(1))
+        #    print(s)
+        #    print('='*diff.size(1))
+        #printDiff(0,1)
+        #printDiff(1,2)
+        #printDiff(3,4)
+
         full = torch.cat((im_tokens,docqa),dim=1)
         full_x = torch.cat((im_tokens_x,docqa_x),dim=1)
         full_y = torch.cat((im_tokens_y,docqa_y),dim=1)
-        im_padding_mask = torch.BoolTensor(batch_size,im_tokens.size(1)).fill_(1).to(docqa_padding_mask.device)
+        im_padding_mask = torch.BoolTensor(batch_size,im_tokens.size(1)).fill_(0).to(docqa_padding_mask.device)
         full_padding_mask = torch.cat((im_padding_mask,docqa_padding_mask),dim=1)
         full_pos_mask= torch.cat((im_padding_mask[:,:,None],pos_mask),dim=1)
         full_pos_mask= pos_mask[:,:,None].expand(-1,-1,full_pos_mask.size(1),1) * full_pos_mask[:,None,:].expand(-1,pos_mask.size(1),-1,1)

@@ -12,6 +12,7 @@ try:
     from transformers import LayoutLMTokenizer, LayoutLMModel
 except:
     pass
+from utils.character_tokenizer import CharaterTokenizer
 from collections import defaultdict
 from timm.models.layers import trunc_normal_
 
@@ -37,12 +38,23 @@ class QAImDocGPT(BaseModel):
         blocks_per_level = config['blocks_per_level'] #[2,2,6,2] -> in:512,emb:64 then 64,32,16,8
         swin_nhead = config['swin_nheads'] #[3,6,12,24] | [2,6,12,12] probably don't need as much later
         im_embed_dim = config['im_embed_dim'] #96 -> 96,192,384,768 | 64->64,128,256,512
+        dropout = 0 if 'no_dropout' in config and  config['no_dropout'] else 0.1
+
+        char_output = config['char_output'] if 'char_output' in config else False
 
         self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
         self.SEP_TOKEN= 102
         self.CLS_TOKEN= 101
 
-        dropout = 0 if 'no_dropout' in config and  config['no_dropout'] else 0.1
+        if char_output:
+            self.decode_tokenizer = CharacterTokenizer()
+            self.DECODE_SEP_TOKEN=self.decode_tokenizer.SEP_index
+            self.DECODE_CLS_TOKEN=self.decode_tokenizer.CLS_index
+        else:
+            self.decode_tokenizer = self.tokenizer
+            self.DECODE_SEP_TOKEN=self.SEP_TOKEN
+            self.DECODE_CLS_TOKEN=self.CLS_TOKEN
+
 
         self.answer_embedding = nn.Embedding(self.tokenizer.vocab_size, d_model)
         self.pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000)
@@ -241,7 +253,7 @@ class QAImDocGPT(BaseModel):
             #could be run in parallel
             im_tokens = swin_layer(im_tokens,proj_d2i(docqa),   #we pass it the answers
                     docq_padding_mask=docq_padding_mask) #but we'll mask them out
-            self.im_xs[level].ocqa = layout_layer(
+            docqa = layout_layer(
                     docqa,xs,ys,
                     proj_i2d(im_tokens),
                     self.im_xs[level].expand(new_batch_size,-1),
@@ -249,6 +261,8 @@ class QAImDocGPT(BaseModel):
                     docqa_mask=att_mask,
                     docqa_padding_mask=answer_padding_mask,
                     pos_mask = doc_mask)
+
+            
 
             if downsample is not None:
                 im_tokens = downsample(im_tokens)
@@ -281,11 +295,11 @@ class QAImDocGPT(BaseModel):
         for b in range(len(questions)):
             response_greedy_tokens_b = response_greedy_tokens[b]
             response_greedy_tokens_b = response_greedy_tokens_b[locs[b]:] #only take response
-            pred_stop = response_greedy_tokens_b==self.SEP_TOKEN
+            pred_stop = response_greedy_tokens_b==self.DECODE_SEP_TOKEN
             if pred_stop.any():
                 stop_index = pred_stop.nonzero(as_tuple=False)[0][0].item()
-                response_greedy_tokens_b[stop_index:]=self.SEP_TOKEN
-            string_response.append(self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(response_greedy_tokens_b,skip_special_tokens=True)))
+                response_greedy_tokens_b[stop_index:]=self.DECODE_SEP_TOKEN
+            string_response.append(self.decode_tokenizer.convert_tokens_to_string(self.decode_tokenizer.convert_ids_to_tokens(response_greedy_tokens_b,skip_special_tokens=True)))
 
 
         #reshape strings into batches

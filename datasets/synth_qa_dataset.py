@@ -155,6 +155,7 @@ class SynthQADataset(QADataset):
 
 
         else:
+            self.images=[]
             self.set_size=min(config['set_size'],2000)
             self.train=False
             self.augmentation=None
@@ -164,7 +165,7 @@ class SynthQADataset(QADataset):
 
 
     def __len__(self):
-        return self.set_size
+        return len(self.images)
 
     def max_len(self):
         return self.text_max_len

@@ -37,12 +37,48 @@ def attention(query, key, value, mask=None, key_padding_mask=None, dropout=None,
         #scores = scores.view(bsz * num_heads, tgt_len, src_len)
 
     p_attn = F.softmax(scores, dim = -1)
+
     
     if mask is not None and fixed:
         p_attn = p_attn.masked_fill(mask == 0, 0) #this is needed in casa node has no neigbors
         #will create a zero vector in those cases, instead of an average of all nodes
     if dropout is not None:
         p_attn = dropout(p_attn)
+
+    ##Draw the attention (as ASCII)
+    #siz = int(p_attn.size(-1)**0.5)
+    #def printDocAtt(a,h):
+    #    rshp = p_attn[a,h,:,:siz**2].view(-1,siz,siz)
+    #    att = rshp.max(dim=0)[0]
+    #    minv = att.min()
+    #    maxv = att.max()
+    #    thresh1=minv + (maxv-minv)*0.25
+    #    thresh2=minv + (maxv-minv)*0.5
+    #    thresh3=minv + (maxv-minv)*0.75
+    #    s=''
+    #    for y in range(siz):
+    #        for x in range(siz):
+    #            v = att[y,x]
+    #            if v>thresh3:
+    #                pos=rshp[:,y,x].argmax()
+    #                s+='{}'.format(pos.item())
+    #            elif v>thresh2:
+    #                s+='+'
+    #            elif v>thresh1:
+    #                s+='.'
+    #            else:
+    #                s+=' '
+    #        s+='\n'
+    #    print('attention {} h{}'.format(a,h))
+    #    print('a'*siz)
+    #    print(s)
+    #    print('a'*siz)
+    #printDocAtt(4,0)
+    #printDocAtt(4,1)
+    #printDocAtt(4,2)
+    #printDocAtt(4,3)
+    #import pdb;pdb.set_trace()
+
     return torch.matmul(p_attn, value), p_attn
 def learned_attention(query, key, value, mask=None, dropout=None,network=None):
     "Compute Attention using provided network"
