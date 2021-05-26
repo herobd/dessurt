@@ -66,9 +66,7 @@ if __name__ == "__main__":
     data=synth_qa_dataset.SynthQADataset(dirPath=dirPath,split='train',config={
 
 	"fontdir": "../data/fonts/single_font",
-        "textdir": "../data/abcL",
-        "data_dir": "../data/sqa_abc",
-        "batch_size": 256,
+        "textdir": "../data/a2z",
         "num_workers": 0,
         "rescale_range": [1.0,1.0],
         "crop_params": None,
@@ -78,8 +76,8 @@ if __name__ == "__main__":
         "max_chars": 8,
         "min_chars": 1,
         "use_before_refresh": 99999999999999999999,
-        "set_size": 20,
-        "num_processes": 3,
+        "set_size": 10000,
+        "num_processes": 2,
         "gen_type": "veryclean",
         "char_file": "../data/english_char_set.json"
 
