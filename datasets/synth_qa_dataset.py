@@ -123,7 +123,7 @@ class SynthQADataset(QADataset):
             self.images= [None]*self.set_size
 
             self.init_size=0
-            cur_files = list(os.listdir(self.directory))
+            cur_files = set(os.listdir(self.directory))
             try:
                 with open(self.gt_filename) as f:
                     labels =f.readlines()
