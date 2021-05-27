@@ -1,4 +1,4 @@
-
+DEBUG=0
 import torch
 import torch.nn as nn
 from torch.nn import Linear, Dropout, LayerNorm
@@ -78,21 +78,22 @@ class RelPosImTransformerLayer(nn.Module):
         else:
             new_pos_mask = None
 
-        #def printDiff(a,b):
-        #    siz = int(im_tokens.size(1)**0.5)
-        #    diff = (torch.abs(im_tokens[a]-im_tokens[b]).max(dim=-1)[0]>0.01).view(siz,siz)
-        #    s=''
-        #    for y in range(diff.size(0)):
-        #        for x in range(diff.size(1)):
-        #            s+='d' if diff[y,x] else ' '
-        #        s+='\n'
-        #    print('diff {} and {}'.format(a,b))
-        #    print('='*diff.size(1))
-        #    print(s)
-        #    print('='*diff.size(1))
-        #printDiff(0,1)
-        #printDiff(1,2)
-        #printDiff(3,4)
+        if DEBUG:
+            def printDiff(a,b):
+                siz = int(im_tokens.size(1)**0.5)
+                diff = (torch.abs(im_tokens[a]-im_tokens[b]).max(dim=-1)[0]>0.01).view(siz,siz)
+                s=''
+                for y in range(diff.size(0)):
+                    for x in range(diff.size(1)):
+                        s+='d' if diff[y,x] else ' '
+                    s+='\n'
+                print('diff {} and {}'.format(a,b))
+                print('='*diff.size(1))
+                print(s)
+                print('='*diff.size(1))
+            printDiff(0,1)
+            #printDiff(1,2)
+            printDiff(3,4)
 
         full = torch.cat((im_tokens,docqa),dim=1)
         full_x = torch.cat((im_tokens_x,docqa_x),dim=1)
