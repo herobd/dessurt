@@ -40,6 +40,12 @@ class QAImDocGPT(BaseModel):
         im_embed_dim = config['im_embed_dim'] #96 -> 96,192,384,768 | 64->64,128,256,512
         dropout = 0 if 'no_dropout' in config and  config['no_dropout'] else 0.1
 
+
+        if 'pre_trained' in config:
+            pre_trained_patch_emb = config['patch_emb'] if 'patch_emb' in config else None
+        else:
+            pre_trained_patch_emb = None
+
         char_output = config['char_output'] if 'char_output' in config else False
 
         self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
@@ -76,6 +82,15 @@ class QAImDocGPT(BaseModel):
                 img_size=self.image_size, 
                 embed_dim=im_embed_dim,
                 norm_layer=nn.LayerNorm)
+        if pre_trained_patch_emb is not None:
+            checkpoint = torch.load(pre_trained_patch_emb, map_location=lambda storage, location: storage)
+            pe_state_dict=self.patch_embed.state_dict()
+            for name,value in checkpoint['state_dict']:
+                if name.startswith('cnn.'):
+                    pe_state_dict[name]=value
+
+            self.patch_embed.load_state_dict(pe_state_dict)
+
         num_patches = self.patch_embed.num_patches
         patches_resolution = self.patch_embed.patches_resolution
 
@@ -123,7 +138,7 @@ class QAImDocGPT(BaseModel):
         
                 
         self.answer_decode = nn.Sequential(
-                nn.Linear(d_model,self.tokenizer.vocab_size),
+                nn.Linear(d_model,self.decode_tokenizer.vocab_size),
                 nn.LogSoftmax(dim=-1) #except
                 )
 
