@@ -6,11 +6,11 @@ class CharacterTokenizer():
         self.idx_to_char = ["[SEP]","\t", " ", "!", "\"", "#", "$", "%", "&", "'", "(", ")", "*", "+", ",", "-", ".", "/", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", ":", ";", "<", "=", ">", "?", "@", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "[", "\\", "]", "_", "`", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "~", "\u00a0", "\u00a3", "\u00a7", "\u00ad", "\u00b0", "\u00b1", "\u00bd", "\u00c9", "\u00d7", "\u00e0", "\u00e1", "\u00e3", "\u00e4", "\u00e5", "\u00e7", "\u00e8", "\u00e9", "\u00ea", "\u00eb", "\u00ed", "\u00f3", "\u00fc", "\u0394", "\u03b1", "\u03b2", "\u03b3", "\u03bc", "\u2002", "\u2013", "\u2014", "\u2018", "\u2019", "\u201c", "\u201d", "\u2022", "\u2026", "\u2033", "\ufb01","[CLS]"]
         self.SEP_index=0
         self.CLS_index=131
+        self.vocab_size=132
 
 
-
-    def convert_ids_to_tokens(id_tensor,skip_special_tokens):
+    def convert_ids_to_tokens(self,id_tensor,skip_special_tokens):
         return [self.idx_to_char[idt.item()] for idt in id_tensor if (not skip_special_tokens) or idt>0]
 
-    def convert_tokens_to_string(tokens):
+    def convert_tokens_to_string(self,tokens):
         return ''.join(tokens)

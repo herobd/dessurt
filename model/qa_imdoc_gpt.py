@@ -138,7 +138,7 @@ class QAImDocGPT(BaseModel):
         
                 
         self.answer_decode = nn.Sequential(
-                nn.Linear(d_model,self.tokenizer.vocab_size),
+                nn.Linear(d_model,self.decode_tokenizer.vocab_size),
                 nn.LogSoftmax(dim=-1) #except
                 )
 
