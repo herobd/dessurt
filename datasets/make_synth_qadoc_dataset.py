@@ -67,7 +67,7 @@ if __name__ == "__main__":
     data=synth_qadoc_dataset.SynthQADocDataset(dirPath=dirPath,split='train',config={
         "create": True,
 	"fontdir": "../data/fonts/single_font",
-        "textdir": "../data/",
+        "textdir": "../data/randomletters",
         "num_workers": 0,
         "rescale_range": [1.0,1.0],
         "crop_params": None,
@@ -80,8 +80,8 @@ if __name__ == "__main__":
         "max_chars": 10,
         "min_chars": 1,
         "use_before_refresh": 99999999999999999999,
-        "set_size": 100000,
-        "num_processes": 3,
+        "set_size": 50000,
+        "num_processes": -1,
         "gen_type": "veryclean",
         "char_file": "../data/english_char_set.json"
 
