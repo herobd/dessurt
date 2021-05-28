@@ -209,6 +209,8 @@ class QAImDocGPT(BaseModel):
 
         repeat_docs = [[doc]*r for doc,r in zip(total_strings,repeats)]
 
+        im_tokens = torch.repeat_interleave(im_tokens,torch.LongTensor(repeats).to(device),dim=0)
+
 
         repeat_docs=[d for bd in repeat_docs for d in bd]
         questions=[q for bq in questions for q in bq]
