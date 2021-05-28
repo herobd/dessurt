@@ -88,7 +88,7 @@ class QADataset(torch.utils.data.Dataset):
                 print("ERROR, could not open "+imagePath)
                 return self.__getitem__((index+1)%self.__len__())
         else:
-            np_img = np.zeros([1000,1000])
+            np_img = None#np.zeros([1000,1000])
         #if scaleP is None:
         #    s = np.random.uniform(self.rescale_range[0], self.rescale_range[1])
         #else:
@@ -117,19 +117,24 @@ class QADataset(torch.utils.data.Dataset):
         #)
 
         #np_img = np.zeros([1000,1000])
+        
+        #t#time = timeit.default_timer()-tic#t#
+        #t#self.opt_history['image read and setup'].append(time)#t#
+        #t#tic=timeit.default_timer()#t#
+
         s=1
+        bbs,ids,trans, metadata, form_metadata, questions_and_answers = self.parseAnn(annotations,s)
+
+        if np_img is None:
+            np_img=metadata['image']
+            del metadata['image']
+
 
         if len(np_img.shape)==2:
             np_img=np_img[...,None] #add 'color' channel
         if self.color and np_img.shape[2]==1:
             np_img = np.repeat(np_img,3,axis=2)
         ##print('resize: {}  [{}, {}]'.format(timeit.default_timer()-tic,np_img.shape[0],np_img.shape[1]))
-        
-        #t#time = timeit.default_timer()-tic#t#
-        #t#self.opt_history['image read and setup'].append(time)#t#
-        #t#tic=timeit.default_timer()#t#
-
-        bbs,ids,trans, metadata, form_metadata, questions_and_answers = self.parseAnn(annotations,s)
 
         #t#time = timeit.default_timer()-tic#t#
         #t#self.opt_history['parseAnn'].append(time)#t#

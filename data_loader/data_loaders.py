@@ -9,6 +9,7 @@ from datasets import forms_box_detect
 from datasets.forms_box_detect import FormsBoxDetect
 from datasets import ai2d_box_detect
 from datasets import synth_qa_dataset
+from datasets import synth_qadoc_dataset
 from datasets import nobrain_qa
 from datasets import nobrain_graph_pair
 from datasets import forms_graph_pair
@@ -115,6 +116,8 @@ def getDataLoader(config,split,rank=None,world_size=None):
             return withCollate(FormsBoxPair,forms_box_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='SynthQADataset':
             return withCollate(synth_qa_dataset.SynthQADataset,synth_qa_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='SynthQADocDataset':
+            return withCollate(synth_qadoc_dataset.SynthQADocDataset,synth_qadoc_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='NobrainQA':
             return withCollate(nobrain_qa.NobrainQA,nobrain_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='NobrainGraphPair':
