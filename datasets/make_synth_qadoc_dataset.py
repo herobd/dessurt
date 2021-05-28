@@ -81,7 +81,7 @@ if __name__ == "__main__":
         "min_chars": 1,
         "use_before_refresh": 99999999999999999999,
         "set_size": 50000,
-        "num_processes": -1,
+        "num_processes": 3,
         "gen_type": "veryclean",
         "char_file": "../data/english_char_set.json"
 
