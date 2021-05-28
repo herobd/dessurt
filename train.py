@@ -186,6 +186,10 @@ if __name__ == '__main__':
             print('turned off CUDA')
     set_procname(config['name'])
 
+    if args.resume is not None:
+        if 'pre_trained' in config['model']:
+            del config['model']['pre_trained'] #we don't need to load the pre-trained weights if we already 
+
     if args.rank is not None:
         print('Awesome, I have rank {}'.format(args.rank))
         config['distributed']=True

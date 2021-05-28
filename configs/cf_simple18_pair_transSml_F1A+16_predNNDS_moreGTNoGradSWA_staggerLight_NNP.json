@@ -99,7 +99,7 @@
         "use_2nd_detect_layer_feats": 0,
         "use_2nd_detect_scale_feats": 1,
         "use_2nd_detect_feats_size": 32,
-        "no_grad_feats": true,
+        
         "graph_config": {
             "arch": "GraphNet",
             "in_channels": 256,
