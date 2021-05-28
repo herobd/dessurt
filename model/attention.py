@@ -1,3 +1,4 @@
+DEBUG=0
 import math,copy
 import torch
 import torch.nn.functional as F
@@ -37,12 +38,49 @@ def attention(query, key, value, mask=None, key_padding_mask=None, dropout=None,
         #scores = scores.view(bsz * num_heads, tgt_len, src_len)
 
     p_attn = F.softmax(scores, dim = -1)
+
     
     if mask is not None and fixed:
         p_attn = p_attn.masked_fill(mask == 0, 0) #this is needed in casa node has no neigbors
         #will create a zero vector in those cases, instead of an average of all nodes
     if dropout is not None:
         p_attn = dropout(p_attn)
+
+    if DEBUG:
+        ##Draw the attention (as ASCII)
+        siz = int(p_attn.size(-1)**0.5)
+        def printDocAtt(a,h):
+            rshp = p_attn[a,h,:,:siz**2].view(-1,siz,siz)
+            att = rshp.max(dim=0)[0]
+            minv = att.min()
+            maxv = att.max()
+            thresh1=minv + (maxv-minv)*0.25
+            thresh2=minv + (maxv-minv)*0.5
+            thresh3=minv + (maxv-minv)*0.75
+            s=''
+            for y in range(siz):
+                for x in range(siz):
+                    v = att[y,x]
+                    if v>thresh3:
+                        pos=rshp[:,y,x].argmax()
+                        s+='{}'.format(pos.item())
+                    elif v>thresh2:
+                        s+='+'
+                    elif v>thresh1:
+                        s+='.'
+                    else:
+                        s+=' '
+                s+='\n'
+            print('attention {} h{}'.format(a,h))
+            print('a'*siz)
+            print(s)
+            print('a'*siz)
+        printDocAtt(4,0)
+        printDocAtt(4,1)
+        printDocAtt(4,2)
+        printDocAtt(4,3)
+        #import pdb;pdb.set_trace()
+
     return torch.matmul(p_attn, value), p_attn
 def learned_attention(query, key, value, mask=None, dropout=None,network=None):
     "Compute Attention using provided network"
@@ -161,21 +199,23 @@ class PosBiasedMultiHeadedAttention(nn.Module):
         
     def forward(self, query, key, value, query_x, query_y, key_x, key_y, mask=None, key_padding_mask=None, pos_mask=None):
         """
-        query:  B x Lq x D
-        key:    B x Lk x D
-        value:  B x Lk x D
-        query_x:B x Lq
-        query_y:B x Lq 
-        key_x:  B x Lk
-        key_y:  B x Lk
-        mask:   Lq x Lk
-        key_padding_mask: B x Lk (False=normal, True=masked out)
-        pos_mask: B x Lq x Lk x 1
+        Args:
+            query:  B x Lq x D
+            key:    B x Lk x D
+            value:  B x Lk x D
+            query_x:B x Lq
+            query_y:B x Lq 
+            key_x:  B x Lk
+            key_y:  B x Lk
+            mask:   Lq x Lk
+            key_padding_mask: B x Lk (False=normal, True=masked out)
+            pos_mask: B x Lq x Lk x 1
 
-        B = batch size
-        Lq = num queries
-        Lk = num keys
-        D = model dim
+        Where:
+            B = batch size
+            Lq = num queries
+            Lk = num keys
+            D = model dim
         """
 
         if mask is not None:

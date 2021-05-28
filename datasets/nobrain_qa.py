@@ -44,7 +44,7 @@ class NobrainQA(QADataset):
 
         self.images=[]
         for i in range(config['batch_size']*100):
-            self.images.append({'id':'{}'.format(i), 'imagePath':'../data/FUNSD/training_data/images/12825369.png', 'annotationPath':'../data/english_char_set.json', 'rescaled':1.0, 'imageName':'0'})
+            self.images.append({'id':'{}'.format(i), 'imagePath':None, 'annotationPath':0, 'rescaled':1.0, 'imageName':'0'})
 
         if 'textfile' in config:
             with open(config['textfile']) as f:

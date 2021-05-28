@@ -24,6 +24,12 @@ def NobrainQA_eval(config,instance, trainer, metrics, outDir=None, startIndex=No
     aa=''
     for a in out['strings']:
         aa+=a+'\n'
+    for b in range(batch_size):
+        print('--Document {}--'.format(b))
+        for t,bb in zip(instance['transcription'][b],instance['bb_gt'][b]):
+            print('{}: {}'.format(t,bb))
+        print('--Questions {}--'.format(b))
+        print(instance['questions'][b])
     print('')
     print(aa)
     #losses.update(run_log)
