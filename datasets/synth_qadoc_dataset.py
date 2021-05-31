@@ -71,6 +71,7 @@ class SynthQADocDataset(QADataset):
         super(SynthQADocDataset, self).__init__(dirPath,split,config)
         from synthetic_text_gen import SyntheticText
         self.color=False
+        self.ocr = config['include_ocr'] if 'include_ocr' in config else False
         self.text_height = config['text_height']
         self.image_size = config['image_size'] if 'image_size' in config else None
         self.min_entries = config['min_entries'] if 'min_entries' in config else self.questions
@@ -188,6 +189,8 @@ class SynthQADocDataset(QADataset):
         image = np.full((self.image_size,self.image_size),255,np.uint8)
 
         y_pos=0
+        boxes=[]
+        trans=[]
         qa=[]
         for ei,(label_img,label_text,value_img,value_text) in enumerate(entries):
             rel_x = random.randrange(10)
@@ -214,18 +217,143 @@ class SynthQADocDataset(QADataset):
             horz = value_img.shape[1]-max(value_x+value_img.shape[1]-self.image_size,0)
             image[value_y:value_y+vert,value_x:value_x+horz] = value_img[:vert,:horz]
 
-            vert = label_img.shape[0]-max(y+label_img.shape[0]-self.image_size,0)
-            horz = label_img.shape[1]-max(x+label_img.shape[1]-self.image_size,0)
-            image[y:y+vert,x:x+horz] = label_img[:vert,:horz]
+            l_vert = label_img.shape[0]-max(y+label_img.shape[0]-self.image_size,0)
+            l_horz = label_img.shape[1]-max(x+label_img.shape[1]-self.image_size,0)
+            image[y:y+l_vert,x:x+l_horz] = label_img[:l_vert,:l_horz]
 
             y_pos=y+heights[ei]
 
             qa.append((label_text,value_text,None))
 
+            if self.ocr:
+                #corrupt text
+                label_text = self.corrupt(label_text)
+                value_text = self.corrupt(value_text)
+                
+                if random.random()<0.5:
+                    #single line
+                    if random.random()>0.1:
+                        full_text = label_text+' '+value_text
+                        lX = x
+                        rX = value_x+horz
+                        lY = y
+                        bY = max(y+l_vert,value_y+vert)
+                        lX+=random.gauss(0,5)
+                        rX+=random.gauss(0,5)
+                        tY+=random.gauss(0,5)
+                        bY+=random.gauss(0,5)
+                        if lX>rX:
+                            tmp=lX
+                            lX=rX
+                            rX=tmp
+                        if tY>bY:
+                            tmp=tY
+                            tY=bY
+                            bY=tmp
 
-        bbs = np.zeros([0,0])
+                        bb=[None]*16
+			bb[0]=lX*s
+			bb[1]=bY*s
+			bb[2]=lX*s
+			bb[3]=tY*s
+			bb[4]=rX*s
+			bb[5]=tY*s
+			bb[6]=rX*s
+			bb[7]=bY*s
+			bb[8]=s*(lX+rX)/2.0
+			bb[9]=s*bY
+			bb[10]=s*(lX+rX)/2.0
+			bb[11]=s*tY
+			bb[12]=s*lX
+			bb[13]=s*(tY+bY)/2.0
+			bb[14]=s*rX
+			bb[15]=s*(tY+bY)/2.0
+                        boxes.append(bb)
+                        trans.append(full_text)
+                else:
+                    #seperate
+                    if random.random()>0.1:
+                        #label
+                        lX = x
+                        rX = x+l_horz
+                        lY = y
+                        bY = y+l_vert
+                        lX+=random.gauss(0,5)
+                        rX+=random.gauss(0,5)
+                        tY+=random.gauss(0,5)
+                        bY+=random.gauss(0,5)
+                        if lX>rX:
+                            tmp=lX
+                            lX=rX
+                            rX=tmp
+                        if tY>bY:
+                            tmp=tY
+                            tY=bY
+                            bY=tmp
+
+                        bb=[None]*16
+			bb[0]=lX*s
+			bb[1]=bY*s
+			bb[2]=lX*s
+			bb[3]=tY*s
+			bb[4]=rX*s
+			bb[5]=tY*s
+			bb[6]=rX*s
+			bb[7]=bY*s
+			bb[8]=s*(lX+rX)/2.0
+			bb[9]=s*bY
+			bb[10]=s*(lX+rX)/2.0
+			bb[11]=s*tY
+			bb[12]=s*lX
+			bb[13]=s*(tY+bY)/2.0
+			bb[14]=s*rX
+			bb[15]=s*(tY+bY)/2.0
+                        boxes.append(bb)
+                        trans.append(label_text)
+
+                    if random.random()>0.1:
+                        #value
+                        lX = value_x
+                        rX = value_x+horz
+                        lY = value_y
+                        bY = value_y+vert
+                        lX+=random.gauss(0,5)
+                        rX+=random.gauss(0,5)
+                        tY+=random.gauss(0,5)
+                        bY+=random.gauss(0,5)
+                        if lX>rX:
+                            tmp=lX
+                            lX=rX
+                            rX=tmp
+                        if tY>bY:
+                            tmp=tY
+                            tY=bY
+                            bY=tmp
+
+                        bb=[None]*16
+			bb[0]=lX*s
+			bb[1]=bY*s
+			bb[2]=lX*s
+			bb[3]=tY*s
+			bb[4]=rX*s
+			bb[5]=tY*s
+			bb[6]=rX*s
+			bb[7]=bY*s
+			bb[8]=s*(lX+rX)/2.0
+			bb[9]=s*bY
+			bb[10]=s*(lX+rX)/2.0
+			bb[11]=s*tY
+			bb[12]=s*lX
+			bb[13]=s*(tY+bY)/2.0
+			bb[14]=s*rX
+			bb[15]=s*(tY+bY)/2.0
+                        boxes.append(bb)
+                        trans.append(value_text)
+
+
+        bbs = np.array(boxes)
         
-        ocr = []
+        ocr = trans
         if self.questions<num_entries:
             qa = random.sample(qa,k=self.questions)
         return bbs, list(range(bbs.shape[1])), ocr, {'image':image}, {}, qa
