@@ -9,7 +9,7 @@
         "fontdir": "../data/fonts/single_font",
         "textdir": "../data/randomletters",
         "data_dir": "../data/randomletters4line",
-        "batch_size": 8,
+        "batch_size": 7,
         "num_workers": 4,
         "rescale_range": [1.0,1.0],
         "crop_params": null,
