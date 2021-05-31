@@ -373,7 +373,7 @@ class QATrainer(BaseTrainer):
         total_score = 0
         for b_answers,b_pred in zip(answers,string_a):
             for answer,pred in zip(b_answers,b_pred):
-                if len(pred)>0 and answer[0]==pred[0]:
+                if len(pred)>0 and len(answer)>0 and answer[0]==pred[0]:
                     cor_present+=1
                 total_present+=1
                 if len(answer)>2:
