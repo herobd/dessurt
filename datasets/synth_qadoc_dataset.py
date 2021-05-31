@@ -10,6 +10,7 @@ import os
 import utils.img_f as img_f
 import numpy as np
 import math, time
+import random, string
 
 from utils import grid_distortion
 
@@ -38,6 +39,7 @@ def collate(batch):
             'questions': [b['questions'] for b in batch],
             'answers': [b['answers'] for b in batch]
             }
+
 
 def create_image(x):
     synth_gen,text_height,image_size,seed = x
@@ -242,7 +244,7 @@ class SynthQADocDataset(QADataset):
                         full_text = label_text+' '+value_text
                         lX = x
                         rX = value_x+horz
-                        lY = y
+                        tY = y
                         bY = max(y+l_vert,value_y+vert)
                         lX+=random.gauss(0,5)
                         rX+=random.gauss(0,5)
@@ -282,7 +284,7 @@ class SynthQADocDataset(QADataset):
                         #label
                         lX = x
                         rX = x+l_horz
-                        lY = y
+                        tY = y
                         bY = y+l_vert
                         lX+=random.gauss(0,5)
                         rX+=random.gauss(0,5)
@@ -321,7 +323,7 @@ class SynthQADocDataset(QADataset):
                         #value
                         lX = value_x
                         rX = value_x+horz
-                        lY = value_y
+                        tY = value_y
                         bY = value_y+vert
                         lX+=random.gauss(0,5)
                         rX+=random.gauss(0,5)
@@ -407,3 +409,20 @@ class SynthQADocDataset(QADataset):
             print('done refreshing: '+str(timeit.default_timer()-tic))
                     
             self.init_size=0
+    def corrupt(self,s):
+        new_s=''
+        for c in s:
+            r = random.random()
+            random
+            if r<0.1:
+                pass
+            elif r<0.2:
+                new_s+=random.choice(string.ascii_letters)
+            elif r<0.3:
+                if random.random()<0.5:
+                    new_s+=c+random.choice(string.ascii_letters)
+                else:
+                    new_s+=random.choice(string.ascii_letters)+c
+            else:
+                new_s+=c
+        return new_s
