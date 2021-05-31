@@ -193,9 +193,10 @@ class SynthQADocDataset(QADataset):
             rel_x = random.randrange(10)
             rel_y = random.randrange(-10,10)
             width = label_img.shape[1] + value_img.shape[1] + rel_x
-            x = random.randrange(self.image_size - width)
-            if x<0:
+            if width>=self.image_size:
                 x=0
+            else:
+                x = random.randrange(self.image_size - width)
             room_y = self.image_size - sum(heights[ei:])
             assert room_y >= 0
             if ei == len(entries)-1:
