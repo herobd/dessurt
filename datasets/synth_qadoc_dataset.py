@@ -215,10 +215,16 @@ class SynthQADocDataset(QADataset):
 
             vert = value_img.shape[0]-max(value_y+value_img.shape[0]-self.image_size,0)
             horz = value_img.shape[1]-max(value_x+value_img.shape[1]-self.image_size,0)
-            image[value_y:value_y+vert,value_x:value_x+horz] = value_img[:vert,:horz]
-
+            if horz<=0 or vert<=0:
+                continue
             l_vert = label_img.shape[0]-max(y+label_img.shape[0]-self.image_size,0)
             l_horz = label_img.shape[1]-max(x+label_img.shape[1]-self.image_size,0)
+            if l_horz<=0 or l_vert<=0:
+                continue
+
+
+            image[value_y:value_y+vert,value_x:value_x+horz] = value_img[:vert,:horz]
+
             image[y:y+l_vert,x:x+l_horz] = label_img[:l_vert,:l_horz]
 
             y_pos=y+heights[ei]
@@ -252,22 +258,22 @@ class SynthQADocDataset(QADataset):
                             bY=tmp
 
                         bb=[None]*16
-			bb[0]=lX*s
-			bb[1]=bY*s
-			bb[2]=lX*s
-			bb[3]=tY*s
-			bb[4]=rX*s
-			bb[5]=tY*s
-			bb[6]=rX*s
-			bb[7]=bY*s
-			bb[8]=s*(lX+rX)/2.0
-			bb[9]=s*bY
-			bb[10]=s*(lX+rX)/2.0
-			bb[11]=s*tY
-			bb[12]=s*lX
-			bb[13]=s*(tY+bY)/2.0
-			bb[14]=s*rX
-			bb[15]=s*(tY+bY)/2.0
+                        bb[0]=lX*s
+                        bb[1]=bY*s
+                        bb[2]=lX*s
+                        bb[3]=tY*s
+                        bb[4]=rX*s
+                        bb[5]=tY*s
+                        bb[6]=rX*s
+                        bb[7]=bY*s
+                        bb[8]=s*(lX+rX)/2.0
+                        bb[9]=s*bY
+                        bb[10]=s*(lX+rX)/2.0
+                        bb[11]=s*tY
+                        bb[12]=s*lX
+                        bb[13]=s*(tY+bY)/2.0
+                        bb[14]=s*rX
+                        bb[15]=s*(tY+bY)/2.0
                         boxes.append(bb)
                         trans.append(full_text)
                 else:
@@ -292,22 +298,22 @@ class SynthQADocDataset(QADataset):
                             bY=tmp
 
                         bb=[None]*16
-			bb[0]=lX*s
-			bb[1]=bY*s
-			bb[2]=lX*s
-			bb[3]=tY*s
-			bb[4]=rX*s
-			bb[5]=tY*s
-			bb[6]=rX*s
-			bb[7]=bY*s
-			bb[8]=s*(lX+rX)/2.0
-			bb[9]=s*bY
-			bb[10]=s*(lX+rX)/2.0
-			bb[11]=s*tY
-			bb[12]=s*lX
-			bb[13]=s*(tY+bY)/2.0
-			bb[14]=s*rX
-			bb[15]=s*(tY+bY)/2.0
+                        bb[0]=lX*s
+                        bb[1]=bY*s
+                        bb[2]=lX*s
+                        bb[3]=tY*s
+                        bb[4]=rX*s
+                        bb[5]=tY*s
+                        bb[6]=rX*s
+                        bb[7]=bY*s
+                        bb[8]=s*(lX+rX)/2.0
+                        bb[9]=s*bY
+                        bb[10]=s*(lX+rX)/2.0
+                        bb[11]=s*tY
+                        bb[12]=s*lX
+                        bb[13]=s*(tY+bY)/2.0
+                        bb[14]=s*rX
+                        bb[15]=s*(tY+bY)/2.0
                         boxes.append(bb)
                         trans.append(label_text)
 
@@ -331,27 +337,28 @@ class SynthQADocDataset(QADataset):
                             bY=tmp
 
                         bb=[None]*16
-			bb[0]=lX*s
-			bb[1]=bY*s
-			bb[2]=lX*s
-			bb[3]=tY*s
-			bb[4]=rX*s
-			bb[5]=tY*s
-			bb[6]=rX*s
-			bb[7]=bY*s
-			bb[8]=s*(lX+rX)/2.0
-			bb[9]=s*bY
-			bb[10]=s*(lX+rX)/2.0
-			bb[11]=s*tY
-			bb[12]=s*lX
-			bb[13]=s*(tY+bY)/2.0
-			bb[14]=s*rX
-			bb[15]=s*(tY+bY)/2.0
+                        bb[0]=lX*s
+                        bb[1]=bY*s
+                        bb[2]=lX*s
+                        bb[3]=tY*s
+                        bb[4]=rX*s
+                        bb[5]=tY*s
+                        bb[6]=rX*s
+                        bb[7]=bY*s
+                        bb[8]=s*(lX+rX)/2.0
+                        bb[9]=s*bY
+                        bb[10]=s*(lX+rX)/2.0
+                        bb[11]=s*tY
+                        bb[12]=s*lX
+                        bb[13]=s*(tY+bY)/2.0
+                        bb[14]=s*rX
+                        bb[15]=s*(tY+bY)/2.0
                         boxes.append(bb)
                         trans.append(value_text)
 
 
         bbs = np.array(boxes)
+        bbs = bbs[None,...]
         
         ocr = trans
         if self.questions<num_entries:

@@ -380,8 +380,10 @@ class QATrainer(BaseTrainer):
                     if answer[2:]==pred[2:]:
                         cor_pair+=1
                     total_pair+=1
-
-                score_ed += editdistance.eval(answer,pred)/((len(answer)+len(pred))/2)
+                if len(answer)>0 or len(pred)>0:
+                    score_ed += editdistance.eval(answer,pred)/((len(answer)+len(pred))/2)
+                else:
+                    score_ed += 0
                 total_score +=1
                 
         log['present_acc']=cor_present/total_present
