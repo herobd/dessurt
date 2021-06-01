@@ -66,7 +66,7 @@ if __name__ == "__main__":
     data=synth_qa_dataset.SynthQADataset(dirPath=dirPath,split='train',config={
 
 	"fontdir": "../data/fonts/single_font",
-        "textdir": "../data/a2z",
+        "textdir": "../data/randomletters",
         "num_workers": 0,
         "rescale_range": [1.0,1.0],
         "crop_params": None,
@@ -77,7 +77,7 @@ if __name__ == "__main__":
         "min_chars": 1,
         "use_before_refresh": 99999999999999999999,
         "set_size": 10000,
-        "num_processes": 2,
+        "num_processes": 4,
         "gen_type": "veryclean",
         "char_file": "../data/english_char_set.json"
 
