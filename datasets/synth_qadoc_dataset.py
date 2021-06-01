@@ -263,6 +263,8 @@ class SynthQADocDataset(QADataset):
                     f.write(gt+'\n')
                     if not logged:
                         print('refreshing sythetic: {}/{}'.format(idx,self.set_size), end='\r')
+                    if idx%100==0:
+                        f.flush()
                     idx+=1
                     if idx>=self.set_size:
                         break

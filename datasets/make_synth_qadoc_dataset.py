@@ -57,13 +57,9 @@ def display(data):
 if __name__ == "__main__":
     dirPath = sys.argv[1]
     if len(sys.argv)>2:
-        start = int(sys.argv[2])
+        logged = int(sys.argv[2])
     else:
-        start=0
-    if len(sys.argv)>3:
-        repeat = int(sys.argv[3])
-    else:
-        repeat=1
+        logged=False
     data=synth_qadoc_dataset.SynthQADocDataset(dirPath=dirPath,split='train',config={
         "create": True,
 	"fontdir": "../data/fonts/single_font",
@@ -81,24 +77,17 @@ if __name__ == "__main__":
         "min_chars": 1,
         "use_before_refresh": 99999999999999999999,
         "set_size": 100000,
-        "num_processes": 3,
+        "num_processes": 9,
         "gen_type": "veryclean",
         "char_file": "../data/english_char_set.json"
 
 
 })
-    #data.cluster(start,repeat,'anchors_rot_{}.json')
-    data.refresh_data()
+    data.refresh_data(logged)
 
     dataLoader = torch.utils.data.DataLoader(data, batch_size=4, shuffle=True, num_workers=0, collate_fn=synth_qadoc_dataset.collate)
     dataLoaderIter = iter(dataLoader)
 
-        #if start==0:
-        #display(data[0])
-    for i in range(0,start):
-        print(i)
-        dataLoaderIter.next()
-        #display(data[i])
     try:
         while True:
             #print('?')
