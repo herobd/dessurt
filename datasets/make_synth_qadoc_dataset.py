@@ -63,7 +63,7 @@ if __name__ == "__main__":
     data=synth_qadoc_dataset.SynthQADocDataset(dirPath=dirPath,split='train',config={
         "create": True,
 	"fontdir": "../data/fonts/single_font",
-        "textdir": "../data/",
+        "textdir": "../data/randomletters",
         "num_workers": 0,
         "rescale_range": [1.0,1.0],
         "crop_params": None,

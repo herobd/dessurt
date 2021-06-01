@@ -580,7 +580,8 @@ class BaseTrainer:
             print('Did not load optimizer')
         if self.useLearningSchedule:
             self.lr_schedule.load_state_dict(checkpoint['lr_schedule'])
-        self.train_logger = checkpoint['logger']
+        if checkpoint['logger'] is not None:
+            self.train_logger = checkpoint['logger']
         self.logger.info("Checkpoint '{}' (iteration {}) loaded".format(resume_path, self.start_iteration))
 
     def update_swa_batch_norm(self):

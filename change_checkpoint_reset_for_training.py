@@ -18,6 +18,7 @@ if __name__ == '__main__':
     if 'swa_state_dict' in saved:
         del saved['swa_state_dict']
     saved['iteration']=0
+    saved['logger']=None
     print(saved.keys())
 
     new_file = args.out
