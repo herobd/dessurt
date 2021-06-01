@@ -29,7 +29,7 @@ PADDING_CONSTANT = -1
 def collate(batch):
     return {
             'img': torch.cat([b['img'] for b in batch],dim=0),
-            'bb_gt': torch.cat([b['bb_gt'] for b in batch],dim=0),
+            'bb_gt': [b['bb_gt'] for b in batch], #torch.cat([b['bb_gt'] for b in batch],dim=0),
             'imgName': [b['imgName'] for b in batch],
             'scale': [b['scale'] for b in batch],
             'cropPoint': [b['cropPoint'] for b in batch],
@@ -360,12 +360,12 @@ class SynthQADocDataset(QADataset):
 
 
         bbs = np.array(boxes)
-        bbs = bbs[None,...]
+        #bbs = bbs[None,...]
         
         ocr = trans
         if self.questions<num_entries:
             qa = random.sample(qa,k=self.questions)
-        return bbs, list(range(bbs.shape[1])), ocr, {'image':image}, {}, qa
+        return bbs, list(range(bbs.shape[0])), ocr, {'image':image}, {}, qa
 
 
 
