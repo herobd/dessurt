@@ -541,9 +541,23 @@ class BaseTrainer:
             keys=checkpoint['state_dict'].keys()
             init_state_dict = self.model.state_dict()
             for key in keys:
-                if len(init_state_dict[key].size())>0 and init_state_dict[key].size(0)>checkpoint['state_dict'][key].size(0):
-                    orig_size = checkpoint['state_dict'][key].size(0)
-                    init_state_dict[key][:orig_size] = checkpoint['state_dict'][key]
+
+                orig_size = checkpoint['state_dict'][key].size()
+                dims=-1
+                for dim in range(len(orig_size)):
+                    if init_state_dict[key].size(dim)>checkpoint['state_dict'][key].size(dim):
+                        dims=dim
+                if dims>-1:
+                    if dims==0:
+                        init_state_dict[key][:orig_size[0]] = checkpoint['state_dict'][key]
+                    elif dims==1:
+                        init_state_dict[key][:orig_size[0],:orig_size[1]] = checkpoint['state_dict'][key]
+                    elif dims==2:
+                        init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2]] = checkpoint['state_dict'][key]
+                    elif dims==3:
+                        init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2],:orig_size[3]] = checkpoint['state_dict'][key]
+                    else:
+                        raise NotImplementedError('no Brain Surgery above 4 dims')
                     checkpoint['state_dict'][key] = init_state_dict[key]
                     self.logger.info('BRAIN SURGERY PERFORMED on {}'.format(key))
                     did_brain_surgery=True
