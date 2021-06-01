@@ -10,7 +10,7 @@
         "textdir": "../data/",
         "data_dir": "../data/english4line_fonts",
         "include_ocr": true,
-        "batch_size": 6,
+        "batch_size": 5,
         "num_workers": 4,
         "rescale_range": [1.0,1.0],
         "crop_params": null,
