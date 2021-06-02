@@ -216,9 +216,9 @@ class QADataset(torch.utils.data.Dataset):
         #if pixel_gt is not None:
         #    pixel_gt = pixel_gt.transpose([2,0,1])[None,...]
         #    pixel_gt = torch.from_numpy(pixel_gt)
-
-        bbs = convertBBs(bbs[None,...],self.rotate,1)[0]
-        if bbs is None:
+        if bbs is not None:
+            bbs = convertBBs(bbs[None,...],self.rotate,1)[0]
+        else:
             bbs = torch.FloatTensor(1,0,5+8+1)
         #if 'word_boxes' in form_metadata:
         #     form_metadata['word_boxes'] = convertBBs(form_metadata['word_boxes'][None,...],self.rotate,0)[0,...]
