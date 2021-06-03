@@ -56,7 +56,8 @@ class RelPosImTransformerLayer(nn.Module):
             im_tokens_y: Tensor, 
             docqa_mask = None, 
             docqa_padding_mask= None,
-            pos_mask=None) -> Tensor:
+            pos_mask=None,
+            auto_regressive=None) -> Tensor:
         r"""Pass the input through the encoder layer.
 
         Args:
@@ -105,8 +106,13 @@ class RelPosImTransformerLayer(nn.Module):
         imdoc_mask = torch.BoolTensor(batch_size,docqa.size(1),im_tokens.size(1)).fill_(1).to(docqa_mask.device)
         full_mask = torch.cat((imdoc_mask,docqa_mask),dim=-1)
 
-        docqa2 = self.self_attn(docqa, full, full, docqa_x,docqa_y,full_x,full_y, mask=full_mask,
-                              key_padding_mask=full_padding_mask,pos_mask=full_pos_mask)
+        if auto_regressive is None:
+            docqa2 = self.self_attn(docqa, full, full, docqa_x,docqa_y,full_x,full_y, mask=full_mask,
+                                  key_padding_mask=full_padding_mask,pos_mask=full_pos_mask)
+        else:
+            docqa = auto_regressive
+            docqa2 = self.self_attn(auto_regressive, full, full, docqa_x[:,-1:],docqa_y[:,-1:],full_x,full_y, 
+                    mask=full_mask[:,-1:], key_padding_mask=full_padding_mask,pos_mask=full_pos_mask[:,-1:])
 
         docqa = docqa + self.dropout1(docqa2)
         docqa = self.norm1(docqa)
