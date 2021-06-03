@@ -79,6 +79,8 @@ class SynthQADocDataset(QADataset):
         self.image_size = config['image_size'] if 'image_size' in config else None
         self.min_entries = config['min_entries'] if 'min_entries' in config else self.questions
         self.max_entries = config['max_entries'] if 'max_entries' in config else self.questions
+        self.change_size = config['change_size'] if 'change_size' in config else False
+        self.min_text_height = config['min_text_height'] if 'min_text_height' in config else 8
         text_len = config['max_chars'] if 'max_chars' in config else 35
         self.text_max_len=text_len
         char_set_path = config['char_file']
@@ -188,6 +190,15 @@ class SynthQADocDataset(QADataset):
             value_img_idx,value_text = values[ei]
             value_img_path = os.path.join(self.directory,'{}.png'.format(value_img_idx))
             value_img = img_f.imread(value_img_path,False)
+
+            if self.change_size:
+                label_height = random.randrange(self.min_text_height,label_img.shape[0])
+                label_width = round(label_img.shape[1]*label_height/label_img.shape[0])
+                label_img = img_f.resize(label_img,(label_height,label_width))
+
+                value_height = random.randrange(self.min_text_height,value_img.shape[0])
+                value_width = round(value_img.shape[1]*value_height/value_img.shape[0])
+                value_img = img_f.resize(value_img,(value_height,value_width))
 
             heights.append(max(label_img.shape[0],value_img.shape[0]))
             rel_x = random.randrange(10)
