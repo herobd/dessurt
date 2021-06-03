@@ -1,6 +1,8 @@
 import numpy as np
 
 
+def SynthQADocDataset_eval(config,instance, trainer, metrics, outDir=None, startIndex=None, lossFunc=None, toEval=None):
+    return SynthQADataset_eval(config,instance, trainer, metrics, outDir, startIndex, lossFunc, toEval)
 
 def SynthQADataset_eval(config,instance, trainer, metrics, outDir=None, startIndex=None, lossFunc=None, toEval=None):
     def __eval_metrics(data,target):
