@@ -18,11 +18,11 @@ class PositionalEncoding(nn.Module):
         pe = pe.unsqueeze(0)
         self.register_buffer('pe', pe)
         
-    def forward(self, x,mask=None):
+    def forward(self, x,mask=None,offset=0):
         if mask is None:
-            x = x + self.pe[:, :x.size(1)] 
+            x = x + self.pe[:, offset:offset+x.size(1)] 
         else:
-            x = x + self.pe[:, :x.size(1)]*mask 
+            x = x + self.pe[:, offset:offset+x.size(1)]*mask 
         return self.dropout(x)
 
 class ReturnPositionalEncoding(nn.Module):
