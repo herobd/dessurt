@@ -335,8 +335,10 @@ class QATrainer(BaseTrainer):
         #t##t#tic=timeit.default_timer()#t##t#
         losses=defaultdict(lambda:0)
         log={}
+        
 
         losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
+
 
         #t#tic=timeit.default_timer()#t#
         cor_present=0
