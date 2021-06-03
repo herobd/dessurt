@@ -148,7 +148,7 @@ class QAImDocGPT(BaseModel):
 
 
     #we're building this for fixed images size
-    def forward(self,image,gtBBs,gtTrans,questions,answers=None,useCurvedBBs=False):
+    def forward(self,image,gtBBs,gtTrans,questions,answers=None,useCurvedBBs=False,RUN=False):
         torch.autograd.set_detect_anomaly(True)
         #there's got to be a better way...
         for name,buff in self.named_buffers():
@@ -214,12 +214,19 @@ class QAImDocGPT(BaseModel):
 
         repeat_docs=[d for bd in repeat_docs for d in bd]
         questions=[q for bq in questions for q in bq]
-        answers=[a for ba in answers for a in ba]
+        if answers is not None:
+            answers=[a for ba in answers for a in ba]
 
         new_batch_size = len(questions)
 
         #Append question before answer
-        docqa_str = [doc+':'+q+'[SEP]'+a for doc,q,a in zip(repeat_docs,questions,answers)]
+        if not RUN:
+            docqa_str = [doc+':'+q+'[SEP]'+a for doc,q,a in zip(repeat_docs,questions,answers)]
+        else:
+            docqa_str = [doc+':'+q for doc,q in zip(repeat_docs,questions)]
+            saved_docqa=[]
+            saved_proj_im_tokens=[]
+            output_tokens=[]
 
         #run question+answer through decoder
         docqa_t = self.tokenizer(docqa_str,return_tensors="pt",padding=True)
@@ -270,14 +277,19 @@ class QAImDocGPT(BaseModel):
             #could be run in parallel
             im_tokens = swin_layer(im_tokens,proj_d2i(docqa),   #we pass it the answers
                     docq_padding_mask=docq_padding_mask) #but we'll mask them out
+            proj_im_tokens = proj_i2d(im_tokens)
+            if RUN:
+                saved_docqa.append(docqa)
+                saved_proj_im_tokens.append(proj_im_tokens)
             docqa = layout_layer(
                     docqa,xs,ys,
-                    proj_i2d(im_tokens),
+                    proj_im_tokens,
                     self.im_xs[level].expand(new_batch_size,-1),
                     self.im_ys[level].expand(new_batch_size,-1),
                     docqa_mask=att_mask,
                     docqa_padding_mask=answer_padding_mask,
                     pos_mask = doc_mask)
+
 
             
 
@@ -286,6 +298,60 @@ class QAImDocGPT(BaseModel):
                 #im_xs = (im_xs[:,0::2]+im_xs[:,1::2])/2
                 #im_ys = (im_ys[:,0::2]+im_ys[:,1::2])/2
                 level+=1
+
+        if RUN: #assuming batchsize of 1
+            assert docqa.size(0)==1 #just to make stopping easier
+            response_decoded = self.answer_decode(docqa)
+            response_greedy_token = response_decoded.argmax(dim=2)
+            response_greedy_token = response_greedy_token[:,-1:] #only care about last
+
+            output_tokens.append(response_greedy_token[0,0].item())
+
+            offset = docqa.size(1)
+
+            max_pred_len=500
+            holder_xs = torch.cat((xs,torch.FloatTensor(new_batch_size,max_pred_len).fill_(0).to(device)),dim=1)
+            holder_ys = torch.cat((ys,torch.FloatTensor(new_batch_size,max_pred_len).fill_(0).to(device)),dim=1)
+            holder_att_mask = torch.FloatTensor(new_batch_size,max_pred_len,max_pred_len).fill_(0).to(device) #assumes here batch size of 1
+            holder_answer_padding_mask = torch.FloatTensor(new_batch_size,max_pred_len).fill_(0).to(device) #assumes here batch size of 1
+            holder_doc_mask = torch.cat((doc_mask,torch.FloatTensor(new_batch_size,max_pred_len,1).fill_(0).to(device)),dim=1)
+
+            while output_tokens[-1] != self.SEP_TOKEN:
+                ans_emb = self.answer_embedding(response_greedy_token)
+                ans = self.pos_1d_enc(ans_emb,offset=offset)
+                level=0
+                for li,(swin_layer, proj_d2i, layout_layer, proj_i2d, downsample) in enumerate(self.layers):
+                    saved_docqa[li] = torch.cat((saved_docqa[li],ans),dim=1)
+                    xs = holder_xs[:,:saved_docqa[li].size(1)]
+                    ys = holder_ys[:,:saved_docqa[li].size(1)]
+                    att_mask = holder_att_mask[:,:saved_docqa[li].size(1),:saved_docqa[li].size(1)]
+                    answer_padding_mask = holder_answer_padding_mask[:,:saved_docqa[li].size(1)]
+                    doc_mask = holder_doc_mask[:,:saved_docqa[li].size(1)]
+                    ans = layout_layer(
+                            saved_docqa[li],xs,ys,
+                            saved_proj_im_tokens[li],
+                            self.im_xs[level].expand(new_batch_size,-1),
+                            self.im_ys[level].expand(new_batch_size,-1),
+                            docqa_mask=att_mask,
+                            docqa_padding_mask=answer_padding_mask,
+                            pos_mask = doc_mask,
+                            auto_regressive=ans) #we tell it to only use the last answer token as the keys
+                    if downsample is not None:
+                        level+=1
+
+                response_decoded = self.answer_decode(ans)
+                response_greedy_token = response_decoded.argmax(dim=2)
+                assert response_greedy_token.size(1)==1
+
+                output_tokens.append(response_greedy_token[0,0].item())
+                offset += 1
+
+            
+            final_str = self.decode_tokenizer.convert_tokens_to_string(self.decode_tokenizer.convert_ids_to_tokens(output_tokens,skip_special_tokens=True))
+            return final_str
+        ############
+
+
 
         response = docqa
         response_decoded = self.answer_decode(response.reshape(-1,response.size(2)))

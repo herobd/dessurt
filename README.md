@@ -21,18 +21,14 @@ No `opencv` any more
 
 `pytorch-geometric`: https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html
 
-`pip install gensim` conda installing this is weird 
 
-`pip install bpemb`
-
-`pip install editdistance`
-
-`pip install knockknock`
-
-pip install gensim bpemb editdistance knockknock
+`pip install gensim bpemb editdistance knockknock`
 
 
 for cvxpy (optimization, not used now), you must have python 3.7 or later:
+pip install cvxpy
+
+or
 
 clone github: https://github.com/cvxgrp/cvxpy
 

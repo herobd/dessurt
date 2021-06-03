@@ -91,13 +91,10 @@ class QATrainer(BaseTrainer):
 
     def _to_tensor(self, instance):
         image = instance['img']
-        bbs = instance['bb_gt']
 
         if self.with_cuda:
             image = image.to(self.gpu)
-            if bbs is not None:
-                bbs = bbs.to(self.gpu)
-        return image, bbs
+        return image
 
     def _eval_metrics(self, typ,name,output, target):
         if len(self.metrics[typ])>0:
@@ -301,7 +298,8 @@ class QATrainer(BaseTrainer):
 
 
     def run(self,instance,get=[],forward_only=False):#
-        image, targetBoxes  = self._to_tensor(instance)
+        image = self._to_tensor(instance)
+        ocrBoxes = instance['bb_gt']
         questions = instance['questions']
         answers = instance['answers']
 
@@ -318,41 +316,17 @@ class QATrainer(BaseTrainer):
         if self.ocr_word_bbs: #useOnlyGTSpace and self.use_word_bbs_gt:
             word_boxes = torch.stack([form_metadata['word_boxes'] for form_metadata in instance['form_metadata']],dim=0)
             word_boxes = word_boxes.to(image.device) #I can change this as it isn't used later
-            targetBoxes_changed=word_boxes
-            if self.model.training:
-                targetBoxes_changed[:,:,0] += torch.randn_like(targetBoxes_changed[:,:,0])
-                targetBoxes_changed[:,:,1] += torch.randn_like(targetBoxes_changed[:,:,1])
-                #if self.model_ref.rotation:
-                #    targetBoxes_changed[:,:,2] += torch.randn_like(targetBoxes_changed[:,:,2])*0.01
-                targetBoxes_changed[:,:,3] += torch.randn_like(targetBoxes_changed[:,:,3])
-                targetBoxes_changed[:,:,4] += torch.randn_like(targetBoxes_changed[:,:,4])
-                targetBoxes_changed[:,:,3][targetBoxes_changed[:,:,3]<1]=1
-                targetBoxes_changed[:,:,4][targetBoxes_changed[:,:,4]<1]=1
+            ocrBoxes=word_boxes
 
-        elif targetBoxes is not None:
-            targetBoxes_changed=targetBoxes.clone()
-            if self.model.training:
-                targetBoxes_changed[:,:,0] += torch.randn_like(targetBoxes_changed[:,:,0])
-                targetBoxes_changed[:,:,1] += torch.randn_like(targetBoxes_changed[:,:,1])
-                #if self.model_ref.rotation:
-                #    targetBoxes_changed[:,:,2] += torch.randn_like(targetBoxes_changed[:,:,2])*0.01
-                targetBoxes_changed[:,:,3] += torch.randn_like(targetBoxes_changed[:,:,3])
-                targetBoxes_changed[:,:,4] += torch.randn_like(targetBoxes_changed[:,:,4])
-                targetBoxes_changed[:,:,3][targetBoxes_changed[:,:,3]<1]=1
-                targetBoxes_changed[:,:,4][targetBoxes_changed[:,:,4]<1]=1
-                #we tweak the classes in the model
+        if ocrBoxes is not None:
+            
+            #ocrBoxes[:,:,5:]=0 #zero out other information to ensure results aren't contaminated
+            ocr = gtTrans
         else:
-            targetBoxes_changed = None
-
-        if targetBoxes_changed is not None:
-            targetBoxes_changed[:,:,5:]=0 #zero out other information to ensure results aren't contaminated
-            #TODO corrupt the OCR
-            ocr_changed = gtTrans
-        else:
-            ocr_changed = None
+            ocr = None
 
         #import pdb;pdb.set_trace()
-        pred_a, target_a, string_a = self.model(image,targetBoxes_changed,ocr_changed,questions,answers)
+        pred_a, target_a, string_a = self.model(image,ocrBoxes,ocr,questions,answers)
 
 
         if forward_only:
