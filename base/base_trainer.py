@@ -561,6 +561,12 @@ class BaseTrainer:
                     checkpoint['state_dict'][key] = init_state_dict[key]
                     self.logger.info('BRAIN SURGERY PERFORMED on {}'.format(key))
                     did_brain_surgery=True
+
+            #specail check for Swin Transformer
+            for init_key,value in init_state_dict.items():
+                if 'attn_mask' in init_key and init_key not in keys:
+                    checkpoint['state_dict'][init_key]=value
+
             self.model.load_state_dict(checkpoint['state_dict'])
             if self.swa and 'swa_state_dict' in checkpoint:
                 self.swa_model = AveragedModel(self.model)

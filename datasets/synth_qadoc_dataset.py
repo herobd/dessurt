@@ -136,7 +136,7 @@ class SynthQADocDataset(QADataset):
                 for i in range(min(self.set_size,len(labels))):
                     if '{}.png'.format(i) in cur_files:
                         self.init_size+=1
-                        self.labels[i]=labels[i].strip()
+                        self.labels[i]=labels[i].strip().lower()
 
                     else:
                         break
@@ -242,6 +242,7 @@ class SynthQADocDataset(QADataset):
                 if self.ocr:
                     self.addText(label_text,x,y,l_horz,l_vert,value_text,value_x,value_y,horz,vert,boxes,trans,s)
         else:
+
             #Assign random positions and collect bounding boxes
             full_bbs=torch.FloatTensor(len(entries),4)
             pad_v=1
@@ -289,39 +290,41 @@ class SynthQADocDataset(QADataset):
             #removed.sort(reverse=True)
             #for r in removed:
             #    del entries[r]
-            
+            not_present_qs=0
+            selected_labels_stripped = [l[1].strip() for i,l in enumerate(labels) if i not in removed]
             for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
-                if ei in removed:
-                    continue
-                #    label_img = 256-label_img
-                #    value_img = 256-value_img
+                if ei not in removed:
 
-                label_x = int(full_bbs[ei,0].item())+pad_h//2
-                label_y = int(full_bbs[ei,1].item())+pad_v//2
-                value_x = label_x + label_img.shape[1] + rel_x
-                value_y = label_y + rel_y
+                    label_x = int(full_bbs[ei,0].item())+pad_h//2
+                    label_y = int(full_bbs[ei,1].item())+pad_v//2
+                    value_x = label_x + label_img.shape[1] + rel_x
+                    value_y = label_y + rel_y
 
-                if value_y<0:
-                    value_img = value_img[-value_y:]
-                    value_y=0
+                    if value_y<0:
+                        value_img = value_img[-value_y:]
+                        value_y=0
 
-                v_vert = value_img.shape[0]-max(value_y+value_img.shape[0]-self.image_size,0)
-                v_horz = value_img.shape[1]-max(value_x+value_img.shape[1]-self.image_size,0)
-                if v_horz<=0 or v_vert<=0:
-                    continue
-                l_vert = label_img.shape[0]-max(label_y+label_img.shape[0]-self.image_size,0)
-                l_horz = label_img.shape[1]-max(label_x+label_img.shape[1]-self.image_size,0)
-                if l_horz<=0 or l_vert<=0:
-                    continue
+                    v_vert = value_img.shape[0]-max(value_y+value_img.shape[0]-self.image_size,0)
+                    v_horz = value_img.shape[1]-max(value_x+value_img.shape[1]-self.image_size,0)
+                    if v_horz<=0 or v_vert<=0:
+                        continue
+                    l_vert = label_img.shape[0]-max(label_y+label_img.shape[0]-self.image_size,0)
+                    l_horz = label_img.shape[1]-max(label_x+label_img.shape[1]-self.image_size,0)
+                    if l_horz<=0 or l_vert<=0:
+                        continue
 
-                image[value_y:value_y+v_vert,value_x:value_x+v_horz] = value_img[:v_vert,:v_horz]
+                    image[value_y:value_y+v_vert,value_x:value_x+v_horz] = value_img[:v_vert,:v_horz]
 
-                image[label_y:label_y+l_vert,label_x:label_x+l_horz] = label_img[:l_vert,:l_horz]
+                    image[label_y:label_y+l_vert,label_x:label_x+l_horz] = label_img[:l_vert,:l_horz]
 
-                qa.append((label_text,value_text,None))
+                    qa.append((label_text,value_text,None))
 
-                if self.ocr:
-                    self.addText(label_text,label_x,label_y,l_horz,l_vert,value_text,value_x,value_y,v_horz,v_vert,boxes,trans,s)
+                    if self.ocr:
+                        self.addText(label_text,label_x,label_y,l_horz,l_vert,value_text,value_x,value_y,v_horz,v_vert,boxes,trans,s)
+                elif not_present_qs<math.ceil(self.questions*0.02):
+                    if label_text.strip() not in selected_labels_stripped:
+                        qa.append((label_text,'[ np ]',None))
+                        not_present_qs+=1
 
 
 
@@ -331,6 +334,7 @@ class SynthQADocDataset(QADataset):
         ocr = trans
         if self.questions<len(qa):
             qa = random.sample(qa,k=self.questions)
+
         return bbs, list(range(bbs.shape[0])), ocr, {'image':image}, {}, qa
 
     
