@@ -10,11 +10,13 @@ import os
 import utils.img_f as img_f
 import numpy as np
 import math, time
+import random, string
 
 from utils import grid_distortion
 
 from utils import string_utils, augmentation
 from utils.util import ensure_dir
+from utils.yolo_tools import allIOU
 from .qa import QADataset
 #import pyexiv2
 #import piexif
@@ -28,7 +30,7 @@ PADDING_CONSTANT = -1
 def collate(batch):
     return {
             'img': torch.cat([b['img'] for b in batch],dim=0),
-            'bb_gt': torch.cat([b['bb_gt'] for b in batch],dim=0),
+            'bb_gt': [b['bb_gt'] for b in batch], #torch.cat([b['bb_gt'] for b in batch],dim=0),
             'imgName': [b['imgName'] for b in batch],
             'scale': [b['scale'] for b in batch],
             'cropPoint': [b['cropPoint'] for b in batch],
@@ -38,6 +40,7 @@ def collate(batch):
             'questions': [b['questions'] for b in batch],
             'answers': [b['answers'] for b in batch]
             }
+
 
 def create_image(x):
     synth_gen,text_height,image_size,seed = x
@@ -133,7 +136,7 @@ class SynthQADocDataset(QADataset):
                 for i in range(min(self.set_size,len(labels))):
                     if '{}.png'.format(i) in cur_files:
                         self.init_size+=1
-                        self.labels[i]=labels[i].strip()
+                        self.labels[i]=labels[i].strip().lower()
 
                     else:
                         break
@@ -169,7 +172,10 @@ class SynthQADocDataset(QADataset):
 
     def parseAnn(self,annotations,s):
         #make the image
-        num_entries = random.randrange(self.min_entries,self.max_entries+1)
+        if self.min_entries is not None:
+            num_entries = random.randrange(self.min_entries,self.max_entries+1)
+        else:
+            num_entries = self.max_entries
         selected = random.choices(list(enumerate(self.labels)),k=num_entries*2)
         labels = selected[:num_entries]
         values = selected[num_entries:]
@@ -184,188 +190,278 @@ class SynthQADocDataset(QADataset):
             value_img = img_f.imread(value_img_path,False)
 
             heights.append(max(label_img.shape[0],value_img.shape[0]))
-            entries.append((label_img,label_text,value_img,value_text))
+            rel_x = random.randrange(10)
+            rel_y = random.randrange(-10,10)
+            entries.append((label_img,label_text,value_img,value_text,rel_x,rel_y))
 
         image = np.full((self.image_size,self.image_size),255,np.uint8)
 
-        y_pos=0
         boxes=[]
         trans=[]
         qa=[]
-        for ei,(label_img,label_text,value_img,value_text) in enumerate(entries):
-            rel_x = random.randrange(10)
-            rel_y = random.randrange(-10,10)
-            width = label_img.shape[1] + value_img.shape[1] + rel_x
-            if width>=self.image_size:
-                x=0
-            else:
-                x = random.randrange(self.image_size - width)
-            room_y = self.image_size - sum(heights[ei:])
-            assert room_y >= 0
-            if ei == len(entries)-1:
-                y = random.randrange(y_pos,room_y)
-            else:
-                y = int(random.triangular(y_pos,room_y,y_pos+1))
-            
-            value_x = x + label_img.shape[1] + rel_x
-            value_y = y + rel_y
-            value_x = max(0,value_x)
-            value_y = max(0,value_y)
-            
+        if self.min_entries is not None:
 
-            vert = value_img.shape[0]-max(value_y+value_img.shape[0]-self.image_size,0)
-            horz = value_img.shape[1]-max(value_x+value_img.shape[1]-self.image_size,0)
-            if horz<=0 or vert<=0:
-                continue
-            l_vert = label_img.shape[0]-max(y+label_img.shape[0]-self.image_size,0)
-            l_horz = label_img.shape[1]-max(x+label_img.shape[1]-self.image_size,0)
-            if l_horz<=0 or l_vert<=0:
-                continue
-
-
-            image[value_y:value_y+vert,value_x:value_x+horz] = value_img[:vert,:horz]
-
-            image[y:y+l_vert,x:x+l_horz] = label_img[:l_vert,:l_horz]
-
-            y_pos=y+heights[ei]
-
-            qa.append((label_text,value_text,None))
-
-            if self.ocr:
-                #corrupt text
-                label_text = self.corrupt(label_text)
-                value_text = self.corrupt(value_text)
-                
-                if random.random()<0.5:
-                    #single line
-                    if random.random()>0.1:
-                        full_text = label_text+' '+value_text
-                        lX = x
-                        rX = value_x+horz
-                        lY = y
-                        bY = max(y+l_vert,value_y+vert)
-                        lX+=random.gauss(0,5)
-                        rX+=random.gauss(0,5)
-                        tY+=random.gauss(0,5)
-                        bY+=random.gauss(0,5)
-                        if lX>rX:
-                            tmp=lX
-                            lX=rX
-                            rX=tmp
-                        if tY>bY:
-                            tmp=tY
-                            tY=bY
-                            bY=tmp
-
-                        bb=[None]*16
-                        bb[0]=lX*s
-                        bb[1]=bY*s
-                        bb[2]=lX*s
-                        bb[3]=tY*s
-                        bb[4]=rX*s
-                        bb[5]=tY*s
-                        bb[6]=rX*s
-                        bb[7]=bY*s
-                        bb[8]=s*(lX+rX)/2.0
-                        bb[9]=s*bY
-                        bb[10]=s*(lX+rX)/2.0
-                        bb[11]=s*tY
-                        bb[12]=s*lX
-                        bb[13]=s*(tY+bY)/2.0
-                        bb[14]=s*rX
-                        bb[15]=s*(tY+bY)/2.0
-                        boxes.append(bb)
-                        trans.append(full_text)
+            y_pos=0
+            for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
+                width = label_img.shape[1] + value_img.shape[1] + rel_x
+                if width>=self.image_size:
+                    x=0
                 else:
-                    #seperate
-                    if random.random()>0.1:
-                        #label
-                        lX = x
-                        rX = x+l_horz
-                        lY = y
-                        bY = y+l_vert
-                        lX+=random.gauss(0,5)
-                        rX+=random.gauss(0,5)
-                        tY+=random.gauss(0,5)
-                        bY+=random.gauss(0,5)
-                        if lX>rX:
-                            tmp=lX
-                            lX=rX
-                            rX=tmp
-                        if tY>bY:
-                            tmp=tY
-                            tY=bY
-                            bY=tmp
+                    x = random.randrange(self.image_size - width)
+                room_y = self.image_size - sum(heights[ei:])
+                assert room_y >= 0
+                if ei == len(entries)-1:
+                    y = random.randrange(y_pos,room_y)
+                else:
+                    y = int(random.triangular(y_pos,room_y,y_pos+1))
+                
+                value_x = x + label_img.shape[1] + rel_x
+                value_y = y + rel_y
+                value_x = max(0,value_x)
+                value_y = max(0,value_y)
+                
 
-                        bb=[None]*16
-                        bb[0]=lX*s
-                        bb[1]=bY*s
-                        bb[2]=lX*s
-                        bb[3]=tY*s
-                        bb[4]=rX*s
-                        bb[5]=tY*s
-                        bb[6]=rX*s
-                        bb[7]=bY*s
-                        bb[8]=s*(lX+rX)/2.0
-                        bb[9]=s*bY
-                        bb[10]=s*(lX+rX)/2.0
-                        bb[11]=s*tY
-                        bb[12]=s*lX
-                        bb[13]=s*(tY+bY)/2.0
-                        bb[14]=s*rX
-                        bb[15]=s*(tY+bY)/2.0
-                        boxes.append(bb)
-                        trans.append(label_text)
+                vert = value_img.shape[0]-max(value_y+value_img.shape[0]-self.image_size,0)
+                horz = value_img.shape[1]-max(value_x+value_img.shape[1]-self.image_size,0)
+                if horz<=0 or vert<=0:
+                    continue
+                l_vert = label_img.shape[0]-max(y+label_img.shape[0]-self.image_size,0)
+                l_horz = label_img.shape[1]-max(x+label_img.shape[1]-self.image_size,0)
+                if l_horz<=0 or l_vert<=0:
+                    continue
 
-                    if random.random()>0.1:
-                        #value
-                        lX = value_x
-                        rX = value_x+horz
-                        lY = value_y
-                        bY = value_y+vert
-                        lX+=random.gauss(0,5)
-                        rX+=random.gauss(0,5)
-                        tY+=random.gauss(0,5)
-                        bY+=random.gauss(0,5)
-                        if lX>rX:
-                            tmp=lX
-                            lX=rX
-                            rX=tmp
-                        if tY>bY:
-                            tmp=tY
-                            tY=bY
-                            bY=tmp
 
-                        bb=[None]*16
-                        bb[0]=lX*s
-                        bb[1]=bY*s
-                        bb[2]=lX*s
-                        bb[3]=tY*s
-                        bb[4]=rX*s
-                        bb[5]=tY*s
-                        bb[6]=rX*s
-                        bb[7]=bY*s
-                        bb[8]=s*(lX+rX)/2.0
-                        bb[9]=s*bY
-                        bb[10]=s*(lX+rX)/2.0
-                        bb[11]=s*tY
-                        bb[12]=s*lX
-                        bb[13]=s*(tY+bY)/2.0
-                        bb[14]=s*rX
-                        bb[15]=s*(tY+bY)/2.0
-                        boxes.append(bb)
-                        trans.append(value_text)
+                image[value_y:value_y+vert,value_x:value_x+horz] = value_img[:vert,:horz]
+
+                image[y:y+l_vert,x:x+l_horz] = label_img[:l_vert,:l_horz]
+
+                y_pos=y+heights[ei]
+
+                qa.append((label_text,value_text,None))
+
+                if self.ocr:
+                    self.addText(label_text,x,y,l_horz,l_vert,value_text,value_x,value_y,horz,vert,boxes,trans,s)
+        else:
+
+            #Assign random positions and collect bounding boxes
+            full_bbs=torch.FloatTensor(len(entries),4)
+            pad_v=1
+            pad_h=30
+            for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
+                height = max(label_img.shape[0],value_img.shape[0])+abs(rel_y)+pad_v*2
+                width = label_img.shape[1]+rel_x+value_img.shape[1]+pad_h*2
+                
+                if width>=self.image_size:
+                    x=0
+                else:
+                    x = random.randrange(self.image_size-width)
+                if height>=self.image_size:
+                    y=0
+                else:
+                    y = random.randrange(self.image_size-height)
+                full_bbs[ei,0]=x
+                full_bbs[ei,1]=y
+                full_bbs[ei,2]=x+width+1
+                full_bbs[ei,3]=y+height+1
+
+            #find intersections and remove an entry until no more intersections
+            intersections = allIOU(full_bbs,full_bbs,x1y1x2y2=True)>0
+            intersections.diagonal()[:]=0
+
+            def print_iter(intersections):
+                s=''
+                for r in range(intersections.size(0)):
+                    for c in range(intersections.size(1)):
+                        s += 'o' if intersections[r,c] else '.'
+                    s+='\n'
+                print(s)
+            
+            intersections_per = intersections.sum(dim=0)
+            removed = set()
+            while intersections_per.sum()>0:
+                #print_iter(intersections)
+                worst_offender = intersections_per.argmax()
+                #print('removing {} i:{} (of {})'.format(worst_offender,intersections_per[worst_offender],len(entries)))
+                removed.add(worst_offender.item())
+                intersections[:,worst_offender]=0
+                intersections[worst_offender,:]=0
+                intersections_per = intersections.sum(dim=0)
+
+            #removed.sort(reverse=True)
+            #for r in removed:
+            #    del entries[r]
+            not_present_qs=0
+            selected_labels_stripped = [l[1].strip() for i,l in enumerate(labels) if i not in removed]
+            for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
+                if ei not in removed:
+
+                    label_x = int(full_bbs[ei,0].item())+pad_h//2
+                    label_y = int(full_bbs[ei,1].item())+pad_v//2
+                    value_x = label_x + label_img.shape[1] + rel_x
+                    value_y = label_y + rel_y
+
+                    if value_y<0:
+                        value_img = value_img[-value_y:]
+                        value_y=0
+
+                    v_vert = value_img.shape[0]-max(value_y+value_img.shape[0]-self.image_size,0)
+                    v_horz = value_img.shape[1]-max(value_x+value_img.shape[1]-self.image_size,0)
+                    if v_horz<=0 or v_vert<=0:
+                        continue
+                    l_vert = label_img.shape[0]-max(label_y+label_img.shape[0]-self.image_size,0)
+                    l_horz = label_img.shape[1]-max(label_x+label_img.shape[1]-self.image_size,0)
+                    if l_horz<=0 or l_vert<=0:
+                        continue
+
+                    image[value_y:value_y+v_vert,value_x:value_x+v_horz] = value_img[:v_vert,:v_horz]
+
+                    image[label_y:label_y+l_vert,label_x:label_x+l_horz] = label_img[:l_vert,:l_horz]
+
+                    qa.append((label_text,value_text,None))
+
+                    if self.ocr:
+                        self.addText(label_text,label_x,label_y,l_horz,l_vert,value_text,value_x,value_y,v_horz,v_vert,boxes,trans,s)
+                elif not_present_qs<math.ceil(self.questions*0.02):
+                    if label_text.strip() not in selected_labels_stripped:
+                        qa.append((label_text,'[ np ]',None))
+                        not_present_qs+=1
+
+
 
 
         bbs = np.array(boxes)
-        bbs = bbs[None,...]
         
         ocr = trans
-        if self.questions<num_entries:
+        if self.questions<len(qa):
             qa = random.sample(qa,k=self.questions)
-        return bbs, list(range(bbs.shape[1])), ocr, {'image':image}, {}, qa
 
+        return bbs, list(range(bbs.shape[0])), ocr, {'image':image}, {}, qa
 
+    
+    def addText(self,label_text,label_x,label_y,l_horz,l_vert,value_text,value_x,value_y,v_horz,v_vert,boxes,trans,s):
+        #corrupt text
+        label_text = self.corrupt(label_text)
+        value_text = self.corrupt(value_text)
+        
+        if random.random()<0.5:
+            #single line
+            if random.random()>0.1:
+                full_text = label_text+' '+value_text
+                lX = label_x
+                rX = value_x+v_horz
+                tY = label_y
+                bY = max(label_y+l_vert,value_y+v_vert)
+                lX+=random.gauss(0,5)
+                rX+=random.gauss(0,5)
+                tY+=random.gauss(0,5)
+                bY+=random.gauss(0,5)
+                if lX>rX:
+                    tmp=lX
+                    lX=rX
+                    rX=tmp
+                if tY>bY:
+                    tmp=tY
+                    tY=bY
+                    bY=tmp
+
+                bb=[None]*16
+                bb[0]=lX*s
+                bb[1]=bY*s
+                bb[2]=lX*s
+                bb[3]=tY*s
+                bb[4]=rX*s
+                bb[5]=tY*s
+                bb[6]=rX*s
+                bb[7]=bY*s
+                bb[8]=s*(lX+rX)/2.0
+                bb[9]=s*bY
+                bb[10]=s*(lX+rX)/2.0
+                bb[11]=s*tY
+                bb[12]=s*lX
+                bb[13]=s*(tY+bY)/2.0
+                bb[14]=s*rX
+                bb[15]=s*(tY+bY)/2.0
+                boxes.append(bb)
+                trans.append(full_text)
+        else:
+            #seperate
+            if random.random()>0.1:
+                #label
+                lX = label_x
+                rX = label_x+l_horz
+                tY = label_y
+                bY = label_y+l_vert
+                lX+=random.gauss(0,5)
+                rX+=random.gauss(0,5)
+                tY+=random.gauss(0,5)
+                bY+=random.gauss(0,5)
+                if lX>rX:
+                    tmp=lX
+                    lX=rX
+                    rX=tmp
+                if tY>bY:
+                    tmp=tY
+                    tY=bY
+                    bY=tmp
+
+                bb=[None]*16
+                bb[0]=lX*s
+                bb[1]=bY*s
+                bb[2]=lX*s
+                bb[3]=tY*s
+                bb[4]=rX*s
+                bb[5]=tY*s
+                bb[6]=rX*s
+                bb[7]=bY*s
+                bb[8]=s*(lX+rX)/2.0
+                bb[9]=s*bY
+                bb[10]=s*(lX+rX)/2.0
+                bb[11]=s*tY
+                bb[12]=s*lX
+                bb[13]=s*(tY+bY)/2.0
+                bb[14]=s*rX
+                bb[15]=s*(tY+bY)/2.0
+                boxes.append(bb)
+                trans.append(label_text)
+
+            if random.random()>0.1:
+                #value
+                lX = value_x
+                rX = value_x+v_horz
+                tY = value_y
+                bY = value_y+v_vert
+                lX+=random.gauss(0,5)
+                rX+=random.gauss(0,5)
+                tY+=random.gauss(0,5)
+                bY+=random.gauss(0,5)
+                if lX>rX:
+                    tmp=lX
+                    lX=rX
+                    rX=tmp
+                if tY>bY:
+                    tmp=tY
+                    tY=bY
+                    bY=tmp
+
+                bb=[None]*16
+                bb[0]=lX*s
+                bb[1]=bY*s
+                bb[2]=lX*s
+                bb[3]=tY*s
+                bb[4]=rX*s
+                bb[5]=tY*s
+                bb[6]=rX*s
+                bb[7]=bY*s
+                bb[8]=s*(lX+rX)/2.0
+                bb[9]=s*bY
+                bb[10]=s*(lX+rX)/2.0
+                bb[11]=s*tY
+                bb[12]=s*lX
+                bb[13]=s*(tY+bY)/2.0
+                bb[14]=s*rX
+                bb[15]=s*(tY+bY)/2.0
+                boxes.append(bb)
+                trans.append(value_text)
 
 
     def refresh_data(self,logged=False):
@@ -399,6 +495,8 @@ class SynthQADocDataset(QADataset):
                     f.write(gt+'\n')
                     if not logged:
                         print('refreshing sythetic: {}/{}'.format(idx,self.set_size), end='\r')
+                    if idx%100==0:
+                        f.flush()
                     idx+=1
                     if idx>=self.set_size:
                         break
@@ -407,3 +505,20 @@ class SynthQADocDataset(QADataset):
             print('done refreshing: '+str(timeit.default_timer()-tic))
                     
             self.init_size=0
+    def corrupt(self,s):
+        new_s=''
+        for c in s:
+            r = random.random()
+            random
+            if r<0.1:
+                pass
+            elif r<0.2:
+                new_s+=random.choice(string.ascii_letters)
+            elif r<0.3:
+                if random.random()<0.5:
+                    new_s+=c+random.choice(string.ascii_letters)
+                else:
+                    new_s+=random.choice(string.ascii_letters)+c
+            else:
+                new_s+=c
+        return new_s
