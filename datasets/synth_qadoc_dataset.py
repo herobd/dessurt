@@ -75,6 +75,7 @@ class SynthQADocDataset(QADataset):
         from synthetic_text_gen import SyntheticText
         self.color=False
         self.ocr = config['include_ocr'] if 'include_ocr' in config else False
+        self.corruption_p = config['text_corruption'] if 'text_corruption' in config else 0.15
         self.text_height = config['text_height']
         self.image_size = config['image_size'] if 'image_size' in config else None
         self.min_entries = config['min_entries'] if 'min_entries' in config else self.questions
@@ -509,12 +510,11 @@ class SynthQADocDataset(QADataset):
         new_s=''
         for c in s:
             r = random.random()
-            random
-            if r<0.1:
+            if r<self.corruption_p/3:
                 pass
-            elif r<0.2:
+            elif r<self.corruption_p*2/3:
                 new_s+=random.choice(string.ascii_letters)
-            elif r<0.3:
+            elif r<self.corruption_p:
                 if random.random()<0.5:
                     new_s+=c+random.choice(string.ascii_letters)
                 else:
