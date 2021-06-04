@@ -47,10 +47,18 @@ class QAImDocGPT(BaseModel):
             pre_trained_patch_emb = None
 
         char_output = config['char_output'] if 'char_output' in config else False
+        char_tokens = config['char_tokens'] if 'char_tokens' in config else False
+        if char_tokens:
+            char_output=False
 
-        self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-        self.SEP_TOKEN= 102
-        self.CLS_TOKEN= 101
+        if char_tokens:
+            self.tokenizer = CharacterTokenizer()
+            self.SEP_TOKEN=self.tokenizer.SEP_index
+            self.CLS_TOKEN=self.tokenizer.CLS_index
+        else:
+            self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+            self.SEP_TOKEN= 102
+            self.CLS_TOKEN= 101
 
         if char_output:
             self.decode_tokenizer = CharacterTokenizer()
@@ -149,7 +157,7 @@ class QAImDocGPT(BaseModel):
 
     #we're building this for fixed images size
     def forward(self,image,gtBBs,gtTrans,questions,answers=None,useCurvedBBs=False,RUN=False):
-        torch.autograd.set_detect_anomaly(True)
+        #torch.autograd.set_detect_anomaly(True)
         #there's got to be a better way...
         for name,buff in self.named_buffers():
             if 'im_xs' in name:
