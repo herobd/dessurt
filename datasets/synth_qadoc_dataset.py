@@ -80,6 +80,14 @@ class SynthQADocDataset(QADataset):
         self.image_size = config['image_size'] if 'image_size' in config else None
         self.min_entries = config['min_entries'] if 'min_entries' in config else self.questions
         self.max_entries = config['max_entries'] if 'max_entries' in config else self.questions
+        self.change_size = config['change_size'] if 'change_size' in config else False
+        self.min_text_height = config['min_text_height'] if 'min_text_height' in config else 8
+        self.use_hw = config['use_hw'] if 'use_hw' in config else False
+        if self.use_hw:
+            self.header_dir = config['header_dir']
+            self.hw_dir = config['hw_dir']
+            header_gt_filename = os.path.join(self.header_dir,'gt.txt')
+            hw_gt_filename = os.path.join(self.hw_dir,'gt.txt')
         text_len = config['max_chars'] if 'max_chars' in config else 35
         self.text_max_len=text_len
         char_set_path = config['char_file']
@@ -118,7 +126,6 @@ class SynthQADocDataset(QADataset):
                 raise NotImplementedError('SynthTextGen unknown gen_type: {}'.format(gen_type))
 
 
-            self.set_size = config['set_size']
             self.used=-1
             self.used_instances=0
             self.num_processes = config['num_processes']
@@ -126,43 +133,56 @@ class SynthQADocDataset(QADataset):
             
             ensure_dir(self.directory)
 
-            self.labels = [None]*self.set_size
 
-            self.init_size=0
-            cur_files = set(os.listdir(self.directory))
-            if os.path.exists(self.gt_filename):
-                with open(self.gt_filename) as f:
-                    labels =f.readlines()
+        self.set_size = config['set_size']
+        self.labels, self.init_size = self.readGT(self.gt_filename,self.directory,self.set_size)
+        
+        if self.init_size>0:
+            print('Found synth images 0-{} with labels'.format(self.init_size-1))
+            if self.init_size!=self.set_size and 'create' not in config:
+                print('Need to finish making dataset!')
+                exit(1)
+        elif 'create' not in config:
+            print('Need to create dataset!')
+            exit(1)
 
-                for i in range(min(self.set_size,len(labels))):
-                    if '{}.png'.format(i) in cur_files:
-                        self.init_size+=1
-                        self.labels[i]=labels[i].strip().lower()
-
-                    else:
-                        break
-                if self.init_size>0:
-                    print('Found synth images 0-{} with labels'.format(self.init_size-1))
-                    if self.init_size!=self.set_size and 'create' not in config:
-                        print('Need to finish making dataset!')
-                        exit(1)
-                elif 'create' not in config:
-                    print('Need to create dataset!')
-                    exit(1)
+        if self.use_hw:
+            self.header_labels,header_size = self.readGT(header_gt_filename,self.header_dir)
+            self.hw_labels,hw_size = self.readGT(hw_gt_filename,self.hw_dir)
             
-            self.images=[]
-            for i in range(config['batch_size']*100): #we just randomly generate instances on the fly
-                self.images.append({'id':'{}'.format(i), 'imagePath':None, 'annotationPath':0, 'rescaled':1.0, 'imageName':'0'})
+        
+        self.images=[]
+        for i in range(config['batch_size']*100): #we just randomly generate instances on the fly
+            self.images.append({'id':'{}'.format(i), 'imagePath':None, 'annotationPath':0, 'rescaled':1.0, 'imageName':'0'})
 
 
+    def readGT(self,gt_filename,directory,set_size=None):
+        init_size=0
+        cur_files = set(os.listdir(directory))
+        if os.path.exists(gt_filename):
+            with open(gt_filename) as f:
+                labels =f.readlines()
+            #if 'IAM' in directory:
+            #    import pdb;pdb.set_trace()
+            if set_size is None:
+                set_size=len(labels)
+            store = [None]*set_size
+
+            for i in range(min(set_size,len(labels))):
+                if '{}.png'.format(i) in cur_files:
+                    init_size+=1
+                    store[i]=labels[i].strip().lower()
+
+                elif set_size is None:
+                    print('Dataset at {} is missing image {}'.format(directory,i))
+                    exit(1)
+                else:
+                    break
+        elif set_size is not None:
+            store = [None]*set_size
         else:
-            self.images=[]
-            self.set_size=min(config['set_size'],2000)
-            self.train=False
-            self.augmentation=None
-            self.include_stroke_aug=False
-            self.use_fg_mask=False
-
+            store = []
+        return store,init_size
 
 
     def __len__(self):
@@ -177,18 +197,46 @@ class SynthQADocDataset(QADataset):
             num_entries = random.randrange(self.min_entries,self.max_entries+1)
         else:
             num_entries = self.max_entries
-        selected = random.choices(list(enumerate(self.labels)),k=num_entries*2)
-        labels = selected[:num_entries]
-        values = selected[num_entries:]
+
         entries=[]
         heights=[]
-        for ei in range(num_entries):
-            label_img_idx,label_text = labels[ei]
-            label_img_path = os.path.join(self.directory,'{}.png'.format(label_img_idx))
+
+        if self.use_hw:
+            num_hw_entries = int(self.use_hw*num_entries)
+            num_entries = num_entries-num_hw_entries
+
+            hw_labels = random.choices(list(enumerate(self.header_labels)),k=num_hw_entries)
+            hw_labels = [a+(self.header_dir,True) for a in hw_labels]
+            hw_values = random.choices(list(enumerate(self.hw_labels)),k=num_hw_entries)
+            hw_values = [a+(self.hw_dir,False) for a in hw_values]
+
+        selected = random.choices(list(enumerate(self.labels)),k=num_entries*2)
+        selected = [a+(self.directory,True) for a in selected]
+        labels = selected[:num_entries]
+        values = selected[num_entries:]
+
+        if self.use_hw:
+            labels+=hw_labels
+            values+=hw_values
+
+        for (label_img_idx,label_text,label_dir,resize_l),(value_img_idx,value_text,value_dir,resize_v) in zip(labels,values):
+            label_img_path = os.path.join(label_dir,'{}.png'.format(label_img_idx))
             label_img = img_f.imread(label_img_path,False)
-            value_img_idx,value_text = values[ei]
-            value_img_path = os.path.join(self.directory,'{}.png'.format(value_img_idx))
+            value_img_path = os.path.join(value_dir,'{}.png'.format(value_img_idx))
             value_img = img_f.imread(value_img_path,False)
+
+            if self.change_size:
+                assert resize_l
+                label_height = random.randrange(self.min_text_height,label_img.shape[0])
+                label_width = round(label_img.shape[1]*label_height/label_img.shape[0])
+                label_img = img_f.resize(label_img,(label_height,label_width))
+
+                if resize_v:
+                    value_height = random.randrange(self.min_text_height,value_img.shape[0])
+                else:
+                    value_height = random.randrange(value_img.shape[0]-5,value_img.shape[0]+5)
+                value_width = round(value_img.shape[1]*value_height/value_img.shape[0])
+                value_img = img_f.resize(value_img,(value_height,value_width))
 
             heights.append(max(label_img.shape[0],value_img.shape[0]))
             rel_x = random.randrange(10)
