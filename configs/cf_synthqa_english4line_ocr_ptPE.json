@@ -1,5 +1,5 @@
 {
-    "name": "synthqa_english4line_fonts_ocr_ptPE",
+    "name": "synthqa_english4line_ocr_ptPE",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -8,8 +8,9 @@
         "data_set_name": "SynthQADocDataset",
         "fontdir": "../data/fonts",
         "textdir": "../data/",
-        "data_dir": "../data/english4line_fonts",
+        "data_dir": "../data/english4line",
         "include_ocr": true,
+        "text_corruption": 0.03,
         "batch_size": 3,
         "num_workers": 4,
         "rescale_range": [1.0,1.0],
@@ -92,7 +93,7 @@
 	    "decode_num_heads": 4,
 	    "no_dropout": false,
             "blocks_per_level": [2,2,2,2],
-            "swin_nheads": [2,4,4,8],
+            "swin_nheads": [4,4,8,8],
             "im_embed_dim": 64,
             "pre_trained": {
                 "patch_emb": "saved/synth_ocr_crnnskipforswin_new/checkpoint-iteration400000.pth"
