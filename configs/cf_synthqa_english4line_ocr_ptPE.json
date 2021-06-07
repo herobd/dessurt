@@ -10,7 +10,7 @@
         "textdir": "../data/",
         "data_dir": "../data/english4line",
         "include_ocr": true,
-        "text_corruption": 0.03,
+        "text_corruption": 0.06,
         "batch_size": 5,
         "num_workers": 4,
         "rescale_range": [1.0,1.0],
