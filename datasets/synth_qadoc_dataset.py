@@ -86,7 +86,7 @@ class SynthQADocDataset(QADataset):
         self.word_questions = config['word_questions'] if 'word_questions' in config else False
         self.tables = config['tables'] if 'tables' in config else False
         assert not self.tables or self.word_questions
-        assert bool(self.use_hw)^bool(self.tables)
+        assert not (self.use_hw and self.tables)
         assert not self.tables or self.min_entries is None
         if self.word_questions:
             self.ask_for_value = [
@@ -638,15 +638,26 @@ class SynthQADocDataset(QADataset):
         num_rows=random.randrange(1,15)
         num_cols=random.randrange(1,10)
 
+        mean_height = random.randrange(self.min_text_height+1,32)
+
         table_entries = random.choices(list(enumerate(self.header_labels)),k=num_rows*num_cols+num_rows+num_cols)
-        table_entries = [(img_f.imread(os.path.join(self.header_dir,'{}.png'.format(e[0]))),e[1]) for e in table_entries]
-        row_headers = table_entries[-num_rows:]
-        col_headers = table_entries[-(num_rows+num_cols):-num_rows]
-        table_entries = table_entries[:-(num_rows+num_cols)]
+        #table_entries = [(img_f.imread(os.path.join(self.header_dir,'{}.png'.format(e[0]))),e[1]) for e in table_entries]
+        table_entries_1d = []
+        for num,label in table_entries:
+            img = img_f.imread(os.path.join(self.header_dir,'{}.png'.format(num)))
+            if self.change_size:
+                height = int(random.gauss(mean_height,4))#random.randrange(self.min_text_height,img.shape[0])
+                width = round(img.shape[1]*height/img.shape[0])
+                img = img_f.resize(img,(height,width))
+            table_entries_1d.append((img,label))
+        row_headers = table_entries_1d[-num_rows:]
+        col_headers = table_entries_1d[-(num_rows+num_cols):-num_rows]
+        table_entries = table_entries_1d[:-(num_rows+num_cols)]
         table_entries_2d = []
         for r in range(num_rows):
-            table_entries_2d.append(table_entries[r*num_cols:(r+1)*num_cols])
+            table_entries_2d.append(table_entries_1d[r*num_cols:(r+1)*num_cols])
         table_entries = table_entries_2d
+
 
         table_x = random.randrange(self.image_size*0.75)
         table_y = random.randrange(self.image_size*0.75)
@@ -672,7 +683,7 @@ class SynthQADocDataset(QADataset):
             total_height+= max_height+padding
 
             if total_height+table_y >= self.image_size:
-                num_rows = r-1
+                num_rows = r
                 if num_rows==0:
                     return None,None,None,None #NO TABLE
                 total_height -= height_row[r]
@@ -699,7 +710,7 @@ class SynthQADocDataset(QADataset):
             total_width+= max_width+padding
 
             if total_width+table_x >= self.image_size:
-                num_cols = c-1
+                num_cols = c
                 if num_cols==0:
                     return None,None,None,None#NO TABLE
                 total_width -= width_col[c]
@@ -713,14 +724,14 @@ class SynthQADocDataset(QADataset):
         #put row headers in image
         cur_y = height_col_heading+table_y
         for r in range(num_rows):
-            if width_row_heading==row_headers[r][0].shape[1]:
+            if width_row_heading-padding==row_headers[r][0].shape[1]:
                 x=table_x
             else:
-                x=table_x + random.randrange(0,width_row_heading-row_headers[r][0].shape[1])
-            if height_row[r]==row_headers[r][0].shape[0]:
+                x=table_x + random.randrange(0,width_row_heading-padding-row_headers[r][0].shape[1])
+            if height_row[r]-padding==row_headers[r][0].shape[0]:
                 y=cur_y
             else:
-                y=cur_y + random.randrange(0,height_row[r]-row_headers[r][0].shape[0])
+                y=cur_y + random.randrange(0,height_row[r]-padding-row_headers[r][0].shape[0])
             cur_y += height_row[r]
 
             image[y:y+row_headers[r][0].shape[0],x:x+row_headers[r][0].shape[1]] = row_headers[r][0]
@@ -730,14 +741,14 @@ class SynthQADocDataset(QADataset):
         #put col headers in image
         cur_x = width_row_heading+table_x
         for c in range(num_cols):
-            if height_col_heading==col_headers[c][0].shape[0]:
+            if height_col_heading-padding==col_headers[c][0].shape[0]:
                 y=table_y
             else:
-                y=table_y + random.randrange(0,height_col_heading-col_headers[c][0].shape[0])
-            if width_col[c]==col_headers[c][0].shape[1]:
+                y=table_y + random.randrange(0,height_col_heading-padding-col_headers[c][0].shape[0])
+            if width_col[c]-padding==col_headers[c][0].shape[1]:
                 x=cur_x
             else:
-                x=cur_x + random.randrange(0,width_col[c]-col_headers[c][0].shape[1])
+                x=cur_x + random.randrange(0,width_col[c]-padding-col_headers[c][0].shape[1])
             cur_x += width_col[c]
 
             image[y:y+col_headers[c][0].shape[0],x:x+col_headers[c][0].shape[1]] = col_headers[c][0]
@@ -749,21 +760,102 @@ class SynthQADocDataset(QADataset):
         for c in range(num_cols):
             cur_y = height_col_heading+table_y
             for r in range(num_rows):
-                if width_col[c]==table_entries[r][c][0].shape[1]:
-                    x=cur_x
-                else:
-                    x=cur_x + random.randrange(0,width_col[c]-table_entries[r][c][0].shape[1])
-                if height_row[r]==table_entries[r][c][0].shape[0]:
-                    y=cur_y
-                else:
-                    y=cur_y + random.randrange(0,height_row[r]-table_entries[r][c][0].shape[0])
-                cur_y += height_row[r]
+                if random.random()>0.2: #sometimes skip an entry
+                    if width_col[c]-padding==table_entries[r][c][0].shape[1]:
+                        x=cur_x
+                    else:
+                        x=cur_x + random.randrange(0,width_col[c]-padding-table_entries[r][c][0].shape[1])
+                    if height_row[r]-padding==table_entries[r][c][0].shape[0]:
+                        y=cur_y
+                    else:
+                        y=cur_y + random.randrange(0,height_row[r]-padding-table_entries[r][c][0].shape[0])
 
-                image[y:y+table_entries[r][c][0].shape[0],x:x+table_entries[r][c][0].shape[1]] = table_entries[r][c][0]
-                table_values.append((col_headers[c][1],row_headers[r][1],table_entries[r][c][1],x,y))
-                if boxes is not None:
-                    self.addText(table_entries[r][c][1],x,t,table_entries[r][c][0].shape[1],table_entries[r][c][0].shape[0],boxes=boxes,trans=trans)
+                    image[y:y+table_entries[r][c][0].shape[0],x:x+table_entries[r][c][0].shape[1]] = table_entries[r][c][0]
+                    table_values.append((col_headers[c][1],row_headers[r][1],table_entries[r][c][1],x,y))
+                    if boxes is not None:
+                        self.addText(table_entries[r][c][1],x,t,table_entries[r][c][0].shape[1],table_entries[r][c][0].shape[0],boxes=boxes,trans=trans)
+                cur_y += height_row[r]
             cur_x += width_col[c]
+
+        #add lines for headers
+        line_thickness_h = random.randrange(1,max(2,min(10,padding)))
+        #top
+        img_f.line(image,
+                (table_x+random.randrange(-5,5),table_y+height_col_heading-random.randrange(0,1+padding)),
+                (table_x+total_width+random.randrange(-5,5),table_y+height_col_heading-random.randrange(0,1+padding)),
+                random.randrange(0,100),
+                line_thickness_h
+                )
+        #side
+        img_f.line(image,
+                (table_x+width_row_heading-random.randrange(0,padding+1),table_y+random.randrange(-5,5)),
+                (table_x+width_row_heading-random.randrange(0,padding+1),table_y+total_height+random.randrange(-5,5)),
+                random.randrange(0,100),
+                line_thickness_h
+                )
+
+        #outside of headers?
+        if random.random()<0.5:
+            line_thickness = random.randrange(1,max(2,min(10,padding)))
+            #top
+            img_f.line(image,
+                    (table_x+random.randrange(-5,5),table_y-random.randrange(0,padding+1)),
+                    (table_x+total_width+random.randrange(-5,5),table_y-random.randrange(0,padding+1)),
+                    random.randrange(0,100),
+                    line_thickness
+                    )
+            #side
+            img_f.line(image,
+                    (table_x-random.randrange(0,padding+1),table_y+random.randrange(-5,5)),
+                    (table_x-random.randrange(0,padding+1),table_y+total_height+random.randrange(-5,5)),
+                    random.randrange(0,100),
+                    line_thickness
+                    )
+
+        #value outline?
+        if random.random()<0.5:
+            line_thickness = random.randrange(1,max(2,min(10,padding)))
+            #bot
+            img_f.line(image,
+                    (table_x+random.randrange(-5,5),table_y-random.randrange(0,padding+1)+total_height),
+                    (table_x+total_width+random.randrange(-5,5),table_y-random.randrange(0,padding+1)+total_height),
+                    random.randrange(0,100),
+                    line_thickness
+                    )
+            #right
+            img_f.line(image,
+                    (table_x-random.randrange(0,padding+1)+total_width,table_y+random.randrange(-5,5)),
+                    (table_x-random.randrange(0,padding+1)+total_width,table_y+total_height+random.randrange(-5,5)),
+                    random.randrange(0,100),
+                    line_thickness
+                    )
+
+        #all inbetween lines?
+        if random.random()<0.5:
+            line_thickness = random.randrange(1,max(2,line_thickness_h))
+            #horz
+            cur_height = height_col_heading
+            for r in range(num_rows-1):
+                cur_height += height_row[r]
+                img_f.line(image,
+                        (table_x+random.randrange(-5,5),table_y-random.randrange(0,padding+1)+cur_height),
+                        (table_x+total_width+random.randrange(-5,5),table_y-random.randrange(0,padding+1)+cur_height),
+                        random.randrange(0,100),
+                        line_thickness
+                        )
+            #right
+            cur_width = width_row_heading
+            for c in range(num_cols-1):
+                cur_width += width_col[c]
+                img_f.line(image,
+                        (table_x-random.randrange(0,padding+1)+cur_width,table_y+random.randrange(-5,5)),
+                        (table_x-random.randrange(0,padding+1)+cur_width,table_y+total_height+random.randrange(-5,5)),
+                        random.randrange(0,100),
+                        line_thickness
+                        )
+
+        
+        #now, optionally add the other lines
 
         
         #add all possible questions
