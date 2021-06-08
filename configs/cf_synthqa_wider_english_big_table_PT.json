@@ -17,7 +17,7 @@
         "num_workers": 4,
         "rescale_range": [1.0,1.0],
         "crop_params": null,
-	"questions": 7,
+	"questions": 6,
         "min_entries": null,
         "max_entries": 100,
         "text_height": 32,
