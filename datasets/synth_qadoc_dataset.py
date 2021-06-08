@@ -782,15 +782,15 @@ class SynthQADocDataset(QADataset):
         line_thickness_h = random.randrange(1,max(2,min(10,padding)))
         #top
         img_f.line(image,
-                (table_x+random.randrange(-5,5),table_y+height_col_heading-random.randrange(0,1+padding)),
-                (min(self.image_size,table_x+total_width+random.randrange(-5,5)),table_y+height_col_heading-random.randrange(0,1+padding)),
+                (max(0,table_x+random.randrange(-5,5)),table_y+height_col_heading-random.randrange(0,1+padding)),
+                (min(self.image_size-1,table_x+total_width+random.randrange(-5,5)),table_y+height_col_heading-random.randrange(0,1+padding)),
                 random.randrange(0,100),
                 line_thickness_h
                 )
         #side
         img_f.line(image,
-                (table_x+width_row_heading-random.randrange(0,padding+1),table_y+random.randrange(-5,5)),
-                (table_x+width_row_heading-random.randrange(0,padding+1),min(self.image_size,table_y+total_height+random.randrange(-5,5))),
+                (table_x+width_row_heading-random.randrange(0,padding+1),max(0,table_y+random.randrange(-5,5))),
+                (table_x+width_row_heading-random.randrange(0,padding+1),min(self.image_size-1,table_y+total_height+random.randrange(-5,5))),
                 random.randrange(0,100),
                 line_thickness_h
                 )
@@ -800,14 +800,14 @@ class SynthQADocDataset(QADataset):
             line_thickness = random.randrange(1,max(2,min(10,padding)))
             #top
             img_f.line(image,
-                    (table_x+random.randrange(-5,5),table_y-random.randrange(0,padding+1)),
+                    (max(0,table_x+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)),
                     (min(self.image_size-1,table_x+total_width+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)),
                     random.randrange(0,100),
                     line_thickness
                     )
             #side
             img_f.line(image,
-                    (table_x-random.randrange(0,padding+1),table_y+random.randrange(-5,5)),
+                    (table_x-random.randrange(0,padding+1),max(0,table_y+random.randrange(-5,5))),
                     (table_x-random.randrange(0,padding+1),min(self.image_size-1,table_y+total_height+random.randrange(-5,5))),
                     random.randrange(0,100),
                     line_thickness
@@ -818,14 +818,14 @@ class SynthQADocDataset(QADataset):
             line_thickness = random.randrange(1,max(2,min(10,padding)))
             #bot
             img_f.line(image,
-                    (table_x+random.randrange(-5,5),table_y-random.randrange(0,padding+1)+total_height),
+                    (max(0,table_x+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)+total_height),
                     (min(self.image_size-1,table_x+total_width+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)+total_height),
                     random.randrange(0,100),
                     line_thickness
                     )
             #right
             img_f.line(image,
-                    (table_x-random.randrange(0,padding+1)+total_width,table_y+random.randrange(-5,5)),
+                    (table_x-random.randrange(0,padding+1)+total_width,max(0,table_y+random.randrange(-5,5))),
                     (table_x-random.randrange(0,padding+1)+total_width,min(self.image_size-1,table_y+total_height+random.randrange(-5,5))),
                     random.randrange(0,100),
                     line_thickness
@@ -839,7 +839,7 @@ class SynthQADocDataset(QADataset):
             for r in range(num_rows-1):
                 cur_height += height_row[r]
                 img_f.line(image,
-                        (table_x+random.randrange(-5,5),table_y-random.randrange(0,padding+1)+cur_height),
+                        (max(0,table_x+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)+cur_height),
                         (min(self.image_size-1,table_x+total_width+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)+cur_height),
                         random.randrange(0,100),
                         line_thickness
@@ -849,7 +849,7 @@ class SynthQADocDataset(QADataset):
             for c in range(num_cols-1):
                 cur_width += width_col[c]
                 img_f.line(image,
-                        (table_x-random.randrange(0,padding+1)+cur_width,table_y+random.randrange(-5,5)),
+                        (table_x-random.randrange(0,padding+1)+cur_width,max(0,table_y+random.randrange(-5,5))),
                         (table_x-random.randrange(0,padding+1)+cur_width,min(self.image_size-1,table_y+total_height+random.randrange(-5,5))),
                         random.randrange(0,100),
                         line_thickness
