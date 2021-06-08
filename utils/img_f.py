@@ -17,6 +17,9 @@ def line(img,p1,p2,color,thickness=1,draw='set'):
         c_points = set(zip(c_rr,c_cc)) #remove duplicates
         for r,c in c_points:
             rr,cc = skimage.draw.line(y1+r,x1+c,y2+r,x2+c)
+            wanted = (rr>=0) & (rr<img.shape[0]) & (cc>=0) & (cc<img.shape[1])
+            rr=rr[wanted]
+            cc=cc[wanted]
             if draw=='set':
                 img[rr,cc]=color
             elif draw=='add':
