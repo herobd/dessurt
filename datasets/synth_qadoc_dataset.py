@@ -648,7 +648,8 @@ class SynthQADocDataset(QADataset):
             if self.change_size:
                 height = int(random.gauss(mean_height,4))#random.randrange(self.min_text_height,img.shape[0])
                 width = round(img.shape[1]*height/img.shape[0])
-                img = img_f.resize(img,(height,width))
+                if height>1 and width>1:
+                    img = img_f.resize(img,(height,width))
             table_entries_1d.append((img,label))
         row_headers = table_entries_1d[-num_rows:]
         col_headers = table_entries_1d[-(num_rows+num_cols):-num_rows]
