@@ -38,6 +38,9 @@ def line(img,p1,p2,color,thickness=1,draw='set'):
         if thickness>1:
             if x1<img.shape[1]-2 and y1<img.shape[0]-2 and x2<img.shape[1]-2 and y2<img.shape[0]-2:
                 rr,cc = skimage.draw.line(y1+1,x1+1,y2+1,x2+1)
+                wanted = (rr>=0) & (rr<img.shape[0]) & (cc>=0) & (cc<img.shape[1])
+                rr=rr[wanted]
+                cc=cc[wanted]
                 if draw=='set':
                     img[rr,cc]=color
                 elif draw=='add':
@@ -46,6 +49,9 @@ def line(img,p1,p2,color,thickness=1,draw='set'):
                     img[rr,cc]*=color
             if x1<img.shape[1]-2 and x2<img.shape[1]-2:
                 rr,cc = skimage.draw.line(y1,x1+1,y2,x2+1)
+                wanted = (rr>=0) & (rr<img.shape[0]) & (cc>=0) & (cc<img.shape[1])
+                rr=rr[wanted]
+                cc=cc[wanted]
                 if draw=='set':
                     img[rr,cc]=color
                 elif draw=='add':
@@ -54,6 +60,9 @@ def line(img,p1,p2,color,thickness=1,draw='set'):
                     img[rr,cc]*=color
             if y1<img.shape[0]-2 and y2<img.shape[0]-2:
                 rr,cc = skimage.draw.line(y1+1,x1,y2+1,x2)
+                wanted = (rr>=0) & (rr<img.shape[0]) & (cc>=0) & (cc<img.shape[1])
+                rr=rr[wanted]
+                cc=cc[wanted]
                 if draw=='set':
                     img[rr,cc]=color
                 elif draw=='add':
@@ -62,6 +71,9 @@ def line(img,p1,p2,color,thickness=1,draw='set'):
                     img[rr,cc]*=color
         if thickness>2:
             rr,cc = skimage.draw.line(y1-1,x1-1,y2-1,x2-1)
+            wanted = (rr>=0) & (rr<img.shape[0]) & (cc>=0) & (cc<img.shape[1])
+            rr=rr[wanted]
+            cc=cc[wanted]
             if draw=='set':
                 img[rr,cc]=color
             elif draw=='add':
@@ -69,6 +81,9 @@ def line(img,p1,p2,color,thickness=1,draw='set'):
             elif draw=='mult':
                 img[rr,cc]*=color
             rr,cc = skimage.draw.line(y1,x1-1,y2,x2-1)
+            wanted = (rr>=0) & (rr<img.shape[0]) & (cc>=0) & (cc<img.shape[1])
+            rr=rr[wanted]
+            cc=cc[wanted]
             if draw=='set':
                 img[rr,cc]=color
             elif draw=='add':
@@ -76,6 +91,9 @@ def line(img,p1,p2,color,thickness=1,draw='set'):
             elif draw=='mult':
                 img[rr,cc]*=color
             rr,cc = skimage.draw.line(y1-1,x1,y2-1,x2)
+            wanted = (rr>=0) & (rr<img.shape[0]) & (cc>=0) & (cc<img.shape[1])
+            rr=rr[wanted]
+            cc=cc[wanted]
             if draw=='set':
                 img[rr,cc]=color
             elif draw=='add':
@@ -84,6 +102,9 @@ def line(img,p1,p2,color,thickness=1,draw='set'):
                 img[rr,cc]*=color
             if y1<img.shape[0]-2 and y2<img.shape[0]-2:
                 rr,cc = skimage.draw.line(y1+1,x1-1,y2+1,x2-1)
+                wanted = (rr>=0) & (rr<img.shape[0]) & (cc>=0) & (cc<img.shape[1])
+                rr=rr[wanted]
+                cc=cc[wanted]
                 if draw=='set':
                     img[rr,cc]=color
                 elif draw=='add':
@@ -92,6 +113,9 @@ def line(img,p1,p2,color,thickness=1,draw='set'):
                     img[rr,cc]*=color
             if x1<img.shape[1]-2 and x2<img.shape[1]-2:
                 rr,cc = skimage.draw.line(y1-1,x1+1,y2-1,x2+1)
+                wanted = (rr>=0) & (rr<img.shape[0]) & (cc>=0) & (cc<img.shape[1])
+                rr=rr[wanted]
+                cc=cc[wanted]
                 if draw=='set':
                     img[rr,cc]=color
                 elif draw=='add':
