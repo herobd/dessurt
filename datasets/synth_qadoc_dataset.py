@@ -90,20 +90,20 @@ class SynthQADocDataset(QADataset):
         assert not self.tables or self.min_entries is None
         if self.word_questions:
             self.ask_for_value = [
-                    'value for {}?',
-                    'value of {}?',
-                    'answer for {}?',
-                    'answer of {}?',
-                    'response for {}?',
-                    'response of {}?'
+                    'value for "{}"?',
+                    'value of "{}"?',
+                    'answer for "{}"?',
+                    'answer of "{}"?',
+                    'response for "{}"?',
+                    'response of "{}"?'
                     ]
             self.ask_for_label = [
-                    'label for {}?',
-                    'label of {}?',
-                    'question for {}?',
-                    'question of {}?',
-                    'prompt for {}?',
-                    'prompt of {}?'
+                    'label for "{}"?',
+                    'label of "{}"?',
+                    'question for "{}"?',
+                    'question of "{}"?',
+                    'prompt for "{}"?',
+                    'prompt of "{}"?'
                     ]
         if self.use_hw or self.tables:
             self.header_dir = config['header_dir']
@@ -774,6 +774,11 @@ class SynthQADocDataset(QADataset):
                     table_values.append((col_headers[c][1],row_headers[r][1],table_entries[r][c][1],x,y))
                     if boxes is not None:
                         self.addText(table_entries[r][c][1],x,t,table_entries[r][c][0].shape[1],table_entries[r][c][0].shape[0],boxes=boxes,trans=trans)
+                else:
+                    #table_values.append((col_headers[c][1],row_headers[r][1],'[np]',cur_x,cur_y))
+                    all_q_a.append(('value of "{}" and "{}"?'.format(row_headers[r][1],col_headers[c][1]),'[np]',None))
+                    all_q_a.append(('value of "{}" and "{}"?'.format(col_headers[c][1],row_headers[r][1]),'[np]',None))
+                
                 cur_y += height_row[r]
             cur_x += width_col[c]
 
@@ -864,8 +869,12 @@ class SynthQADocDataset(QADataset):
         ambiguous=set()
         for (col_h,row_h,v,x,y) in table_values:
             if col_h is not None and row_h is not None:
-                all_q_a.append(('value of "{}" and "{}"?'.format(row_h,col_h),v,None))
-                all_q_a.append(('value of "{}" and "{}"?'.format(col_h,row_h),v,None))
+                if random.random()<0.5:
+                    all_q_a.append(('value of "{}" and "{}"?'.format(row_h,col_h),v,None))
+                    all_q_a.append(('value of "{}" and "{}"?'.format(col_h,row_h),v,None))
+                else:
+                    all_q_a.append(('value in "{}" and "{}"?'.format(row_h,col_h),v,None))
+                    all_q_a.append(('value in "{}" and "{}"?'.format(col_h,row_h),v,None))
             if v not in ambiguous:
                 if row_h is not None:
                     all_q_a.append(('row that "{}" is in?'.format(v),row_h,None))
@@ -883,12 +892,18 @@ class SynthQADocDataset(QADataset):
                 a=vs[0][0]
                 for v,x in vs[1:]:
                     a+=', '+v
-                all_q_a.append(('all values in row {}?'.format(row_h),a,None))
+                if random.random()<0.5:
+                    all_q_a.append(('all values in row "{}"?'.format(row_h),a,None))
+                else:
+                    all_q_a.append(('all values of row "{}"?'.format(row_h),a,None))
         for col_h, vs in col_vs.items():
             if col_h not in ambiguous:
                 vs.sort(key=lambda a:a[1])
                 a=vs[0][0]
                 for v,y in vs[1:]:
                     a+=', '+v
-                all_q_a.append(('all values in column {}?'.format(col_h),a,None))
+                if random.random()<0.5:
+                    all_q_a.append(('all values in column "{}"?'.format(col_h),a,None))
+                else:
+                    all_q_a.append(('all values of column "{}"?'.format(col_h),a,None))
         return table_x-10, table_y-10, total_width+20, total_height+20
