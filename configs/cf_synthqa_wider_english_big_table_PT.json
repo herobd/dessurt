@@ -69,7 +69,7 @@
         "#swa_start": 200000,
         "save_dir": "saved/",
         "val_step": 999999999999999,
-        "save_step": 25000,
+        "save_step": 50000,
         "save_step_minor": 200,
         "log_step": 100,
         "print_pred_every": 100,
