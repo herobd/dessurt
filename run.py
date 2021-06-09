@@ -98,6 +98,7 @@ def main(resume,config,img_path,addToConfig,gpu=False):
         model = eval(config['arch'])(config['model'])
 
     model.eval()
+    model.max_pred_len=40
 
     with torch.no_grad():
         if img_path is None:

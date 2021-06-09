@@ -15,7 +15,7 @@ def display(data):
     #mask = makeMask(data['image'])
     for b in range(batchSize):
         #print (data['img'].size())
-        img = (data['img'][b].permute(1,2,0)+1)/2.0
+        img = (1-data['img'][b].permute(1,2,0))/2.0
         #label = data['label']
         #gt = data['gt'][b]
         #print(label[:data['label_lengths'][b],b])
@@ -45,6 +45,8 @@ def display(data):
             plt.show()
 
             #cv2.waitKey()
+
+            cv2.imwrite('test.png',img.numpy()[:,:,0])
 
         #fig = plt.figure()
 
@@ -78,7 +80,7 @@ if __name__ == "__main__":
         "textdir": "../data/",
         "word_questions": True,
         "use_hw": False,
-        "tables": 0.9,
+        "tables": False,
         "header_dir": "../data/english4line_fonts",
         "hw_dir": "../data/IAM_lines/train",
         "num_workers": 0,
