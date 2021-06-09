@@ -18,7 +18,7 @@
             "crop_size":[600,1400],
             "pad":0
         },
-        "no_blanks": true,
+        "no_blanks": false,
         "swap_circle":true,
         "no_graphics":true,
         "cache_resized_images": true,
@@ -47,7 +47,6 @@
         "box": "YoloLoss",
         "rel": "sigmoid_BCE_loss",
         "propRel": "sigmoid_BCE_loss",
-        "nnFinal": "MSE",
         "classFinal": "sigmoid_BCE_loss",
         "confFinal": "sigmoid_BCE_loss"
     },
@@ -55,7 +54,6 @@
         "box": 1.0,
         "rel": 0.5,
         "propRel": 0.5,
-        "nnFinal": 0.25,
         "classFinal": 0.5,
         "confFinal": 0.5
     },
@@ -76,7 +74,7 @@
         "val_step": 25000,
         "save_step": 50000,
         "save_step_minor": 200,
-        "log_step": 250,
+        "log_step": 500,
         "verbosity": 1,
         "monitor": "loss",
         "monitor_mode": "none",
@@ -93,7 +91,8 @@
         "max_use_pred": 0.5,
         "use_all_bb_pred_for_rel_loss": true,
 
-        "use_learning_schedule": "multi_rise then swa",
+        "use_learning_schedule": "multi_rise then ramp_to_swa",
+"ramp_down_steps": 10000,
         "warmup_steps": [1000],
         "swa_lr_mul": 0.1,
         "adapt_lr": false
@@ -114,7 +113,7 @@
         "use_2nd_detect_scale_feats": 2,
         "use_2nd_detect_feats_size": 64,
         "use_fixed_masks": true,
-        "no_grad_feats": true,
+        
         "feat_norm": "group_norm",
 
         "expand_rel_context": 150,

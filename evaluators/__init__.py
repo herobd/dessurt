@@ -22,3 +22,5 @@ from evaluators.othergraphpair_eval import FormsGraphPair_eval, AdobeGraphPair_e
 #def FormsPair_printer(config,instance, model, gpu, metrics, outDir=None, startIndex=None):
 #    return AI2D_printer(config,instance, model, gpu, metrics, outDir, startIndex)
 from evaluators.formlinesatrdataset_eval import FormlinesATRDataset_eval
+from evaluators.nobrain_eval import NobrainQA_eval, NobrainGraphPair_eval
+from evaluators.synthqadataset_eval import *

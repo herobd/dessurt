@@ -1,3 +1,4 @@
+from skimage import filters as filters #this needs to be here on noahsark for some unknown reason
 import os
 import sys
 import signal
@@ -17,6 +18,7 @@ import warnings
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel
+
 
 try: 
     from knockknock import slack_sender
@@ -58,12 +60,15 @@ def main(rank,config, resume,world_size=None):
     if rank is not None: #multiprocessing
         #print('Process {} can see these GPUs:'.format(rank,os.environ['CUDA_VISIBLE_DEVICES']))
         if 'distributed' in config:
+            print('env NCCL_SOCKET_IFNAME: {}'.format(os.environ['NCCL_SOCKET_IFNAME']))
+            print('{} calling dist.init_process_group()'.format(rank))
             os.environ['CUDA_VISIBLE_DEVICES']='0'
             dist.init_process_group(
                             "nccl",
                             init_method='file:///fslhome/brianld/job_comm/{}'.format(config['name']),
                             rank=rank,
                             world_size=world_size)
+            print('{} finished dist.init_process_group()'.format(rank))
         else:
             dist.init_process_group("gloo", rank=rank, world_size=world_size)
 
@@ -105,7 +110,13 @@ def main(rank,config, resume,world_size=None):
     supercomputer = config['super_computer'] if 'super_computer' in config else False
 
     if rank is not None and rank!=0:
-        trainer.side_process=True #this tells the trainer not to log or validate on this thread
+        trainer.side_process=rank #this tells the trainer not to log or validate on this thread
+    else:
+        trainer.finishSetup()
+        def handleSIGINT(sig, frame):
+            trainer.save()
+            sys.exit(0)
+        signal.signal(signal.SIGINT, handleSIGINT)
 
     print("Begin training")
     #warnings.filterwarnings("error")
@@ -175,7 +186,12 @@ if __name__ == '__main__':
             print('turned off CUDA')
     set_procname(config['name'])
 
+    if args.resume is not None:
+        if 'pre_trained' in config['model']:
+            del config['model']['pre_trained'] #we don't need to load the pre-trained weights if we already 
+
     if args.rank is not None:
+        print('Awesome, I have rank {}'.format(args.rank))
         config['distributed']=True
         with torch.cuda.device(config['gpu']):
             main(args.rank,config, args.resume, args.worldsize)

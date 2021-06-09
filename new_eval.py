@@ -182,7 +182,10 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
     if verbosity>1:
         model.summary()
     else:
-        print('model param counts: {}'.format(model.num_params()))
+        try:
+            print('model param counts: {}'.format(model.num_params()))
+        except torch.nn.modules.module.ModuleAttributeError:
+            pass
 
     if type(config['loss'])==dict: 
         loss={}#[eval(l) for l in config['loss']]
@@ -447,6 +450,10 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
             with warnings.catch_warnings():   
                 warnings.simplefilter('error')
                 val_metrics_sum /= len(valid_data_loader)
+                BROS_prec=None
+                rel_BROS_TP=None
+                group_TP = None
+                DocStruct_hit = None
                 print('{} metrics'.format(validName))
                 rel_BROS_TP=group_TP=None
                 for i in range(len(metrics)):
@@ -466,6 +473,18 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                         group_gt_count = sum(val_comb_metrics[typ])
                     elif 'final_group_XX_predCount'==typ:
                         group_pred_count = sum(val_comb_metrics[typ])
+                    elif 'ED_TP_XX'==typ:
+                        group_TP=sum(val_comb_metrics[typ])
+                    elif 'ED_true_count_XX'==typ:
+                        group_gt_count=sum(val_comb_metrics[typ])
+                    elif 'ED_pred_count_XX'==typ:
+                        group_pred_count=sum(val_comb_metrics[typ])
+                    elif 'DocStruct_hit_XX'==typ:
+                        DocStruct_hit=sum(val_comb_metrics[typ])
+                    elif 'DocStruct_count_XX'==typ:
+                        DocStruct_count=sum(val_comb_metrics[typ])
+
+
                     else:
                         assert 'XX' not in typ
                         if 'final_rel_BROS_prec'==typ:
@@ -482,20 +501,23 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                             print('ERROR on {}: {}'.format(typ,e))
                             print('{}'.format(val_comb_metrics[typ]))
 
-                if rel_BROS_TP is not None:
+                if BROS_prec is not None:
                     print('----PER DOCUMENT------')
-                    print('BROS relationship Recall Prec F1: {:.2f} & {:.2f} & {:.2f}'.format(100*BROS_recall,100*BROS_prec,100*BROS_Fm))
+                    print('BROS relationship Recall Prec F1: {:.2f} , {:.2f} , {:.2f}'.format(100*BROS_recall,100*BROS_prec,100*BROS_Fm))
+                if rel_BROS_TP is not None:
                     print('----OVERALL------')
                     BROS_recall = rel_BROS_TP/rel_gt_count
                     BROS_prec = rel_BROS_TP/rel_pred_count
-                    print('BROS relationships Recall Prec F1: {:.2f} & {:.2f} & {:.2f}'.format(100*BROS_recall,100*BROS_prec,100*2*BROS_recall*BROS_prec/(BROS_prec+BROS_recall)))
-                    strict_recall = rel_strict_TP/rel_gt_count
-                    strict_prec = rel_strict_TP/rel_pred_count
-                    print('strict relationships Recall Prec F1: {:.2f} & {:.2f} & {:.2f}'.format(100*strict_recall,100*strict_prec,100*2*strict_recall*strict_prec/(strict_prec+strict_recall)))
+                    print('BROS relationships Recall Prec F1: {:.2f} , {:.2f} , {:.2f}'.format(100*BROS_recall,100*BROS_prec,100*2*BROS_recall*BROS_prec/(BROS_prec+BROS_recall)))
+                    #strict_recall = rel_strict_TP/rel_gt_count
+                    #strict_prec = rel_strict_TP/rel_pred_count
+                    #print('strict relationships Recall Prec F1: {:.2f} , {:.2f} , {:.2f}'.format(100*strict_recall,100*strict_prec,100*2*strict_recall*strict_prec/(strict_prec+strict_recall)))
                 if group_TP is not None:
                     group_recall = group_TP/group_gt_count
                     group_prec = group_TP/group_pred_count
-                    print('entity Recall Prec F1: {:.2f} & {:.2f} & {:.2f}'.format(100*group_recall,100*group_prec,100*2*group_recall*group_prec/(group_prec+group_recall)))
+                    print('entity Recall Prec F1: {:.2f} , {:.2f} , {:.2f}'.format(100*group_recall,100*group_prec,100*2*group_recall*group_prec/(group_prec+group_recall)))
+                if DocStruct_hit is not None:
+                    print('DocStruct hit@1 [overall]: {}'.format(DocStruct_hit/DocStruct_count))
 
             if 'save_nns' in config:
                 pickle.dump(nns,open(config['save_nns'],'wb'))
@@ -555,8 +577,11 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
             else:
                 print('{} not found! (on {})'.format(index,instance['imgName']))
                 print('{} not found! (on {})'.format(index,instance['imgName']))
-
-    if trainer.do_characterization:
+    try:
+        do =trainer.do_characterization
+    except:
+        do = False
+    if do:
         trainer.displayCharacterization()
 
 

@@ -27,8 +27,6 @@ import json
 import timeit
 import utils.img_f as img_f
 
-MAX_CANDIDATES=325 #450
-MAX_GRAPH_SIZE=370
 #max seen 428, so why'd it crash on 375?
 
 class PairingGraph(BaseModel):
@@ -63,6 +61,7 @@ class PairingGraph(BaseModel):
             detectorSavedFeatSize += detectorSavedFeatSize2
             
         self.detector.setForGraphPairing(useBeginningOfLast,useFeatsLayer,useFeatsScale,useFLayer2,useFScale2)
+        self.detector_predNumNeighbors = self.detector.predNumNeighbors
 
 
         self.no_grad_feats = config['no_grad_feats'] if 'no_grad_feats' in config else False
@@ -300,10 +299,13 @@ class PairingGraph(BaseModel):
         self.pairer = eval(config['graph_config']['arch'])(config['graph_config'])
         self.useMetaGraph = type(self.pairer) is MetaGraphNet
         self.fixBiDirection= config['fix_bi_dir'] if 'fix_bi_dir' in config else False
+
+        self.MAX_CANDIDATES=325 #450
+        self.MAX_GRAPH_SIZE=370
         if 'max_graph_size' in config:
-            MAX_GRAPH_SIZE = config['max_graph_size']
+            self.MAX_GRAPH_SIZE = config['max_graph_size']
         if 'max_graph_cand' in config:
-            MAX_CANDIDATES = config['max_graph_cand']
+            self.MAX_CANDIDATES = config['max_graph_cand']
 
         self.useOldDecay = config['use_old_len_decay'] if 'use_old_len_decay' in config else False
 
@@ -1323,7 +1325,7 @@ class PairingGraph(BaseModel):
             #print('candidates:{} ({})'.format(len(candidates),distMul))
             #if len(candidates)>1:
             #    drawIt()
-            if (len(candidates)+numBoxes<MAX_GRAPH_SIZE and len(candidates)<MAX_CANDIDATES) or return_all:
+            if (len(candidates)+numBoxes<self.MAX_GRAPH_SIZE and len(candidates)<self.MAX_CANDIDATES) or return_all:
                 return list(candidates)
             else:
                 if self.useOldDecay:
@@ -1331,8 +1333,8 @@ class PairingGraph(BaseModel):
                 else:
                     distMul=distMul*0.8 - 0.05
         #This is a problem, we couldn't prune down enough
-        print("ERROR: could not prune number of candidates down: {} (should be {})".format(len(candidates),MAX_GRAPH_SIZE-numBoxes))
-        return list(candidates)[:MAX_GRAPH_SIZE-numBoxes]
+        print("ERROR: could not prune number of candidates down: {} (should be {})".format(len(candidates),self.MAX_GRAPH_SIZE-numBoxes))
+        return list(candidates)[:self.MAX_GRAPH_SIZE-numBoxes]
 
     def getTranscriptions(self,bbs,image):
         #get corners from bb predictions

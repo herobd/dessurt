@@ -16,7 +16,7 @@ def display(data):
 
     #print (data['img'].size())
     #img = (data['img'][0].permute(1,2,0)+1)/2.0
-    img = (data['img'][b].permute(1,2,0)+1)/2.0
+    img = (1-data['img'][b].permute(1,2,0))/2.0
     #print(img.shape)
     #print(data['pixel_gt']['table_pixels'].shape)
     print(data['imgName'])
@@ -25,13 +25,16 @@ def display(data):
     #ws.append(img.shape[1])
     #return
 
+    for q,a in zip(data['questions'],data['answers']):
+        print(q+' '+a)
+    return
 
 
     fig = plt.figure()
 
     ax_im = plt.subplot()
     ax_im.set_axis_off()
-    ax_im.imshow(img[:,:,0])
+    ax_im.imshow(img[:,:,0],cmap='gray')
 
     colors = {  'text_start_gt':'g-',
                 'text_end_gt':'b-',
@@ -51,28 +54,40 @@ def display(data):
         answer=data['bb_gt'][b,i,15]
         other=data['bb_gt'][b,i,16]
         if header:
-            color = 'r-'
-        elif question:
             color = 'b-'
+        elif question:
+            color = 'c-'
         elif answer:
-            color = 'g-'
-        elif other:
             color = 'y-'
+        elif other:
+            color = 'm-'
         tr = (math.cos(rot)*w-math.sin(rot)*h +xc, math.sin(rot)*w+math.cos(rot)*h +yc)
         tl = (math.cos(rot)*-w-math.sin(rot)*h +xc, math.sin(rot)*-w+math.cos(rot)*h +yc)
         br = (math.cos(rot)*w-math.sin(rot)*-h +xc, math.sin(rot)*w+math.cos(rot)*-h +yc)
         bl = (math.cos(rot)*-w-math.sin(rot)*-h +xc, math.sin(rot)*-w+math.cos(rot)*-h +yc)
         #print([tr,tl,br,bl])
+    #for i in range(data['form_metadata']['word_boxes'].size(0)):
+    #    word_bbs = data['form_metadata']['word_boxes']
+    #    xc=word_bbs[i,0]
+    #    yc=word_bbs[i,1]
+    #    rot=word_bbs[i,2]
+    #    h=word_bbs[i,3]
+    #    w=word_bbs[i,4]
+    #    color = 'r-'
+    #    tr = (math.cos(rot)*w-math.sin(rot)*h +xc, math.sin(rot)*w+math.cos(rot)*h +yc)
+    #    tl = (math.cos(rot)*-w-math.sin(rot)*h +xc, math.sin(rot)*-w+math.cos(rot)*h +yc)
+    #    br = (math.cos(rot)*w-math.sin(rot)*-h +xc, math.sin(rot)*w+math.cos(rot)*-h +yc)
+    #    bl = (math.cos(rot)*-w-math.sin(rot)*-h +xc, math.sin(rot)*-w+math.cos(rot)*-h +yc)
 
-        ax_im.plot([tr[0],tl[0],bl[0],br[0],tr[0]],[tr[1],tl[1],bl[1],br[1],tr[1]],color)
-    for ind1,ind2 in data['adj']:
-        x1=data['bb_gt'][b,ind1,0]
-        y1=data['bb_gt'][b,ind1,1]
-        x2=data['bb_gt'][b,ind2,0]
-        y2=data['bb_gt'][b,ind2,1]
+    #    ax_im.plot([tr[0],tl[0],bl[0],br[0],tr[0]],[tr[1],tl[1],bl[1],br[1],tr[1]],color)
+    #for ind1,ind2 in data['adj']:
+    #    x1=data['bb_gt'][b,ind1,0]
+    #    y1=data['bb_gt'][b,ind1,1]
+    #    x2=data['bb_gt'][b,ind2,0]
+    #    y2=data['bb_gt'][b,ind2,1]
 
-        ax_im.plot([x1,x2],[y1,y2],'m-')
-        #print('{} to {}, {} - {}'.format(ind1,ind2,(x1,y1),(x2,y2)))
+    #    ax_im.plot([x1,x2],[y1,y2],'m-')
+    #    #print('{} to {}, {} - {}'.format(ind1,ind2,(x1,y1),(x2,y2)))
 
     groupCenters=[]
     for group in data['gt_groups']:
@@ -113,12 +128,12 @@ if __name__ == "__main__":
     data=FUNSDGraphPair(dirPath=dirPath,split='train',config={
         'color':False,
         'rescale_range':[0.8,1.2],
-        '#rescale_range':[0.4,0.65],
         'crop_params':{
-            "crop_size":[1000,700],
-            "pad":70,
+            "crop_size":[800,800],
+            "pad":50,
             "xxrot_degree_std_dev": 0.7}, 
         'split_to_lines': True,
+        'questions':50
 })
 
     dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False, num_workers=0, collate_fn=funsd_graph_pair.collate)

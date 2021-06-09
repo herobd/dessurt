@@ -86,7 +86,8 @@
         "max_use_pred": 0.5,
         "use_all_bb_pred_for_rel_loss": true,
 
-        "use_learning_schedule": "multi_rise then swa",
+        "use_learning_schedule": "multi_rise then ramp_to_swa",
+"ramp_down_steps": 10000,
         "warmup_steps": [1000],
         "swa_lr_mul": 0.1,
         "adapt_lr": false
@@ -107,7 +108,7 @@
         "use_2nd_detect_scale_feats": 2,
         "use_2nd_detect_feats_size": 64,
         "use_fixed_masks": true,
-        "no_grad_feats": true,
+        
         "feat_norm": "group_norm",
 
         "expand_rel_context": 150,

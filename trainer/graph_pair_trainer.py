@@ -41,6 +41,32 @@ def maxRelScoreIsHit(child_groups,parent_groups,edgeIndexes,edgePred):
                     max_score_is_hit = False
     return max_score_is_hit
 
+def _check_bn_apply(module, flag):
+    if issubclass(module.__class__, torch.nn.modules.batchnorm._BatchNorm):
+        flag[0] = True
+
+
+def _check_bn(model):
+    flag = [False]
+    model.apply(lambda module: _check_bn_apply(module, flag))
+    return flag[0]
+
+
+def _reset_bn(module):
+    if issubclass(module.__class__, torch.nn.modules.batchnorm._BatchNorm):
+        module.running_mean = torch.zeros_like(module.running_mean)
+        module.running_var = torch.ones_like(module.running_var)
+
+
+def _get_momenta(module, momenta):
+    if issubclass(module.__class__, torch.nn.modules.batchnorm._BatchNorm):
+        momenta[module] = module.momentum
+
+
+def _set_momenta(module, momenta):
+    if issubclass(module.__class__, torch.nn.modules.batchnorm._BatchNorm):
+        module.momentum = momenta[module]
+
 class GraphPairTrainer(BaseTrainer):
     """
     Trainer class
@@ -127,7 +153,7 @@ class GraphPairTrainer(BaseTrainer):
 
         self.use_gt_trans = config['trainer']['use_gt_trans'] if 'use_gt_trans' in config['trainer'] else False
 
-        self.merge_first_only_until = config['trainer']['merge_first_only_until'] if 'merge_first_only_until' in config['trainer'] else 100
+        self.merge_first_only_until = config['trainer']['merge_first_only_until'] if 'merge_first_only_until' in config['trainer'] else 0
         self.init_merge_rule = config['trainer']['init_merge_rule'] if 'init_merge_rule' in config['trainer'] else None
         self.picky_merging = 'picky' in self.init_merge_rule if self.init_merge_rule is not None else False
 
@@ -164,6 +190,8 @@ class GraphPairTrainer(BaseTrainer):
             self.characterization_sum=defaultdict(int)
             self.characterization_form=defaultdict(list)
             self.characterization_hist=defaultdict(list)
+
+        self.model_ref.used_threshConf=0.5
 
     def _to_tensor(self, instance):
         image = instance['img']
@@ -242,7 +270,7 @@ class GraphPairTrainer(BaseTrainer):
         except StopIteration:
             self.data_loader_iter = iter(self.data_loader)
             thisInstance = self.data_loader_iter.next()
-        if not self.model_ref.detector.predNumNeighbors:
+        if not self.model_ref.detector_predNumNeighbors:
             thisInstance['num_neighbors']=None
         ##toc=timeit.default_timer()
         #t#self.opt_history['get data'].append(timeit.default_timer()-ticAll)#t#
@@ -300,6 +328,7 @@ class GraphPairTrainer(BaseTrainer):
             loss += losses[name]
             losses[name] = losses[name].item()
         if len(losses)>0:
+            assert not torch.isnan(loss)
             if self.accum_grad_steps>1:
                 loss /= self.accum_grad_steps
             if self.amp:
@@ -307,6 +336,16 @@ class GraphPairTrainer(BaseTrainer):
             else:
                 loss.backward()
 
+        meangrad=0
+        count=0
+        for m in self.model.parameters():
+            if m.grad is None:
+                continue
+            count+=1
+            meangrad+=m.grad.data.mean().cpu().item()
+            assert not torch.isnan(m.grad.data).any()
+        if count!=0:
+            meangrad/=count
         if self.accum_grad_steps<2 or iteration%self.accum_grad_steps==0:
             torch.nn.utils.clip_grad_value_(self.model.parameters(),1)
             if self.amp:
@@ -315,18 +354,9 @@ class GraphPairTrainer(BaseTrainer):
             else:
                 self.optimizer.step()
         #t#self.opt_history['backprop'].append(timeit.default_timer()-tic)#t#
-        meangrad=0
-        count=0
-        for m in self.model.parameters():
-            if m.grad is None:
-                continue
-            count+=1
-            meangrad+=m.grad.data.mean().cpu().item()
-        if count!=0:
-            meangrad/=count
-        self.optimizer.step()
         if len(losses)>0:
             loss = loss.item()
+        #print('loss:{}, mean grad:{}'.format(loss,meangrad))
         log = {
             'mean grad': meangrad,
             'loss': loss,
@@ -385,7 +415,7 @@ class GraphPairTrainer(BaseTrainer):
 
         with torch.no_grad():
             for batch_idx, instance in enumerate(self.valid_data_loader):
-                if not self.model_ref.detector.predNumNeighbors:
+                if not self.model_ref.detector_predNumNeighbors:
                     instance['num_neighbors']=None
                 if not self.logged:
                     print('iter:{} valid batch: {}/{}'.format(self.iteration,batch_idx,len(self.valid_data_loader)), end='\r')
@@ -418,7 +448,7 @@ class GraphPairTrainer(BaseTrainer):
 
         for val_name in val_metrics:
             if val_count[val_name]>0:
-                val_metrics[val_name] /= val_count[val_name]
+                val_metrics[val_name] =  val_metrics[val_name]/val_count[val_name]
         return val_metrics
 
     def alignEdgePred(self,targetBoxes,adj,outputBoxes,relPred,relIndexes,rel_prop_pred):
@@ -1418,7 +1448,7 @@ class GraphPairTrainer(BaseTrainer):
                 targSize =0 
 
             if 'box' in self.loss:
-                boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
+                boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision,recall_noclass,precision_noclass = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
                 losses['boxLoss'] = boxLoss
             else:
                 oversegLoss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered, recall_noclass, precision_noclass, gt_covered_noclass, pred_covered_noclass = self.loss['overseg'](outputOffsets,targetBoxes,[targSize],calc_stats='bb_stats' in get)
@@ -1462,6 +1492,48 @@ class GraphPairTrainer(BaseTrainer):
                 'rel_Fm': 2*(fullPrec*eRecall)/(eRecall+fullPrec) if eRecall+fullPrec>0 else 0
                 }
 
+        ######Adding "BROS" (it has single groups, so BROS doesn't actual make a difference)
+        #make pred pairs
+        outputBoxes_nn_removed = torch.cat((outputBoxes[:,:6].cpu(),outputBoxes[:,-numClasses:].cpu()),dim=1)
+        pred_to_gt = newGetTargIndexForPreds_iou(targetBoxes[0].cpu(),outputBoxes_nn_removed,self.final_bb_iou_thresh,numClasses,False)
+        #pred_to_gt2 = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,False)
+        #targIndex_hard, _ = getTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.5,numClasses,hard_thresh=True,fixed=self.fixedAlign)
+        #targIndex, fullHit = getTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,hard_thresh=False,fixed=self.fixedAlign)
+        #targIndex_ = targIndex*fullHit
+        #import pdb;pdb.set_trace()
+        act_relPred = torch.sigmoid(relPred)
+        predPairs=[]
+        somethreshold=0.5
+        for pi, score in enumerate(act_relPred):
+            n1,n2 = relIndexes[pi]
+            if score>somethreshold:
+                predPairs.append((min(n1,n2),max(n1,n2)))
+
+        gtRelHit_BROS=set()
+        relPrec_BROS=0
+        for pi,(n0,n1) in enumerate(predPairs):
+            BROS_gtG0 = pred_to_gt[n0].item()
+            BROS_gtG1 = pred_to_gt[n1].item()
+            hit=False
+            if BROS_gtG0>=0 and BROS_gtG1>=0:
+                pair_id = (min(BROS_gtG0,BROS_gtG1),max(BROS_gtG0,BROS_gtG1))
+                if pair_id in adj:
+                    hit=True
+                    relPrec_BROS+=1
+                    gtRelHit_BROS.add((min(BROS_gtG0,BROS_gtG1),max(BROS_gtG0,BROS_gtG1)))
+    
+        log['final_rel_XX_BROS_TP']=relPrec_BROS
+        log['final_rel_XX_predCount']=len(predPairs)
+        log['final_rel_XX_gtCount']=len(adj)
+
+        log['final_rel_BROS_prec'] = relPrec_BROS/len(predPairs) if len(predPairs)>0 else 1
+        log['final_rel_BROS_recall'] = relPrec_BROS/len(adj) if len(adj)>0 else 1
+        log['final_rel_BROS_Fm'] = 2*log['final_rel_BROS_prec']*log['final_rel_BROS_recall']/(log['final_rel_BROS_recall']+log['final_rel_BROS_prec']) if log['final_rel_BROS_recall']+log['final_rel_BROS_prec']>0 else 0
+        ######%^
+
+
+
+
         gt_hit = [False]*targetBoxes.size(1)
         if self.model_ref.predNN:
             start=7
@@ -1469,11 +1541,18 @@ class GraphPairTrainer(BaseTrainer):
             start=6
         ed_true_pos=0
         for ni in range(outputBoxes.size(0)):
-            if bbAlignment[ni]>-1 and bbFullHit[ni] and not gt_hit[bbAlignment[ni]]:
-                p_cls = outputBoxes[ni,start:start+self.model_ref.numBBTypes].argmax().item()
-                if targetBoxes[0,bbAlignment[ni],13+p_cls]==1:
-                    ed_true_pos+=1
-                    gt_hit[bbAlignment[ni]]=True
+            #if bbAlignment[ni]>-1 and bbFullHit[ni] and not gt_hit[bbAlignment[ni]]:
+            #    p_cls = outputBoxes[ni,start:start+self.model_ref.numBBTypes].argmax().item()
+            #    if targetBoxes[0,bbAlignment[ni],13+p_cls]==1:
+            #        ed_true_pos+=1
+            #        gt_hit[bbAlignment[ni]]=True
+            if pred_to_gt[ni]>-1 and not gt_hit[pred_to_gt[ni]]:
+                ed_true_pos+=1
+                gt_hit[bbAlignment[ni]]=True
+        log['ED_TP_XX'] = ed_true_pos
+        log['ED_true_count_XX'] = targetBoxes.size(1)
+        log['ED_pred_count_XX'] = outputBoxes.size(0)
+        
         if targetBoxes.size(1)>0:
             log['ED_recall'] = ed_true_pos/targetBoxes.size(1)
         else:
@@ -1496,7 +1575,7 @@ class GraphPairTrainer(BaseTrainer):
                 log['class loss improvement (neg is good)'] = losses['classFinalLoss'].item()-class_loss
 
         if 'bb_stats' in get:
-            if self.model_ref.detector.predNumNeighbors:
+            if self.model_ref.detector_predNumNeighbors:
                 outputBoxes=torch.cat((outputBoxes[:,0:6],outputBoxes[:,7:]),dim=1) #throw away NN pred
             if targetBoxes is not None:
                 targetBoxes = targetBoxes.cpu()
@@ -1561,7 +1640,7 @@ class GraphPairTrainer(BaseTrainer):
 
 
 
-    def newRun(self,instance,useGT,threshIntur=None,get=[]):#,useOnlyGTSpace=False,useGTGroups=False):
+    def newRun(self,instance,useGT,threshIntur=None,get=[],forward_only=False):#,useOnlyGTSpace=False,useGTGroups=False):
         assert(not self.model_ref.predNN)
         numClasses = len(self.classMap)
         image, targetBoxes, adj, target_num_neighbors = self._to_tensor(instance)
@@ -1569,10 +1648,15 @@ class GraphPairTrainer(BaseTrainer):
         gtGroupAdj = instance['gt_groups_adj']
         targetIndexToGroup = instance['targetIndexToGroup']
         targetIndexToGroup = instance['targetIndexToGroup']
+        
         if self.use_gt_trans:
-            gtTrans = instance['transcription']
-            if (gtTrans)==0:
-                gtTrans=None
+            if useGT and 'word_bbs' in useGT:
+                gtTrans = instance['form_metadata']['word_trans']
+            else:
+                gtTrans = instance['transcription']
+            #if (gtTrans)==0:
+            #    gtTrans=None
+            
         else:
             gtTrans = None
         #t#tic=timeit.default_timer()#t##t#
@@ -1604,7 +1688,7 @@ class GraphPairTrainer(BaseTrainer):
                         targetBoxes_changed[:,:,3][targetBoxes_changed[:,:,3]<1]=1
                         targetBoxes_changed[:,:,4][targetBoxes_changed[:,:,4]<1]=1
 
-            elif self.model_ref.useCurvedBBs:# and 'only_space' not in useGT:#not useOnlyGTSpace:
+            elif self.model_ref.useCurvedBBs and targetBoxes is not None:# and 'only_space' not in useGT:#not useOnlyGTSpace:
                 #build targets of GT to pass as detections
                 ph_boxes = [torch.zeros(1,1,1,1,1)]*3
                 ph_cls = [torch.zeros(1,1,1,1,1)]*3
@@ -1665,7 +1749,7 @@ class GraphPairTrainer(BaseTrainer):
             #    y2 = targetBoxes[:,:,1]+targetBoxes[:,:,3]
             #    r = targetBoxes[:,:,2]
             #    targetBoxes_changed = torch.stack((x1,y1,x2,y2,r),dim=2) #leave out class information
-            else:
+            elif targetBoxes is not None:
                 targetBoxes_changed=targetBoxes.clone()
                 if self.model.training:
                     targetBoxes_changed[:,:,0] += torch.randn_like(targetBoxes_changed[:,:,0])
@@ -1677,8 +1761,10 @@ class GraphPairTrainer(BaseTrainer):
                     targetBoxes_changed[:,:,3][targetBoxes_changed[:,:,3]<1]=1
                     targetBoxes_changed[:,:,4][targetBoxes_changed[:,:,4]<1]=1
                     #we tweak the classes in the model
+            else:
+                targetBoxes_changed = None
 
-            if 'only_space' in useGT and not self.model_ref.useCurvedBBs:
+            if 'only_space' in useGT and not self.model_ref.useCurvedBBs and targetBoxes_changed is not None:
                 targetBoxes_changed[:,:,5:]=0 #zero out other information to ensure results aren't contaminated
                 #useCurved doesnt include class
 
@@ -1726,6 +1812,8 @@ class GraphPairTrainer(BaseTrainer):
                     gtTrans = gtTrans,
                     merge_first_only = self.iteration<self.merge_first_only_until)
             #gtPairing,predPairing = self.alignEdgePred(targetBoxes,adj,outputBoxes,relPred)
+        if forward_only:
+            return
         #t#self.opt_history['run model'].append(timeit.default_timer()-tic)#t#
         #t#tic=timeit.default_timer()#t##t#
         ### TODO code prealigned
@@ -1738,14 +1826,15 @@ class GraphPairTrainer(BaseTrainer):
         proposedInfo=None
         mergeProposedInfo=None
 
+
        # print('effective prop thresh: {:.3f}, raw: {:.3f}'.format(torch.sigmoid(torch.FloatTensor([rel_prop_pred[-1]])).item(),rel_prop_pred[-1]))
 
-        merged_first = self.model_ref.merge_first and not useOnlyGTSpace
+        merged_first = self.model_ref.merge_first #and not useOnlyGTSpace
         if allEdgePred is not None:
             for graphIteration,(outputBoxes,edgePred,nodePred,edgeIndexes,predGroups) in enumerate(zip(allOutputBoxes,allEdgePred,allNodePred,allEdgeIndexes,allPredGroups)):
 
-                if self.model_ref.merge_first and useOnlyGTSpace:
-                    graphIteration+=1
+                #if self.model_ref.merge_first and useOnlyGTSpace:
+                #    graphIteration+=1
 
                 #t#tic2=timeit.default_timer()#t##t#
                 predEdgeShouldBeTrue,predEdgeShouldBeFalse, bbAlignment, proposedInfoI, logIter, edgePredTypes, missedRels = self.simplerAlignEdgePred(
@@ -2003,13 +2092,13 @@ class GraphPairTrainer(BaseTrainer):
 
             tic2=timeit.default_timer()
             if 'box' in self.loss:
-                boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
+                boxLoss, position_loss, conf_loss, class_loss, nn_loss, recall, precision, recall_noclass,precision_noclass = self.loss['box'](outputOffsets,targetBoxes,[targSize],target_num_neighbors)
                 losses['boxLoss'] += boxLoss
                 log['bb_position_loss'] = position_loss
                 log['bb_conf_loss'] = conf_loss
                 log['bb_class_loss'] = class_loss
                 log['bb_nn_loss'] = nn_loss
-            else:
+            elif 'overseg' in self.loss:
                 oversegLoss, position_loss, conf_loss, class_loss, rot_loss, recall, precision, gt_covered, pred_covered, recall_noclass, precision_noclass, gt_covered_noclass, pred_covered_noclass = self.loss['overseg'](outputOffsets,targetBoxes,[targSize],calc_stats='bb_stats' in get)
                 losses['oversegLoss'] = oversegLoss
                 log['bb_position_loss'] = position_loss
@@ -2020,6 +2109,11 @@ class GraphPairTrainer(BaseTrainer):
                     log['bb_precision_noclass']=precision_noclass
                     log['bb_gt_covered_noclass']=gt_covered_noclass
                     log['bb_pred_covered_noclass']=pred_covered_noclass
+            elif 'init_class' in self.loss:
+                assert 'word_bbs' in useGT
+                init_class_pred = outputOffsets
+                targetClasses = instance['form_metadata']['word_classes'].to(init_class_pred.device)
+                losses['init_classLoss'] = self.loss['init_class'](init_class_pred,targetClasses)
 
         #We'll use information from the final prediction before the final pruning
         if 'DocStruct' in get:
@@ -2154,6 +2248,8 @@ class GraphPairTrainer(BaseTrainer):
                         sum_hit+=0.5
             if len(gtGroupAdj)>0:
                 log['DocStruct redid hit@1'] = sum_hit/len(gtGroupAdj)
+                log['DocStruct_hit_XX'] = sum_hit
+                log['DocStruct_count_XX'] = len(gtGroupAdj)
 
             
             
@@ -3534,3 +3630,51 @@ class GraphPairTrainer(BaseTrainer):
             decision=decision.to(relPred.device)
             relPred[keep] = torch.where(0==decision,relPred[keep]-1,relPred[keep]+self.thresh_rel)
             relPred[~keep] -=1
+
+    def bn_update(self):
+        r"""Updates BatchNorm running_mean, running_var buffers in the model.
+        It performs one pass over data in `loader` to estimate the activation
+        statistics for BatchNorm layers in the model.
+        Args:
+            loader (torch.utils.data.DataLoader): dataset loader to compute the
+                activation statistics on. Each data batch should be either a
+                tensor, or a list/tuple whose first element is a tensor
+                containing data.
+            model (torch.nn.Module): model for which we seek to update BatchNorm
+                statistics.
+            device (torch.device, optional): If set, data will be trasferred to
+                :attr:`device` before being passed into :attr:`model`.
+        """
+        model=self.model
+        loader=self.data_loader
+        if not _check_bn(model):
+            return
+        print('updating bn')
+        was_training = model.training
+        model.train()
+        momenta = {}
+        #model.apply(_reset_bn)
+        #model.apply(lambda module: _get_momenta(module, momenta))
+        n = 0
+        with torch.no_grad():
+            for instance in loader:
+
+                b = 1#input.size(0)
+
+                momentum = b / float(n + b)
+                #for module in momenta.keys():
+                #    module.momentum = momentum
+
+                self.newRun(instance,self.useGT(self.iteration),forward_only=True)
+                n += b
+
+        #model.apply(lambda module: _set_momenta(module, momenta))
+        #model.train(was_training)
+
+    def update_swa_batch_norm(self):
+        #update_bn(self.data_loader,self.swa_model)
+        tmp=self.model.cpu()
+        self.model=self.swa_model.train()
+        for instance in self.data_loader:
+            self.newRun(instance,self.useGT(self.iteration),forward_only=True)
+        self.model=tmp

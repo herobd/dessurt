@@ -4,8 +4,8 @@ from base import BaseModel
 import math
 import json
 import numpy as np
-from .net_builder import make_layers
-
+from .net_builder import make_layers, getGroupSize
+from .resnet import resnet50
 
 
 
@@ -54,29 +54,63 @@ class YoloBoxDetector(nn.Module): #BaseModel
         self.numOutLine = (self.numBBTypes+self.numLineParams)*self.predLineCount
         self.numOutPoint = self.predPointCount*3
 
-        if 'down_layers_cfg' in config:
-            layers_cfg = config['down_layers_cfg']
-        else:
-            layers_cfg=[in_ch,64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512]
+        if 'publaynet_model' in config:
+            #https://github.com/phamquiluan/PubLayNet
+            self.use_resnet=True
+            checkpoint = torch.load(config['publaynet_model'], map_location='cpu')
+            self.resnet = resnet50(pretrained=False)
+            #has five downsamples
+            model_state_dict = self.resnet.state_dict()
+            new_state_dict={}
+            prefix = 'backbone.body.'
+            for key,value in checkpoint['model'].items():
+                if key.startswith(prefix):
+                    new_state_dict[key[len(prefix):]] = value
+            #copy FC accross
+            #new_state_dict['fc.weight'] = model_state_dict['fc.weight']
+            #new_state_dict['fc.bias'] = model_state_dict['fc.bias']
+                            
+            self.resnet.load_state_dict(new_state_dict)
+            self.upsample = nn.Sequential(
+                    nn.ConvTranspose2d(2048,512,2,2,0),
+                    nn.GroupNorm(16,512),
+                    nn.ReLU(True))
+            self.combine_layer = nn.Sequential(
+                    nn.Conv2d(1024+512,512,kernel_size=1,padding=0),
+                    nn.GroupNorm(16,512),
+                    nn.ReLU(True))
 
-        self.net_down_modules, down_last_channels = make_layers(layers_cfg, dilation,norm,dropout=dropout)
-        self.final_features=None 
-        self.last_channels=down_last_channels
+                    #convReLU(2048,1024,'group',kernel=4,droupout=0.1,stride=2
+            self.net_down_modules=[]
+            down_last_channels = self.last_channels = 512# 2048, 256
+            self.scale=(16,16)
+            self.save_scale=16
+            self.save2_scale=4
+        else:
+            self.use_resnet=False
+            if 'down_layers_cfg' in config:
+                layers_cfg = config['down_layers_cfg']
+            else:
+                layers_cfg=[in_ch,64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512]
+
+            self.net_down_modules, down_last_channels = make_layers(layers_cfg, dilation,norm,dropout=dropout)
+            self.final_features=None 
+            self.last_channels=down_last_channels
+            scaleX=1
+            scaleY=1
+            for a in layers_cfg:
+                if a=='M' or (type(a) is str and a[0]=='D'):
+                    scaleX*=2
+                    scaleY*=2
+                elif type(a) is str and a[0]=='U':
+                    scaleX/=2
+                    scaleY/=2
+                elif type(a) is str and a[0:4]=='long': #long pool
+                    scaleX*=3
+                    scaleY*=2
+            self.scale=(scaleX,scaleY)
         self.net_down_modules.append(nn.Conv2d(down_last_channels, self.numOutBB+self.numOutLine+self.numOutPoint, kernel_size=1))
         self._hack_down = nn.Sequential(*self.net_down_modules)
-        scaleX=1
-        scaleY=1
-        for a in layers_cfg:
-            if a=='M' or (type(a) is str and a[0]=='D'):
-                scaleX*=2
-                scaleY*=2
-            elif type(a) is str and a[0]=='U':
-                scaleX/=2
-                scaleY/=2
-            elif type(a) is str and a[0:4]=='long': #long pool
-                scaleX*=3
-                scaleY*=2
-        self.scale=(scaleX,scaleY)
 
         if self.predPixelCount>0:
             if 'up_layers_cfg' in config:
@@ -97,7 +131,32 @@ class YoloBoxDetector(nn.Module): #BaseModel
 
     def forward(self, img):
         #import pdb; pdb.set_trace()
-        y = self._hack_down(img)
+        if self.use_resnet:
+            x2,x3,x4,x5 = self.resnet(img)
+            x3=None
+
+            x5_4 = self.upsample(x5)
+            if x5_4.size(2)<x4.size(2):
+                assert x4.size(2)-x5_4.size(2)<2
+                x4 = x4[:,:,:x5_4.size(2)]
+            elif x5_4.size(2)>x4.size(2):
+                assert x5_4.size(2)-x4.size(2)<2
+                x5_4 = x5_4[:,:,:x4.size(2)]
+            if x5_4.size(3)<x4.size(3):
+                assert x4.size(3)-x5_4.size(3)<2
+                x4 = x4[:,:,:,:x5_4.size(3)]
+            elif x5_4.size(3)>x4.size(3):
+                assert x5_4.size(3)-x4.size(3)<2
+                x5_4 = x5_4[:,:,:,:x4.size(3)]
+            final_x = self.combine_layer(torch.cat([x4,x5_4],dim=1))
+            if self.forGraphPairing:
+                self.saved_features2=x2
+                self.saved_features=final_x
+            else:
+                x2=None
+            y = self._hack_down(final_x)
+        else:
+            y = self._hack_down(img)
         if self.discard_first_class_pred:
             to_cat = []
             for a in range(self.numAnchors):
@@ -220,8 +279,7 @@ class YoloBoxDetector(nn.Module): #BaseModel
                 p-=1
             pixelPreds = self.net_up_modules[-1](y2)
             
-
-
+        
 
         return bbPredictions, offsetPredictions, linePreds, offsetLinePreds, pointPreds, pixelPreds #, avg_conf_per_anchor
 
@@ -242,32 +300,33 @@ class YoloBoxDetector(nn.Module): #BaseModel
     def setForGraphPairing(self,beginningOfLast=False,featuresFromHere=-1,featuresFromScale=-2,f2Here=None,f2Scale=None):
         self.forGraphPairing=True
         self.saved_features=None
-        def save_feats(module,input,output):
-            self.saved_features=output
-        if beginningOfLast:
-            self.net_down_modules[-2][0].register_forward_hook(save_final) #after max pool
-            self.last_channels= self.last_channels//2 #HACK
-        else:
-            typ = type( self.net_down_modules[featuresFromScale][featuresFromHere])
-            if typ == torch.nn.modules.activation.ReLU or typ == torch.nn.modules.MaxPool2d:
-                self.net_down_modules[featuresFromScale][featuresFromHere].register_forward_hook(save_feats)
-                if featuresFromScale<0:
-                    featuresFromScale = len(self.net_down_modules)+featuresFromScale
-                self.save_scale = 2**featuresFromScale
+        if not self.use_resnet:
+            def save_feats(module,input,output):
+                self.saved_features=output
+            if beginningOfLast:
+                self.net_down_modules[-2][0].register_forward_hook(save_final) #after max pool
+                self.last_channels= self.last_channels//2 #HACK
             else:
-                print('Layer {},{} of the final conv block was specified, but it is not a ReLU layer. Did you choose the right layer?'.format(featuresFromScale,featuresFromHere))
-                exit()
-        if f2Here is not None:
-            def save_feats2(module,input,output):
-                self.saved_features2=output
-            typ = type( self.net_down_modules[f2Scale][f2Here])
-            if typ == torch.nn.modules.activation.ReLU or typ==torch.nn.modules.MaxPool2d:
-                self.net_down_modules[f2Scale][f2Here].register_forward_hook(save_feats2)
-                if f2Scale<0:
-                    f2Scale = len(self.net_down_modules)+f2Scale
-                self.save2_scale = 2**f2Scale
-            else:
-                print('Layer {},{} of the final conv block was specified, but it is not a ReLU layer. Did you choose the right layer?'.format(f2Scale,f2Here))
+                typ = type( self.net_down_modules[featuresFromScale][featuresFromHere])
+                if typ == torch.nn.modules.activation.ReLU or typ == torch.nn.modules.MaxPool2d:
+                    self.net_down_modules[featuresFromScale][featuresFromHere].register_forward_hook(save_feats)
+                    if featuresFromScale<0:
+                        featuresFromScale = len(self.net_down_modules)+featuresFromScale
+                    self.save_scale = 2**featuresFromScale
+                else:
+                    print('Layer {},{} of the final conv block was specified, but it is not a ReLU layer. Did you choose the right layer?'.format(featuresFromScale,featuresFromHere))
+                    exit()
+            if f2Here is not None:
+                def save_feats2(module,input,output):
+                    self.saved_features2=output
+                typ = type( self.net_down_modules[f2Scale][f2Here])
+                if typ == torch.nn.modules.activation.ReLU or typ==torch.nn.modules.MaxPool2d:
+                    self.net_down_modules[f2Scale][f2Here].register_forward_hook(save_feats2)
+                    if f2Scale<0:
+                        f2Scale = len(self.net_down_modules)+f2Scale
+                    self.save2_scale = 2**f2Scale
+                else:
+                    print('Layer {},{} of the final conv block was specified, but it is not a ReLU layer. Did you choose the right layer?'.format(f2Scale,f2Here))
     def setDEBUG(self):
         #self.debug=[None]*5
         #for i in range(0,1):

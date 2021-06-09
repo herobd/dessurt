@@ -205,8 +205,11 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
 
         #Draw pred groups (based on bb pred)
         groupCenters=[]
-        if predGroups is None:
+        if predGroups is None and bbs is not None:
             predGroups = [[i] for i in range(len(bbs))]
+        elif predGroups is None:
+            predGroups = []
+
         for group in predGroups:
             maxX=maxY=0
             minY=minX=99999999
@@ -470,6 +473,7 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
                 img_f.line(image,(maxX,maxY),(minX,maxY),color,lineWidth)
                 img_f.line(image,(minX,maxY),(minX,minY),color,lineWidth)
                 #image[minY:minY+3,minX:minX+3]=idColor
+                shade=1
                 if cls==0:
                     color=(0,0,shade) #header
                 elif cls==1:

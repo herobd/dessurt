@@ -84,7 +84,8 @@
         "valid_with_gt": true,
         "use_all_bb_pred_for_rel_loss": true,
 
-        "use_learning_schedule": "multi_rise then swa",
+        "use_learning_schedule": "multi_rise then ramp_to_swa",
+"ramp_down_steps": 10000,
         "warmup_steps": [1000],
         "swa_lr_mul": 0.1,
         "adapt_lr": false
@@ -96,7 +97,7 @@
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
         "percent_rel_to_keep": 0.5,
-        "max_rel_to_keep": 400,
+        "max_rel_to_keep": 800,
         "roi_batch_size": 400,
 
 	"use_rel_shape_feats": "corner",
@@ -105,7 +106,7 @@
         "use_2nd_detect_scale_feats": 2,
         "use_2nd_detect_feats_size": 64,
         "use_fixed_masks": true,
-        "no_grad_feats": true,
+        
         "feat_norm": "group_norm",
 
         "expand_rel_context": 20,

@@ -10,3 +10,4 @@ from .toy_graph_trainer import ToyGraphTrainer
 from .toy_metagraph_trainer import ToyMetaGraphTrainer
 from .maxpairs_metagraph_trainer import MaxPairsMetaGraphTrainer
 from .hwr_trainer import HWRTrainer
+from .qa_trainer import QATrainer

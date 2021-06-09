@@ -5,7 +5,7 @@ import json
 #from skimage import draw
 #import skimage.transform as sktransform
 import os
-import math
+import math, random
 from utils.crop_transform import CropBoxTransform
 from utils import augmentation
 from collections import defaultdict, OrderedDict
@@ -31,6 +31,7 @@ class GraphPairDataset(torch.utils.data.Dataset):
         #    self.augmentation_params=config['augmentation_params']
         #else:
         #    self.augmentation_params=None
+        self.questions = config['questions'] if 'questions' in config else False
         self.color = config['color'] if 'color' in config else True
         self.rotate = config['rotation'] if 'rotation' in config else False
         #patchSize=config['patch_size']
@@ -49,6 +50,9 @@ class GraphPairDataset(torch.utils.data.Dataset):
                     os.mkdir(self.cache_path)
         else:
             self.cache_resized = False
+        self.aug_params = config['additional_aug_params'] if 'additional_aug_params' in config else {}
+
+
         self.pixel_count_thresh = config['pixel_count_thresh'] if 'pixel_count_thresh' in config else 10000000
         self.max_dim_thresh = config['max_dim_thresh'] if 'max_dim_thresh' in config else 2700
 
@@ -107,8 +111,10 @@ class GraphPairDataset(torch.utils.data.Dataset):
                 fx=partial_rescale,
                 fy=partial_rescale,
                 )
-        if not self.color:
+        if len(np_img.shape)==2:
             np_img=np_img[...,None] #add 'color' channel
+        if self.color and np_img.shape[2]==1:
+            np_img = np.repeat(np_img,3,axis=2)
         ##print('resize: {}  [{}, {}]'.format(timeit.default_timer()-tic,np_img.shape[0],np_img.shape[1]))
         
         ##tic=timeit.default_timer()
@@ -137,11 +143,53 @@ class GraphPairDataset(torch.utils.data.Dataset):
         #pixel_gt = table_pixels
 
         ##ticTr=timeit.default_timer()
+        if self.questions: #we need to do questions before crop to have full context
+            #we have to relationships to get questions
+            pairs=set()
+            for index1,id in enumerate(ids): #updated
+                responseBBIdList = self.getResponseBBIdList(id,annotations)
+                for bbId in responseBBIdList:
+                    try:
+                        index2 = ids.index(bbId)
+                        pairs.add((min(index1,index2),max(index1,index2)))
+                    except ValueError:
+                        pass
+            groups_adj = set()
+            if groups is not None:
+                for n0,n1 in pairs:
+                    g0=-1
+                    g1=-1
+                    for i,ns in enumerate(groups):
+                        if n0 in ns:
+                            g0=i
+                            if g1!=-1:
+                                break
+                        if n1 in ns:
+                            g1=i
+                            if g0!=-1:
+                                break
+                    if g0!=g1:
+                        groups_adj.add((min(g0,g1),max(g0,g1)))
+            questions_and_answers = self.makeQuestions(bbs,trans,groups,groups_adj)
+        else:
+            questions_and_answers=None
+
         if self.transform is not None:
+            if 'word_boxes' in form_metadata:
+                word_bbs = form_metadata['word_boxes']
+                dif_f = bbs.shape[2]-word_bbs.shape[1]
+                blank = np.zeros([word_bbs.shape[0],dif_f])
+                prep_word_bbs = np.concatenate([word_bbs,blank],axis=1)[None,...]
+                crop_bbs = np.concatenate([bbs,prep_word_bbs],axis=1)
+                crop_ids=ids+['word{}'.format(i) for i in range(word_bbs.shape[0])]
+            else:
+                crop_bbs = bbs
+                crop_ids = ids
             out, cropPoint = self.transform({
                 "img": np_img,
-                "bb_gt": bbs,
-                'bb_auxs':ids,
+                "bb_gt": crop_bbs,
+                'bb_auxs':crop_ids,
+                #'word_bbs':form_metadata['word_boxes'] if 'word_boxes' in form_metadata else None
                 #"line_gt": {
                 #    "start_of_line": start_of_line,
                 #    "end_of_line": end_of_line
@@ -153,8 +201,39 @@ class GraphPairDataset(torch.utils.data.Dataset):
                 
             }, cropPoint)
             np_img = out['img']
-            bbs = out['bb_gt']
-            ids= out['bb_auxs']
+
+            if 'word_boxes' in form_metadata:
+                saw_word=False
+                word_index=-1
+                for i,ii in enumerate(out['bb_auxs']):
+                    if not saw_word:
+                        if type(ii) is str and 'word' in ii:
+                            saw_word=True
+                            word_index=i
+                    else:
+                        assert 'word' in ii
+                bbs = out['bb_gt'][:,:word_index]
+                ids= out['bb_auxs'][:word_index]
+                form_metadata['word_boxes'] = out['bb_gt'][0,word_index:,:8]
+                word_ids=out['bb_auxs'][word_index:]
+                form_metadata['word_trans'] = [form_metadata['word_trans'][int(id[4:])] for id in word_ids]
+            else:
+                bbs = out['bb_gt']
+                ids= out['bb_auxs'] 
+
+            if questions_and_answers is not None:
+                questions=[]
+                answers=[]
+                questions_and_answers = [(q,a,qids) for q,a,qids in questions_and_answers if all((i in ids) for i in qids)]
+        if questions_and_answers is not None:
+            if len(questions_and_answers) > self.questions:
+                questions_and_answers = random.sample(questions_and_answers,k=self.questions)
+            if len(questions_and_answers)>0:
+                questions,answers,_ = zip(*questions_and_answers)
+            else:
+                return self.getitem((index+1)%len(self))
+        else:
+            questions=answers=None
 
 
 
@@ -162,9 +241,9 @@ class GraphPairDataset(torch.utils.data.Dataset):
             ##tic=timeit.default_timer()
             if np_img.shape[2]==3:
                 np_img = augmentation.apply_random_color_rotation(np_img)
-                np_img = augmentation.apply_tensmeyer_brightness(np_img)
+                np_img = augmentation.apply_tensmeyer_brightness(np_img,**self.aug_params)
             else:
-                np_img = augmentation.apply_tensmeyer_brightness(np_img)
+                np_img = augmentation.apply_tensmeyer_brightness(np_img,**self.aug_params)
             ##print('augmentation: {}'.format(timeit.default_timer()-tic))
         newGroups = []
         for group in groups:
@@ -209,6 +288,8 @@ class GraphPairDataset(torch.utils.data.Dataset):
         #end_of_line = None if end_of_line is None or end_of_line.shape[1] == 0 else torch.from_numpy(end_of_line)
         
         bbs = convertBBs(bbs,self.rotate,numClasses)
+        if 'word_boxes' in form_metadata:
+             form_metadata['word_boxes'] = convertBBs(form_metadata['word_boxes'][None,...],self.rotate,0)[0,...]
         if len(numNeighbors)>0:
             numNeighbors = torch.tensor(numNeighbors)[None,:] #add batch dim
         else:
@@ -237,6 +318,9 @@ class GraphPairDataset(torch.utils.data.Dataset):
             targetIndexToGroup={}
             for groupId,bbIds in enumerate(groups):
                 targetIndexToGroup.update({bbId:groupId for bbId in bbIds})
+        
+        transcription = [trans[id] for id in ids]
+
         return {
                 "img": img,
                 "bb_gt": bbs,
@@ -245,12 +329,14 @@ class GraphPairDataset(torch.utils.data.Dataset):
                 "imgName": imageName,
                 "scale": s,
                 "cropPoint": cropPoint,
-                "transcription": [trans[id] for id in ids],
+                "transcription": transcription,
                 "metadata": [metadata[id] for id in ids if id in metadata],
                 "form_metadata": form_metadata,
                 "gt_groups": groups,
                 "targetIndexToGroup":targetIndexToGroup,
-                "gt_groups_adj": groups_adj
+                "gt_groups_adj": groups_adj,
+                "questions": questions,
+                "answers": answers
                 }
 
 
