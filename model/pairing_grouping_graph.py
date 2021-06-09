@@ -1351,7 +1351,8 @@ class PairingGroupingGraph(BaseModel):
         else:
             if len(bbs)>1:
                 nodeConfPred = torch.sigmoid(nodeOuts[:,-1,self.nodeIdxConf:self.nodeIdxConf+1]).cpu()
-                bbConfPred = torch.FloatTensor(bbs.size(0),1)
+                #bbConfPred = torch.FloatTensor(bbs.size(0),1) this didn't work with AMP
+                bbConfPred = nodeConfPred.new_empty([bbs.size(0),1])
                 for i,group in enumerate(groups):
                     bbConfPred[group] = nodeConfPred[i].detach()
                 if self.include_bb_conf:
