@@ -116,7 +116,7 @@
         "use_2nd_detect_feats_size": 128,
         "detect_save2_scale": 4,
         "use_fixed_masks": true,
-        "no_grad_feats": true,
+        
 
         "merge_first": true,
         "expand_merge_context": [10,20],

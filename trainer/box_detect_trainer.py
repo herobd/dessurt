@@ -292,10 +292,12 @@ class BoxDetectTrainer(BaseTrainer):
         #    this_loss, position_loss, conf_loss, class_loss, recall, precision = lossC
         #else:
         data, targetBoxes, targetBoxes_sizes, targetLines, targetLines_sizes, targetPoints, targetPoints_sizes, targetPixels,target_num_neighbors = self._to_tensor(instance)
+        if not self.model.predNumNeighbors:
+            target_num_neighbors=None
         outputBoxes, outputOffsets, outputLines, outputOffsetLines, outputPoints, outputPixels = self.model(data)
 
         if 'box' in self.loss:
-            this_loss, position_loss, conf_loss, class_loss, nn_loss, recall, precision = self.loss['box'](outputOffsets,targetBoxes,targetBoxes_sizes,target_num_neighbors)
+            this_loss, position_loss, conf_loss, class_loss, nn_loss, recall, precision, recall_noclass, precision_noclass = self.loss['box'](outputOffsets,targetBoxes,targetBoxes_sizes,target_num_neighbors)
 
             losses['boxLoss']=this_loss#.item()
             log['position_loss']=position_loss
@@ -303,6 +305,16 @@ class BoxDetectTrainer(BaseTrainer):
             log['class_loss']=class_loss
             log['recall']=recall
             log['precision']=precision
+            if recall+precision>0:
+                log['F1']=2*recall*precision/(recall+precision)
+            else:
+                log['F1']=0
+            log['recall_noclass']=recall_noclass
+            log['precision_noclass']=precision_noclass
+            if recall_noclass+precision_noclass>0:
+                log['F1_noclass']=2*recall_noclass*precision_noclass/(recall_noclass+precision_noclass)
+            else:
+                log['F1_noclass']=0
             #print('boxLoss:{}'.format(this_loss))
 #display(instance)
         elif 'overseg' in self.loss:
@@ -317,6 +329,7 @@ class BoxDetectTrainer(BaseTrainer):
                 log['precision_noclass']=precision_noclass
                 log['gt_covered_noclass']=gt_covered_noclass
                 log['pred_covered_noclass']=pred_covered_noclass
+                log['F1_covered_noclass']=2*gt_covered_noclass*pred_covered_noclass/(gt_covered_noclass+pred_covered_noclass)
             else:
                 this_loss, position_loss, conf_loss, class_loss, rot_loss, _,_,_,_,_,_,_,_ = self.loss['overseg'](outputOffsets,targetBoxes,targetBoxes_sizes)
             losses['oversegLoss']=this_loss#.item()

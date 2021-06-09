@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-#SBATCH --time=1:20:00   # walltime
+#SBATCH --time=0:30:00   # walltime
 #SBATCH --ntasks=5
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -46,14 +46,21 @@ conda info --envs
 #mkdir out2
 
 
-echo 'no 1 net yes'
-python new_eval.py -c saved/FUNSDLines_pair_binary44rv_mc_prop_preBckBn_120k/checkpoint-latest.pth -g 0 -v 0 -T 
+#echo 'no 1 net yes'
+#python new_eval.py -c saved/FUNSDLines_pair_binary44rv_mc_prop_preBckBn_120k/checkpoint-latest.pth -g 0 -v 0 -T 
 
-echo 'no 2 net yes'
-python new_eval.py -c saved/FUNSDLines_pair_binary333rv_mc_prop_preBckBn_120k/checkpoint-latest.pth -g 0 -v 0 -T 
-echo 'no 2 line-of-sight yes'
-python new_eval.py -c saved/FUNSDLines_pair_binary333rv_mc_prop_preBckBn_120k/checkpoint-latest.pth -g 0 -v 0 -T -a model=change_relationship_proposal=line_of_sight
-echo 'no 2 net no'
-python new_eval.py -c saved/FUNSDLines_pair_binary333rv_mc_prop_preBckBn_120k/checkpoint-latest.pth -g 0 -v 0 -T -a model=graph_config=0=merge_thresh=1.1,model=graph_config=1=merge_thresh=1.1,model=graph_config=2=merge_thresh=1.1
+#echo 'no 2 net yes'
+#python new_eval.py -c saved/FUNSDLines_pair_binary333rv_mc_prop_preBckBn_120k/checkpoint-latest.pth -g 0 -v 0 -T 
+echo 'line-of-sight 2'
+python new_eval.py -c saved/FUNSDLines_pair_graph222rv_ablate/checkpoint-latest.pth -g 0 -v 0 -T -a model=change_relationship_proposal=line_of_sight
+#python new_eval.py -c saved/FUNSDLines_pair_graph222rv_ablate3/checkpoint-latest.pth -g 0 -v 0 -T -a model=change_relationship_proposal=line_of_sight
+#python new_eval.py -c saved/FUNSDLines_pair_graph222rv_ablate4/checkpoint-latest.pth -g 0 -v 0 -T -a model=change_relationship_proposal=line_of_sight
+#python new_eval.py -c saved/FUNSDLines_pair_graph222rv_ablate5/checkpoint-latest.pth -g 0 -v 0 -T -a model=change_relationship_proposal=line_of_sight
+
+echo 'no merge 2'
+python new_eval.py -c saved/FUNSDLines_pair_graph222rv_ablate/checkpoint-latest.pth -g 0 -v 0 -T -a model=graph_config=0=merge_thresh=1.1,model=graph_config=1=merge_thresh=1.1,model=graph_config=2=merge_thresh=1.1
+#python new_eval.py -c saved/FUNSDLines_pair_graph222rv_ablate3/checkpoint-latest.pth -g 0 -v 0 -T -a model=graph_config=0=merge_thresh=1.1,model=graph_config=1=merge_thresh=1.1,model=graph_config=2=merge_thresh=1.1
+#python new_eval.py -c saved/FUNSDLines_pair_graph222rv_ablate4/checkpoint-latest.pth -g 0 -v 0 -T -a model=graph_config=0=merge_thresh=1.1,model=graph_config=1=merge_thresh=1.1,model=graph_config=2=merge_thresh=1.1
+#python new_eval.py -c saved/FUNSDLines_pair_graph222rv_ablate5/checkpoint-latest.pth -g 0 -v 0 -T -a model=graph_config=0=merge_thresh=1.1,model=graph_config=1=merge_thresh=1.1,model=graph_config=2=merge_thresh=1.1
 
 

@@ -17,6 +17,9 @@ def line(img,p1,p2,color,thickness=1,draw='set'):
         c_points = set(zip(c_rr,c_cc)) #remove duplicates
         for r,c in c_points:
             rr,cc = skimage.draw.line(y1+r,x1+c,y2+r,x2+c)
+            wanted = (rr>=0) & (rr<img.shape[0]) & (cc>=0) & (cc<img.shape[1])
+            rr=rr[wanted]
+            cc=cc[wanted]
             if draw=='set':
                 img[rr,cc]=color
             elif draw=='add':
@@ -35,6 +38,9 @@ def line(img,p1,p2,color,thickness=1,draw='set'):
         if thickness>1:
             if x1<img.shape[1]-2 and y1<img.shape[0]-2 and x2<img.shape[1]-2 and y2<img.shape[0]-2:
                 rr,cc = skimage.draw.line(y1+1,x1+1,y2+1,x2+1)
+                wanted = (rr>=0) & (rr<img.shape[0]) & (cc>=0) & (cc<img.shape[1])
+                rr=rr[wanted]
+                cc=cc[wanted]
                 if draw=='set':
                     img[rr,cc]=color
                 elif draw=='add':
@@ -43,6 +49,9 @@ def line(img,p1,p2,color,thickness=1,draw='set'):
                     img[rr,cc]*=color
             if x1<img.shape[1]-2 and x2<img.shape[1]-2:
                 rr,cc = skimage.draw.line(y1,x1+1,y2,x2+1)
+                wanted = (rr>=0) & (rr<img.shape[0]) & (cc>=0) & (cc<img.shape[1])
+                rr=rr[wanted]
+                cc=cc[wanted]
                 if draw=='set':
                     img[rr,cc]=color
                 elif draw=='add':
@@ -51,6 +60,9 @@ def line(img,p1,p2,color,thickness=1,draw='set'):
                     img[rr,cc]*=color
             if y1<img.shape[0]-2 and y2<img.shape[0]-2:
                 rr,cc = skimage.draw.line(y1+1,x1,y2+1,x2)
+                wanted = (rr>=0) & (rr<img.shape[0]) & (cc>=0) & (cc<img.shape[1])
+                rr=rr[wanted]
+                cc=cc[wanted]
                 if draw=='set':
                     img[rr,cc]=color
                 elif draw=='add':
@@ -59,6 +71,9 @@ def line(img,p1,p2,color,thickness=1,draw='set'):
                     img[rr,cc]*=color
         if thickness>2:
             rr,cc = skimage.draw.line(y1-1,x1-1,y2-1,x2-1)
+            wanted = (rr>=0) & (rr<img.shape[0]) & (cc>=0) & (cc<img.shape[1])
+            rr=rr[wanted]
+            cc=cc[wanted]
             if draw=='set':
                 img[rr,cc]=color
             elif draw=='add':
@@ -66,6 +81,9 @@ def line(img,p1,p2,color,thickness=1,draw='set'):
             elif draw=='mult':
                 img[rr,cc]*=color
             rr,cc = skimage.draw.line(y1,x1-1,y2,x2-1)
+            wanted = (rr>=0) & (rr<img.shape[0]) & (cc>=0) & (cc<img.shape[1])
+            rr=rr[wanted]
+            cc=cc[wanted]
             if draw=='set':
                 img[rr,cc]=color
             elif draw=='add':
@@ -73,6 +91,9 @@ def line(img,p1,p2,color,thickness=1,draw='set'):
             elif draw=='mult':
                 img[rr,cc]*=color
             rr,cc = skimage.draw.line(y1-1,x1,y2-1,x2)
+            wanted = (rr>=0) & (rr<img.shape[0]) & (cc>=0) & (cc<img.shape[1])
+            rr=rr[wanted]
+            cc=cc[wanted]
             if draw=='set':
                 img[rr,cc]=color
             elif draw=='add':
@@ -81,6 +102,9 @@ def line(img,p1,p2,color,thickness=1,draw='set'):
                 img[rr,cc]*=color
             if y1<img.shape[0]-2 and y2<img.shape[0]-2:
                 rr,cc = skimage.draw.line(y1+1,x1-1,y2+1,x2-1)
+                wanted = (rr>=0) & (rr<img.shape[0]) & (cc>=0) & (cc<img.shape[1])
+                rr=rr[wanted]
+                cc=cc[wanted]
                 if draw=='set':
                     img[rr,cc]=color
                 elif draw=='add':
@@ -89,6 +113,9 @@ def line(img,p1,p2,color,thickness=1,draw='set'):
                     img[rr,cc]*=color
             if x1<img.shape[1]-2 and x2<img.shape[1]-2:
                 rr,cc = skimage.draw.line(y1-1,x1+1,y2-1,x2+1)
+                wanted = (rr>=0) & (rr<img.shape[0]) & (cc>=0) & (cc<img.shape[1])
+                rr=rr[wanted]
+                cc=cc[wanted]
                 if draw=='set':
                     img[rr,cc]=color
                 elif draw=='add':
@@ -120,13 +147,16 @@ def show(): #replaces cv2.waitKey()
 
 def resize(img,dim,fx=None,fy=None): #remove ",interpolation = cv2.INTER_CUBIC"
     hasColor = len(img.shape)==3
+    assert not hasColor
     if dim[0]==0:
         downsize = fx<1 and fy<1
         
-        return transform.rescale(img,(fy,fx),3,multichannel=hasColor,anti_aliasing=downsize,preserve_range=True)
+        return transform.rescale(img,(fy,fx),3,anti_aliasing=downsize,preserve_range=True)
+        #return transform.rescale(img,(fy,fx),3,multichannel=hasColor,anti_aliasing=downsize,preserve_range=True)
     else:
         downsize = dim[0]<img.shape[0] and dim[1]<img.shape[1]
-        return transform.resize(img,dim,3,multichannel=hasColor,anti_aliasing=downsize,preserve_range=True)
+        return transform.resize(img,dim,3,anti_aliasing=downsize,preserve_range=True)
+        #return transform.resize(img,dim,3,multichannel=hasColor,anti_aliasing=downsize,preserve_range=True)
 
 def otsuThreshold(img):
     #if len(img.shape)==3 and img.shape[2]==1:

@@ -214,6 +214,24 @@ class BaseTrainer:
                 else:
                     return swa_lr_mul
             self.lr_schedule = torch.optim.lr_scheduler.LambdaLR(self.optimizer,riseLR)
+        elif self.useLearningSchedule=='multi_rise then ramp_to_swa':
+            steps = config['trainer']['warmup_steps']
+            down_steps = config['trainer']['ramp_down_steps']
+            warmup_cap = 1.0
+            swa_lr_mul = config['trainer']['swa_lr_mul'] if 'swa_lr_mul' in config['trainer'] else 0.001
+            assert(type(steps) is list)
+            steps=[0]+steps
+            def riseLR(step_num):
+                if step_num<self.swa_start-down_steps:
+                    for i,step in enumerate(steps[1:]):
+                        if step_num<step:
+                            return warmup_cap*((step_num-steps[i])*(0.99/(step-steps[i]))+.01)
+                    return 1.0
+                elif step_num<self.swa_start:
+                    return 1 - (1-swa_lr_mul)*(down_steps-(self.swa_start-step_num))/down_steps
+                else:
+                    return swa_lr_mul
+            self.lr_schedule = torch.optim.lr_scheduler.LambdaLR(self.optimizer,riseLR)
         elif self.useLearningSchedule=='multi_rise with cyclic_full then swa':
             steps = config['trainer']['warmup_steps']
             warmup_cap = config['trainer']['warmup_cap']
@@ -262,6 +280,7 @@ class BaseTrainer:
         self.monitor_best = math.inf if self.monitor_mode == 'min' else -math.inf
         self.retry_count = config['trainer']['retry_count'] if 'retry_count' in config['trainer'] else 1
         self.start_iteration = 1
+        self.iteration=self.start_iteration
         self.checkpoint_dir = os.path.join(config['trainer']['save_dir'], self.name)
         ensure_dir(self.checkpoint_dir)
         json.dump(config, open(os.path.join(self.checkpoint_dir, 'config.json'), 'w'),
@@ -271,6 +290,14 @@ class BaseTrainer:
         self.reset_iteration = config['trainer']['reset_resume_iteration'] if 'reset_resume_iteration' in config['trainer'] else False
         if resume:
             self._resume_checkpoint(resume)
+
+    def finishSetup(self):
+        """
+        things that slave processes shouldn't do
+        """
+        ensure_dir(self.checkpoint_dir)
+        json.dump(self.config, open(os.path.join(self.checkpoint_dir, 'config.json'), 'w'),
+                  indent=4, sort_keys=False)
 
     def train(self):
         """
@@ -295,12 +322,15 @@ class BaseTrainer:
                     result = self._train_iteration(self.iteration)
                     break
                 except RuntimeError as err:
+                    print(err)
                     torch.cuda.empty_cache() #this is primarily to catch rare CUDA out of memory errors
                     lastErr = err
+
             if result is None:
-                if self.retry_count>1:
-                    print('Failed all {} times!'.format(self.retry_count))
-                raise lastErr
+                result = self._train_iteration(self.iteration)
+                #if self.retry_count>1:
+                #    print('Failed all {} times!'.format(self.retry_count))
+                #raise lastErr
 
             elapsed_time = timeit.default_timer() - t
             sumLog['sec_per_iter'] += elapsed_time
@@ -359,10 +389,11 @@ class BaseTrainer:
             #VALIDATION
             if self.iteration%self.val_step==0:
                 if self.swa and self.iteration>=self.swa_start:
-                    temp_model = self.model
+                    temp_model = self.model.cpu()
                     self.model = self.swa_model
+                    self.bn_update()
                     val_result = self._valid_epoch()
-                    self.model = temp_model
+                    self.model = temp_model.cuda()
                     for key, value in val_result.items():
                         if 'metrics' in key:
                             for i, metric in enumerate(self.metrics):
@@ -501,6 +532,7 @@ class BaseTrainer:
             self.config = checkpoint['config']
         if not self.reset_iteration:
             self.start_iteration = checkpoint['iteration'] + 1
+            self.iteration=self.start_iteration
         self.monitor_best = checkpoint['monitor_best']
         #print(checkpoint['state_dict'].keys())
         if ('save_mode' not in self.config or self.config['save_mode']=='state_dict') and 'state_dict' in checkpoint:
@@ -509,12 +541,32 @@ class BaseTrainer:
             keys=checkpoint['state_dict'].keys()
             init_state_dict = self.model.state_dict()
             for key in keys:
-                if len(init_state_dict[key].size())>0 and init_state_dict[key].size(0)>checkpoint['state_dict'][key].size(0):
-                    orig_size = checkpoint['state_dict'][key].size(0)
-                    init_state_dict[key][:orig_size] = checkpoint['state_dict'][key]
+
+                orig_size = checkpoint['state_dict'][key].size()
+                dims=-1
+                for dim in range(len(orig_size)):
+                    if init_state_dict[key].size(dim)>checkpoint['state_dict'][key].size(dim):
+                        dims=dim
+                if dims>-1:
+                    if dims==0:
+                        init_state_dict[key][:orig_size[0]] = checkpoint['state_dict'][key]
+                    elif dims==1:
+                        init_state_dict[key][:orig_size[0],:orig_size[1]] = checkpoint['state_dict'][key]
+                    elif dims==2:
+                        init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2]] = checkpoint['state_dict'][key]
+                    elif dims==3:
+                        init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2],:orig_size[3]] = checkpoint['state_dict'][key]
+                    else:
+                        raise NotImplementedError('no Brain Surgery above 4 dims')
                     checkpoint['state_dict'][key] = init_state_dict[key]
                     self.logger.info('BRAIN SURGERY PERFORMED on {}'.format(key))
                     did_brain_surgery=True
+
+            #specail check for Swin Transformer
+            for init_key,value in init_state_dict.items():
+                if 'attn_mask' in init_key and init_key not in keys:
+                    checkpoint['state_dict'][init_key]=value
+
             self.model.load_state_dict(checkpoint['state_dict'])
             if self.swa and 'swa_state_dict' in checkpoint:
                 self.swa_model = AveragedModel(self.model)
@@ -533,7 +585,8 @@ class BaseTrainer:
                 self.swa_model = checkpoint['swa_model']
         #if self.swa:
         #    self.swa_n = checkpoint['swa_n']
-        if not did_brain_surgery:
+        dont_load_optimizer = self.config['dont_load_optimizer'] if 'dont_load_optimizer' in self.config else False
+        if not did_brain_surgery and not dont_load_optimizer and 'optimizer' in checkpoint:
             try:
                 self.optimizer.load_state_dict(checkpoint['optimizer'])
                 if self.with_cuda:
@@ -543,10 +596,21 @@ class BaseTrainer:
                                 state[k] = v.cuda(self.gpu)
             except ValueError as e:
                 print('WARNING did not load optimizer state_dict. {}'.format(e))
+        else:
+            print('Did not load optimizer')
         if self.useLearningSchedule:
             self.lr_schedule.load_state_dict(checkpoint['lr_schedule'])
-        self.train_logger = checkpoint['logger']
+        if checkpoint['logger'] is not None:
+            self.train_logger = checkpoint['logger']
         self.logger.info("Checkpoint '{}' (iteration {}) loaded".format(resume_path, self.start_iteration))
+
+    def update_swa_batch_norm(self):
+        #update_bn(self.data_loader,self.swa_model)
+        tmp=self.model.cpu()
+        self.model=self.swa_model.train()
+        for instance in self.data_loader:
+            self.run(instance)
+        self.model=tmp
 
 def moving_average(net1, net2, alpha=1):
     for param1, param2 in zip(net1.parameters(), net2.parameters()):
