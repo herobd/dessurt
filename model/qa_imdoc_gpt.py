@@ -40,6 +40,8 @@ class QAImDocGPT(BaseModel):
         im_embed_dim = config['im_embed_dim'] #96 -> 96,192,384,768 | 64->64,128,256,512
         dropout = 0 if 'no_dropout' in config and  config['no_dropout'] else 0.1
 
+        self.max_pred_len = 500
+
 
         if 'pre_trained' in config:
             pre_trained_patch_emb = config['patch_emb'] if 'patch_emb' in config else None
@@ -317,14 +319,14 @@ class QAImDocGPT(BaseModel):
 
             offset = docqa.size(1)
 
-            max_pred_len=500
+            max_pred_len=self.max_pred_len
             holder_xs = torch.cat((xs,torch.FloatTensor(new_batch_size,max_pred_len).fill_(0).to(device)),dim=1)
             holder_ys = torch.cat((ys,torch.FloatTensor(new_batch_size,max_pred_len).fill_(0).to(device)),dim=1)
             holder_att_mask = torch.FloatTensor(new_batch_size,max_pred_len,max_pred_len).fill_(0).to(device) #assumes here batch size of 1
             holder_answer_padding_mask = torch.FloatTensor(new_batch_size,max_pred_len).fill_(0).to(device) #assumes here batch size of 1
             holder_doc_mask = torch.cat((doc_mask,torch.FloatTensor(new_batch_size,max_pred_len,1).fill_(0).to(device)),dim=1)
 
-            while output_tokens[-1] != self.SEP_TOKEN:
+            while output_tokens[-1] != self.SEP_TOKEN and saved_docqa[0].size(1)<max_pred_len:
                 ans_emb = self.answer_embedding(response_greedy_token)
                 ans = self.pos_1d_enc(ans_emb,offset=offset)
                 level=0

@@ -154,7 +154,8 @@ class SynthQADocDataset(QADataset):
             self.num_processes = config['num_processes']
             self.per_process = config['per_process'] if 'per_process' in config else 100
             
-            ensure_dir(self.directory)
+            if 'create' in config:
+                ensure_dir(self.directory)
 
 
         self.set_size = config['set_size']
