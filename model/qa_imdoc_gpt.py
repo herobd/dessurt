@@ -233,7 +233,7 @@ class QAImDocGPT(BaseModel):
         if not RUN:
             docqa_str = [doc+':'+q+'[SEP]'+a for doc,q,a in zip(repeat_docs,questions,answers)]
         else:
-            docqa_str = [doc+':'+q for doc,q in zip(repeat_docs,questions)]
+            docqa_str = [doc+':'+q+'[SEP]' for doc,q in zip(repeat_docs,questions)]
             saved_docqa=[]
             saved_proj_im_tokens=[]
             output_tokens=[]
@@ -322,11 +322,17 @@ class QAImDocGPT(BaseModel):
             max_pred_len=self.max_pred_len
             holder_xs = torch.cat((xs,torch.FloatTensor(new_batch_size,max_pred_len).fill_(0).to(device)),dim=1)
             holder_ys = torch.cat((ys,torch.FloatTensor(new_batch_size,max_pred_len).fill_(0).to(device)),dim=1)
-            holder_att_mask = torch.FloatTensor(new_batch_size,max_pred_len,max_pred_len).fill_(0).to(device) #assumes here batch size of 1
             holder_answer_padding_mask = torch.FloatTensor(new_batch_size,max_pred_len).fill_(0).to(device) #assumes here batch size of 1
             holder_doc_mask = torch.cat((doc_mask,torch.FloatTensor(new_batch_size,max_pred_len,1).fill_(0).to(device)),dim=1)
 
+            holder_att_mask = torch.BoolTensor(new_batch_size,max_pred_len,max_pred_len).fill_(1) #1/0
+            #assume batch size of 1
+            holder_att_mask[0,:docqa_len,docqa_len:]=0 #doc and question tokens cannot attend to answer tokens
+            holder_att_mask[0,docqa_len:,docqa_len:]=torch.tril(holder_att_mask[0,docqa_len:,docqa_len:]) #causual attention for answer
+            holder_att_mask = holder_att_mask.to(device)
+
             while output_tokens[-1] != self.SEP_TOKEN and saved_docqa[0].size(1)<max_pred_len:
+
                 ans_emb = self.answer_embedding(response_greedy_token)
                 ans = self.pos_1d_enc(ans_emb,offset=offset)
                 level=0
@@ -352,9 +358,11 @@ class QAImDocGPT(BaseModel):
                 response_decoded = self.answer_decode(ans)
                 response_greedy_token = response_decoded.argmax(dim=2)
                 assert response_greedy_token.size(1)==1
+                
 
                 output_tokens.append(response_greedy_token[0,0].item())
                 offset += 1
+
 
             
             final_str = self.decode_tokenizer.convert_tokens_to_string(self.decode_tokenizer.convert_ids_to_tokens(output_tokens,skip_special_tokens=True))
@@ -407,6 +415,7 @@ class QAImDocGPT(BaseModel):
         #t#self.opt_history['decode'].append(time)#t#
         #t#self.opt_history['full forward'].append(timeA)#t#
         #t#self.print_opt_times()#t#
+        #import pdb;pdb.set_trace()
         return response_decoded, target_decoded.to(device), batch_string_response
 
     #t#def print_opt_times(self):#t#

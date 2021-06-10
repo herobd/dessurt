@@ -46,7 +46,7 @@ def display(data):
 
             #cv2.waitKey()
 
-            cv2.imwrite('test.png',img.numpy()[:,:,0])
+            cv2.imwrite('testsinglesize_1024.png',img.numpy()[:,:,0])
 
         #fig = plt.figure()
 
@@ -85,7 +85,7 @@ if __name__ == "__main__":
         "hw_dir": "../data/IAM_lines/train",
         "num_workers": 0,
         "include_ocr": False,
-        "change_size": True,
+        "change_size": False,
         "rescale_range": [1.0,1.0],
         "crop_params": None,
         "batch_size": 4,

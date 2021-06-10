@@ -122,9 +122,14 @@ def main(resume,config,img_path,addToConfig,gpu=False):
 
             question = input('Question: ')
             while question!='q':
+                if question.startswith('[nr]'):
+                    run=False
+                    question=question[4:]
+                else:
+                    run=True
                 ocrBoxes=[[]]
                 ocr=[[]]
-                answer = model(img,ocrBoxes,ocr,[[question]],RUN=True)
+                answer = model(img,ocrBoxes,ocr,[[question]],RUN=run)
                 print('Answer: '+answer)
 
                 question = input('Question ("q" to stop): ')

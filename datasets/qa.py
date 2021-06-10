@@ -150,7 +150,7 @@ class QADataset(torch.utils.data.Dataset):
                 crop_ids = ids
             out, cropPoint = self.transform({
                 "img": np_img,
-                "bb_gt": crop_bbs,
+                "bb_gt": crop_bbs[None,...],
                 'bb_auxs':crop_ids,
                 #'word_bbs':form_metadata['word_boxes'] if 'word_boxes' in form_metadata else None
                 #"line_gt": {
@@ -175,13 +175,13 @@ class QADataset(torch.utils.data.Dataset):
                             word_index=i
                     else:
                         assert 'word' in ii
-                bbs = out['bb_gt'][:,:word_index]
+                bbs = out['bb_gt'][0,:word_index]
                 ids= out['bb_auxs'][:word_index]
                 form_metadata['word_boxes'] = out['bb_gt'][0,word_index:,:8]
                 word_ids=out['bb_auxs'][word_index:]
                 form_metadata['word_trans'] = [form_metadata['word_trans'][int(id[4:])] for id in word_ids]
             else:
-                bbs = out['bb_gt']
+                bbs = out['bb_gt'][0]
                 ids= out['bb_auxs'] 
 
             if questions_and_answers is not None:
