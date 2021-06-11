@@ -40,6 +40,8 @@ class QAImDocGPT(BaseModel):
         im_embed_dim = config['im_embed_dim'] #96 -> 96,192,384,768 | 64->64,128,256,512
         dropout = 0 if 'no_dropout' in config and  config['no_dropout'] else 0.1
 
+        self.max_pred_len = 500
+
 
         if 'pre_trained' in config:
             pre_trained_patch_emb = config['patch_emb'] if 'patch_emb' in config else None
@@ -47,10 +49,18 @@ class QAImDocGPT(BaseModel):
             pre_trained_patch_emb = None
 
         char_output = config['char_output'] if 'char_output' in config else False
+        char_tokens = config['char_tokens'] if 'char_tokens' in config else False
+        if char_tokens:
+            char_output=False
 
-        self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-        self.SEP_TOKEN= 102
-        self.CLS_TOKEN= 101
+        if char_tokens:
+            self.tokenizer = CharacterTokenizer()
+            self.SEP_TOKEN=self.tokenizer.SEP_index
+            self.CLS_TOKEN=self.tokenizer.CLS_index
+        else:
+            self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+            self.SEP_TOKEN= 102
+            self.CLS_TOKEN= 101
 
         if char_output:
             self.decode_tokenizer = CharacterTokenizer()
@@ -149,7 +159,7 @@ class QAImDocGPT(BaseModel):
 
     #we're building this for fixed images size
     def forward(self,image,gtBBs,gtTrans,questions,answers=None,useCurvedBBs=False,RUN=False):
-        torch.autograd.set_detect_anomaly(True)
+        #torch.autograd.set_detect_anomaly(True)
         #there's got to be a better way...
         for name,buff in self.named_buffers():
             if 'im_xs' in name:
@@ -223,7 +233,7 @@ class QAImDocGPT(BaseModel):
         if not RUN:
             docqa_str = [doc+':'+q+'[SEP]'+a for doc,q,a in zip(repeat_docs,questions,answers)]
         else:
-            docqa_str = [doc+':'+q for doc,q in zip(repeat_docs,questions)]
+            docqa_str = [doc+':'+q+'[SEP]' for doc,q in zip(repeat_docs,questions)]
             saved_docqa=[]
             saved_proj_im_tokens=[]
             output_tokens=[]
@@ -309,14 +319,20 @@ class QAImDocGPT(BaseModel):
 
             offset = docqa.size(1)
 
-            max_pred_len=500
+            max_pred_len=self.max_pred_len
             holder_xs = torch.cat((xs,torch.FloatTensor(new_batch_size,max_pred_len).fill_(0).to(device)),dim=1)
             holder_ys = torch.cat((ys,torch.FloatTensor(new_batch_size,max_pred_len).fill_(0).to(device)),dim=1)
-            holder_att_mask = torch.FloatTensor(new_batch_size,max_pred_len,max_pred_len).fill_(0).to(device) #assumes here batch size of 1
             holder_answer_padding_mask = torch.FloatTensor(new_batch_size,max_pred_len).fill_(0).to(device) #assumes here batch size of 1
             holder_doc_mask = torch.cat((doc_mask,torch.FloatTensor(new_batch_size,max_pred_len,1).fill_(0).to(device)),dim=1)
 
-            while output_tokens[-1] != self.SEP_TOKEN:
+            holder_att_mask = torch.BoolTensor(new_batch_size,max_pred_len,max_pred_len).fill_(1) #1/0
+            #assume batch size of 1
+            holder_att_mask[0,:docqa_len,docqa_len:]=0 #doc and question tokens cannot attend to answer tokens
+            holder_att_mask[0,docqa_len:,docqa_len:]=torch.tril(holder_att_mask[0,docqa_len:,docqa_len:]) #causual attention for answer
+            holder_att_mask = holder_att_mask.to(device)
+
+            while output_tokens[-1] != self.SEP_TOKEN and saved_docqa[0].size(1)<max_pred_len:
+
                 ans_emb = self.answer_embedding(response_greedy_token)
                 ans = self.pos_1d_enc(ans_emb,offset=offset)
                 level=0
@@ -342,9 +358,11 @@ class QAImDocGPT(BaseModel):
                 response_decoded = self.answer_decode(ans)
                 response_greedy_token = response_decoded.argmax(dim=2)
                 assert response_greedy_token.size(1)==1
+                
 
                 output_tokens.append(response_greedy_token[0,0].item())
                 offset += 1
+
 
             
             final_str = self.decode_tokenizer.convert_tokens_to_string(self.decode_tokenizer.convert_ids_to_tokens(output_tokens,skip_special_tokens=True))
@@ -397,6 +415,7 @@ class QAImDocGPT(BaseModel):
         #t#self.opt_history['decode'].append(time)#t#
         #t#self.opt_history['full forward'].append(timeA)#t#
         #t#self.print_opt_times()#t#
+        #import pdb;pdb.set_trace()
         return response_decoded, target_decoded.to(device), batch_string_response
 
     #t#def print_opt_times(self):#t#

@@ -75,17 +75,42 @@ class SynthQADocDataset(QADataset):
         from synthetic_text_gen import SyntheticText
         self.color=False
         self.ocr = config['include_ocr'] if 'include_ocr' in config else False
+        self.corruption_p = config['text_corruption'] if 'text_corruption' in config else 0.15
         self.text_height = config['text_height']
         self.image_size = config['image_size'] if 'image_size' in config else None
         self.min_entries = config['min_entries'] if 'min_entries' in config else self.questions
         self.max_entries = config['max_entries'] if 'max_entries' in config else self.questions
         self.change_size = config['change_size'] if 'change_size' in config else False
         self.min_text_height = config['min_text_height'] if 'min_text_height' in config else 8
+        self.np_qs = 0.02
         self.use_hw = config['use_hw'] if 'use_hw' in config else False
-        if self.use_hw:
+        self.word_questions = config['word_questions'] if 'word_questions' in config else False
+        self.tables = config['tables'] if 'tables' in config else False
+        assert not self.tables or self.word_questions
+        assert not (self.use_hw and self.tables)
+        assert not self.tables or self.min_entries is None
+        if self.word_questions:
+            self.ask_for_value = [
+                    'value for "{}"?',
+                    'value of "{}"?',
+                    'answer for "{}"?',
+                    'answer of "{}"?',
+                    'response for "{}"?',
+                    'response of "{}"?'
+                    ]
+            self.ask_for_label = [
+                    'label for "{}"?',
+                    'label of "{}"?',
+                    'question for "{}"?',
+                    'question of "{}"?',
+                    'prompt for "{}"?',
+                    'prompt of "{}"?'
+                    ]
+        if self.use_hw or self.tables:
             self.header_dir = config['header_dir']
-            self.hw_dir = config['hw_dir']
             header_gt_filename = os.path.join(self.header_dir,'gt.txt')
+        if self.use_hw:
+            self.hw_dir = config['hw_dir']
             hw_gt_filename = os.path.join(self.hw_dir,'gt.txt')
         text_len = config['max_chars'] if 'max_chars' in config else 35
         self.text_max_len=text_len
@@ -130,7 +155,8 @@ class SynthQADocDataset(QADataset):
             self.num_processes = config['num_processes']
             self.per_process = config['per_process'] if 'per_process' in config else 100
             
-            ensure_dir(self.directory)
+            if 'create' in config:
+                ensure_dir(self.directory)
 
 
         self.set_size = config['set_size']
@@ -145,8 +171,9 @@ class SynthQADocDataset(QADataset):
             print('Need to create dataset! {}'.format(self.directory))
             exit(1)
 
-        if self.use_hw:
+        if self.use_hw or self.tables:
             self.header_labels,header_size = self.readGT(header_gt_filename,self.header_dir)
+        if self.use_hw:
             self.hw_labels,hw_size = self.readGT(hw_gt_filename,self.hw_dir)
             
         
@@ -204,12 +231,12 @@ class SynthQADocDataset(QADataset):
             num_hw_entries = int(self.use_hw*num_entries)
             num_entries = num_entries-num_hw_entries
 
-            hw_labels = random.choices(list(enumerate(self.header_labels)),k=num_hw_entries)
+            hw_labels = random.sample(list(enumerate(self.header_labels)),k=num_hw_entries)
             hw_labels = [a+(self.header_dir,True) for a in hw_labels]
-            hw_values = random.choices(list(enumerate(self.hw_labels)),k=num_hw_entries)
+            hw_values = random.sample(list(enumerate(self.hw_labels)),k=num_hw_entries)
             hw_values = [a+(self.hw_dir,False) for a in hw_values]
 
-        selected = random.choices(list(enumerate(self.labels)),k=num_entries*2)
+        selected = random.sample(list(enumerate(self.labels)),k=num_entries*2)
         selected = [a+(self.directory,True) for a in selected]
         labels = selected[:num_entries]
         values = selected[num_entries:]
@@ -289,15 +316,30 @@ class SynthQADocDataset(QADataset):
                 image[y:y+l_vert,x:x+l_horz] = label_img[:l_vert,:l_horz]
 
                 y_pos=y+heights[ei]
-
-                qa.append((label_text,value_text,None))
+                
+                if self.word_questions:
+                    question_to_value = random.choice(self.ask_for_value)
+                    question_to_label = random.choice(self.ask_for_label)
+                    qa.append((question_to_value.format(label_text),value_text,None))
+                    qa.append((question_to_label.format(value_text),label_text,None))
+                else:
+                    qa.append((label_text,value_text,None))
 
                 if self.ocr:
                     self.addText(label_text,x,y,l_horz,l_vert,value_text,value_x,value_y,horz,vert,boxes,trans,s)
         else:
+            #TABLE
+            if self.tables and random.random()<self.tables:
+                table_x,table_y,table_width,table_height = self.addTable(image,qa,boxes if self.ocr else None,trans if self.ocr else None)
+                if table_x is None:
+                    did_table=False
+                else:
+                    did_table=True
+            else:
+                did_table=False
 
             #Assign random positions and collect bounding boxes
-            full_bbs=torch.FloatTensor(len(entries),4)
+            full_bbs=torch.FloatTensor(len(entries)+(1 if did_table else 0),4)
             pad_v=1
             pad_h=30
             for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
@@ -317,6 +359,14 @@ class SynthQADocDataset(QADataset):
                 full_bbs[ei,2]=x+width+1
                 full_bbs[ei,3]=y+height+1
 
+
+            if did_table:
+                full_bbs[-1,0]=table_x
+                full_bbs[-1,1]=table_y
+                full_bbs[-1,2]=table_x+table_width+1
+                full_bbs[-1,3]=table_y+table_height+1
+
+
             #find intersections and remove an entry until no more intersections
             intersections = allIOU(full_bbs,full_bbs,x1y1x2y2=True)>0
             intersections.diagonal()[:]=0
@@ -330,6 +380,8 @@ class SynthQADocDataset(QADataset):
                 print(s)
             
             intersections_per = intersections.sum(dim=0)
+            if did_table:
+                intersections_per[-1]=0 #clear Table so it is not selected
             removed = set()
             while intersections_per.sum()>0:
                 #print_iter(intersections)
@@ -339,11 +391,13 @@ class SynthQADocDataset(QADataset):
                 intersections[:,worst_offender]=0
                 intersections[worst_offender,:]=0
                 intersections_per = intersections.sum(dim=0)
+                if did_table:
+                    intersections_per[-1]=0 #clear Table so it is not selected
 
             #removed.sort(reverse=True)
             #for r in removed:
             #    del entries[r]
-            not_present_qs=0
+            not_present_qs=[]
             selected_labels_stripped = [l[1].strip() for i,l in enumerate(labels) if i not in removed]
             for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
                 if ei not in removed:
@@ -370,14 +424,18 @@ class SynthQADocDataset(QADataset):
 
                     image[label_y:label_y+l_vert,label_x:label_x+l_horz] = label_img[:l_vert,:l_horz]
 
-                    qa.append((label_text,value_text,None))
+                    if self.word_questions:
+                        question_to_value = random.choice(self.ask_for_value)
+                        question_to_label = random.choice(self.ask_for_label)
+                        qa.append((question_to_value.format(label_text),value_text,None))
+                        qa.append((question_to_label.format(value_text),label_text,None))
+                    else:
+                        qa.append((label_text,value_text,None))
 
                     if self.ocr:
                         self.addText(label_text,label_x,label_y,l_horz,l_vert,value_text,value_x,value_y,v_horz,v_vert,boxes,trans,s)
-                elif not_present_qs<math.ceil(self.questions*0.02):
-                    if label_text.strip() not in selected_labels_stripped:
-                        qa.append((label_text,'[ np ]',None))
-                        not_present_qs+=1
+                elif label_text.strip() not in selected_labels_stripped:
+                    not_present_qs.append(label_text)
 
 
 
@@ -385,15 +443,39 @@ class SynthQADocDataset(QADataset):
         bbs = np.array(boxes)
         
         ocr = trans
+
+        #Add possible not present questions
+        to_add_np = len(qa)*self.np_qs #?0.02
+        num_np = math.floor(to_add_np)
+        if random.random()<to_add_np-num_np: #handle non-whole number correctly
+            num_np+=1
+        for i in range(num_np):
+            if len(not_present_qs)>0:
+                q_text = not_present_qs.pop()
+            else:
+                while True:
+                    q_text = random.choice(self.labels)
+                    if q_text.strip() not in selected_labels_stripped:
+                        break
+            if self.word_questions:
+                question = random.choice(self.ask_for_value)
+                qa.append((question.format(q_text),'[ np ]',None))
+            else:
+                qa.append((q_text,'[ np ]',None))
+
+
+
+
         if self.questions<len(qa):
             qa = random.sample(qa,k=self.questions)
 
         return bbs, list(range(bbs.shape[0])), ocr, {'image':image}, {}, qa
 
     
-    def addText(self,label_text,label_x,label_y,l_horz,l_vert,value_text,value_x,value_y,v_horz,v_vert,boxes,trans,s):
+    def addText(self,label_text,label_x,label_y,l_horz,l_vert,value_text=None,value_x=None,value_y=None,v_horz=None,v_vert=None,boxes=None,trans=None,s=1):
         #corrupt text
         label_text = self.corrupt(label_text)
+
         value_text = self.corrupt(value_text)
         
         if random.random()<0.5:
@@ -562,12 +644,11 @@ class SynthQADocDataset(QADataset):
         new_s=''
         for c in s:
             r = random.random()
-            random
-            if r<0.1:
+            if r<self.corruption_p/3:
                 pass
-            elif r<0.2:
+            elif r<self.corruption_p*2/3:
                 new_s+=random.choice(string.ascii_letters)
-            elif r<0.3:
+            elif r<self.corruption_p:
                 if random.random()<0.5:
                     new_s+=c+random.choice(string.ascii_letters)
                 else:
@@ -575,3 +656,279 @@ class SynthQADocDataset(QADataset):
             else:
                 new_s+=c
         return new_s
+
+    def addTable(self,image,all_q_a,boxes,trans):
+        #Taken from FUNSD_QA
+        num_rows=random.randrange(1,15)
+        num_cols=random.randrange(1,10)
+
+        mean_height = random.randrange(self.min_text_height+1,32)
+
+        table_entries = random.choices(list(enumerate(self.header_labels)),k=num_rows*num_cols+num_rows+num_cols)
+        #table_entries = [(img_f.imread(os.path.join(self.header_dir,'{}.png'.format(e[0]))),e[1]) for e in table_entries]
+        table_entries_1d = []
+        for num,label in table_entries:
+            img = img_f.imread(os.path.join(self.header_dir,'{}.png'.format(num)))
+            if self.change_size:
+                height = int(random.gauss(mean_height,4))#random.randrange(self.min_text_height,img.shape[0])
+                width = round(img.shape[1]*height/img.shape[0])
+                if height>1 and width>1:
+                    img = img_f.resize(img,(height,width))
+            table_entries_1d.append((img,label))
+        row_headers = table_entries_1d[-num_rows:]
+        col_headers = table_entries_1d[-(num_rows+num_cols):-num_rows]
+        table_entries = table_entries_1d[:-(num_rows+num_cols)]
+        table_entries_2d = []
+        for r in range(num_rows):
+            table_entries_2d.append(table_entries_1d[r*num_cols:(r+1)*num_cols])
+        table_entries = table_entries_2d
+
+
+        table_x = random.randrange(self.image_size*0.75)
+        table_y = random.randrange(self.image_size*0.75)
+
+        padding = random.randrange(0,30)
+
+        #find the height of each row and cut rows that spill off page
+        max_height=0
+        for c in range(num_cols):
+            max_height = max(max_height,col_headers[c][0].shape[0])
+        total_height = max_height+padding
+        height_col_heading = max_height+padding
+        
+        if total_height+table_y >= self.image_size:
+            #NO TABLE
+            return None,None,None,None
+        height_row=[0]*num_rows
+        for r in range(num_rows):
+            max_height = row_headers[r][0].shape[0]
+            for c in range(num_cols):
+                max_height = max(max_height,table_entries[r][c][0].shape[0])
+            height_row[r] = max_height+padding
+            total_height+= max_height+padding
+
+            if total_height+table_y >= self.image_size:
+                num_rows = r
+                if num_rows==0:
+                    return None,None,None,None #NO TABLE
+                total_height -= height_row[r]
+                row_headers=row_headers[:num_rows]
+                height_row=height_row[:num_rows]
+                break
+
+        #find the width of each rowumn and cut rowumns that spill off page
+        max_width=0
+        for r in range(num_rows):
+            max_width = max(max_width,row_headers[r][0].shape[1])
+        total_width = max_width+padding
+        width_row_heading = max_width+padding
+        
+        if total_width+table_x >= self.image_size:
+            #NO TABLE
+            return None,None,None,None
+        width_col=[0]*num_cols
+        for c in range(num_cols):
+            max_width = col_headers[c][0].shape[1]
+            for r in range(num_rows):
+                max_width = max(max_width,table_entries[r][c][0].shape[1])
+            width_col[c] = max_width+padding
+            total_width+= max_width+padding
+
+            if total_width+table_x >= self.image_size:
+                num_cols = c
+                if num_cols==0:
+                    return None,None,None,None#NO TABLE
+                total_width -= width_col[c]
+                col_headers=col_headers[:num_cols]
+                width_col=width_col[:num_cols]
+                break
+    
+        #build table
+        table_values=[]
+
+        #put row headers in image
+        cur_y = height_col_heading+table_y
+        for r in range(num_rows):
+            if width_row_heading-padding==row_headers[r][0].shape[1]:
+                x=table_x
+            else:
+                x=table_x + random.randrange(0,width_row_heading-padding-row_headers[r][0].shape[1])
+            if height_row[r]-padding==row_headers[r][0].shape[0]:
+                y=cur_y
+            else:
+                y=cur_y + random.randrange(0,height_row[r]-padding-row_headers[r][0].shape[0])
+            cur_y += height_row[r]
+
+            image[y:y+row_headers[r][0].shape[0],x:x+row_headers[r][0].shape[1]] = row_headers[r][0]
+            if boxes is not None:
+                self.addText(row_headers[r][1],x,y,row_headers[r][0].shape[1],row_headers[r][0].shape[0],boxes=boxes,trans=trans)
+
+        #put col headers in image
+        cur_x = width_row_heading+table_x
+        for c in range(num_cols):
+            if height_col_heading-padding==col_headers[c][0].shape[0]:
+                y=table_y
+            else:
+                y=table_y + random.randrange(0,height_col_heading-padding-col_headers[c][0].shape[0])
+            if width_col[c]-padding==col_headers[c][0].shape[1]:
+                x=cur_x
+            else:
+                x=cur_x + random.randrange(0,width_col[c]-padding-col_headers[c][0].shape[1])
+            cur_x += width_col[c]
+
+            image[y:y+col_headers[c][0].shape[0],x:x+col_headers[c][0].shape[1]] = col_headers[c][0]
+            if boxes is not None:
+                self.addText(col_headers[c][1],x,y,col_headers[c][0].shape[1],col_headers[c][0].shape[0],boxes=boxes,trans=trans)
+
+        #put in entries
+        cur_x = width_row_heading+table_x
+        for c in range(num_cols):
+            cur_y = height_col_heading+table_y
+            for r in range(num_rows):
+                if random.random()>0.2: #sometimes skip an entry
+                    if width_col[c]-padding==table_entries[r][c][0].shape[1]:
+                        x=cur_x
+                    else:
+                        x=cur_x + random.randrange(0,width_col[c]-padding-table_entries[r][c][0].shape[1])
+                    if height_row[r]-padding==table_entries[r][c][0].shape[0]:
+                        y=cur_y
+                    else:
+                        y=cur_y + random.randrange(0,height_row[r]-padding-table_entries[r][c][0].shape[0])
+
+                    image[y:y+table_entries[r][c][0].shape[0],x:x+table_entries[r][c][0].shape[1]] = table_entries[r][c][0]
+                    table_values.append((col_headers[c][1],row_headers[r][1],table_entries[r][c][1],x,y))
+                    if boxes is not None:
+                        self.addText(table_entries[r][c][1],x,t,table_entries[r][c][0].shape[1],table_entries[r][c][0].shape[0],boxes=boxes,trans=trans)
+                else:
+                    #table_values.append((col_headers[c][1],row_headers[r][1],'[np]',cur_x,cur_y))
+                    all_q_a.append(('value of "{}" and "{}"?'.format(row_headers[r][1],col_headers[c][1]),'[np]',None))
+                    all_q_a.append(('value of "{}" and "{}"?'.format(col_headers[c][1],row_headers[r][1]),'[np]',None))
+                
+                cur_y += height_row[r]
+            cur_x += width_col[c]
+
+        #add lines for headers
+        line_thickness_h = random.randrange(1,max(2,min(10,padding)))
+        #top
+        img_f.line(image,
+                (max(0,table_x+random.randrange(-5,5)),table_y+height_col_heading-random.randrange(0,1+padding)),
+                (min(self.image_size-1,table_x+total_width+random.randrange(-5,5)),table_y+height_col_heading-random.randrange(0,1+padding)),
+                random.randrange(0,100),
+                line_thickness_h
+                )
+        #side
+        img_f.line(image,
+                (table_x+width_row_heading-random.randrange(0,padding+1),max(0,table_y+random.randrange(-5,5))),
+                (table_x+width_row_heading-random.randrange(0,padding+1),min(self.image_size-1,table_y+total_height+random.randrange(-5,5))),
+                random.randrange(0,100),
+                line_thickness_h
+                )
+
+        #outside of headers?
+        if random.random()<0.5:
+            line_thickness = random.randrange(1,max(2,min(10,padding)))
+            #top
+            img_f.line(image,
+                    (max(0,table_x+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)),
+                    (min(self.image_size-1,table_x+total_width+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)),
+                    random.randrange(0,100),
+                    line_thickness
+                    )
+            #side
+            img_f.line(image,
+                    (table_x-random.randrange(0,padding+1),max(0,table_y+random.randrange(-5,5))),
+                    (table_x-random.randrange(0,padding+1),min(self.image_size-1,table_y+total_height+random.randrange(-5,5))),
+                    random.randrange(0,100),
+                    line_thickness
+                    )
+
+        #value outline?
+        if random.random()<0.5:
+            line_thickness = random.randrange(1,max(2,min(10,padding)))
+            #bot
+            img_f.line(image,
+                    (max(0,table_x+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)+total_height),
+                    (min(self.image_size-1,table_x+total_width+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)+total_height),
+                    random.randrange(0,100),
+                    line_thickness
+                    )
+            #right
+            img_f.line(image,
+                    (table_x-random.randrange(0,padding+1)+total_width,max(0,table_y+random.randrange(-5,5))),
+                    (table_x-random.randrange(0,padding+1)+total_width,min(self.image_size-1,table_y+total_height+random.randrange(-5,5))),
+                    random.randrange(0,100),
+                    line_thickness
+                    )
+
+        #all inbetween lines?
+        if random.random()<0.5:
+            line_thickness = random.randrange(1,max(2,line_thickness_h))
+            #horz
+            cur_height = height_col_heading
+            for r in range(num_rows-1):
+                cur_height += height_row[r]
+                img_f.line(image,
+                        (max(0,table_x+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)+cur_height),
+                        (min(self.image_size-1,table_x+total_width+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)+cur_height),
+                        random.randrange(0,100),
+                        line_thickness
+                        )
+            #right
+            cur_width = width_row_heading
+            for c in range(num_cols-1):
+                cur_width += width_col[c]
+                img_f.line(image,
+                        (table_x-random.randrange(0,padding+1)+cur_width,max(0,table_y+random.randrange(-5,5))),
+                        (table_x-random.randrange(0,padding+1)+cur_width,min(self.image_size-1,table_y+total_height+random.randrange(-5,5))),
+                        random.randrange(0,100),
+                        line_thickness
+                        )
+
+        
+        #now, optionally add the other lines
+
+        
+        #add all possible questions
+        col_vs=defaultdict(list)
+        row_vs=defaultdict(list)
+        ambiguous=set()
+        for (col_h,row_h,v,x,y) in table_values:
+            if col_h is not None and row_h is not None:
+                if random.random()<0.5:
+                    all_q_a.append(('value of "{}" and "{}"?'.format(row_h,col_h),v,None))
+                    all_q_a.append(('value of "{}" and "{}"?'.format(col_h,row_h),v,None))
+                else:
+                    all_q_a.append(('value in "{}" and "{}"?'.format(row_h,col_h),v,None))
+                    all_q_a.append(('value in "{}" and "{}"?'.format(col_h,row_h),v,None))
+            if v not in ambiguous:
+                if row_h is not None:
+                    all_q_a.append(('row that "{}" is in?'.format(v),row_h,None))
+                if col_h is not None:
+                    all_q_a.append(('column that "{}" is in?'.format(v),col_h,None))
+
+            if col_h is not None:
+                col_vs[col_h].append((v,y))
+            if row_h is not None:
+                row_vs[row_h].append((v,x))
+
+        for row_h, vs in row_vs.items():
+            if row_h not in ambiguous:
+                vs.sort(key=lambda a:a[1])
+                a=vs[0][0]
+                for v,x in vs[1:]:
+                    a+=', '+v
+                if random.random()<0.5:
+                    all_q_a.append(('all values in row "{}"?'.format(row_h),a,None))
+                else:
+                    all_q_a.append(('all values of row "{}"?'.format(row_h),a,None))
+        for col_h, vs in col_vs.items():
+            if col_h not in ambiguous:
+                vs.sort(key=lambda a:a[1])
+                a=vs[0][0]
+                for v,y in vs[1:]:
+                    a+=', '+v
+                if random.random()<0.5:
+                    all_q_a.append(('all values in column "{}"?'.format(col_h),a,None))
+                else:
+                    all_q_a.append(('all values of column "{}"?'.format(col_h),a,None))
+        return table_x-10, table_y-10, total_width+20, total_height+20
