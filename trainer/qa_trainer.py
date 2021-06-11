@@ -371,6 +371,8 @@ class QATrainer(BaseTrainer):
         if self.print_pred_every>0 and self.iteration%self.print_pred_every==0:
             print('iteration {}'.format(self.iteration))
             for b,(b_question,b_answer,b_pred) in enumerate(zip(questions,answers,string_a)):
+                if ocr is not None:
+                    print('{} OCR: {}'.format(b,ocr[b]))
                 for question,answer,pred in zip(b_question,b_answer,b_pred):
                     print('{} [Q]:{}\t[A]:{}\t[P]:{}'.format(b,question,answer,pred))
 

@@ -14,7 +14,7 @@
         "num_workers": 4,
         "rescale_range": [1.0,1.0],
         "crop_params": null,
-	"questions": 8,
+	"questions": 7,
         "min_entries": null,
         "max_entries": 100,
         "text_height": 32,
@@ -60,7 +60,7 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 300000,
+        "iterations": 600000,
         "accum_grad_steps": 4,
         "#swa": true,
         "#swa_start": 200000,
