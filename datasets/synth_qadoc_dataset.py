@@ -82,6 +82,7 @@ class SynthQADocDataset(QADataset):
         self.max_entries = config['max_entries'] if 'max_entries' in config else self.questions
         self.change_size = config['change_size'] if 'change_size' in config else False
         self.min_text_height = config['min_text_height'] if 'min_text_height' in config else 8
+        self.np_qs = 0.02
         self.use_hw = config['use_hw'] if 'use_hw' in config else False
         self.word_questions = config['word_questions'] if 'word_questions' in config else False
         self.tables = config['tables'] if 'tables' in config else False
@@ -230,12 +231,12 @@ class SynthQADocDataset(QADataset):
             num_hw_entries = int(self.use_hw*num_entries)
             num_entries = num_entries-num_hw_entries
 
-            hw_labels = random.choices(list(enumerate(self.header_labels)),k=num_hw_entries)
+            hw_labels = random.sample(list(enumerate(self.header_labels)),k=num_hw_entries)
             hw_labels = [a+(self.header_dir,True) for a in hw_labels]
-            hw_values = random.choices(list(enumerate(self.hw_labels)),k=num_hw_entries)
+            hw_values = random.sample(list(enumerate(self.hw_labels)),k=num_hw_entries)
             hw_values = [a+(self.hw_dir,False) for a in hw_values]
 
-        selected = random.choices(list(enumerate(self.labels)),k=num_entries*2)
+        selected = random.sample(list(enumerate(self.labels)),k=num_entries*2)
         selected = [a+(self.directory,True) for a in selected]
         labels = selected[:num_entries]
         values = selected[num_entries:]
@@ -391,7 +392,7 @@ class SynthQADocDataset(QADataset):
             #removed.sort(reverse=True)
             #for r in removed:
             #    del entries[r]
-            not_present_qs=0
+            not_present_qs=[]
             selected_labels_stripped = [l[1].strip() for i,l in enumerate(labels) if i not in removed]
             for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
                 if ei not in removed:
@@ -428,14 +429,8 @@ class SynthQADocDataset(QADataset):
 
                     if self.ocr:
                         self.addText(label_text,label_x,label_y,l_horz,l_vert,value_text,value_x,value_y,v_horz,v_vert,boxes,trans,s)
-                elif not_present_qs<math.ceil(self.questions*0.02):
-                    if label_text.strip() not in selected_labels_stripped:
-                        if self.word_questions:
-                            question = random.choice(self.ask_for_value)
-                            qa.append((question.format(label_text),'[ np ]',None))
-                        else:
-                            qa.append((label_text,'[ np ]',None))
-                        not_present_qs+=1
+                elif label_text.strip() not in selected_labels_stripped:
+                    not_present_qs.append(label_text)
 
 
 
@@ -443,6 +438,29 @@ class SynthQADocDataset(QADataset):
         bbs = np.array(boxes)
         
         ocr = trans
+
+        #Add possible not present questions
+        to_add_np = len(qa)*self.np_qs #?0.02
+        num_np = math.floor(to_add_np)
+        if random.random()<to_add_np-num_np: #handle non-whole number correctly
+            num_np+=1
+        for i in range(num_np):
+            if len(not_present_qs)>0:
+                q_text = not_present_qs.pop()
+            else:
+                while True:
+                    q_text = random.choice(self.labels)
+                    if q_text.strip() not in selected_labels_stripped:
+                        break
+            if self.word_questions:
+                question = random.choice(self.ask_for_value)
+                qa.append((question.format(q_text),'[ np ]',None))
+            else:
+                qa.append((q_text,'[ np ]',None))
+
+
+
+
         if self.questions<len(qa):
             qa = random.sample(qa,k=self.questions)
 
