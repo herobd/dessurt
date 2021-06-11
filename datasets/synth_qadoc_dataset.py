@@ -142,7 +142,7 @@ class SynthQADocDataset(QADataset):
                 print('Need to finish making dataset!')
                 exit(1)
         elif 'create' not in config:
-            print('Need to create dataset!')
+            print('Need to create dataset! {}'.format(self.directory))
             exit(1)
 
         if self.use_hw:
@@ -228,7 +228,12 @@ class SynthQADocDataset(QADataset):
                 assert resize_l
                 label_height = random.randrange(self.min_text_height,label_img.shape[0])
                 label_width = round(label_img.shape[1]*label_height/label_img.shape[0])
-                label_img = img_f.resize(label_img,(label_height,label_width))
+                try:
+                    label_img = img_f.resize(label_img,(label_height,label_width))
+                except OverflowError as e:
+                    print(e)
+                    print('image {} to {}'.format(label_img.shape,(label_height,label_width)))
+
 
                 if resize_v:
                     value_height = random.randrange(self.min_text_height,value_img.shape[0])
