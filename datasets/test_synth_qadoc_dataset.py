@@ -15,7 +15,7 @@ def display(data):
     #mask = makeMask(data['image'])
     for b in range(batchSize):
         #print (data['img'].size())
-        img = (data['img'][b].permute(1,2,0)+1)/2.0
+        img = (1-data['img'][b].permute(1,2,0))/2.0
         #label = data['label']
         #gt = data['gt'][b]
         #print(label[:data['label_lengths'][b],b])
@@ -45,6 +45,8 @@ def display(data):
             plt.show()
 
             #cv2.waitKey()
+
+            cv2.imwrite('testsinglesize_1024.png',img.numpy()[:,:,0])
 
         #fig = plt.figure()
 
@@ -76,9 +78,9 @@ if __name__ == "__main__":
         "create": True,
 	"fontdir": "../data/fonts",
         "textdir": "../data/",
-        "word_questions": True,
+        "word_questions": "simple",
         "use_hw": False,
-        "tables": 0.9,
+        "tables": 0.5,
         "header_dir": "../data/english4line_fonts",
         "hw_dir": "../data/IAM_lines/train",
         "num_workers": 0,
@@ -87,11 +89,11 @@ if __name__ == "__main__":
         "rescale_range": [1.0,1.0],
         "crop_params": None,
         "batch_size": 4,
-        "questions": 16,
+        "questions": 10,
         "min_entries": None,
-        "max_entries": 100,
+        "max_entries": 60,
         "text_height": 32,
-        "image_size": 1024,
+        "image_size": 512,
         "max_chars": 10,
         "min_chars": 1,
         "use_before_refresh": 99999999999999999999,
