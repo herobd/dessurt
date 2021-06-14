@@ -56,7 +56,7 @@ class GraphPairDataset(torch.utils.data.Dataset):
         self.pixel_count_thresh = config['pixel_count_thresh'] if 'pixel_count_thresh' in config else 10000000
         self.max_dim_thresh = config['max_dim_thresh'] if 'max_dim_thresh' in config else 2700
 
-
+        self.semi_supervised = config['semi_supervised'] if 'semi_supervised' in config else False #Float
 
 
 
@@ -321,11 +321,20 @@ class GraphPairDataset(torch.utils.data.Dataset):
         
         transcription = [trans[id] for id in ids]
 
+        if self.semi_supervised:
+            groups_adj = [pair for pair in groups_adj if random.random()<self.semi_supervised]
+            only_groups=set()
+            for g1,g2 in groups_adj:
+                only_groups.add(g1)
+                only_groups.add(g2)
+        else:
+            only_groups=None
+
         return {
                 "img": img,
                 "bb_gt": bbs,
                 "num_neighbors": numNeighbors,
-                "adj": pairs,#adjMatrix,
+                "adj": None#pairs,
                 "imgName": imageName,
                 "scale": s,
                 "cropPoint": cropPoint,
@@ -336,7 +345,8 @@ class GraphPairDataset(torch.utils.data.Dataset):
                 "targetIndexToGroup":targetIndexToGroup,
                 "gt_groups_adj": groups_adj,
                 "questions": questions,
-                "answers": answers
+                "answers": answers,
+                "only_groups": only_groups #semi supervised
                 }
 
 
