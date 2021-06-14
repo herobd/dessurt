@@ -341,6 +341,7 @@ class SynthQADocDataset(QADataset):
                     did_table=True
             else:
                 did_table=False
+                row_hs=col_hs=[]
 
             #Assign random positions and collect bounding boxes
             full_bbs=torch.FloatTensor(len(entries)+(1 if did_table else 0),4)
@@ -458,7 +459,7 @@ class SynthQADocDataset(QADataset):
             num_np+=1
         for i in range(num_np):
             if self.tables and random.random()<(self.tables*0.5) and self.word_questions=='simple':
-                for random.random()<0.3:
+                if random.random()<0.3:
                     while True:
                         q_text = random.choice(self.labels)
                         if q_text.strip() not in col_hs:
@@ -479,7 +480,7 @@ class SynthQADocDataset(QADataset):
                         r_text = random.choice(self.labels)
                         if r_text.strip() not in row_hs+col_hs:
                             break
-                    qa.append(('t~{}~~{}'.format(row_h,col_h),'[ np ]',None))
+                    qa.append(('t~{}~~{}'.format(r_text,c_text),'[ np ]',None))
             else:
                 if len(not_present_qs)>0:
                     q_text = not_present_qs.pop()
@@ -740,7 +741,7 @@ class SynthQADocDataset(QADataset):
         
         if total_height+table_y >= self.image_size:
             #NO TABLE
-            return None,None,None,None
+            return None,None,None,None, None, None
         height_row=[0]*num_rows
         for r in range(num_rows):
             max_height = row_headers[r][0].shape[0]
@@ -752,7 +753,7 @@ class SynthQADocDataset(QADataset):
             if total_height+table_y >= self.image_size:
                 num_rows = r
                 if num_rows==0:
-                    return None,None,None,None #NO TABLE
+                    return None,None,None,None,None,None #NO TABLE
                 total_height -= height_row[r]
                 row_headers=row_headers[:num_rows]
                 height_row=height_row[:num_rows]
@@ -767,7 +768,7 @@ class SynthQADocDataset(QADataset):
         
         if total_width+table_x >= self.image_size:
             #NO TABLE
-            return None,None,None,None
+            return None,None,None,None, None, None
         width_col=[0]*num_cols
         for c in range(num_cols):
             max_width = col_headers[c][0].shape[1]
@@ -779,7 +780,7 @@ class SynthQADocDataset(QADataset):
             if total_width+table_x >= self.image_size:
                 num_cols = c
                 if num_cols==0:
-                    return None,None,None,None#NO TABLE
+                    return None,None,None,None, None, None#NO TABLE
                 total_width -= width_col[c]
                 col_headers=col_headers[:num_cols]
                 width_col=width_col[:num_cols]
