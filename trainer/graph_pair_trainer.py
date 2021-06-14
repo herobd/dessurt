@@ -627,7 +627,7 @@ class GraphPairTrainer(BaseTrainer):
 
 
 
-    def simplerAlignEdgePred(self,targetBoxes,targetIndexToGroup,gtGroupAdj,outputBoxes,edgePred,edgePredIndexes,predGroups,rel_prop_pred,thresh_edge,thresh_rel,thresh_overSeg,thresh_group,thresh_error,merge_only=False):
+    def simplerAlignEdgePred(self,targetBoxes,targetIndexToGroup,gtGroupAdj,outputBoxes,edgePred,edgePredIndexes,predGroups,rel_prop_pred,thresh_edge,thresh_rel,thresh_overSeg,thresh_group,thresh_error,merge_only=False,only_groups=None):
         assert(self.useBadBBPredForRelLoss=='full' or self.useBadBBPredForRelLoss==1)
         if edgePred is None:
             if targetBoxes is None:
@@ -688,7 +688,30 @@ class GraphPairTrainer(BaseTrainer):
             else:
                 #targIndex=torch.LongTensor(len(outputBoxes)).fill_(-1)
                 targIndex = [-1]*len(outputBoxes)
-            
+         
+            predGroupsT={}
+            for node in range(len(predGroups)):
+                predGroupsT[node] = [targIndex[bb] for bb in predGroups[node] if targIndex[bb]>=0]
+
+            #SEMI_SUPERVISED training
+            if only_groups is not None:
+                predTargGroups = [getGTGroup(predGroupsT[n0],targetIndexToGroup) for n0 in predGroupsT]
+                new_edgePred=[]
+                new_predGroupsT={}
+                new_edgePredIndexes[]
+                for ei,(n1,n2) for enumerate(edgePredIndexes):
+                    tg1 = predTargGroups[n1]
+                    tg2 = predTargGroups[n2]
+                    if tg1 in only_groups and tg2 in only_groups:
+                        new_edgePred.append(edgePred[ei])
+                        new_predGroupsT[n1] = predGroupsT[n1]
+                        new_predGroupsT[n1] = predGroupsT[n2]
+                        new_edgePredIndexes.append((n1,n2))
+
+                edgePred = torch.cat(new_edgePred,dim=0)
+                predGroupsT=new_predGroupsT
+                edgePredIndexes = new_edgePredIndexes
+
             #t#self.opt_history['simplerAlign newGetTargIndexForPreds'].append(timeit.default_timer()-tic)#t#
             #t#tic=timeit.default_timer()#t##t#
 
@@ -732,13 +755,11 @@ class GraphPairTrainer(BaseTrainer):
                 saveGroupPred={}
                 saveErrorPred={}
 
-            predGroupsT={}
-            predGroupsTNear={}
-            for node in range(len(predGroups)):
-                predGroupsT[node] = [targIndex[bb] for bb in predGroups[node] if targIndex[bb]>=0]
+            #predGroupsT={}
+            #for node in range(len(predGroups)):
+            #    predGroupsT[node] = [targIndex[bb] for bb in predGroups[node] if targIndex[bb]>=0]
             shouldBeEdge={}
 
-            #gtGroupToPred = 
 
             #t#self.opt_history['simplerAlign edge setup'].append(timeit.default_timer()-tic)#t#
             #t#tic=timeit.default_timer()#t#
@@ -1648,6 +1669,9 @@ class GraphPairTrainer(BaseTrainer):
         gtGroupAdj = instance['gt_groups_adj']
         targetIndexToGroup = instance['targetIndexToGroup']
         targetIndexToGroup = instance['targetIndexToGroup']
+
+        if 'only_groups' in instance:
+            only_gt_groups = instance['only_groups'] #Semi-supervised
         
         if self.use_gt_trans:
             if useGT and 'word_bbs' in useGT:
@@ -1851,7 +1875,8 @@ class GraphPairTrainer(BaseTrainer):
                         self.thresh_overSeg[graphIteration],
                         self.thresh_group[graphIteration],
                         self.thresh_error[graphIteration],
-                        merge_only= graphIteration==0 and merged_first
+                        merge_only= graphIteration==0 and merged_first,
+                        only_groups=only_gt_groups
                         )
                 #t#self.opt_history['newAlignEdgePred gI{}'.format(graphIteration)].append(timeit.default_timer()-tic2)#t#
 
@@ -1874,6 +1899,10 @@ class GraphPairTrainer(BaseTrainer):
 
                     for i,predGroup in enumerate(predGroups):
                         ts=[bbAlignment[pId] for pId in predGroup]
+                        if only_gt_groups is not None:
+                            gtGroup = getGTGroup(ts,targetIndexToGroup)
+                            if gtGroup not in only_gt_groups:
+                                continue
                         classes=defaultdict(lambda:0)
                         classesIndexes={-2:-2}
                         hits=misses=0
