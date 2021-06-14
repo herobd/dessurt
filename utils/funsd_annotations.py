@@ -28,7 +28,8 @@ def combineLine(classMap,line,bbs,trans,lineTrans,s,label):
     bb[15]=s*bYL
     
     bb[16:]=0
-    bb[classMap[label]]=1
+    if numClasses>0:
+        bb[classMap[label]]=1
     #if boxinfo['label']=='header':
     #    bb[16]=1
     #elif boxinfo['label']=='question':

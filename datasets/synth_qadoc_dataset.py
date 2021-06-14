@@ -82,6 +82,7 @@ class SynthQADocDataset(QADataset):
         self.max_entries = config['max_entries'] if 'max_entries' in config else self.questions
         self.change_size = config['change_size'] if 'change_size' in config else False
         self.min_text_height = config['min_text_height'] if 'min_text_height' in config else 8
+        self.np_qs = 0.02
         self.use_hw = config['use_hw'] if 'use_hw' in config else False
         self.word_questions = config['word_questions'] if 'word_questions' in config else False
         self.tables = config['tables'] if 'tables' in config else False
@@ -154,7 +155,8 @@ class SynthQADocDataset(QADataset):
             self.num_processes = config['num_processes']
             self.per_process = config['per_process'] if 'per_process' in config else 100
             
-            ensure_dir(self.directory)
+            if 'create' in config:
+                ensure_dir(self.directory)
 
 
         self.set_size = config['set_size']
@@ -166,7 +168,7 @@ class SynthQADocDataset(QADataset):
                 print('Need to finish making dataset!')
                 exit(1)
         elif 'create' not in config:
-            print('Need to create dataset!')
+            print('Need to create dataset! {}'.format(self.directory))
             exit(1)
 
         if self.use_hw or self.tables:
@@ -229,12 +231,12 @@ class SynthQADocDataset(QADataset):
             num_hw_entries = int(self.use_hw*num_entries)
             num_entries = num_entries-num_hw_entries
 
-            hw_labels = random.choices(list(enumerate(self.header_labels)),k=num_hw_entries)
+            hw_labels = random.sample(list(enumerate(self.header_labels)),k=num_hw_entries)
             hw_labels = [a+(self.header_dir,True) for a in hw_labels]
-            hw_values = random.choices(list(enumerate(self.hw_labels)),k=num_hw_entries)
+            hw_values = random.sample(list(enumerate(self.hw_labels)),k=num_hw_entries)
             hw_values = [a+(self.hw_dir,False) for a in hw_values]
 
-        selected = random.choices(list(enumerate(self.labels)),k=num_entries*2)
+        selected = random.sample(list(enumerate(self.labels)),k=num_entries*2)
         selected = [a+(self.directory,True) for a in selected]
         labels = selected[:num_entries]
         values = selected[num_entries:]
@@ -253,7 +255,12 @@ class SynthQADocDataset(QADataset):
                 assert resize_l
                 label_height = random.randrange(self.min_text_height,label_img.shape[0])
                 label_width = round(label_img.shape[1]*label_height/label_img.shape[0])
-                label_img = img_f.resize(label_img,(label_height,label_width))
+                try:
+                    label_img = img_f.resize(label_img,(label_height,label_width))
+                except OverflowError as e:
+                    print(e)
+                    print('image {} to {}'.format(label_img.shape,(label_height,label_width)))
+
 
                 if resize_v:
                     value_height = random.randrange(self.min_text_height,value_img.shape[0])
@@ -310,7 +317,10 @@ class SynthQADocDataset(QADataset):
 
                 y_pos=y+heights[ei]
                 
-                if self.word_questions:
+                if self.word_questions=='simple':
+                    qa.append(('l~{}'.format(label_text),value_text,None))
+                    qa.append(('v~{}'.format(value_text),label_text,None))
+                elif self.word_questions:
                     question_to_value = random.choice(self.ask_for_value)
                     question_to_label = random.choice(self.ask_for_label)
                     qa.append((question_to_value.format(label_text),value_text,None))
@@ -323,13 +333,15 @@ class SynthQADocDataset(QADataset):
         else:
             #TABLE
             if self.tables and random.random()<self.tables:
-                table_x,table_y,table_width,table_height = self.addTable(image,qa,boxes if self.ocr else None,trans if self.ocr else None)
+                table_x,table_y,table_width,table_height,row_hs,col_hs = self.addTable(image,qa,boxes if self.ocr else None,trans if self.ocr else None)
                 if table_x is None:
                     did_table=False
+                    row_hs=col_hs=[]
                 else:
                     did_table=True
             else:
                 did_table=False
+                row_hs=col_hs=[]
 
             #Assign random positions and collect bounding boxes
             full_bbs=torch.FloatTensor(len(entries)+(1 if did_table else 0),4)
@@ -390,7 +402,7 @@ class SynthQADocDataset(QADataset):
             #removed.sort(reverse=True)
             #for r in removed:
             #    del entries[r]
-            not_present_qs=0
+            not_present_qs=[]
             selected_labels_stripped = [l[1].strip() for i,l in enumerate(labels) if i not in removed]
             for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
                 if ei not in removed:
@@ -417,7 +429,10 @@ class SynthQADocDataset(QADataset):
 
                     image[label_y:label_y+l_vert,label_x:label_x+l_horz] = label_img[:l_vert,:l_horz]
 
-                    if self.word_questions:
+                    if self.word_questions=='simple':
+                        qa.append(('l~{}'.format(label_text),value_text,None))
+                        qa.append(('v~{}'.format(value_text),label_text,None))
+                    elif self.word_questions:
                         question_to_value = random.choice(self.ask_for_value)
                         question_to_label = random.choice(self.ask_for_label)
                         qa.append((question_to_value.format(label_text),value_text,None))
@@ -427,14 +442,8 @@ class SynthQADocDataset(QADataset):
 
                     if self.ocr:
                         self.addText(label_text,label_x,label_y,l_horz,l_vert,value_text,value_x,value_y,v_horz,v_vert,boxes,trans,s)
-                elif not_present_qs<math.ceil(self.questions*0.02):
-                    if label_text.strip() not in selected_labels_stripped:
-                        if self.word_questions:
-                            question = random.choice(self.ask_for_value)
-                            qa.append((question.format(label_text),'[ np ]',None))
-                        else:
-                            qa.append((label_text,'[ np ]',None))
-                        not_present_qs+=1
+                elif label_text.strip() not in selected_labels_stripped:
+                    not_present_qs.append(label_text)
 
 
 
@@ -442,6 +451,64 @@ class SynthQADocDataset(QADataset):
         bbs = np.array(boxes)
         
         ocr = trans
+
+        #Add possible not present questions
+        to_add_np = len(qa)*self.np_qs #?0.02
+        num_np = math.floor(to_add_np)
+        if random.random()<to_add_np-num_np: #handle non-whole number correctly
+            num_np+=1
+        for i in range(num_np):
+            if self.tables and random.random()<(self.tables*0.5) and self.word_questions=='simple':
+                if random.random()<0.3:
+                    while True:
+                        q_text = random.choice(self.labels)
+                        if q_text.strip() not in col_hs:
+                            break
+                    qa.append(('ac~{}'.format(q_text),'[ np ]',None))
+                elif random.random()<0.6:
+                    while True:
+                        q_text = random.choice(self.labels)
+                        if q_text.strip() not in row_hs:
+                            break
+                    qa.append(('ar~{}'.format(q_text),'[ np ]',None))
+                else:
+                    while True:
+                        c_text = random.choice(self.labels)
+                        if c_text.strip() not in col_hs+row_hs:
+                            break
+                    while True:
+                        r_text = random.choice(self.labels)
+                        if r_text.strip() not in row_hs+col_hs:
+                            break
+                    qa.append(('t~{}~~{}'.format(r_text,c_text),'[ np ]',None))
+            else:
+                if len(not_present_qs)>0:
+                    q_text = not_present_qs.pop()
+                else:
+                    while True:
+                        q_text = random.choice(self.labels)
+                        if q_text.strip() not in selected_labels_stripped:
+                            break
+                if self.word_questions=='simple':
+                    qa.append(('l~{}'.format(q_text),'[ np ]',None))
+                elif self.word_questions:
+                    question = random.choice(self.ask_for_value)
+                    qa.append((question.format(q_text),'[ np ]',None))
+                else:
+                    qa.append((q_text,'[ np ]',None))
+        
+        if self.tables and self.word_questions=='simple':
+            if did_table:
+                qa.append(('t>','yes',None))
+                rows = ', '.join(row_hs)
+                qa.append(('rh>',rows,None))
+                cols = ', '.join(col_hs)
+                qa.append(('ch>',cols,None))
+            else:
+                qa.append(('t>','no',None))
+
+
+
         if self.questions<len(qa):
             qa = random.sample(qa,k=self.questions)
 
@@ -674,7 +741,7 @@ class SynthQADocDataset(QADataset):
         
         if total_height+table_y >= self.image_size:
             #NO TABLE
-            return None,None,None,None
+            return None,None,None,None, None, None
         height_row=[0]*num_rows
         for r in range(num_rows):
             max_height = row_headers[r][0].shape[0]
@@ -686,7 +753,7 @@ class SynthQADocDataset(QADataset):
             if total_height+table_y >= self.image_size:
                 num_rows = r
                 if num_rows==0:
-                    return None,None,None,None #NO TABLE
+                    return None,None,None,None,None,None #NO TABLE
                 total_height -= height_row[r]
                 row_headers=row_headers[:num_rows]
                 height_row=height_row[:num_rows]
@@ -701,7 +768,7 @@ class SynthQADocDataset(QADataset):
         
         if total_width+table_x >= self.image_size:
             #NO TABLE
-            return None,None,None,None
+            return None,None,None,None, None, None
         width_col=[0]*num_cols
         for c in range(num_cols):
             max_width = col_headers[c][0].shape[1]
@@ -713,7 +780,7 @@ class SynthQADocDataset(QADataset):
             if total_width+table_x >= self.image_size:
                 num_cols = c
                 if num_cols==0:
-                    return None,None,None,None#NO TABLE
+                    return None,None,None,None, None, None#NO TABLE
                 total_width -= width_col[c]
                 col_headers=col_headers[:num_cols]
                 width_col=width_col[:num_cols]
@@ -777,8 +844,12 @@ class SynthQADocDataset(QADataset):
                         self.addText(table_entries[r][c][1],x,t,table_entries[r][c][0].shape[1],table_entries[r][c][0].shape[0],boxes=boxes,trans=trans)
                 else:
                     #table_values.append((col_headers[c][1],row_headers[r][1],'[np]',cur_x,cur_y))
-                    all_q_a.append(('value of "{}" and "{}"?'.format(row_headers[r][1],col_headers[c][1]),'[np]',None))
-                    all_q_a.append(('value of "{}" and "{}"?'.format(col_headers[c][1],row_headers[r][1]),'[np]',None))
+                    if self.word_questions=='simple':
+                        all_q_a.append(('t~{}~~{}'.format(row_headers[r][1],col_headers[c][1]),'[ blank ]',None))
+                        all_q_a.append(('t~{}~~{}'.format(col_headers[c][1],row_headers[r][1]),'[ blank ]',None))
+                    else:
+                        all_q_a.append(('value of "{}" and "{}"?'.format(row_headers[r][1],col_headers[c][1]),'[np]',None))
+                        all_q_a.append(('value of "{}" and "{}"?'.format(col_headers[c][1],row_headers[r][1]),'[np]',None))
                 
                 cur_y += height_row[r]
             cur_x += width_col[c]
@@ -870,17 +941,27 @@ class SynthQADocDataset(QADataset):
         ambiguous=set()
         for (col_h,row_h,v,x,y) in table_values:
             if col_h is not None and row_h is not None:
-                if random.random()<0.5:
-                    all_q_a.append(('value of "{}" and "{}"?'.format(row_h,col_h),v,None))
-                    all_q_a.append(('value of "{}" and "{}"?'.format(col_h,row_h),v,None))
+                if self.word_questions=='simple':
+                    all_q_a.append(('t~{}~~{}'.format(row_h,col_h),v,None))
+                    all_q_a.append(('t~{}~~{}'.format(col_h,row_h),v,None))
                 else:
-                    all_q_a.append(('value in "{}" and "{}"?'.format(row_h,col_h),v,None))
-                    all_q_a.append(('value in "{}" and "{}"?'.format(col_h,row_h),v,None))
+                    if random.random()<0.5:
+                        all_q_a.append(('value of "{}" and "{}"?'.format(row_h,col_h),v,None))
+                        all_q_a.append(('value of "{}" and "{}"?'.format(col_h,row_h),v,None))
+                    else:
+                        all_q_a.append(('value in "{}" and "{}"?'.format(row_h,col_h),v,None))
+                        all_q_a.append(('value in "{}" and "{}"?'.format(col_h,row_h),v,None))
             if v not in ambiguous:
-                if row_h is not None:
-                    all_q_a.append(('row that "{}" is in?'.format(v),row_h,None))
-                if col_h is not None:
-                    all_q_a.append(('column that "{}" is in?'.format(v),col_h,None))
+                if self.word_questions=='simple':
+                    if row_h is not None:
+                        all_q_a.append(('ri~{}'.format(v),row_h,None))
+                    if col_h is not None:
+                        all_q_a.append(('ci~{}'.format(v),col_h,None))
+                else:
+                    if row_h is not None:
+                        all_q_a.append(('row that "{}" is in?'.format(v),row_h,None))
+                    if col_h is not None:
+                        all_q_a.append(('column that "{}" is in?'.format(v),col_h,None))
 
             if col_h is not None:
                 col_vs[col_h].append((v,y))
@@ -893,18 +974,24 @@ class SynthQADocDataset(QADataset):
                 a=vs[0][0]
                 for v,x in vs[1:]:
                     a+=', '+v
-                if random.random()<0.5:
-                    all_q_a.append(('all values in row "{}"?'.format(row_h),a,None))
+                if self.word_questions=='simple':
+                    all_q_a.append(('ar~{}'.format(row_h),a,None))
                 else:
-                    all_q_a.append(('all values of row "{}"?'.format(row_h),a,None))
+                    if random.random()<0.5:
+                        all_q_a.append(('all values in row "{}"?'.format(row_h),a,None))
+                    else:
+                        all_q_a.append(('all values of row "{}"?'.format(row_h),a,None))
         for col_h, vs in col_vs.items():
             if col_h not in ambiguous:
                 vs.sort(key=lambda a:a[1])
                 a=vs[0][0]
                 for v,y in vs[1:]:
                     a+=', '+v
-                if random.random()<0.5:
-                    all_q_a.append(('all values in column "{}"?'.format(col_h),a,None))
+                if self.word_questions=='simple':
+                    all_q_a.append(('ac~{}'.format(col_h),a,None))
                 else:
-                    all_q_a.append(('all values of column "{}"?'.format(col_h),a,None))
-        return table_x-10, table_y-10, total_width+20, total_height+20
+                    if random.random()<0.5:
+                        all_q_a.append(('all values in column "{}"?'.format(col_h),a,None))
+                    else:
+                        all_q_a.append(('all values of column "{}"?'.format(col_h),a,None))
+        return table_x-10, table_y-10, total_width+20, total_height+20, [r[1].strip() for r in row_headers], [c[1].strip() for c in col_headers]
