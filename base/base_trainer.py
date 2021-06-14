@@ -535,37 +535,59 @@ class BaseTrainer:
             self.iteration=self.start_iteration
         self.monitor_best = checkpoint['monitor_best']
         #print(checkpoint['state_dict'].keys())
+
         if ('save_mode' not in self.config or self.config['save_mode']=='state_dict') and 'state_dict' in checkpoint:
             #Brain surgery, allow restarting with modified model
             did_brain_surgery=False
+            remove_keys=[]
             keys=checkpoint['state_dict'].keys()
             init_state_dict = self.model.state_dict()
             for key in keys:
 
                 orig_size = checkpoint['state_dict'][key].size()
-                dims=-1
-                for dim in range(len(orig_size)):
-                    if init_state_dict[key].size(dim)>checkpoint['state_dict'][key].size(dim):
-                        dims=dim
-                if dims>-1:
-                    if dims==0:
-                        init_state_dict[key][:orig_size[0]] = checkpoint['state_dict'][key]
-                    elif dims==1:
-                        init_state_dict[key][:orig_size[0],:orig_size[1]] = checkpoint['state_dict'][key]
-                    elif dims==2:
-                        init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2]] = checkpoint['state_dict'][key]
-                    elif dims==3:
-                        init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2],:orig_size[3]] = checkpoint['state_dict'][key]
-                    else:
-                        raise NotImplementedError('no Brain Surgery above 4 dims')
-                    checkpoint['state_dict'][key] = init_state_dict[key]
-                    self.logger.info('BRAIN SURGERY PERFORMED on {}'.format(key))
+                if key in init_state_dict:
+                    init_size = init_state_dict[key].size()
+                    dims=-1
+                    for dim in range(len(orig_size)):
+                        if init_size[dim]!=orig_size[dim]:
+                            dims=dim
+                    if dims>-1:
+                        if dims==0:
+                            if init_size[0]>orig_size[0]:
+                                init_state_dict[key][:orig_size[0]] = checkpoint['state_dict'][key]
+                            else:
+                                init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0]]
+                        elif dims==1:
+                            if init_size[0]>orig_size[0] or init_size[1]>orig_size[1]:
+                                init_state_dict[key][:orig_size[0],:orig_size[1]] = checkpoint['state_dict'][key]
+                            else:
+                                init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0],:init_size[1]]
+                        elif dims==2:
+                            if init_size[0]>orig_size[0] or init_size[1]>orig_size[1] or init_size[2]>orig_size[2]:
+                                init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2]] = checkpoint['state_dict'][key]
+                            else:
+                                 init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0],:init_size[1],:init_size[2]]
+                        elif dims==3:
+                            if init_size[0]>orig_size[0] or init_size[1]>orig_size[1] or init_size[2]>orig_size[2] or init_size[3]>orig_size[3]:
+                                init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2],:orig_size[3]] = checkpoint['state_dict'][key]
+                            else:
+                                init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0],:init_size[1],:init_size[2],:init_size[3]]
+                        else:
+                            raise NotImplementedError('no Brain Surgery above 4 dims')
+                        checkpoint['state_dict'][key] = init_state_dict[key]
+                        self.logger.info('BRAIN SURGERY PERFORMED on {}: {} -> {}'.format(key,orig_size,init_size))
+                        did_brain_surgery=True
+                else:
+                    remove_keys.append(key)
                     did_brain_surgery=True
+                    self.logger.info('BRAIN SURGERY PERFORMED removed {}'.format(key))
 
             #specail check for Swin Transformer
             for init_key,value in init_state_dict.items():
                 if 'attn_mask' in init_key and init_key not in keys:
                     checkpoint['state_dict'][init_key]=value
+            for key in remove_keys:
+                del checkpoint['state_dict'][key]
 
             self.model.load_state_dict(checkpoint['state_dict'])
             if self.swa and 'swa_state_dict' in checkpoint:
