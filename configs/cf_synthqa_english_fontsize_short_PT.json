@@ -9,7 +9,7 @@
         "fontdir": "../data/fonts/",
         "textdir": "../data/",
         "data_dir": "../data/english4line_fontslong",
-        "batch_size": 6,
+        "batch_size": 5,
         "num_workers": 4,
         "rescale_range": [1.0,1.0],
         "crop_params": null,
@@ -60,6 +60,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 300000,
+        "accum_grad_steps": 2,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
