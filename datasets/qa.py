@@ -29,7 +29,7 @@ class QADataset(torch.utils.data.Dataset):
         #else:
         #    self.augmentation_params=None
         self.questions = config['questions']
-        self.color = config['color'] if 'color' in config else True
+        self.color = config['color'] if 'color' in config else False
         self.rotate = config['rotation'] if 'rotation' in config else False
         #patchSize=config['patch_size']
         if 'crop_params' in config and config['crop_params'] is not None:
@@ -187,12 +187,14 @@ class QADataset(torch.utils.data.Dataset):
             if questions_and_answers is not None:
                 questions=[]
                 answers=[]
-                questions_and_answers = [(q,a,qids) for q,a,qids in questions_and_answers if all((i in ids) for i in qids)]
+                questions_and_answers = [(q,a,qids) for q,a,qids in questions_and_answers if qids is None or all((i in ids) for i in qids)]
         if questions_and_answers is not None:
             if len(questions_and_answers) > self.questions:
                 questions_and_answers = random.sample(questions_and_answers,k=self.questions)
             if len(questions_and_answers)>0:
                 questions,answers,_ = zip(*questions_and_answers)
+                questions = [q.lower() for q in questions]
+                answers = [a.lower() for a in answers]
             else:
                 return self.getitem((index+1)%len(self))
         else:
@@ -234,6 +236,8 @@ class QADataset(torch.utils.data.Dataset):
         #t#self.opt_history['remainder'].append(time-tic)#t#
         #t#self.opt_history['Full get_item'].append(time-ticFull)#t#
         #t#self.print_opt_times()#t#
+
+        
 
 
         return {
