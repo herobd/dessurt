@@ -518,10 +518,10 @@ class SynthQADocDataset(QADataset):
     def addText(self,label_text,label_x,label_y,l_horz,l_vert,value_text=None,value_x=None,value_y=None,v_horz=None,v_vert=None,boxes=None,trans=None,s=1):
         #corrupt text
         label_text = self.corrupt(label_text)
-
-        value_text = self.corrupt(value_text)
+        if value_text is not None:
+            value_text = self.corrupt(value_text)
         
-        if random.random()<0.5:
+        if random.random()<0.5 and value_text is not None:
             #single line
             if random.random()>0.1:
                 full_text = label_text+' '+value_text
@@ -602,7 +602,7 @@ class SynthQADocDataset(QADataset):
                 boxes.append(bb)
                 trans.append(label_text)
 
-            if random.random()>0.1:
+            if random.random()>0.1 and value_text is not None:
                 #value
                 lX = value_x
                 rX = value_x+v_horz
@@ -841,7 +841,7 @@ class SynthQADocDataset(QADataset):
                     image[y:y+table_entries[r][c][0].shape[0],x:x+table_entries[r][c][0].shape[1]] = table_entries[r][c][0]
                     table_values.append((col_headers[c][1],row_headers[r][1],table_entries[r][c][1],x,y))
                     if boxes is not None:
-                        self.addText(table_entries[r][c][1],x,t,table_entries[r][c][0].shape[1],table_entries[r][c][0].shape[0],boxes=boxes,trans=trans)
+                        self.addText(table_entries[r][c][1],x,y,table_entries[r][c][0].shape[1],table_entries[r][c][0].shape[0],boxes=boxes,trans=trans)
                 else:
                     #table_values.append((col_headers[c][1],row_headers[r][1],'[np]',cur_x,cur_y))
                     if self.word_questions=='simple':
