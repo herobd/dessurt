@@ -106,7 +106,7 @@ def generate_random_crop(img, pixel_gt, line_gts, point_gts, params, bb_gt=None,
 
 
         got_all=True
-        if bb_gt is not None:
+        if bb_gt is not None and bb_gt.shape[1]>0:
             bb_gt_match=np.zeros_like(bb_gt)
 
             bb_gt_match[...,8][bb_gt[...,8] < dim1] = 1
@@ -204,7 +204,7 @@ def generate_random_crop(img, pixel_gt, line_gts, point_gts, params, bb_gt=None,
                 if line_gts is not None:
                     for name in line_gts:
                         line_gt_match[name] = np.where(line_gt_match[name]!=0)
-                if bb_gt is not None:
+                if bb_gt is not None and bb_gt.shape[1]>0:
                     with warnings.catch_warnings(): 
                         warnings.simplefilter("ignore")#we do some div by zero stuff that's caught within
                         #We need to clip bbs that go outsire crop
@@ -453,7 +453,7 @@ class CropBoxTransform(object):
                 if len(pixel_gt.shape)==2:
                     pixel_gt = pixel_gt[:,:,None]
             #rotate points
-            if bb_gt is not None:
+            if bb_gt is not None and bb_gt.shape[1]>0:
                 points = np.reshape(bb_gt[0,:,0:16],(-1,2)) #reshape all box points to vector of x,y pairs
                 points = np.append(points,np.ones((points.shape[0],1)),axis=1) #append 1 to make homogeneous (x,y,1)
                 #I HAVE NO IDEA WHY I NEED THE OPPOSITE ROTATION HERE
@@ -486,13 +486,17 @@ class CropBoxTransform(object):
         pad_params = self.pad_params
         if org_img.shape[0]+pad_params[0][0]+pad_params[0][1] < self.crop_size[0]+1:
             diff = self.crop_size[0]+1-(org_img.shape[0])#+pad_params[0][0]+pad_params[0][1])
-            pad_byT = diff//2
-            pad_byB = diff//2 + diff%2
+            pad_byT = random.randrange(diff)
+            pad_byB = diff-pad_byT
+            #pad_byT = diff//2
+            #pad_byB = diff//2 + diff%2
             pad_params = ((pad_byT,pad_byB),)+pad_params[1:]
         if org_img.shape[1]+pad_params[1][0]+pad_params[1][1] < self.crop_size[1]+1:
             diff = self.crop_size[1]+1-(org_img.shape[1])#+pad_params[1][0]+pad_params[1][1])
-            pad_byL = diff//2
-            pad_byR = diff//2 + diff%2
+            pad_byL = random.randrange(diff)
+            pad_byR = diff-pad_byL
+            #pad_byL = diff//2
+            #pad_byR = diff//2 + diff%2
             pad_params = (pad_params[0],(pad_byL,pad_byR),pad_params[2])
         #print(pad_params)
 
@@ -510,24 +514,25 @@ class CropBoxTransform(object):
         
         ##tic=timeit.default_timer()
         #corner points
-        bb_gt[:,:,0] = bb_gt[:,:,0] + pad_params[1][0]
-        bb_gt[:,:,1] = bb_gt[:,:,1] + pad_params[0][0]
-        bb_gt[:,:,2] = bb_gt[:,:,2] + pad_params[1][0]
-        bb_gt[:,:,3] = bb_gt[:,:,3] + pad_params[0][0]
-        bb_gt[:,:,4] = bb_gt[:,:,4] + pad_params[1][0]
-        bb_gt[:,:,5] = bb_gt[:,:,5] + pad_params[0][0]
-        bb_gt[:,:,6 ] = bb_gt[:,:,6 ] + pad_params[1][0]
-        bb_gt[:,:,7 ] = bb_gt[:,:,7 ] + pad_params[0][0]
+        if bb_gt is not None and bb_gt.shape[1]>0:
+            bb_gt[:,:,0] = bb_gt[:,:,0] + pad_params[1][0]
+            bb_gt[:,:,1] = bb_gt[:,:,1] + pad_params[0][0]
+            bb_gt[:,:,2] = bb_gt[:,:,2] + pad_params[1][0]
+            bb_gt[:,:,3] = bb_gt[:,:,3] + pad_params[0][0]
+            bb_gt[:,:,4] = bb_gt[:,:,4] + pad_params[1][0]
+            bb_gt[:,:,5] = bb_gt[:,:,5] + pad_params[0][0]
+            bb_gt[:,:,6 ] = bb_gt[:,:,6 ] + pad_params[1][0]
+            bb_gt[:,:,7 ] = bb_gt[:,:,7 ] + pad_params[0][0]
 
-        #cross/edge points
-        bb_gt[:,:,8 ] = bb_gt[:,:,8 ] + pad_params[1][0]
-        bb_gt[:,:,9 ] = bb_gt[:,:,9 ] + pad_params[0][0]
-        bb_gt[:,:,10] = bb_gt[:,:,10] + pad_params[1][0]
-        bb_gt[:,:,11] = bb_gt[:,:,11] + pad_params[0][0]
-        bb_gt[:,:,12] = bb_gt[:,:,12] + pad_params[1][0]
-        bb_gt[:,:,13] = bb_gt[:,:,13] + pad_params[0][0]
-        bb_gt[:,:,14] = bb_gt[:,:,14] + pad_params[1][0]
-        bb_gt[:,:,15] = bb_gt[:,:,15] + pad_params[0][0]
+            #cross/edge points
+            bb_gt[:,:,8 ] = bb_gt[:,:,8 ] + pad_params[1][0]
+            bb_gt[:,:,9 ] = bb_gt[:,:,9 ] + pad_params[0][0]
+            bb_gt[:,:,10] = bb_gt[:,:,10] + pad_params[1][0]
+            bb_gt[:,:,11] = bb_gt[:,:,11] + pad_params[0][0]
+            bb_gt[:,:,12] = bb_gt[:,:,12] + pad_params[1][0]
+            bb_gt[:,:,13] = bb_gt[:,:,13] + pad_params[0][0]
+            bb_gt[:,:,14] = bb_gt[:,:,14] + pad_params[1][0]
+            bb_gt[:,:,15] = bb_gt[:,:,15] + pad_params[0][0]
 
         if query_bb is not None:
             query_bb[8 ] = query_bb[8 ] + pad_params[1][0]
@@ -560,16 +565,20 @@ class CropBoxTransform(object):
         
         ##tic=timeit.default_timer()
         #new_bb_gt=bb_gt[bb_gt_match][None,...] #this is done in generate_random_crop() as it modified some bbs
-        new_bb_gt=new_bb_gt[None,...] #this re-adds the batch dim
-        new_bb_gt[...,0] = new_bb_gt[...,0] - crop_params['dim1'][0]
-        new_bb_gt[...,1] = new_bb_gt[...,1] - crop_params['dim0'][0]
-        new_bb_gt[...,2] = new_bb_gt[...,2] - crop_params['dim1'][0]
-        new_bb_gt[...,3] = new_bb_gt[...,3] - crop_params['dim0'][0]
-        new_bb_gt[...,4] = new_bb_gt[...,4] - crop_params['dim1'][0]
-        new_bb_gt[...,5] = new_bb_gt[...,5] - crop_params['dim0'][0]
-        new_bb_gt[...,6 ] = new_bb_gt[...,6 ] - crop_params['dim1'][0]
-        new_bb_gt[...,7 ] = new_bb_gt[...,7 ] - crop_params['dim0'][0]
-        #the cross/edge points are invalid now
+        if bb_gt is not None and bb_gt.shape[1]>0:
+            new_bb_gt=new_bb_gt[None,...] #this re-adds the batch dim
+            new_bb_gt[...,0] = new_bb_gt[...,0] - crop_params['dim1'][0]
+            new_bb_gt[...,1] = new_bb_gt[...,1] - crop_params['dim0'][0]
+            new_bb_gt[...,2] = new_bb_gt[...,2] - crop_params['dim1'][0]
+            new_bb_gt[...,3] = new_bb_gt[...,3] - crop_params['dim0'][0]
+            new_bb_gt[...,4] = new_bb_gt[...,4] - crop_params['dim1'][0]
+            new_bb_gt[...,5] = new_bb_gt[...,5] - crop_params['dim0'][0]
+            new_bb_gt[...,6 ] = new_bb_gt[...,6 ] - crop_params['dim1'][0]
+            new_bb_gt[...,7 ] = new_bb_gt[...,7 ] - crop_params['dim0'][0]
+            #the cross/edge points are invalid now
+        else:
+            new_bb_gt=bb_gt
+
         new_point_gts={}
         if point_gts is not None:
             for name, gt in point_gts.items():
