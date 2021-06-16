@@ -698,7 +698,7 @@ class GraphPairTrainer(BaseTrainer):
                 predTargGroups = [getGTGroup(predGroupsT[n0],targetIndexToGroup) for n0 in predGroupsT]
                 new_edgePred=[]
                 new_predGroupsT={}
-                new_edgePredIndexes[]
+                new_edgePredIndexes=[]
                 for ei,(n1,n2) for enumerate(edgePredIndexes):
                     tg1 = predTargGroups[n1]
                     tg2 = predTargGroups[n2]

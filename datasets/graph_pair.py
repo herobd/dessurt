@@ -334,7 +334,7 @@ class GraphPairDataset(torch.utils.data.Dataset):
                 "img": img,
                 "bb_gt": bbs,
                 "num_neighbors": numNeighbors,
-                "adj": None#pairs,
+                "adj": None,#pairs,
                 "imgName": imageName,
                 "scale": s,
                 "cropPoint": cropPoint,
