@@ -322,7 +322,7 @@ class GraphPairDataset(torch.utils.data.Dataset):
         transcription = [trans[id] for id in ids]
 
         if self.semi_supervised:
-            groups_adj = [pair for pair in groups_adj if random.random()<self.semi_supervised]
+            groups_adj = set(pair for pair in groups_adj if random.random()<self.semi_supervised)
             only_groups=set()
             for g1,g2 in groups_adj:
                 only_groups.add(g1)

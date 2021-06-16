@@ -29,6 +29,7 @@ def normalize_bbox2(bbox, dwidth, dheight, twidth, theight, max_dist):
 class QAImDocGPT(BaseModel):
     def __init__(self,config):
         super(QAImDocGPT, self).__init__(config)
+        self.blank_ocr = config['blank_ocr'] if 'blank_ocr' in config else False
         self.image_size = config['image_size'] #start at 512?
         window_size = config['window_size'] #7
         self.max_dist = self.image_size
@@ -159,6 +160,8 @@ class QAImDocGPT(BaseModel):
 
     #we're building this for fixed images size
     def forward(self,image,gtBBs,gtTrans,questions,answers=None,useCurvedBBs=False,RUN=False):
+        if self.blank_ocr:
+            gtTrans=[[]]*len(questions)
         #torch.autograd.set_detect_anomaly(True)
         #there's got to be a better way...
         for name,buff in self.named_buffers():

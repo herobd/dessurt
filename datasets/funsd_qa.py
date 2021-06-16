@@ -42,6 +42,7 @@ class FUNSDQA(QADataset):
         self.split_to_lines = config['split_to_lines']
         self.corruption_p = config['text_corruption'] if 'text_corruption' in config else 0.15
         self.do_words = config['do_words']
+        self.char_qs = config['char_qs'] if 'char_qs' in config else False
 
         if images is not None:
             self.images=images
@@ -460,11 +461,20 @@ class FUNSDQA(QADataset):
             if ai is not None:
                 trans_ai = all_trans[ai]
                 if trans_qi not in ambiguous:
-                    all_q_a.append(('value for "{}"?'.format(trans_qi),trans_ai,[qi,ai]))
+                    if self.char_qs:
+                        all_q_a.append(('l~{}'.format(trans_qi),trans_ai,[qi,ai]))
+                    else:
+                        all_q_a.append(('value for "{}"?'.format(trans_qi),trans_ai,[qi,ai]))
                 if trans_ai not in ambiguous:
-                    all_q_a.append(('label of "{}"?'.format(trans_ai),trans_qi,[qi,ai]))
+                    if self.char_qs:
+                        all_q_a.append(('v~{}'.format(trans_ai),trans_qi,[qi,ai]))
+                    else:
+                        all_q_a.append(('label of "{}"?'.format(trans_ai),trans_qi,[qi,ai]))
             elif trans_qi not in ambiguous:
-                all_q_a.append(('value for "{}"?'.format(trans_qi),'blank',[qi]))
+                if self.char_qs:
+                    all_q_a.append(('l~{}'.format(trans_qi),'[ blank ]',[qi]))
+                else:
+                    all_q_a.append(('value for "{}"?'.format(trans_qi),'blank',[qi]))
 
         #addTable can cause two tables to be made in odd cases (uneven rows, etc), so we'll simply combine all the table information and generate questions from it.
         #print(tables)
@@ -501,15 +511,58 @@ class FUNSDQA(QADataset):
         #we we'll aggregate the information and just make the questions
         col_vs=defaultdict(list)
         row_vs=defaultdict(list)
+        tables={}
+        header_to_table_id={}
+        cur_table_id=0
         for (col_h,row_h),v in table_values.items():
             if col_h is not None and row_h is not None:
-                all_q_a.append(('value of "{}" and "{}"?'.format(all_trans[row_h],all_trans[col_h]),all_trans[v],[col_h,row_h,v]))
-                all_q_a.append(('value of "{}" and "{}"?'.format(all_trans[col_h],all_trans[row_h]),all_trans[v],[col_h,row_h,v]))
+                if col_h in header_to_table_id:
+                    col_tab = header_to_table_id[col_h]
+                else:
+                    col_tab = None
+                if row_h in header_to_table_id:
+                    row_tab = header_to_table_id[row_h]
+                else:
+                    row_tab = None
+
+                if col_tab is None and row_tab is None:
+                    tables[cur_table_id] = ([col_h],[row_h])
+                    header_to_table_id[col_h]=cur_table_id
+                    header_to_table_id[row_h]=cur_table_id
+                    cur_table_id+=1
+                elif col_tab is None:
+                    tables[row_tab][0].append(col_h)
+                    header_to_table_id[col_h]=row_tab
+                elif row_tab is None:
+                    tables[col_tab][1].append(row_h)
+                    header_to_table_id[row_h]=col_tab
+                else:
+                    if col_tab!=row_tab:
+                        #merge tables
+                        tables[col_tab][0]+=tables[row_tab][0]
+                        tables[col_tab][1]+=tables[row_tab][1]
+                        for h in tables[row_tab][0]+tables[row_tab][1]:
+                            header_to_table_id[h]=col_tab
+                        del tables[row_tab]
+
+            if col_h is not None and row_h is not None:
+                if self.char_qs:
+                    all_q_a.append(('t~{}~~{}'.format(all_trans[row_h],all_trans[col_h]),all_trans[v],[col_h,row_h,v]))
+                    all_q_a.append(('t~{}~~{}'.format(all_trans[col_h],all_trans[row_h]),all_trans[v],[col_h,row_h,v]))
+                else:
+                    all_q_a.append(('value of "{}" and "{}"?'.format(all_trans[row_h],all_trans[col_h]),all_trans[v],[col_h,row_h,v]))
+                    all_q_a.append(('value of "{}" and "{}"?'.format(all_trans[col_h],all_trans[row_h]),all_trans[v],[col_h,row_h,v]))
             if all_trans[v] not in ambiguous:
                 if row_h is not None:
-                    all_q_a.append(('row that "{}" is in?'.format(all_trans[v]),all_trans[row_h],[v,row_h]))
+                    if self.char_qs:
+                        all_q_a.append(('ri~{}'.format(all_trans[v]),all_trans[row_h],[v,row_h]))
+                    else:
+                        all_q_a.append(('row that "{}" is in?'.format(all_trans[v]),all_trans[row_h],[v,row_h]))
                 if col_h is not None:
-                    all_q_a.append(('column that "{}" is in?'.format(all_trans[v]),all_trans[col_h],[v,col_h]))
+                    if self.char_qs:
+                        all_q_a.append(('ci~{}'.format(all_trans[v]),all_trans[col_h],[v,col_h]))
+                    else:
+                        all_q_a.append(('column that "{}" is in?'.format(all_trans[v]),all_trans[col_h],[v,col_h]))
 
             x,y = bbs[groups[v][0],0:2]
             if col_h is not None:
@@ -524,7 +577,10 @@ class FUNSDQA(QADataset):
                 a=all_trans[vs[0][0]]
                 for v,x in vs[1:]:
                     a+=', '+all_trans[v]
-                all_q_a.append(('all values in row "{}"?'.format(trans_row_h),a,[row_h,vs[0][0]]))
+                if self.char_qs:
+                    all_q_a.append(('ar~{}'.format(trans_row_h),a,[row_h,vs[0][0]]))
+                else:
+                    all_q_a.append(('all values in row "{}"?'.format(trans_row_h),a,[row_h,vs[0][0]]))
         for col_h, vs in col_vs.items():
             trans_col_h = all_trans[col_h]
             if trans_col_h not in ambiguous:
@@ -532,7 +588,28 @@ class FUNSDQA(QADataset):
                 a=all_trans[vs[0][0]]
                 for v,y in vs[1:]:
                     a+=', '+all_trans[v]
-                all_q_a.append(('all values in column "{}"?'.format(trans_col_h),a,[col_h,vs[0][0]]))
+                if self.char_qs: 
+                    all_q_a.append(('ac~{}'.format(trans_col_h),a,[col_h,vs[0][0]]))
+                else:
+                    all_q_a.append(('all values in column "{}"?'.format(trans_col_h),a,[col_h,vs[0][0]]))
+
+        if self.char_qs:
+            all_q_a.append(('t#>',str(len(tables)),list(col_vs.keys())+list(row_vs.keys())))
+            for i,(col_hs, row_hs) in enumerate(tables.values()):
+                col_hs = [(h,bbs[groups[h][0]][0]) for h in col_hs]
+                col_hs.sort(key=lambda a:a[1])
+                col_hs = [h[0] for h in col_hs]
+                col_h_strs = [all_trans[h] for h in col_hs]
+                row_hs = [(h,bbs[groups[h][0]][1]) for h in row_hs]
+                row_hs.sort(key=lambda a:a[1])
+                row_hs = [h[0] for h in row_hs]
+                row_h_strs = [all_trans[h] for h in row_hs]
+                
+                all_q_a.append(('ch~{}'.format(i),', '.join(col_h_strs),col_hs))
+                all_q_a.append(('rh~{}'.format(i),', '.join(row_h_strs),row_hs))
+
+
+
 
         #Convert the group IDs on each QA pair to be BB IDs.
         #   This uses groups_id, which can be the word BB ids
