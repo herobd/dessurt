@@ -1,10 +1,34 @@
-from synthetic_text_gen import SyntheticText
-from utils import img_f
+#from synthetic_text_gen import SyntheticText
+#from utils import img_f
+#
+#generator = SyntheticText("../data/fonts", "../data/",line_prob=0.0,line_thickness=70,line_var=0,mean_pad=10,pad=0,gaus_noise=0,gaus_std=0.0000001,blur_std=0.01,hole_prob=0.0, hole_size=400,neighbor_gap_var=0,rot=0.5, use_warp=0.0,warp_std=[1,1.4], linesAboveAndBelow=False,useBrightness=False)
+#img,text,fnt = generator.getSample(7)
+#img_f.imwrite("TEXT_IMG.png", img)
 
-generator = SyntheticText("../data/fonts", "../data/",line_prob=0.0,line_thickness=70,line_var=0,mean_pad=10,pad=0,gaus_noise=0,gaus_std=0.0000001,blur_std=0.01,hole_prob=0.0, hole_size=400,neighbor_gap_var=0,rot=0.5, use_warp=0.0,warp_std=[1,1.4], linesAboveAndBelow=False,useBrightness=False)
-img,text,fnt = generator.getSample(7)
-img_f.imwrite("TEXT_IMG.png", img)
+import torch
+import torch.nn as nn
 
+window_size=(6,6)
+num_heads=4
+
+relative_position_bias_table = nn.Parameter(
+            torch.zeros((2 * window_size[0] - 1) * (2 * window_size[1] - 1), num_heads))  # 2*Wh-1 * 2*Ww-1, nH
+
+# get pair-wise relative position index for each token inside the window
+coords_h = torch.arange(window_size[0])
+coords_w = torch.arange(window_size[1])
+coords = torch.stack(torch.meshgrid([coords_h, coords_w]))  # 2, Wh, Ww
+coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
+relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
+relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
+relative_coords[:, :, 0] += window_size[0] - 1  # shift to start from 0
+relative_coords[:, :, 1] += window_size[1] - 1
+relative_coords[:, :, 0] *= 2 * window_size[1] - 1
+relative_position_index = relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
+
+
+print(relative_position_bias_table.size())
+print(relative_position_index.max())
 
 #from utils.bb_merging import check_point_angles
 #

@@ -540,7 +540,7 @@ class BaseTrainer:
             #Brain surgery, allow restarting with modified model
             did_brain_surgery=False
             remove_keys=[]
-            checkpoint['state_dict'] = {(k if not k.startswith('module') else k[7:]):v for k,v in checkpoint['state_dict'].items()}
+            checkpoint['state_dict'] = {(k if not k.startswith('module') else k[7:]):v for k,v in checkpoint['state_dict'].items() if 'relative_position_index' not in k}
             keys=checkpoint['state_dict'].keys()
             init_state_dict = self.model.state_dict()
             for key in keys:
