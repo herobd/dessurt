@@ -99,6 +99,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False):
 
     model.eval()
     model.max_pred_len=40
+    if gpu:
+        model = model.cuda()
 
     with torch.no_grad():
         if img_path is None:
