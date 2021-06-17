@@ -554,25 +554,29 @@ class BaseTrainer:
                             dims=dim
                     if dims>-1:
                         if dims==0:
-                            if init_size[0]>orig_size[0]:
-                                init_state_dict[key][:orig_size[0]] = checkpoint['state_dict'][key]
-                            else:
-                                init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0]]
+                            #if init_size[0]>orig_size[0]:
+                            #    init_state_dict[key][:orig_size[0]] = checkpoint['state_dict'][key]
+                            #else:
+                            #    init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0]]
+                            init_state_dict[key][:orig_size[0]] = checkpoint['state_dict'][key][:init_size[0]]
                         elif dims==1:
-                            if init_size[0]>orig_size[0] or init_size[1]>orig_size[1]:
-                                init_state_dict[key][:orig_size[0],:orig_size[1]] = checkpoint['state_dict'][key]
-                            else:
-                                init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0],:init_size[1]]
+                            #if init_size[0]>orig_size[0] or init_size[1]>orig_size[1]:
+                            #    init_state_dict[key][:orig_size[0],:orig_size[1]] = checkpoint['state_dict'][key]
+                            #else:
+                            #    init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0],:init_size[1]]
+                            init_state_dict[key][:orig_size[0],:orig_size[1]] = checkpoint['state_dict'][key][:init_size[0],:init_size[1]]
                         elif dims==2:
-                            if init_size[0]>orig_size[0] or init_size[1]>orig_size[1] or init_size[2]>orig_size[2]:
-                                init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2]] = checkpoint['state_dict'][key]
-                            else:
-                                 init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0],:init_size[1],:init_size[2]]
+                            #if init_size[0]>=orig_size[0] and init_size[1]>=orig_size[1] and init_size[2]>=orig_size[2]:
+                            #    init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2]] = checkpoint['state_dict'][key]
+                            #elif init_size[0]<=orig_size[0] and init_size[1]<=orig_size[1] and init_size[2]<=orig_size[2]:
+                            #     init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0],:init_size[1],:init_size[2]]
+                            init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2]] = checkpoint['state_dict'][key][:init_size[0],:init_size[1],:init_size[2]]
                         elif dims==3:
-                            if init_size[0]>orig_size[0] or init_size[1]>orig_size[1] or init_size[2]>orig_size[2] or init_size[3]>orig_size[3]:
-                                init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2],:orig_size[3]] = checkpoint['state_dict'][key]
-                            else:
-                                init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0],:init_size[1],:init_size[2],:init_size[3]]
+                            #if init_size[0]>orig_size[0] or init_size[1]>orig_size[1] or init_size[2]>orig_size[2] or init_size[3]>orig_size[3]:
+                            #    init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2],:orig_size[3]] = checkpoint['state_dict'][key]
+                            #else:
+                            #    init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0],:init_size[1],:init_size[2],:init_size[3]]
+                            nit_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2],:orig_size[3]] = checkpoint['state_dict'][key][:init_size[0],:init_size[1],:init_size[2],:init_size[3]]
                         else:
                             raise NotImplementedError('no Brain Surgery above 4 dims')
                         checkpoint['state_dict'][key] = init_state_dict[key]
