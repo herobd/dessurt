@@ -15,6 +15,19 @@ import timeit
 import utils.img_f as img_f
 
 
+def collate(batch):
+    return {
+            'img': torch.cat([b['img'] for b in batch],dim=0),
+            'bb_gt': [b['bb_gt'] for b in batch], #torch.cat([b['bb_gt'] for b in batch],dim=0),
+            'imgName': [b['imgName'] for b in batch],
+            'scale': [b['scale'] for b in batch],
+            'cropPoint': [b['cropPoint'] for b in batch],
+            'transcription': [b['transcription'] for b in batch],
+            'metadata': [b['metadata'] for b in batch],
+            'form_metadata': [b['form_metadata'] for b in batch],
+            'questions': [b['questions'] for b in batch],
+            'answers': [b['answers'] for b in batch]
+            }
 
 
 class QADataset(torch.utils.data.Dataset):

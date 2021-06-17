@@ -47,10 +47,6 @@ class BaseTrainer:
             self.model = self.model.to(self.gpu)
         else:
             self.gpu=None
-        if 'multiprocess' in config or 'distributed' in config:
-            self.model = DistributedDataParallel(
-                    self.model,
-                    find_unused_parameters=True)
 
         self.train_logger = train_logger
         if config['optimizer_type']!="none":
@@ -271,7 +267,7 @@ class BaseTrainer:
             #y=((x-(2000-3))/100)^-0.1 and y=x*(1.485/2000)+0.01
             self.lr_schedule = torch.optim.lr_scheduler.LambdaLR(self.optimizer,lr_lambda)
         elif self.useLearningSchedule:
-            print('Unrecognized learning schedule: {}'.format(self.useLearningSchedule))
+            self.logger.info('Unrecognized learning schedule: {}'.format(self.useLearningSchedule))
             exit()
         
         self.monitor = config['trainer']['monitor']
@@ -290,6 +286,10 @@ class BaseTrainer:
         self.reset_iteration = config['trainer']['reset_resume_iteration'] if 'reset_resume_iteration' in config['trainer'] else False
         if resume:
             self._resume_checkpoint(resume)
+        if 'multiprocess' in config or 'distributed' in config:
+            self.model = DistributedDataParallel(
+                    self.model,
+                    find_unused_parameters=True)
 
     def finishSetup(self):
         """
@@ -540,6 +540,7 @@ class BaseTrainer:
             #Brain surgery, allow restarting with modified model
             did_brain_surgery=False
             remove_keys=[]
+            checkpoint['state_dict'] = {(k if not k.startswith('module') else k[7:]):v for k,v in checkpoint['state_dict'].items() if 'relative_position_index' not in k}
             keys=checkpoint['state_dict'].keys()
             init_state_dict = self.model.state_dict()
             for key in keys:
@@ -553,25 +554,29 @@ class BaseTrainer:
                             dims=dim
                     if dims>-1:
                         if dims==0:
-                            if init_size[0]>orig_size[0]:
-                                init_state_dict[key][:orig_size[0]] = checkpoint['state_dict'][key]
-                            else:
-                                init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0]]
+                            #if init_size[0]>orig_size[0]:
+                            #    init_state_dict[key][:orig_size[0]] = checkpoint['state_dict'][key]
+                            #else:
+                            #    init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0]]
+                            init_state_dict[key][:orig_size[0]] = checkpoint['state_dict'][key][:init_size[0]]
                         elif dims==1:
-                            if init_size[0]>orig_size[0] or init_size[1]>orig_size[1]:
-                                init_state_dict[key][:orig_size[0],:orig_size[1]] = checkpoint['state_dict'][key]
-                            else:
-                                init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0],:init_size[1]]
+                            #if init_size[0]>orig_size[0] or init_size[1]>orig_size[1]:
+                            #    init_state_dict[key][:orig_size[0],:orig_size[1]] = checkpoint['state_dict'][key]
+                            #else:
+                            #    init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0],:init_size[1]]
+                            init_state_dict[key][:orig_size[0],:orig_size[1]] = checkpoint['state_dict'][key][:init_size[0],:init_size[1]]
                         elif dims==2:
-                            if init_size[0]>orig_size[0] or init_size[1]>orig_size[1] or init_size[2]>orig_size[2]:
-                                init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2]] = checkpoint['state_dict'][key]
-                            else:
-                                 init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0],:init_size[1],:init_size[2]]
+                            #if init_size[0]>=orig_size[0] and init_size[1]>=orig_size[1] and init_size[2]>=orig_size[2]:
+                            #    init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2]] = checkpoint['state_dict'][key]
+                            #elif init_size[0]<=orig_size[0] and init_size[1]<=orig_size[1] and init_size[2]<=orig_size[2]:
+                            #     init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0],:init_size[1],:init_size[2]]
+                            init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2]] = checkpoint['state_dict'][key][:init_size[0],:init_size[1],:init_size[2]]
                         elif dims==3:
-                            if init_size[0]>orig_size[0] or init_size[1]>orig_size[1] or init_size[2]>orig_size[2] or init_size[3]>orig_size[3]:
-                                init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2],:orig_size[3]] = checkpoint['state_dict'][key]
-                            else:
-                                init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0],:init_size[1],:init_size[2],:init_size[3]]
+                            #if init_size[0]>orig_size[0] or init_size[1]>orig_size[1] or init_size[2]>orig_size[2] or init_size[3]>orig_size[3]:
+                            #    init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2],:orig_size[3]] = checkpoint['state_dict'][key]
+                            #else:
+                            #    init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0],:init_size[1],:init_size[2],:init_size[3]]
+                            nit_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2],:orig_size[3]] = checkpoint['state_dict'][key][:init_size[0],:init_size[1],:init_size[2],:init_size[3]]
                         else:
                             raise NotImplementedError('no Brain Surgery above 4 dims')
                         checkpoint['state_dict'][key] = init_state_dict[key]
@@ -621,9 +626,9 @@ class BaseTrainer:
                             if isinstance(v, torch.Tensor):
                                 state[k] = v.cuda(self.gpu)
             except ValueError as e:
-                print('WARNING did not load optimizer state_dict. {}'.format(e))
+                self.logger.info('WARNING did not load optimizer state_dict. {}'.format(e))
         else:
-            print('Did not load optimizer')
+            self.logger.info('Did not load optimizer')
         if self.useLearningSchedule:
             self.lr_schedule.load_state_dict(checkpoint['lr_schedule'])
         if checkpoint['logger'] is not None:

@@ -15,6 +15,7 @@ except:
 from utils.character_tokenizer import CharacterTokenizer
 from collections import defaultdict
 from timm.models.layers import trunc_normal_
+import math
 
 import timeit
 
@@ -32,7 +33,7 @@ class QAImDocGPT(BaseModel):
         self.blank_ocr = config['blank_ocr'] if 'blank_ocr' in config else False
         self.image_size = config['image_size'] #start at 512?
         window_size = config['window_size'] #7
-        self.max_dist = self.image_size
+        max_dist = math.sqrt(self.image_size[0]**2 + self.image_size[1]**2)
         d_model = config['decode_dim']
         dim_ff = config['dim_ff']
         nhead = config['decode_num_heads']
@@ -40,7 +41,10 @@ class QAImDocGPT(BaseModel):
         swin_nhead = config['swin_nheads'] #[3,6,12,24] | [2,6,12,12] probably don't need as much later
         im_embed_dim = config['im_embed_dim'] #96 -> 96,192,384,768 | 64->64,128,256,512
         dropout = 0 if 'no_dropout' in config and  config['no_dropout'] else 0.1
+        lighter_conv_patch_emb = config['lighter_conv_patch_emb'] if 'lighter_conv_patch_emb' in config else False
 
+        if type(window_size) is int:
+            window_size = [window_size]*len(blocks_per_level)
         self.max_pred_len = 500
 
 
@@ -76,10 +80,10 @@ class QAImDocGPT(BaseModel):
         self.answer_embedding = nn.Embedding(self.tokenizer.vocab_size, d_model)
         self.pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000)
         self.word_pos_enc = ReturnPositionalEncoding(d_model,dropout=dropout,max_len=1000)
-        self.pos_emb_x = UniformRealEmbedding(d_model,0,self.max_dist,100)
-        self.pos_emb_y = UniformRealEmbedding(d_model,0,self.max_dist,100)
-        self.pos_emb_w = PositiveRealEmbedding(d_model,0,int(0.5*self.max_dist),30)
-        self.pos_emb_h = PositiveRealEmbedding(d_model,0,int(0.3*self.max_dist),30)
+        self.pos_emb_x = UniformRealEmbedding(d_model,0,self.image_size[1],100)
+        self.pos_emb_y = UniformRealEmbedding(d_model,0,self.image_size[0],100)
+        self.pos_emb_w = PositiveRealEmbedding(d_model,0,int(0.5*self.image_size[1]),30)
+        self.pos_emb_h = PositiveRealEmbedding(d_model,0,int(0.3*self.image_size[0]),30)
 
         mlp_ratio=4.
         qkv_bias=True
@@ -92,7 +96,8 @@ class QAImDocGPT(BaseModel):
         self.patch_embed =  ConvPatchEmbed(
                 img_size=self.image_size, 
                 embed_dim=im_embed_dim,
-                norm_layer=nn.LayerNorm)
+                norm_layer=nn.LayerNorm,
+                lighter=lighter_conv_patch_emb)
         if pre_trained_patch_emb is not None:
             checkpoint = torch.load(pre_trained_patch_emb, map_location=lambda storage, location: storage)
             pe_state_dict=self.patch_embed.state_dict()
@@ -114,9 +119,9 @@ class QAImDocGPT(BaseModel):
         for level,blocks in enumerate(blocks_per_level):
             d_im = int(im_embed_dim * 2 ** level)
             cur_resolution = (patches_resolution[0]//(2**level), patches_resolution[1]//(2**level))
-            patch_size = (self.image_size/cur_resolution[0],self.image_size/cur_resolution[1])
-            im_xs = torch.arange(patch_size[1]/2,self.image_size,patch_size[1])[None,:].expand(cur_resolution[0],-1)
-            im_ys = torch.arange(patch_size[0]/2,self.image_size,patch_size[0])[:,None].expand(-1,cur_resolution[1])
+            patch_size = (self.image_size[0]/cur_resolution[0],self.image_size[1]/cur_resolution[1])
+            im_xs = torch.arange(patch_size[1]/2,self.image_size[1],patch_size[1])[None,:].expand(cur_resolution[0],-1)
+            im_ys = torch.arange(patch_size[0]/2,self.image_size[0],patch_size[0])[:,None].expand(-1,cur_resolution[1])
             #im_cords = torch.stack((im_xs,im_ys),dim=2).view(patches_resolution[0]*patches_resolution[1],2)
             im_xs = im_xs.contiguous().view(1,cur_resolution[0]*cur_resolution[1])
             im_ys = im_ys.contiguous().view(1,cur_resolution[0]*cur_resolution[1])
@@ -128,8 +133,8 @@ class QAImDocGPT(BaseModel):
                     SwinTransformerBlock(dim=d_im, 
                                 input_resolution=cur_resolution,
                                  num_heads=swin_nhead[level], 
-                                 window_size=window_size,
-                                 shift_size=0 if (len(self.layers) % 2 == 0) else window_size // 2,
+                                 window_size=window_size[level],
+                                 shift_size=0 if (len(self.layers) % 2 == 0) else window_size[level] // 2,
                                  mlp_ratio=mlp_ratio,
                                  qkv_bias=qkv_bias,
                                  qk_scale=qk_scale,
@@ -139,7 +144,7 @@ class QAImDocGPT(BaseModel):
                                  norm_layer=nn.LayerNorm,
                                  sees_docq=True),
                     nn.Linear(d_model,d_im,bias=False) if d_model!=d_im else nn.Identity(),
-                    RelPosImTransformerLayer(d_model,nhead,self.max_dist,dim_ff,dropout=dropout),
+                    RelPosImTransformerLayer(d_model,nhead,max_dist,dim_ff,dropout=dropout),
                     nn.Linear(d_im,d_model,bias=False) if d_model!=d_im else nn.Identity(),
                     PatchMerging(cur_resolution, dim=d_im, norm_layer=nn.LayerNorm) if last else None 
                     ] ) )
