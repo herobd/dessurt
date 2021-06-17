@@ -57,23 +57,23 @@ def notify_main(rank,config, resume,world_size=None):
     main(rank,config, resume,world_size)
 
 def main(rank,config, resume,world_size=None):
+    train_logger = Logger()
     if rank is not None: #multiprocessing
         #print('Process {} can see these GPUs:'.format(rank,os.environ['CUDA_VISIBLE_DEVICES']))
         if 'distributed' in config:
             print('env NCCL_SOCKET_IFNAME: {}'.format(os.environ['NCCL_SOCKET_IFNAME']))
-            print('{} calling dist.init_process_group()'.format(rank))
+            logger.info('{} calling dist.init_process_group() <<<<'.format(rank))
             os.environ['CUDA_VISIBLE_DEVICES']='0'
             dist.init_process_group(
                             "nccl",
                             init_method='file:///fslhome/brianld/job_comm/{}'.format(config['name']),
                             rank=rank,
                             world_size=world_size)
-            print('{} finished dist.init_process_group()'.format(rank))
+            logger.info('{} finished dist.init_process_group() <<<<'.format(rank))
         else:
             dist.init_process_group("gloo", rank=rank, world_size=world_size)
 
     #np.random.seed(1234) I don't have a way of restarting the DataLoader at the same place, so this makes it totaly random
-    train_logger = Logger()
 
     split = config['split'] if 'split' in config else 'train'
     data_loader, valid_data_loader = getDataLoader(config,split,rank,world_size)

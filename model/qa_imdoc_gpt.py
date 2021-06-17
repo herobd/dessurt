@@ -40,6 +40,7 @@ class QAImDocGPT(BaseModel):
         swin_nhead = config['swin_nheads'] #[3,6,12,24] | [2,6,12,12] probably don't need as much later
         im_embed_dim = config['im_embed_dim'] #96 -> 96,192,384,768 | 64->64,128,256,512
         dropout = 0 if 'no_dropout' in config and  config['no_dropout'] else 0.1
+        lighter_conv_patch_emb = config['lighter_conv_patch_emb'] if 'lighter_conv_patch_emb' in config else False
 
         self.max_pred_len = 500
 
@@ -92,7 +93,8 @@ class QAImDocGPT(BaseModel):
         self.patch_embed =  ConvPatchEmbed(
                 img_size=self.image_size, 
                 embed_dim=im_embed_dim,
-                norm_layer=nn.LayerNorm)
+                norm_layer=nn.LayerNorm,
+                lighter=lighter_conv_patch_emb)
         if pre_trained_patch_emb is not None:
             checkpoint = torch.load(pre_trained_patch_emb, map_location=lambda storage, location: storage)
             pe_state_dict=self.patch_embed.state_dict()
