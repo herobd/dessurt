@@ -33,7 +33,6 @@ class QAImDocGPT(BaseModel):
         self.blank_ocr = config['blank_ocr'] if 'blank_ocr' in config else False
         self.image_size = config['image_size'] #start at 512?
         window_size = config['window_size'] #7
-        max_dist = math.sqrt(self.image_size[0]**2 + self.image_size[1]**2)
         d_model = config['decode_dim']
         dim_ff = config['dim_ff']
         nhead = config['decode_num_heads']
@@ -45,6 +44,9 @@ class QAImDocGPT(BaseModel):
 
         if type(window_size) is int:
             window_size = [window_size]*len(blocks_per_level)
+        if type(self.image_size) is int:
+            self.image_size = (self.image_size,self.image_size)
+        max_dist = math.sqrt(self.image_size[0]**2 + self.image_size[1]**2)
         self.max_pred_len = 500
 
 
