@@ -1133,7 +1133,7 @@ class GraphPairTrainer(BaseTrainer):
             #t#self.opt_history['simplerAlign edge resolution'].append(timeit.default_timer()-tic)#t#
 
 
-        if rel_prop_pred is not None:
+        if rel_prop_pred is not None and targIndex is not None:
 
             relPropScores,relPropIds, threshPropRel = rel_prop_pred
 
@@ -1898,7 +1898,7 @@ class GraphPairTrainer(BaseTrainer):
                 elif (graphIteration==0 and not merged_first) or (graphIteration==1 and merged_first):
                     proposedInfo=proposedInfoI
 
-                if self.model_ref.predClass and nodePred is not None:
+                if self.model_ref.predClass and nodePred is not None and bbAlignment is not None:
                     node_pred_use_index=[]
                     node_gt_use_class_indexes=[]
                     node_pred_use_index_sp=[]
@@ -1974,6 +1974,9 @@ class GraphPairTrainer(BaseTrainer):
                     if len(node_conf_use_index)>0:
                         nodePredConf_use = nodePred[node_conf_use_index][:,:,self.model_ref.nodeIdxConf]
                         nodeGTConf_use = torch.FloatTensor(node_conf_gt).to(nodePred.device)
+                    else:
+                        nodePredConf_use = None
+                        nodeGTConf_use = None
                 else:
                     nodePredClass_use = None
                     alignedClass_use = None

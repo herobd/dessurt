@@ -582,6 +582,10 @@ class BaseTrainer:
                     remove_keys.append(key)
                     did_brain_surgery=True
                     self.logger.info('BRAIN SURGERY PERFORMED removed {}'.format(key))
+            for key in init_state_dict.keys():
+                if key not in checkpoint['state_dict']:
+                    self.logger.info('BRAIN SURGERY PERFORMED added {}'.format(key))
+                    checkpoint['state_dict'][key] = init_state_dict[key]
 
             #specail check for Swin Transformer
             for init_key,value in init_state_dict.items():
