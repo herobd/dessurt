@@ -78,6 +78,8 @@ class SynthQADocDataset(QADataset):
         self.corruption_p = config['text_corruption'] if 'text_corruption' in config else 0.15
         self.text_height = config['text_height']
         self.image_size = config['image_size'] if 'image_size' in config else None
+        if type(self.image_size) is int:
+            self.image_size = (self.image_size,self.image_size)
         self.min_entries = config['min_entries'] if 'min_entries' in config else self.questions
         self.max_entries = config['max_entries'] if 'max_entries' in config else self.questions
         self.change_size = config['change_size'] if 'change_size' in config else False
@@ -274,7 +276,7 @@ class SynthQADocDataset(QADataset):
             rel_y = random.randrange(-10,10)
             entries.append((label_img,label_text,value_img,value_text,rel_x,rel_y))
 
-        image = np.full((self.image_size,self.image_size),255,np.uint8)
+        image = np.full((self.image_size[0],self.image_size[1]),255,np.uint8)
 
         boxes=[]
         trans=[]
@@ -284,11 +286,11 @@ class SynthQADocDataset(QADataset):
             y_pos=0
             for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
                 width = label_img.shape[1] + value_img.shape[1] + rel_x
-                if width>=self.image_size:
+                if width>=self.image_size[1]:
                     x=0
                 else:
-                    x = random.randrange(self.image_size - width)
-                room_y = self.image_size - sum(heights[ei:])
+                    x = random.randrange(self.image_size[1] - width)
+                room_y = self.image_size[0] - sum(heights[ei:])
                 assert room_y >= 0
                 if ei == len(entries)-1:
                     y = random.randrange(y_pos,room_y)
@@ -301,12 +303,12 @@ class SynthQADocDataset(QADataset):
                 value_y = max(0,value_y)
                 
 
-                vert = value_img.shape[0]-max(value_y+value_img.shape[0]-self.image_size,0)
-                horz = value_img.shape[1]-max(value_x+value_img.shape[1]-self.image_size,0)
+                vert = value_img.shape[0]-max(value_y+value_img.shape[0]-self.image_size[0],0)
+                horz = value_img.shape[1]-max(value_x+value_img.shape[1]-self.image_size[1],0)
                 if horz<=0 or vert<=0:
                     continue
-                l_vert = label_img.shape[0]-max(y+label_img.shape[0]-self.image_size,0)
-                l_horz = label_img.shape[1]-max(x+label_img.shape[1]-self.image_size,0)
+                l_vert = label_img.shape[0]-max(y+label_img.shape[0]-self.image_size[0],0)
+                l_horz = label_img.shape[1]-max(x+label_img.shape[1]-self.image_size[1],0)
                 if l_horz<=0 or l_vert<=0:
                     continue
 
@@ -351,14 +353,14 @@ class SynthQADocDataset(QADataset):
                 height = max(label_img.shape[0],value_img.shape[0])+abs(rel_y)+pad_v*2
                 width = label_img.shape[1]+rel_x+value_img.shape[1]+pad_h*2
                 
-                if width>=self.image_size:
+                if width>=self.image_size[1]:
                     x=0
                 else:
-                    x = random.randrange(self.image_size-width)
-                if height>=self.image_size:
+                    x = random.randrange(self.image_size[1]-width)
+                if height>=self.image_size[0]:
                     y=0
                 else:
-                    y = random.randrange(self.image_size-height)
+                    y = random.randrange(self.image_size[0]-height)
                 full_bbs[ei,0]=x
                 full_bbs[ei,1]=y
                 full_bbs[ei,2]=x+width+1
@@ -416,12 +418,12 @@ class SynthQADocDataset(QADataset):
                         value_img = value_img[-value_y:]
                         value_y=0
 
-                    v_vert = value_img.shape[0]-max(value_y+value_img.shape[0]-self.image_size,0)
-                    v_horz = value_img.shape[1]-max(value_x+value_img.shape[1]-self.image_size,0)
+                    v_vert = value_img.shape[0]-max(value_y+value_img.shape[0]-self.image_size[0],0)
+                    v_horz = value_img.shape[1]-max(value_x+value_img.shape[1]-self.image_size[1],0)
                     if v_horz<=0 or v_vert<=0:
                         continue
-                    l_vert = label_img.shape[0]-max(label_y+label_img.shape[0]-self.image_size,0)
-                    l_horz = label_img.shape[1]-max(label_x+label_img.shape[1]-self.image_size,0)
+                    l_vert = label_img.shape[0]-max(label_y+label_img.shape[0]-self.image_size[0],0)
+                    l_horz = label_img.shape[1]-max(label_x+label_img.shape[1]-self.image_size[1],0)
                     if l_horz<=0 or l_vert<=0:
                         continue
 
@@ -727,8 +729,8 @@ class SynthQADocDataset(QADataset):
         table_entries = table_entries_2d
 
 
-        table_x = random.randrange(self.image_size*0.75)
-        table_y = random.randrange(self.image_size*0.75)
+        table_x = random.randrange(self.image_size[1]*0.75)
+        table_y = random.randrange(self.image_size[0]*0.75)
 
         padding = random.randrange(0,30)
 
@@ -739,7 +741,7 @@ class SynthQADocDataset(QADataset):
         total_height = max_height+padding
         height_col_heading = max_height+padding
         
-        if total_height+table_y >= self.image_size:
+        if total_height+table_y >= self.image_size[0]:
             #NO TABLE
             return None,None,None,None, None, None
         height_row=[0]*num_rows
@@ -750,7 +752,7 @@ class SynthQADocDataset(QADataset):
             height_row[r] = max_height+padding
             total_height+= max_height+padding
 
-            if total_height+table_y >= self.image_size:
+            if total_height+table_y >= self.image_size[0]:
                 num_rows = r
                 if num_rows==0:
                     return None,None,None,None,None,None #NO TABLE
@@ -766,7 +768,7 @@ class SynthQADocDataset(QADataset):
         total_width = max_width+padding
         width_row_heading = max_width+padding
         
-        if total_width+table_x >= self.image_size:
+        if total_width+table_x >= self.image_size[1]:
             #NO TABLE
             return None,None,None,None, None, None
         width_col=[0]*num_cols
@@ -777,7 +779,7 @@ class SynthQADocDataset(QADataset):
             width_col[c] = max_width+padding
             total_width+= max_width+padding
 
-            if total_width+table_x >= self.image_size:
+            if total_width+table_x >= self.image_size[1]:
                 num_cols = c
                 if num_cols==0:
                     return None,None,None,None, None, None#NO TABLE
@@ -859,14 +861,14 @@ class SynthQADocDataset(QADataset):
         #top
         img_f.line(image,
                 (max(0,table_x+random.randrange(-5,5)),table_y+height_col_heading-random.randrange(0,1+padding)),
-                (min(self.image_size-1,table_x+total_width+random.randrange(-5,5)),table_y+height_col_heading-random.randrange(0,1+padding)),
+                (min(self.image_size[1]-1,table_x+total_width+random.randrange(-5,5)),table_y+height_col_heading-random.randrange(0,1+padding)),
                 random.randrange(0,100),
                 line_thickness_h
                 )
         #side
         img_f.line(image,
                 (table_x+width_row_heading-random.randrange(0,padding+1),max(0,table_y+random.randrange(-5,5))),
-                (table_x+width_row_heading-random.randrange(0,padding+1),min(self.image_size-1,table_y+total_height+random.randrange(-5,5))),
+                (table_x+width_row_heading-random.randrange(0,padding+1),min(self.image_size[0]-1,table_y+total_height+random.randrange(-5,5))),
                 random.randrange(0,100),
                 line_thickness_h
                 )
@@ -877,14 +879,14 @@ class SynthQADocDataset(QADataset):
             #top
             img_f.line(image,
                     (max(0,table_x+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)),
-                    (min(self.image_size-1,table_x+total_width+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)),
+                    (min(self.image_size[1]-1,table_x+total_width+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)),
                     random.randrange(0,100),
                     line_thickness
                     )
             #side
             img_f.line(image,
                     (table_x-random.randrange(0,padding+1),max(0,table_y+random.randrange(-5,5))),
-                    (table_x-random.randrange(0,padding+1),min(self.image_size-1,table_y+total_height+random.randrange(-5,5))),
+                    (table_x-random.randrange(0,padding+1),min(self.image_size[0]-1,table_y+total_height+random.randrange(-5,5))),
                     random.randrange(0,100),
                     line_thickness
                     )
@@ -895,14 +897,14 @@ class SynthQADocDataset(QADataset):
             #bot
             img_f.line(image,
                     (max(0,table_x+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)+total_height),
-                    (min(self.image_size-1,table_x+total_width+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)+total_height),
+                    (min(self.image_size[1]-1,table_x+total_width+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)+total_height),
                     random.randrange(0,100),
                     line_thickness
                     )
             #right
             img_f.line(image,
                     (table_x-random.randrange(0,padding+1)+total_width,max(0,table_y+random.randrange(-5,5))),
-                    (table_x-random.randrange(0,padding+1)+total_width,min(self.image_size-1,table_y+total_height+random.randrange(-5,5))),
+                    (table_x-random.randrange(0,padding+1)+total_width,min(self.image_size[0]-1,table_y+total_height+random.randrange(-5,5))),
                     random.randrange(0,100),
                     line_thickness
                     )
@@ -916,7 +918,7 @@ class SynthQADocDataset(QADataset):
                 cur_height += height_row[r]
                 img_f.line(image,
                         (max(0,table_x+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)+cur_height),
-                        (min(self.image_size-1,table_x+total_width+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)+cur_height),
+                        (min(self.image_size[1]-1,table_x+total_width+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)+cur_height),
                         random.randrange(0,100),
                         line_thickness
                         )
@@ -926,7 +928,7 @@ class SynthQADocDataset(QADataset):
                 cur_width += width_col[c]
                 img_f.line(image,
                         (table_x-random.randrange(0,padding+1)+cur_width,max(0,table_y+random.randrange(-5,5))),
-                        (table_x-random.randrange(0,padding+1)+cur_width,min(self.image_size-1,table_y+total_height+random.randrange(-5,5))),
+                        (table_x-random.randrange(0,padding+1)+cur_width,min(self.image_size[0]-1,table_y+total_height+random.randrange(-5,5))),
                         random.randrange(0,100),
                         line_thickness
                         )

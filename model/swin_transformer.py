@@ -503,8 +503,16 @@ class ConvPatchEmbed(nn.Module):
         norm_layer (nn.Module, optional): Normalization layer. Default: None
     """
 
-    def __init__(self, img_size, patch_size=8, in_chans=1, embed_dim=256, norm_layer=None,cnn_model_small=True):
+    def __init__(self, img_size, patch_size=8, in_chans=1, embed_dim=256, norm_layer=None,cnn_model_small=True,lighter=False):
         super().__init__()
+        #From cnn_lstm_skip_forSwin.py
+        ks = [7, 3, 3, 3, 3, 3, 3]
+        ps = [3, 1, 1, 1, 1, 1, 1]
+        ss = [2, 1, 1, 1, 1, 1, 1]
+        if lighter:
+            nm = [64, 128, 128, 256, 256, 256, 256]
+        else:
+            nm = [64, 128, 128, 256, 512, 512, 512]
         img_size = to_2tuple(img_size)
         patch_size = to_2tuple(patch_size)
         patches_resolution = [img_size[0] // patch_size[0], img_size[1] // patch_size[1]]
@@ -516,18 +524,13 @@ class ConvPatchEmbed(nn.Module):
         self.in_chans = in_chans
         self.embed_dim = embed_dim
 
-        self.proj = nn.Conv2d(512, embed_dim, kernel_size=1, stride=1)
+        self.proj = nn.Conv2d(nm[-1], embed_dim, kernel_size=1, stride=1)
         if norm_layer is not None:
             self.norm = norm_layer(embed_dim)
         else:
             self.norm = None
 
 
-        #From cnn_lstm_skip_forSwin.py
-        ks = [7, 3, 3, 3, 3, 3, 3]
-        ps = [3, 1, 1, 1, 1, 1, 1]
-        ss = [2, 1, 1, 1, 1, 1, 1]
-        nm = [64, 128, 128, 256, 512, 512, 512]
 
         cnn = nn.Sequential()
         norm = 'group'

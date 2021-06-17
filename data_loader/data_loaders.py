@@ -8,6 +8,7 @@ from datasets.forms_detect import FormsDetect
 from datasets import forms_box_detect
 from datasets.forms_box_detect import FormsBoxDetect
 from datasets import ai2d_box_detect
+from datasets import multiple_dataset
 from datasets import synth_qa_dataset
 from datasets import synth_qadoc_dataset
 from datasets import funsd_qa
@@ -115,6 +116,8 @@ def getDataLoader(config,split,rank=None,world_size=None):
             return withCollate(ai2d_box_detect.AI2DBoxDetect,ai2d_box_detect.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='FormsBoxPair':
             return withCollate(FormsBoxPair,forms_box_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='MultipleDataset':
+            return withCollate(multiple_dataset.MultipleDataset,multiple_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='SynthQADataset':
             return withCollate(synth_qa_dataset.SynthQADataset,synth_qa_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='SynthQADocDataset':
