@@ -526,7 +526,7 @@ class FUNSDQA(QADataset):
                     row_tab = None
 
                 if col_tab is None and row_tab is None:
-                    tables[cur_table_id] = ([col_h],[row_h])
+                    tables[cur_table_id] = [[col_h],[row_h]]
                     header_to_table_id[col_h]=cur_table_id
                     header_to_table_id[row_h]=cur_table_id
                     cur_table_id+=1
