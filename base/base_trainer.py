@@ -595,7 +595,7 @@ class BaseTrainer:
 
             #specail check for Swin Transformer
             for init_key,value in init_state_dict.items():
-                if 'attn_mask' in init_key and init_key not in keys:
+                if 'attn_mask' in init_key or 'relative_position_index' in key: # and init_key not in keys:
                     checkpoint['state_dict'][init_key]=value
             for key in remove_keys:
                 del checkpoint['state_dict'][key]
