@@ -17,7 +17,7 @@
                 "pad":0,
                 "rot_degree_std_dev": 1
             },
-	"questions": 9,
+	"questions": 8,
         "min_entries": null,
         "max_entries": 160,
         "text_height": 32,
@@ -92,6 +92,7 @@
     },
     "arch": "QAImDocGPT", 
     "model": {
+            "blank_ocr": true,
             "image_size": [1152,768],
             "window_size": 6,
 	    "decode_dim": 128,
@@ -100,6 +101,9 @@
 	    "no_dropout": true,
             "blocks_per_level": [2,2,4],
             "swin_nheads": [2,4,8],
-            "im_embed_dim": 64
+            "im_embed_dim": 64,
+            "pre_trained": {
+                "patch_emb": "saved/synth_ocr_crnnskipforswin_new/checkpoint-iteration400000.pth"
+                        }
     }
 }
