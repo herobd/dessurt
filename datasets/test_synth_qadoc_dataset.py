@@ -41,12 +41,14 @@ def display(data):
             #cv2.imwrite('out/fg_mask{}.png'.format(b),fg_mask.numpy()*255)
             #cv2.imwrite('out/img{}.png'.format(b),img.numpy()*255)
             #cv2.imwrite('out/changed_img{}.png'.format(b),changed_img.numpy()*255)
+            cv2.imwrite('test_512.png',img.numpy()[:,:,0])
+
+
             plt.imshow(img.numpy()[:,:,0], cmap='gray')
             plt.show()
 
             #cv2.waitKey()
 
-            cv2.imwrite('testsinglesize_1024.png',img.numpy()[:,:,0])
 
         #fig = plt.figure()
 
