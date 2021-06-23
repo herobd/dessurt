@@ -1,4 +1,4 @@
-import json, pickle
+import json
 import timeit
 import torch
 from torch.utils.data import Dataset
@@ -40,6 +40,14 @@ def collate(batch):
             'questions': [b['questions'] for b in batch],
             'answers': [b['answers'] for b in batch]
             }
+def get_height_width_from_list(imgs,pad):
+    height = 0
+    width = 0
+    for img in imgs[1:]:
+        height += pad + img.shape[0]
+        width = max(img.shape[1],width)
+    #height-=pad
+    return height,width
 
 
 def create_image(x):
@@ -87,6 +95,8 @@ class SynthQADocDataset(QADataset):
         self.np_qs = 0.02
         self.use_hw = config['use_hw'] if 'use_hw' in config else False
         self.word_questions = config['word_questions'] if 'word_questions' in config else False
+        self.multiline = config['multiline'] if 'multiline' in config else False
+        self.max_num_lines = config['max_num_lines'] if 'max_num_lines' in config else 6
         self.tables = config['tables'] if 'tables' in config else False
         assert not self.tables or self.word_questions
         assert not (self.use_hw and self.tables)
@@ -190,8 +200,6 @@ class SynthQADocDataset(QADataset):
         if os.path.exists(gt_filename):
             with open(gt_filename) as f:
                 labels =f.readlines()
-            #if 'IAM' in directory:
-            #    import pdb;pdb.set_trace()
             if set_size is None:
                 set_size=len(labels)
             store = [None]*set_size
@@ -238,43 +246,87 @@ class SynthQADocDataset(QADataset):
             hw_values = random.sample(list(enumerate(self.hw_labels)),k=num_hw_entries)
             hw_values = [a+(self.hw_dir,False) for a in hw_values]
 
-        selected = random.sample(list(enumerate(self.labels)),k=num_entries*2)
+
+        if self.multiline:
+            assert not self.ocr
+            labels_linec = [random.randrange(1,self.max_num_lines) if random.random()<self.multiline else 1 for i in range(num_entries)]
+            values_linec = [random.randrange(1,self.max_num_lines) if random.random()<self.multiline else 1 for i in range(num_entries)]
+        else:
+            labels_linec = [1]*num_entries
+            values_linec = [1]*num_entries
+        total_entries = sum(labels_linec) + sum(values_linec)
+        selected = random.sample(list(enumerate(self.labels)),k=total_entries)
         selected = [a+(self.directory,True) for a in selected]
-        labels = selected[:num_entries]
-        values = selected[num_entries:]
+
+        #labels = selected[:num_entries]
+        #values = selected[num_entries:]
+        i=0
+        labels = []
+        for num in labels_linec:
+            labels.append(selected[i:i+num])
+            i+=num
+        values = []
+        for num in values_linec:
+            values.append(selected[i:i+num])
+            i+=num
 
         if self.use_hw:
             labels+=hw_labels
             values+=hw_values
 
-        for (label_img_idx,label_text,label_dir,resize_l),(value_img_idx,value_text,value_dir,resize_v) in zip(labels,values):
-            label_img_path = os.path.join(label_dir,'{}.png'.format(label_img_idx))
-            label_img = img_f.imread(label_img_path,False)
-            value_img_path = os.path.join(value_dir,'{}.png'.format(value_img_idx))
-            value_img = img_f.imread(value_img_path,False)
-
+        #for (label_img_idx,label_text,label_dir,resize_l),(value_img_idx,value_text,value_dir,resize_v) in zip(labels,values):
+        for l,v in zip(labels,values):
+            pad = random.randrange(5)
+            label_imgs=[pad]
+            label_texts=[]
+            l_h=0
             if self.change_size:
                 assert resize_l
                 label_height = random.randrange(self.min_text_height,label_img.shape[0])
-                label_width = round(label_img.shape[1]*label_height/label_img.shape[0])
-                try:
-                    label_img = img_f.resize(label_img,(label_height,label_width))
-                except OverflowError as e:
-                    print(e)
-                    print('image {} to {}'.format(label_img.shape,(label_height,label_width)))
+            for label_img_idx,label_text,label_dir,resize_l in l:
+                label_img_path = os.path.join(label_dir,'{}.png'.format(label_img_idx))
+                label_img = img_f.imread(label_img_path,False)
 
 
+                if self.change_size:
+                    label_width = round(label_img.shape[1]*label_height/label_img.shape[0])
+                    try:
+                        label_img = img_f.resize(label_img,(label_height,label_width))
+                    except OverflowError as e:
+                        print(e)
+                        print('image {} to {}'.format(label_img.shape,(label_height,label_width)))
+                l_h += label_img.shape[0]+pad
+                label_imgs.append(label_img)
+                label_texts.append(label_text)
+            l_h-=pad
+    
+            pad = random.randrange(5)
+            value_imgs=[pad]
+            value_texts=[]
+            v_h=0
+            if self.change_size:
                 if resize_v:
                     value_height = random.randrange(self.min_text_height,value_img.shape[0])
                 else:
                     value_height = random.randrange(value_img.shape[0]-5,value_img.shape[0]+5)
-                value_width = round(value_img.shape[1]*value_height/value_img.shape[0])
-                value_img = img_f.resize(value_img,(value_height,value_width))
+            for value_img_idx,value_text,value_dir,resize_v in v:
+                value_img_path = os.path.join(value_dir,'{}.png'.format(value_img_idx))
+                value_img = img_f.imread(value_img_path,False)
+                if self.change_size:
+                    value_width = round(value_img.shape[1]*value_height/value_img.shape[0])
+                    value_img = img_f.resize(value_img,(value_height,value_width))
+                v_h += value_img.shape[0]+pad
+                value_imgs.append(value_img)
+                value_texts.append(value_text)
+            v_h-=pad
 
-            heights.append(max(label_img.shape[0],value_img.shape[0]))
+            heights.append(max(l_h,v_h))
             rel_x = random.randrange(10)
             rel_y = random.randrange(-10,10)
-            entries.append((label_img,label_text,value_img,value_text,rel_x,rel_y))
+            if not self.multiline or len(l)==1:
+                entries.append((label_img,label_text,value_img,value_text,rel_x,rel_y))
+            else:
+                entries.append((label_imgs,label_texts,value_imgs,value_texts,rel_x,rel_y))
 
         image = np.full((self.image_size[0],self.image_size[1]),255,np.uint8)
 
@@ -350,17 +402,29 @@ class SynthQADocDataset(QADataset):
             pad_v=1
             pad_h=30
             for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
-                height = max(label_img.shape[0],value_img.shape[0])+abs(rel_y)+pad_v*2
-                width = label_img.shape[1]+rel_x+value_img.shape[1]+pad_h*2
+                if type(label_img) is list:
+                    label_height, label_width = get_height_width_from_list(label_img[1:],label_img[0])
+                    extra_height = label_height*(len(label_img[1:])-1)/len(label_img[1:])
+                else:
+                    label_height, label_width = label_img.shape
+                    extra_height=0
+                if type(value_img) is list:
+                    value_height, value_width = get_height_width_from_list(value_img[1:],value_img[0])
+                    extra_height += value_height*(len(value_img[1:])-1)/len(value_img[1:])
+                else:
+                    value_height, value_width = value_img.shape
+
+                height = max(label_height,value_height)+abs(rel_y)+pad_v*2 + extra_height
+                width = label_width+rel_x+value_width+pad_h*2
                 
                 if width>=self.image_size[1]:
                     x=0
                 else:
-                    x = random.randrange(self.image_size[1]-width)
+                    x = random.randrange(int(self.image_size[1]-width))
                 if height>=self.image_size[0]:
                     y=0
                 else:
-                    y = random.randrange(self.image_size[0]-height)
+                    y = random.randrange(int(self.image_size[0]-height))
                 full_bbs[ei,0]=x
                 full_bbs[ei,1]=y
                 full_bbs[ei,2]=x+width+1
@@ -405,31 +469,64 @@ class SynthQADocDataset(QADataset):
             #for r in removed:
             #    del entries[r]
             not_present_qs=[]
-            selected_labels_stripped = [l[1].strip() for i,l in enumerate(labels) if i not in removed]
+            selected_labels_stripped = []#[l[1].strip() for i,l in enumerate(labels) if i not in removed]
             for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
                 if ei not in removed:
+                    if type(label_img) is list:
+                        label_height, label_width = get_height_width_from_list(label_img[1:],label_img[0])
+                    else:
+                        label_height, label_width = label_img.shape
 
                     label_x = int(full_bbs[ei,0].item())+pad_h//2
                     label_y = int(full_bbs[ei,1].item())+pad_v//2
-                    value_x = label_x + label_img.shape[1] + rel_x
+                    value_x = label_x + label_width + rel_x
                     value_y = label_y + rel_y
 
                     if value_y<0:
-                        value_img = value_img[-value_y:]
+                        if type(value_img) is list:
+                            value_img[1] = value_img[1][-value_y:]
+                        else:
+                            value_img = value_img[-value_y:]
                         value_y=0
 
-                    v_vert = value_img.shape[0]-max(value_y+value_img.shape[0]-self.image_size[0],0)
-                    v_horz = value_img.shape[1]-max(value_x+value_img.shape[1]-self.image_size[1],0)
-                    if v_horz<=0 or v_vert<=0:
-                        continue
-                    l_vert = label_img.shape[0]-max(label_y+label_img.shape[0]-self.image_size[0],0)
-                    l_horz = label_img.shape[1]-max(label_x+label_img.shape[1]-self.image_size[1],0)
-                    if l_horz<=0 or l_vert<=0:
-                        continue
 
-                    image[value_y:value_y+v_vert,value_x:value_x+v_horz] = value_img[:v_vert,:v_horz]
+                    if type(label_img) is list:
+                        l_imgs = label_img[1:]
+                        pad = label_img[0]
+                    else:
+                        l_imgs = [label_img]
+                        pad = 0
+                    cur_y=label_y
+                    for img in l_imgs:
+                        l_vert = img.shape[0]-max(cur_y+img.shape[0]-self.image_size[0],0)
+                        l_horz = img.shape[1]-max(label_x+img.shape[1]-self.image_size[1],0)
+                        if l_horz<=0 or l_vert<=0:
+                            continue
+                        image[cur_y:cur_y+l_vert,label_x:label_x+l_horz] = img[:l_vert,:l_horz]
+                        cur_y += l_vert+pad
 
-                    image[label_y:label_y+l_vert,label_x:label_x+l_horz] = label_img[:l_vert,:l_horz]
+                    cur_y -= l_vert+pad - rel_y
+                    if cur_y<0:
+                        cur_y=0
+                    if type(value_img) is list:
+                        v_imgs = value_img[1:]
+                        pad = value_img[0]
+                    else:
+                        v_imgs = [value_img]
+                        pad = 0
+                    for img in v_imgs:
+                        v_vert = img.shape[0]-max(cur_y+img.shape[0]-self.image_size[0],0)
+                        v_horz = img.shape[1]-max(value_x+img.shape[1]-self.image_size[1],0)
+                        if v_horz<=0 or v_vert<=0:
+                            continue
+                        image[cur_y:cur_y+v_vert,value_x:value_x+v_horz] = img[:v_vert,:v_horz]
+                        cur_y += v_vert+pad
+                    
+                    if type(label_text) is list:
+                        label_text = ' '.join(label_text)
+                    selected_labels_stripped.append(label_text.strip())
+                    if type(value_text) is list:
+                        value_text = ' '.join(value_text)
 
                     if self.word_questions=='simple':
                         qa.append(('l~{}'.format(label_text),value_text,None))
@@ -444,8 +541,11 @@ class SynthQADocDataset(QADataset):
 
                     if self.ocr:
                         self.addText(label_text,label_x,label_y,l_horz,l_vert,value_text,value_x,value_y,v_horz,v_vert,boxes,trans,s)
-                elif label_text.strip() not in selected_labels_stripped:
-                    not_present_qs.append(label_text)
+                else:
+                    if type(label_text) is list:
+                        label_text = ' '.join(label_text)
+                    if label_text.strip() not in selected_labels_stripped:
+                        not_present_qs.append(label_text)
 
 
 
