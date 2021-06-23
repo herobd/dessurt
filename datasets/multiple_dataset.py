@@ -56,12 +56,14 @@ class MultipleDataset(Dataset):
             dataset_i=0
             while choice>self.d_ranges[dataset_i]:
                 dataset_i+=1
-            print('choose dataset {}'.format(dataset_i))
             index = random.randrange(0,self.lens[dataset_i])
-            return self.datasets[dataset_i][index]
+            ret = self.datasets[dataset_i][index]
         else:
             dataset_i=0
             while idx>=self.lens[dataset_i]:
                 idx-=self.lens[dataset_i]
                 dataset_i+=1
-            return self.datasets[dataset_i][idx]
+            ret = self.datasets[dataset_i][idx]
+
+        ret['imgName'] = 'd{}>{}'.format(dataset_i,ret['imgName'])
+        return ret
