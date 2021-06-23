@@ -18,11 +18,11 @@
             "data_dir": "../data/FUNSD",
             "rescale_range": [0.8,1.2],
             "crop_params": {
-                "crop_size":[1024,1024],
+                "crop_size":[1152,768],
                 "pad":0,
                 "rot_degree_std_dev": 1
             },
-            "questions": 2,
+            "questions": 4,
             "char_qs": true,
             "split_to_lines": true,
             "do_words": false,
@@ -40,15 +40,15 @@
             "data_dir": "../data/english4line_fontslong",
             "rescale_range": [1.0,1.0],
             "crop_params": {
-                "crop_size":[1024,1024],
+                "crop_size":[1152,768],
                 "pad":0,
                 "rot_degree_std_dev": 1
             },
-            "questions": 2,
+            "questions": 6,
             "min_entries": null,
             "max_entries": 160,
             "text_height": 32,
-            "image_size": 1024,
+            "image_size": [1152,768],
             "change_size": true,
             "word_questions": "simple",
             "tables": 0.2,
@@ -77,10 +77,10 @@
             "data_dir": "../data/FUNSD",
             "rescale_range": [1,1],
             "crop_params": {
-                "crop_size":[1024,1024],
+                "crop_size":[1152,768],
                 "pad":0
             },
-            "questions": 4,
+            "questions": 6,
             "char_qs": true,
             "split_to_lines": true,
             "do_words": false,
@@ -116,7 +116,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 600000,
-        "accum_grad_steps": 15,
+        "accum_grad_steps": 8,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
@@ -141,8 +141,8 @@
     "arch": "QAImDocGPT", 
     "model": {
             "blank_ocr": true,
-            "image_size": 1024,
-            "window_size": 8,
+            "image_size": [1152,768],
+            "window_size": 6,
 	    "decode_dim": 128,
 	    "dim_ff": 256,
 	    "decode_num_heads": 4,
