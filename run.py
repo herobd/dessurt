@@ -20,7 +20,7 @@ from utils.debug_graph import GraphChecker
 from utils import img_f
 
 
-def main(resume,config,img_path,addToConfig,gpu=False):
+def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False):
     np.random.seed(1234)
     torch.manual_seed(1234)
     if resume is not None:
@@ -98,6 +98,15 @@ def main(resume,config,img_path,addToConfig,gpu=False):
         model = eval(config['arch'])(config['model'])
 
     model.eval()
+    model.max_pred_len=40
+    if gpu:
+        model = model.cuda()
+
+    if do_pad is not None:
+        do_pad = do_pad.split(',')
+        if len(do_pad)==1:
+            do_pad+=do_pad
+        do_pad = [int(p) for p in do_pad]
 
     with torch.no_grad():
         if img_path is None:
@@ -109,6 +118,13 @@ def main(resume,config,img_path,addToConfig,gpu=False):
             img = img_f.imread(img_path,False)
             if img.max()<=1:
                 img*=255
+            
+            if do_pad and (img.shape[0]<do_pad[0] or img.shape[1]<do_pad[1]):
+                diff_x = do_pad[1]-img.shape[1]
+                diff_y = do_pad[0]-img.shape[0]
+                p_img = np.zeros(do_pad,dtype=img.dtype)
+                p_img[diff_y//2:-(diff_y//2 + diff_y%2),diff_x//2:-(diff_x//2 + diff_x%2)] = img
+                img=p_img
             if len(img.shape)==2:
                 img=img[...,None] #add color channel
             img = img.transpose([2,0,1])[None,...]
@@ -121,9 +137,14 @@ def main(resume,config,img_path,addToConfig,gpu=False):
 
             question = input('Question: ')
             while question!='q':
+                if question.startswith('[nr]'):
+                    run=False
+                    question=question[4:]
+                else:
+                    run=True
                 ocrBoxes=[[]]
                 ocr=[[]]
-                answer = model(img,ocrBoxes,ocr,[[question]],RUN=True)
+                answer = model(img,ocrBoxes,ocr,[[question]],RUN=run)
                 print('Answer: '+answer)
 
                 question = input('Question ("q" to stop): ')
@@ -143,6 +164,8 @@ if __name__ == '__main__':
             help='path to image (default: prompt)')
     parser.add_argument('-g', '--gpu', default=None, type=int,
                         help='gpu number (default: cpu only)')
+    parser.add_argument('-p', '--pad', default=False, type=str,
+                        help='pad image to this size (square)')
     parser.add_argument('-f', '--config', default=None, type=str,
                         help='config override')
     parser.add_argument('-a', '--addtoconfig', default=None, type=str,
@@ -163,6 +186,6 @@ if __name__ == '__main__':
         exit()
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint,args.config,args.image,addtoconfig,True)
+            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad)
     else:
-        main(args.checkpoint,args.config, args.image,addtoconfig)
+        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad)

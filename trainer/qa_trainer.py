@@ -218,9 +218,6 @@ class QATrainer(BaseTrainer):
                 #t#if len(times)>600:#t#
                     #t#times.pop(0)#t#
         #t#print('--------------------------')#t#
-        if self.side_process:
-            with open('test/tmp_{}.txt'.format(self.side_process),'a') as f:
-                f.write('[{}] {}'.format(self.iteration,self.model_ref.decoder.layers[0].linear1.weight.data[0]))
         return log
 
     def _minor_log(self, log):
@@ -369,12 +366,12 @@ class QATrainer(BaseTrainer):
         #t#self.opt_history['score'].append(timeit.default_timer()-tic)#t#
 
         if self.print_pred_every>0 and self.iteration%self.print_pred_every==0:
-            print('iteration {}'.format(self.iteration))
+            self.logger.info('iteration {}'.format(self.iteration))
             for b,(b_question,b_answer,b_pred) in enumerate(zip(questions,answers,string_a)):
-                if ocr is not None:
-                    print('{} OCR: {}'.format(b,ocr[b]))
+                if ocr is not None and not self.model_ref.blank_ocr:
+                    self.logger.info('{} OCR: {}'.format(b,ocr[b]))
                 for question,answer,pred in zip(b_question,b_answer,b_pred):
-                    print('{} [Q]:{}\t[A]:{}\t[P]:{}'.format(b,question,answer,pred))
+                    self.logger.info('{} [Q]:{}\t[A]:{}\t[P]:{}'.format(b,question,answer,pred))
 
 
 

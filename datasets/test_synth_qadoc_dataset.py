@@ -15,7 +15,7 @@ def display(data):
     #mask = makeMask(data['image'])
     for b in range(batchSize):
         #print (data['img'].size())
-        img = (data['img'][b].permute(1,2,0)+1)/2.0
+        img = (1-data['img'][b].permute(1,2,0))/2.0
         #label = data['label']
         #gt = data['gt'][b]
         #print(label[:data['label_lengths'][b],b])
@@ -41,10 +41,14 @@ def display(data):
             #cv2.imwrite('out/fg_mask{}.png'.format(b),fg_mask.numpy()*255)
             #cv2.imwrite('out/img{}.png'.format(b),img.numpy()*255)
             #cv2.imwrite('out/changed_img{}.png'.format(b),changed_img.numpy()*255)
+            cv2.imwrite('test_512.png',img.numpy()[:,:,0])
+
+
             plt.imshow(img.numpy()[:,:,0], cmap='gray')
             plt.show()
 
             #cv2.waitKey()
+
 
         #fig = plt.figure()
 
@@ -76,22 +80,22 @@ if __name__ == "__main__":
         "create": True,
 	"fontdir": "../data/fonts",
         "textdir": "../data/",
-        "word_questions": True,
+        "word_questions": "simple",
         "use_hw": False,
-        "tables": 0.9,
+        "tables": False,
         "header_dir": "../data/english4line_fonts",
         "hw_dir": "../data/IAM_lines/train",
         "num_workers": 0,
         "include_ocr": False,
-        "change_size": True,
+        "change_size": False,
         "rescale_range": [1.0,1.0],
         "crop_params": None,
         "batch_size": 4,
-        "questions": 16,
+        "questions": 10,
         "min_entries": None,
-        "max_entries": 100,
+        "max_entries": 160,
         "text_height": 32,
-        "image_size": 1024,
+        "image_size": [1152,768],
         "max_chars": 10,
         "min_chars": 1,
         "use_before_refresh": 99999999999999999999,

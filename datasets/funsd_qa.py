@@ -5,16 +5,13 @@ import json
 #from skimage import draw
 #import skimage.transform as sktransform
 import os
-import math, random
+import math, random, string
 from collections import defaultdict, OrderedDict
 from utils.funsd_annotations import createLines
 import timeit
-from .graph_pair import GraphPairDataset
+from .qa import QADataset
 
 import utils.img_f as img_f
-
-SKIP=['174']#['193','194','197','200']
-ONE_DONE=[]
 
 def collate(batch):
     return {
@@ -31,18 +28,21 @@ def collate(batch):
             }
 
 
-class FUNSDGraphPair(GraphPairDataset):
+class FUNSDQA(QADataset):
     """
     Class for reading forms dataset and creating starting and ending gt
     """
 
 
     def __init__(self, dirPath=None, split=None, config=None, images=None):
-        super(FUNSDGraphPair, self).__init__(dirPath,split,config,images)
+        super(FUNSDQA, self).__init__(dirPath,split,config,images)
 
         self.only_types=None
 
         self.split_to_lines = config['split_to_lines']
+        self.corruption_p = config['text_corruption'] if 'text_corruption' in config else 0.15
+        self.do_words = config['do_words']
+        self.char_qs = config['char_qs'] if 'char_qs' in config else False
 
         if images is not None:
             self.images=images
@@ -114,9 +114,6 @@ class FUNSDGraphPair(GraphPairDataset):
                 ]
 
 
-
-
-
     def parseAnn(self,annotations,s):
         #if useBlankClass:
         #    numClasses+=1
@@ -126,9 +123,10 @@ class FUNSDGraphPair(GraphPairDataset):
         numClasses=len(self.classMap)
         if self.split_to_lines:
             bbs, numNeighbors, trans, groups = createLines(annotations,self.classMap,s)
+            bbs = bbs[0]
         else:
             boxes = annotations['form']
-            bbs = np.empty((1,len(boxes), 8+8+numClasses), dtype=np.float32) #2x4 corners, 2x4 cross-points, n classes
+            bbs = np.empty((len(boxes), 8+8+numClasses), dtype=np.float32) #2x4 corners, 2x4 cross-points, n classes
             #pairs=set()
             numNeighbors=[]
             trans=[]
@@ -138,51 +136,51 @@ class FUNSDGraphPair(GraphPairDataset):
                 w=rX-lX
                 if h/w>5 and self.rotate: #flip labeling, since FUNSD doesn't label verticle text correctly
                     #I don't know if it needs rotated clockwise or countercw, so I just say countercw
-                    bbs[:,j,0]=lX*s
-                    bbs[:,j,1]=bY*s
-                    bbs[:,j,2]=lX*s
-                    bbs[:,j,3]=tY*s
-                    bbs[:,j,4]=rX*s
-                    bbs[:,j,5]=tY*s
-                    bbs[:,j,6]=rX*s
-                    bbs[:,j,7]=bY*s
+                    bbs[j,0]=lX*s
+                    bbs[j,1]=bY*s
+                    bbs[j,2]=lX*s
+                    bbs[j,3]=tY*s
+                    bbs[j,4]=rX*s
+                    bbs[j,5]=tY*s
+                    bbs[j,6]=rX*s
+                    bbs[j,7]=bY*s
                     #we add these for conveince to crop BBs within window
-                    bbs[:,j,8]=s*(lX+rX)/2.0
-                    bbs[:,j,9]=s*bY
-                    bbs[:,j,10]=s*(lX+rX)/2.0
-                    bbs[:,j,11]=s*tY
-                    bbs[:,j,12]=s*lX
-                    bbs[:,j,13]=s*(tY+bY)/2.0
-                    bbs[:,j,14]=s*rX
-                    bbs[:,j,15]=s*(tY+bY)/2.0
+                    bbs[j,8]=s*(lX+rX)/2.0
+                    bbs[j,9]=s*bY
+                    bbs[j,10]=s*(lX+rX)/2.0
+                    bbs[j,11]=s*tY
+                    bbs[j,12]=s*lX
+                    bbs[j,13]=s*(tY+bY)/2.0
+                    bbs[j,14]=s*rX
+                    bbs[j,15]=s*(tY+bY)/2.0
                 else:
-                    bbs[:,j,0]=lX*s
-                    bbs[:,j,1]=tY*s
-                    bbs[:,j,2]=rX*s
-                    bbs[:,j,3]=tY*s
-                    bbs[:,j,4]=rX*s
-                    bbs[:,j,5]=bY*s
-                    bbs[:,j,6]=lX*s
-                    bbs[:,j,7]=bY*s
+                    bbs[j,0]=lX*s
+                    bbs[j,1]=tY*s
+                    bbs[j,2]=rX*s
+                    bbs[j,3]=tY*s
+                    bbs[j,4]=rX*s
+                    bbs[j,5]=bY*s
+                    bbs[j,6]=lX*s
+                    bbs[j,7]=bY*s
                     #we add these for conveince to crop BBs within window
-                    bbs[:,j,8]=s*lX
-                    bbs[:,j,9]=s*(tY+bY)/2.0
-                    bbs[:,j,10]=s*rX
-                    bbs[:,j,11]=s*(tY+bY)/2.0
-                    bbs[:,j,12]=s*(lX+rX)/2.0
-                    bbs[:,j,13]=s*tY
-                    bbs[:,j,14]=s*(rX+lX)/2.0
-                    bbs[:,j,15]=s*bY
+                    bbs[j,8]=s*lX
+                    bbs[j,9]=s*(tY+bY)/2.0
+                    bbs[j,10]=s*rX
+                    bbs[j,11]=s*(tY+bY)/2.0
+                    bbs[j,12]=s*(lX+rX)/2.0
+                    bbs[j,13]=s*tY
+                    bbs[j,14]=s*(rX+lX)/2.0
+                    bbs[j,15]=s*bY
                 
-                bbs[:,j,16:]=0
+                bbs[j,16:]=0
                 if boxinfo['label']=='header':
-                    bbs[:,j,16]=1
+                    bbs[j,16]=1
                 elif boxinfo['label']=='question':
-                    bbs[:,j,17]=1
+                    bbs[j,17]=1
                 elif boxinfo['label']=='answer':
-                    bbs[:,j,18]=1
+                    bbs[j,18]=1
                 elif boxinfo['label']=='other':
-                    bbs[:,j,19]=1
+                    bbs[j,19]=1
                 #for id1,id2 in boxinfo['linking']:
                 #    pairs.add((min(id1,id2),max(id1,id2)))
                 trans.append(boxinfo['text'])
@@ -191,7 +189,13 @@ class FUNSDGraphPair(GraphPairDataset):
 
         word_boxes=[]
         word_trans=[]
-        for entity in annotations['form']:
+        word_groups=[]
+        groups_adj=set()
+        for group_id,entity in enumerate(annotations['form']):
+            for linkIds in entity['linking']:
+                groups_adj.add((min(linkIds),max(linkIds)))
+                
+            group=[]
             for word in entity['words']:
                 lX,tY,rX,bY = word['box']
                 #cX = (lX+rX)/2
@@ -237,22 +241,28 @@ class FUNSDGraphPair(GraphPairDataset):
                     bb[13]=s*tY
                     bb[14]=s*(rX+lX)/2.0
                     bb[15]=s*bY
+                group.append(len(word_boxes))
                 word_boxes.append(bb)
                 word_trans.append(word['text'])
+            word_groups.append(word_groups)
         #word_boxes = torch.FloatTensor(word_boxes)
         word_boxes = np.array(word_boxes)
+        assert len(groups)==len(word_groups) #this should be identicle in alginment
         #self.pairs=list(pairs)
 
         if self.do_words:
             ocr = word_trans
-            bbs = word_boxes
+            ocr_bbs = word_boxes
+            ocr_groups = word_groups
         else:
             ocr = trans
+            ocr_bbs = bbs[:,:16]
+            ocr_groups = groups
 
-        qa = self.makeQuestions(bbs,ocr,groups,groups_adj)
+        qa = self.makeQuestions(bbs,trans,groups,groups_adj,ocr_groups)
 
         ocr = [self.corrupt(text) for text in ocr]
-        return bbs, list(range(bbs.shape[1])), ocr, {}, {}, qa
+        return ocr_bbs, list(range(ocr_bbs.shape[0])), ocr, {}, {}, qa
 
 
     def getResponseBBIdList(self,queryId,annotations):
@@ -269,8 +279,7 @@ class FUNSDGraphPair(GraphPairDataset):
                     cto.append(id1)
             return cto
 
-    def makeQuestions(self,bbs,transcription,groups,groups_adj):
-        bbs=bbs[0]
+    def makeQuestions(self,bbs,transcription,groups,groups_adj,groups_id):
         #get all question-answer relationships
         questions_gs=set()
         answers_gs=set()
@@ -403,6 +412,8 @@ class FUNSDGraphPair(GraphPairDataset):
                         bb_ids = groups[qi]+groups[other_qi]
                         groups = groups+[bb_ids]
 
+                        groups_id.append(groups_id[qi]+groups_id[other_qi])
+
                         q_a_pairs.append((gi,ai))
                         skip.add(other_qi)
             else:
@@ -412,11 +423,13 @@ class FUNSDGraphPair(GraphPairDataset):
                     gi = group_count
                     trans_bb = []
                     bb_ids = []
+                    real_ids = []
                     for ai in ais:
                         #assert len(groups[ai])==1 this can be a list, in which  case we lose new lines
                         bbi = groups[ai][0]
                         trans_bb.append((bbs[bbi,1],transcription[bbi]))
                         bb_ids += groups[ai]
+                        real_ids += groups_id[ai]
                     trans_bb.sort(key=lambda a:a[0] )
                     trans=trans_bb[0][1]
                     for y,t in trans_bb[1:]:
@@ -424,6 +437,8 @@ class FUNSDGraphPair(GraphPairDataset):
                     all_trans[gi]=trans
                     group_count+=1
                     groups = groups+[bb_ids]
+
+                    groups_id.append(real_ids)
 
                     q_a_pairs.append((qi,gi))
                 else:
@@ -446,11 +461,20 @@ class FUNSDGraphPair(GraphPairDataset):
             if ai is not None:
                 trans_ai = all_trans[ai]
                 if trans_qi not in ambiguous:
-                    all_q_a.append(('value for "{}"?'.format(trans_qi),trans_ai,[qi,ai]))
+                    if self.char_qs:
+                        all_q_a.append(('l~{}'.format(trans_qi),trans_ai,[qi,ai]))
+                    else:
+                        all_q_a.append(('value for "{}"?'.format(trans_qi),trans_ai,[qi,ai]))
                 if trans_ai not in ambiguous:
-                    all_q_a.append(('label of "{}"?'.format(trans_ai),trans_qi,[qi,ai]))
+                    if self.char_qs:
+                        all_q_a.append(('v~{}'.format(trans_ai),trans_qi,[qi,ai]))
+                    else:
+                        all_q_a.append(('label of "{}"?'.format(trans_ai),trans_qi,[qi,ai]))
             elif trans_qi not in ambiguous:
-                all_q_a.append(('value for "{}"?'.format(trans_qi),'blank',[qi]))
+                if self.char_qs:
+                    all_q_a.append(('l~{}'.format(trans_qi),'[ blank ]',[qi]))
+                else:
+                    all_q_a.append(('value for "{}"?'.format(trans_qi),'blank',[qi]))
 
         #addTable can cause two tables to be made in odd cases (uneven rows, etc), so we'll simply combine all the table information and generate questions from it.
         #print(tables)
@@ -487,15 +511,58 @@ class FUNSDGraphPair(GraphPairDataset):
         #we we'll aggregate the information and just make the questions
         col_vs=defaultdict(list)
         row_vs=defaultdict(list)
+        tables={}
+        header_to_table_id={}
+        cur_table_id=0
         for (col_h,row_h),v in table_values.items():
             if col_h is not None and row_h is not None:
-                all_q_a.append(('value of "{}" and "{}"?'.format(all_trans[row_h],all_trans[col_h]),all_trans[v],[col_h,row_h,v]))
-                all_q_a.append(('value of "{}" and "{}"?'.format(all_trans[col_h],all_trans[row_h]),all_trans[v],[col_h,row_h,v]))
+                if col_h in header_to_table_id:
+                    col_tab = header_to_table_id[col_h]
+                else:
+                    col_tab = None
+                if row_h in header_to_table_id:
+                    row_tab = header_to_table_id[row_h]
+                else:
+                    row_tab = None
+
+                if col_tab is None and row_tab is None:
+                    tables[cur_table_id] = [[col_h],[row_h]]
+                    header_to_table_id[col_h]=cur_table_id
+                    header_to_table_id[row_h]=cur_table_id
+                    cur_table_id+=1
+                elif col_tab is None:
+                    tables[row_tab][0].append(col_h)
+                    header_to_table_id[col_h]=row_tab
+                elif row_tab is None:
+                    tables[col_tab][1].append(row_h)
+                    header_to_table_id[row_h]=col_tab
+                else:
+                    if col_tab!=row_tab:
+                        #merge tables
+                        tables[col_tab][0]+=tables[row_tab][0]
+                        tables[col_tab][1]+=tables[row_tab][1]
+                        for h in tables[row_tab][0]+tables[row_tab][1]:
+                            header_to_table_id[h]=col_tab
+                        del tables[row_tab]
+
+            if col_h is not None and row_h is not None:
+                if self.char_qs:
+                    all_q_a.append(('t~{}~~{}'.format(all_trans[row_h],all_trans[col_h]),all_trans[v],[col_h,row_h,v]))
+                    all_q_a.append(('t~{}~~{}'.format(all_trans[col_h],all_trans[row_h]),all_trans[v],[col_h,row_h,v]))
+                else:
+                    all_q_a.append(('value of "{}" and "{}"?'.format(all_trans[row_h],all_trans[col_h]),all_trans[v],[col_h,row_h,v]))
+                    all_q_a.append(('value of "{}" and "{}"?'.format(all_trans[col_h],all_trans[row_h]),all_trans[v],[col_h,row_h,v]))
             if all_trans[v] not in ambiguous:
                 if row_h is not None:
-                    all_q_a.append(('row that "{}" is in?'.format(all_trans[v]),all_trans[row_h],[v,row_h]))
+                    if self.char_qs:
+                        all_q_a.append(('ri~{}'.format(all_trans[v]),all_trans[row_h],[v,row_h]))
+                    else:
+                        all_q_a.append(('row that "{}" is in?'.format(all_trans[v]),all_trans[row_h],[v,row_h]))
                 if col_h is not None:
-                    all_q_a.append(('column that "{}" is in?'.format(all_trans[v]),all_trans[col_h],[v,col_h]))
+                    if self.char_qs:
+                        all_q_a.append(('ci~{}'.format(all_trans[v]),all_trans[col_h],[v,col_h]))
+                    else:
+                        all_q_a.append(('column that "{}" is in?'.format(all_trans[v]),all_trans[col_h],[v,col_h]))
 
             x,y = bbs[groups[v][0],0:2]
             if col_h is not None:
@@ -510,7 +577,10 @@ class FUNSDGraphPair(GraphPairDataset):
                 a=all_trans[vs[0][0]]
                 for v,x in vs[1:]:
                     a+=', '+all_trans[v]
-                all_q_a.append(('all values in row {}?'.format(trans_row_h),a,[row_h,vs[0][0]]))
+                if self.char_qs:
+                    all_q_a.append(('ar~{}'.format(trans_row_h),a,[row_h,vs[0][0]]))
+                else:
+                    all_q_a.append(('all values in row "{}"?'.format(trans_row_h),a,[row_h,vs[0][0]]))
         for col_h, vs in col_vs.items():
             trans_col_h = all_trans[col_h]
             if trans_col_h not in ambiguous:
@@ -518,88 +588,60 @@ class FUNSDGraphPair(GraphPairDataset):
                 a=all_trans[vs[0][0]]
                 for v,y in vs[1:]:
                     a+=', '+all_trans[v]
-                all_q_a.append(('all values in column {}?'.format(trans_col_h),a,[col_h,vs[0][0]]))
+                if self.char_qs: 
+                    all_q_a.append(('ac~{}'.format(trans_col_h),a,[col_h,vs[0][0]]))
+                else:
+                    all_q_a.append(('all values in column "{}"?'.format(trans_col_h),a,[col_h,vs[0][0]]))
 
+        if self.char_qs:
+            all_q_a.append(('t#>',str(len(tables)),list(col_vs.keys())+list(row_vs.keys())))
+            for i,(col_hs, row_hs) in enumerate(tables.values()):
+                col_hs = [(h,bbs[groups[h][0]][0]) for h in col_hs]
+                col_hs.sort(key=lambda a:a[1])
+                col_hs = [h[0] for h in col_hs]
+                col_h_strs = [all_trans[h] for h in col_hs]
+                row_hs = [(h,bbs[groups[h][0]][1]) for h in row_hs]
+                row_hs.sort(key=lambda a:a[1])
+                row_hs = [h[0] for h in row_hs]
+                row_h_strs = [all_trans[h] for h in row_hs]
+                
+                all_q_a.append(('ch~{}'.format(i),', '.join(col_h_strs),col_hs))
+                all_q_a.append(('rh~{}'.format(i),', '.join(row_h_strs),row_hs))
+
+
+
+
+        #Convert the group IDs on each QA pair to be BB IDs.
+        #   This uses groups_id, which can be the word BB ids
         new_all_q_a =[]
         for q,a,group_ids in all_q_a:
             bb_ids=[]
             for gid in group_ids:
-                bb_ids+=groups[gid]
+                bb_ids+=groups_id[gid]
             new_all_q_a.append((q,a,bb_ids))
         return new_all_q_a
 
 
-def getWidthFromBB(bb):
-    return (np.linalg.norm(bb[0]-bb[1]) + np.linalg.norm(bb[3]-bb[2]))/2
-def getHeightFromBB(bb):
-    return (np.linalg.norm(bb[0]-bb[3]) + np.linalg.norm(bb[1]-bb[2]))/2
+    def corrupt(self,s):
+        new_s=''
+        for c in s:
+            r = random.random()
+            if r<self.corruption_p/3:
+                pass
+            elif r<self.corruption_p*2/3:
+                new_s+=random.choice(string.ascii_letters)
+            elif r<self.corruption_p:
+                if random.random()<0.5:
+                    new_s+=c+random.choice(string.ascii_letters)
+                else:
+                    new_s+=random.choice(string.ascii_letters)+c
+            else:
+                new_s+=c
+        return new_s
 
 
 
-def polyIntersect(poly1, poly2):
-    prevPoint = poly1[-1]
-    for point in poly1:
-        perpVec = np.array([ -(point[1]-prevPoint[1]), point[0]-prevPoint[0] ])
-        perpVec = perpVec/np.linalg.norm(perpVec)
-        
-        maxPoly1=np.dot(perpVec,poly1[0])
-        minPoly1=maxPoly1
-        for p in poly1:
-            p_onLine = np.dot(perpVec,p)
-            maxPoly1 = max(maxPoly1,p_onLine)
-            minPoly1 = min(minPoly1,p_onLine)
-        maxPoly2=np.dot(perpVec,poly2[0])
-        minPoly2=maxPoly2
-        for p in poly2:
-            p_onLine = np.dot(perpVec,p)
-            maxPoly2 = max(maxPoly2,p_onLine)
-            minPoly2 = min(minPoly2,p_onLine)
 
-        if (maxPoly1<minPoly2 or minPoly1>maxPoly2):
-            return False
-        prevPoint = point
-    return True
-
-def perp( a ) :
-    b = np.empty_like(a)
-    b[0] = -a[1]
-    b[1] = a[0]
-    return b
-
-def lineIntersection(lineA, lineB, threshA_low=10, threshA_high=10, threshB_low=10, threshB_high=10, both=False):
-    a1=lineA[0]
-    a2=lineA[1]
-    b1=lineB[0]
-    b2=lineB[1]
-    da = a2-a1
-    db = b2-b1
-    dp = a1-b1
-    dap = perp(da)
-    denom = np.dot( dap, db)
-    num = np.dot( dap, dp )
-    point = (num / denom.astype(float))*db + b1
-    #check if it is on atleast one line segment
-    vecA = da/np.linalg.norm(da)
-    p_A = np.dot(point,vecA)
-    a1_A = np.dot(a1,vecA)
-    a2_A = np.dot(a2,vecA)
-
-    vecB = db/np.linalg.norm(db)
-    p_B = np.dot(point,vecB)
-    b1_B = np.dot(b1,vecB)
-    b2_B = np.dot(b2,vecB)
-    
-    ###rint('A:{},  B:{}, int p:{}'.format(lineA,lineB,point))
-    ###rint('{:.0f}>{:.0f} and {:.0f}<{:.0f}  and/or  {:.0f}>{:.0f} and {:.0f}<{:.0f} = {} {} {}'.format((p_A+threshA_low),(min(a1_A,a2_A)),(p_A-threshA_high),(max(a1_A,a2_A)),(p_B+threshB_low),(min(b1_B,b2_B)),(p_B-threshB_high),(max(b1_B,b2_B)),(p_A+threshA_low>min(a1_A,a2_A) and p_A-threshA_high<max(a1_A,a2_A)),'and' if both else 'or',(p_B+threshB_low>min(b1_B,b2_B) and p_B-threshB_high<max(b1_B,b2_B))))
-    if both:
-        if ( (p_A+threshA_low>min(a1_A,a2_A) and p_A-threshA_high<max(a1_A,a2_A)) and
-             (p_B+threshB_low>min(b1_B,b2_B) and p_B-threshB_high<max(b1_B,b2_B)) ):
-            return point
-    else:
-        if ( (p_A+threshA_low>min(a1_A,a2_A) and p_A-threshA_high<max(a1_A,a2_A)) or
-             (p_B+threshB_low>min(b1_B,b2_B) and p_B-threshB_high<max(b1_B,b2_B)) ):
-            return point
-    return None
 
 def addTable(tables,table_map,groups,bbs,qi,ais,relationships_q_a,relationships_a_q):
     other_qis=[]
@@ -741,3 +783,4 @@ def addTableElement(table_values,row_headers,col_headers,ai,qi1,qi2,groups,bbs,t
             col_headers.add(qi1)
             table_values[(qi1,None)]=ai
     return True
+

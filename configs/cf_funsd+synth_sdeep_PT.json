@@ -1,5 +1,5 @@
 {
-    "name": "test",
+    "name": "funsd+synth_sdeep_PT",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -22,7 +22,7 @@
                 "pad":0,
                 "rot_degree_std_dev": 1
             },
-            "questions": 2,
+            "questions": 4,
             "char_qs": true,
             "split_to_lines": true,
             "do_words": false,
@@ -44,7 +44,7 @@
                 "pad":0,
                 "rot_degree_std_dev": 1
             },
-            "questions": 2,
+            "questions": 6,
             "min_entries": null,
             "max_entries": 160,
             "text_height": 32,
@@ -77,10 +77,10 @@
             "data_dir": "../data/FUNSD",
             "rescale_range": [1,1],
             "crop_params": {
-                "crop_size":[1024,1024],
+                "crop_size":[1152,768],
                 "pad":0
             },
-            "questions": 4,
+            "questions": 6,
             "char_qs": true,
             "split_to_lines": true,
             "do_words": false,
@@ -115,8 +115,8 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 600000,
-        "accum_grad_steps": 15,
+        "iterations": 1000000,
+        "accum_grad_steps": 8,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
@@ -143,12 +143,12 @@
             "blank_ocr": true,
             "image_size": [1152,768],
             "window_size": 6,
-	    "decode_dim": 64,
-	    "dim_ff": 32,
+	    "decode_dim": 128,
+	    "dim_ff": 256,
 	    "decode_num_heads": 4,
 	    "no_dropout": true,
-            "blocks_per_level": [2,2,2],
-            "swin_nheads": [2,4,4],
-            "im_embed_dim": 16
+            "blocks_per_level": [2,2,4],
+            "swin_nheads": [2,4,8],
+            "im_embed_dim": 64
     }
 }
