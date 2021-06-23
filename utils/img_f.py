@@ -198,10 +198,10 @@ def warpAffine(img,M,shape=None):
     if M.shape[0]==2: #OpenCV takes 2x3 instead of 3x3
         M = np.concatenate((M,np.array([[0.0,0.0,1.0]])),axis=0)
     T = transform.AffineTransform(M)
-    return transform.warp(img,T,output_shape=shape)
+    return transform.warp(img,T,output_shape=shape,preserve_range=True)
 
 def remap(img,map_x,map_y,interpolation=2,borderValue=None):
-    return transform.warp(img,np.stack((map_y,map_x),axis=0),order=interpolation)
+    return transform.warp(img,np.stack((map_y,map_x),axis=0),order=interpolation,preserve_range=True)
 
 ROTATE_90_COUNTERCLOCKWISE=1
 ROTATE_90_CLOCKWISE=3
