@@ -250,7 +250,6 @@ class QADataset(torch.utils.data.Dataset):
         #t#self.opt_history['Full get_item'].append(time-ticFull)#t#
         #t#self.print_opt_times()#t#
 
-        
 
 
         return {
