@@ -107,6 +107,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False):
         if len(do_pad)==1:
             do_pad+=do_pad
         do_pad = [int(p) for p in do_pad]
+    else:
+        do_pad = config['model']['image_size']
 
     with torch.no_grad():
         if img_path is None:
@@ -164,7 +166,7 @@ if __name__ == '__main__':
             help='path to image (default: prompt)')
     parser.add_argument('-g', '--gpu', default=None, type=int,
                         help='gpu number (default: cpu only)')
-    parser.add_argument('-p', '--pad', default=False, type=str,
+    parser.add_argument('-p', '--pad', default=None, type=str,
                         help='pad image to this size (square)')
     parser.add_argument('-f', '--config', default=None, type=str,
                         help='config override')
