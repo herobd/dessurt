@@ -11,6 +11,7 @@ def tensmeyer_brightness(img, foreground=0, background=0):
     except ValueError:
         th=img/2
 
+
     th = (th.astype(np.float32) / 255)#[...,None]
 
     if img.shape[2]==3:

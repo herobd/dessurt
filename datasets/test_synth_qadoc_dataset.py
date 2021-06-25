@@ -44,8 +44,10 @@ def display(data):
             cv2.imwrite('test_512.png',img.numpy()[:,:,0])
 
 
-            plt.imshow(img.numpy()[:,:,0], cmap='gray')
-            plt.show()
+            #plt.imshow(img.numpy()[:,:,0], cmap='gray')
+            #plt.show()
+            cv2.imshow('fd',img.numpy()[:,:,0])
+            cv2.show()
 
             #cv2.waitKey()
 
@@ -90,6 +92,9 @@ if __name__ == "__main__":
         "change_size": False,
         "rescale_range": [1.0,1.0],
         "crop_params": None,
+        "augment_shade": 0.9,
+        "additional_aug_params": {"better":True},
+        "wider": 200,
         "batch_size": 4,
         "questions": 10,
         "min_entries": None,

@@ -94,6 +94,7 @@ class SynthQADocDataset(QADataset):
         self.min_text_height = config['min_text_height'] if 'min_text_height' in config else 8
         self.max_text_height = config['max_text_height'] if 'max_text_height' in config else 32
         self.np_qs = 0.02
+        self.wider = config['wider'] if 'wider' in config else False
         self.use_hw = config['use_hw'] if 'use_hw' in config else False
         self.word_questions = config['word_questions'] if 'word_questions' in config else False
         self.multiline = config['multiline'] if 'multiline' in config else False
@@ -238,6 +239,9 @@ class SynthQADocDataset(QADataset):
         entries=[]
         heights=[]
 
+        wider = round(random.triangular(0,self.wider,0)) if self.wider else False
+        print('wider {}'.format(wider))
+
         if self.use_hw:
             num_hw_entries = int(self.use_hw*num_entries)
             num_entries = num_entries-num_hw_entries
@@ -322,7 +326,10 @@ class SynthQADocDataset(QADataset):
             v_h-=pad
 
             heights.append(max(l_h,v_h))
-            rel_x = random.randrange(10)
+            if wider:
+                rel_x = random.randrange(10+wider)
+            else:
+                rel_x = random.randrange(10)
             rel_y = random.randrange(-10,10)
             if not self.multiline or len(l)==1:
                 entries.append((label_img,label_text,value_img,value_text,rel_x,rel_y))
@@ -400,8 +407,12 @@ class SynthQADocDataset(QADataset):
 
             #Assign random positions and collect bounding boxes
             full_bbs=torch.FloatTensor(len(entries)+(1 if did_table else 0),4)
-            pad_v=1
-            pad_h=30
+            if wider:
+                pad_v=1+int(0.1*wider)
+                pad_h=30+int(1.2*wider)
+            else:
+                pad_v=1
+                pad_h=30
             for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
                 if type(label_img) is list:
                     label_height, label_width = get_height_width_from_list(label_img[1:],label_img[0])
