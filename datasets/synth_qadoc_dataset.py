@@ -240,7 +240,6 @@ class SynthQADocDataset(QADataset):
         heights=[]
 
         wider = round(random.triangular(0,self.wider,0)) if self.wider else False
-        print('wider {}'.format(wider))
 
         if self.use_hw:
             num_hw_entries = int(self.use_hw*num_entries)
