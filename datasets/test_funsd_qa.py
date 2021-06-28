@@ -79,12 +79,12 @@ if __name__ == "__main__":
         'crop_params': {
             "crop_size":[1024,1024],
             "pad":0,
-            "rot_degree_std_dev": 1.5
+            "rot_degree_std_dev": 1
             },
         'split_to_lines': True,
         'questions':50,
         'do_words': False,
-        'char_qs': True
+        'char_qs': "full"
 
 })
 

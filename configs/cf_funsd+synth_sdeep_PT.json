@@ -22,7 +22,7 @@
                 "pad":0,
                 "rot_degree_std_dev": 1
             },
-            "questions": 4,
+            "questions": 1,
             "char_qs": true,
             "split_to_lines": true,
             "do_words": false,
@@ -44,14 +44,16 @@
                 "pad":0,
                 "rot_degree_std_dev": 1
             },
-            "questions": 6,
+            "questions": 2,
             "min_entries": null,
             "max_entries": 160,
             "text_height": 32,
+            "wider": 200,
             "image_size": [1152,768],
             "change_size": true,
             "word_questions": "simple",
             "tables": 0.2,
+            "multiline": 0.1,
             "header_dir": "../data/english4line_fonts",
             "max_chars": 10,
             "min_chars": 1,
@@ -80,7 +82,7 @@
                 "crop_size":[1152,768],
                 "pad":0
             },
-            "questions": 6,
+            "questions": 3,
             "char_qs": true,
             "split_to_lines": true,
             "do_words": false,
@@ -116,7 +118,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 1000000,
-        "accum_grad_steps": 8,
+        "accum_grad_steps": 15,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
@@ -128,7 +130,7 @@
         "verbosity": 1,
         "monitor": "loss",
         "monitor_mode": "none",
-        "retry_count":0,
+        "retry_count":2,
 
 
         "#use_learning_schedule": "multi_rise then ramp_to_swa",
@@ -146,7 +148,7 @@
 	    "decode_dim": 128,
 	    "dim_ff": 256,
 	    "decode_num_heads": 4,
-	    "no_dropout": true,
+	    "no_dropout": false,
             "blocks_per_level": [2,2,4],
             "swin_nheads": [2,4,8],
             "im_embed_dim": 64

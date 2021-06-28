@@ -44,6 +44,8 @@ class FUNSDQA(QADataset):
         self.do_words = config['do_words']
         self.char_qs = config['char_qs'] if 'char_qs' in config else False
 
+        self.min_start_read = 7
+
         if images is not None:
             self.images=images
         else:
@@ -280,7 +282,8 @@ class FUNSDQA(QADataset):
             return cto
 
     def makeQuestions(self,bbs,transcription,groups,groups_adj,groups_id):
-        #get all question-answer relationships
+        all_q_a=[] #question-answers go here
+
         questions_gs=set()
         answers_gs=set()
         headers_gs=set()
@@ -289,12 +292,17 @@ class FUNSDQA(QADataset):
         for gi,group in enumerate(groups):
             cls = bbs[group[0],16:].argmax()
             trans_bb = []
+            class_qs=[]
+            class_answer = '[ '+self.index_class_map[cls]+' ]'
             for bbi in group:
                 trans_bb.append((bbs[bbi,1],transcription[bbi]))
                 #if fullyKnown(transcription[bbi]): #need this for NAF
                 #    trans_bb.append((bbs[bbi,1],transcription[bbi]))
                 #else:
                 #    continue
+                if self.char_qs=='full':
+                    #classify individual lines
+                    class_qs.append(('cs~{}'.format(transcription[bbi]),class_answer,[gi])) #This can be ambigous, although generally the same text has the same class
 
             trans_bb.sort(key=lambda a:a[0] )
             trans=trans_bb[0][1]
@@ -309,6 +317,22 @@ class FUNSDQA(QADataset):
                 answers_gs.add(gi)
             elif self.index_class_map[cls] == 'header':
                 headers_gs.add(gi)
+
+            if self.char_qs=='full':
+                #classify all together
+                class_qs.append(('cs~{}'.format(trans),class_answer,[gi])) #This can be ambigous, although generally the same text has the same class
+
+                all_q_a.append(random.choice(class_qs))
+
+                #complete (read)
+                if len(trans)>2:
+                    if len(trans)>self.min_start_read+1:
+                        start_point = random.randrange(self.min_start_read,len(trans)-1)
+                    else:
+                        start_point = random.randrange(len(trans)//2,len(trans)-1)
+                    start_text = trans[:start_point]
+                    finish_text = trans[start_point:]
+                    all_q_a.append(('re~{}'.format(start_text),finish_text,[gi]))
 
 
         relationships_h_q=defaultdict(list)
@@ -350,14 +374,24 @@ class FUNSDQA(QADataset):
 
         for trans,i_list in trans_to_gi.items():
             if len(i_list)>1:
+                typ = bbs[groups[i_list[0]][0],16:].argmax()
+                amb=True
+                for i in i_list[1:]:
+                    bbi = groups[i][0]
+                    if bbs[bbi,16:].argmax() != typ:
+                        amb=False
+                        break
+                if not amb:
+                    break
+                #import pdb;pdb.set_trace()
                 #print('possible ambig: {}'.format(trans))
                 got=0
-                for gi in i_list:
-                    if gi in relationships_q_h:
-                        got+=1
-                        hi = relationships_q_h[gi]
-                        all_trans[gi]= all_trans[hi]+' '+all_trans[gi]
-                        #print('  ambig rename: {}'.format(all_trans[gi]))
+                #for gi in i_list:
+                #    if gi in relationships_q_h:
+                #        got+=1
+                #        hi = relationships_q_h[gi]
+                #        all_trans[gi]= all_trans[hi]+' '+all_trans[gi]
+                #        #print('  ambig rename: {}'.format(all_trans[gi]))
                 if got<len(i_list)-1:
                     ambiguous.add(trans)
                 #else:
@@ -452,7 +486,6 @@ class FUNSDQA(QADataset):
                             q2 = None
                         addTableElement(table_values,row_headers,col_headers,ai,q1,q2,groups,bbs)
 
-        all_q_a=[]
 
         for qi,ai in q_a_pairs:
             trans_qi = all_trans[qi]
@@ -475,6 +508,62 @@ class FUNSDQA(QADataset):
                     all_q_a.append(('l~{}'.format(trans_qi),'[ blank ]',[qi]))
                 else:
                     all_q_a.append(('value for "{}"?'.format(trans_qi),'blank',[qi]))
+
+
+        if self.char_qs=="full":
+
+            #Do header and qestions
+            for hi,qis in relationships_h_q.items():
+                trans_h = all_trans[hi]
+                trans_qs=[]
+                for qi in qis:
+                    trans_q = all_trans[qi]
+                    if len(qis)>1:
+                        x=y=h=0
+                        for bbi in groups[qi]:
+                            x += bbs[bbi,0]
+                            x += bbs[bbi,4]
+                            y += bbs[bbi,1]
+                            y += bbs[bbi,5]
+                            h += bbs[bbi,5]-bbs[bbi,1]+1
+                        xc = x/(2*len(groups[qi]))
+                        yc = y/(2*len(groups[qi]))
+                        h = h/len(groups[qi])
+                    else:
+                        xc=yc=h=-1
+                    trans_qs.append((trans_q,xc,yc,h))
+                    all_q_a.append(('qu~{}'.format(trans_q),trans_h,[hi,qi]))
+
+                #Now we need to put all the questions into read order
+                if len(trans_qs)>1:
+                    rows=[]
+                    rows_mean_y=[]
+                    for trans_q,x,y,h in trans_qs:
+                        row_i=None
+                        for r,mean_y in enumerate(rows_mean_y):
+                            if abs(mean_y-y)<h*0.6:
+                                row_i=r
+                                break
+                        if row_i is None:
+                            rows.append([(trans_q,x,y)])
+                            rows_mean_y.append(y)
+                        else:
+                            rows[row_i].append((trans_q,x,y))
+                            mean_y=0
+                            for (trans_q2,x2,y2) in rows[r]:
+                                mean_y+=y2
+                            rows_mean_y[row_i] = mean_y/len(rows[row_i])
+                    trans_qs = []
+                    rows = list(zip(rows,rows_mean_y))
+                    rows.sort(key=lambda a:a[1])
+                    for row,mean_y in rows:
+                        row.sort(key=lambda a:a[1])
+                        for trans_q,x,y in row:
+                            trans_qs.append(trans_q)
+                    trans_qs = ', '.join(trans_qs)
+                else:
+                    trans_qs = trans_qs[0][0]
+                all_q_a.append(('hd~{}'.format(trans_h),trans_qs,[hi]+qis))
 
         #addTable can cause two tables to be made in odd cases (uneven rows, etc), so we'll simply combine all the table information and generate questions from it.
         #print(tables)

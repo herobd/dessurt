@@ -219,7 +219,6 @@ class QADataset(torch.utils.data.Dataset):
 
             ##tic=timeit.default_timer()
         if self.augment_shade and self.augment_shade>random.random():
-            #import pdb;pdb.set_trace()
             if np_img.shape[2]==3:
                 np_img = augmentation.apply_random_color_rotation(np_img)
                 np_img = augmentation.apply_tensmeyer_brightness(np_img,**self.aug_params)

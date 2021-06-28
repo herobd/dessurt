@@ -98,6 +98,7 @@ class SynthQADocDataset(QADataset):
         self.use_hw = config['use_hw'] if 'use_hw' in config else False
         self.word_questions = config['word_questions'] if 'word_questions' in config else False
         self.multiline = config['multiline'] if 'multiline' in config else False
+        self.min_start_read = 7
         self.max_num_lines = config['max_num_lines'] if 'max_num_lines' in config else 6
         self.tables = config['tables'] if 'tables' in config else False
         assert not self.tables or self.word_questions
@@ -253,8 +254,8 @@ class SynthQADocDataset(QADataset):
 
         if self.multiline:
             assert not self.ocr
-            labels_linec = [random.randrange(1,self.max_num_lines) if random.random()<self.multiline else 1 for i in range(num_entries)]
-            values_linec = [random.randrange(1,self.max_num_lines) if random.random()<self.multiline else 1 for i in range(num_entries)]
+            labels_linec = [random.randrange(2,self.max_num_lines) if random.random()<self.multiline else 1 for i in range(num_entries)]
+            values_linec = [random.randrange(2,self.max_num_lines) if random.random()<self.multiline else 1 for i in range(num_entries)]
         else:
             labels_linec = [1]*num_entries
             values_linec = [1]*num_entries
@@ -542,6 +543,9 @@ class SynthQADocDataset(QADataset):
                     if self.word_questions=='simple':
                         qa.append(('l~{}'.format(label_text),value_text,None))
                         qa.append(('v~{}'.format(value_text),label_text,None))
+                        if self.multiline:
+                            self.addRead(qa,label_text)
+                            self.addRead(qa,value_text)
                     elif self.word_questions:
                         question_to_value = random.choice(self.ask_for_value)
                         question_to_label = random.choice(self.ask_for_label)
@@ -627,6 +631,15 @@ class SynthQADocDataset(QADataset):
 
         return bbs, list(range(bbs.shape[0])), ocr, {'image':image}, {}, qa
 
+    def addRead(self,qa,text):
+        if len(text)>2:
+            if len(text)>self.min_start_read+1:
+                start_point = random.randrange(self.min_start_read,len(text)-1)
+            else:
+                start_point = random.randrange(len(text)//2,len(text)-1)
+            start_text = text[:start_point]
+            finish_text = text[start_point:]
+            qa.append(('re~{}'.format(start_text),finish_text,None))
     
     def addText(self,label_text,label_x,label_y,l_horz,l_vert,value_text=None,value_x=None,value_y=None,v_horz=None,v_vert=None,boxes=None,trans=None,s=1):
         #corrupt text
