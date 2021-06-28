@@ -125,7 +125,14 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False):
                 diff_x = do_pad[1]-img.shape[1]
                 diff_y = do_pad[0]-img.shape[0]
                 p_img = np.zeros(do_pad,dtype=img.dtype)
-                p_img[diff_y//2:-(diff_y//2 + diff_y%2),diff_x//2:-(diff_x//2 + diff_x%2)] = img
+                if diff_x>=0 and diff_y>=0:
+                    p_img[diff_y//2:-(diff_y//2 + diff_y%2),diff_x//2:-(diff_x//2 + diff_x%2)] = img
+                elif diff_x<0 and diff_y>=0:
+                    p_img[diff_y//2:-(diff_y//2 + diff_y%2),:] = img[:,(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
+                elif diff_x>=0 and diff_y<0:
+                    p_img[:,diff_x//2:-(diff_x//2 + diff_x%2)] = img[(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),:]
+                else:
+                    p_img = img[(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
                 img=p_img
             if len(img.shape)==2:
                 img=img[...,None] #add color channel

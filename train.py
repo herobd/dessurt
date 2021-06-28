@@ -148,7 +148,8 @@ if __name__ == '__main__':
 
     config = None
     if args.config is not None:
-        config = json.load(open(args.config))
+        with open(args.config) as f:
+            config = json.load(f)
     if  args.resume is None and  args.soft_resume is not None:
         if not os.path.exists(args.soft_resume):
             print('WARNING: resume path ({}) was not found, starting from scratch'.format(args.soft_resume))
