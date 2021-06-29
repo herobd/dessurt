@@ -90,6 +90,7 @@ class SynthQADocDataset(QADataset):
             self.image_size = (self.image_size,self.image_size)
         self.min_entries = config['min_entries'] if 'min_entries' in config else self.questions
         self.max_entries = config['max_entries'] if 'max_entries' in config else self.questions
+        self.not_pack = 0.2
         self.change_size = config['change_size'] if 'change_size' in config else False
         self.min_text_height = config['min_text_height'] if 'min_text_height' in config else 8
         self.max_text_height = config['max_text_height'] if 'max_text_height' in config else 32
@@ -413,6 +414,9 @@ class SynthQADocDataset(QADataset):
             else:
                 pad_v=1
                 pad_h=30
+
+
+            removed = set()
             for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
                 if type(label_img) is list:
                     label_height, label_width = get_height_width_from_list(label_img[1:],label_img[0])
@@ -431,10 +435,20 @@ class SynthQADocDataset(QADataset):
                 
                 if width>=self.image_size[1]:
                     x=0
+                    if width-self.image_size[1]>9:
+                        y=0
+                        width=-1
+                        height=-1
+                        removed.add(ei)
                 else:
                     x = random.randrange(int(self.image_size[1]-width))
                 if height>=self.image_size[0]:
                     y=0
+                    if height-self.image_size[0]>9:
+                        x=0
+                        width=-1
+                        height=-1
+                        removed.add(ei)
                 else:
                     y = random.randrange(int(self.image_size[0]-height))
                 full_bbs[ei,0]=x
@@ -465,18 +479,33 @@ class SynthQADocDataset(QADataset):
             intersections_per = intersections.sum(dim=0)
             if did_table:
                 intersections_per[-1]=0 #clear Table so it is not selected
-            removed = set()
+            pack = self.not_pack<random.random()
+            if not pack:
+                weights = [ 1/(len(label_text)+len(value_text)) for label_img,label_text,value_img,value_text,rel_x,rel_y in entries]
+                if did_table:
+                    weights += [0]
+
             while intersections_per.sum()>0:
                 #print_iter(intersections)
-                worst_offender = intersections_per.argmax()
+                if pack:
+                    worst_offender = intersections_per.argmax().item()
+                else:
+                    #worst_offender = random.randrange(intersections_per.shape[0])
+                    #first remove table intersections
+                    if did_table and intersections[-1].sum()>0:
+                        worst_offender = intersections[-1].nonzero()[0].item()
+                    else:
+                        #favor keeping longer
+                        offenders = intersections_per.nonzero()
+                        off_weights = [weights[o] for o in offenders]
+                        worst_offender = random.choices(offenders,weights=off_weights)[0].item()
                 #print('removing {} i:{} (of {})'.format(worst_offender,intersections_per[worst_offender],len(entries)))
-                removed.add(worst_offender.item())
+                removed.add(worst_offender)
                 intersections[:,worst_offender]=0
                 intersections[worst_offender,:]=0
                 intersections_per = intersections.sum(dim=0)
                 if did_table:
                     intersections_per[-1]=0 #clear Table so it is not selected
-
             #removed.sort(reverse=True)
             #for r in removed:
             #    del entries[r]
