@@ -120,3 +120,92 @@ class RelPosImTransformerLayer(nn.Module):
         docqa = docqa + self.dropout2(docqa2)
         docqa = self.norm2(docqa)
         return docqa
+
+
+
+
+class RelPosTransformerLayer(nn.Module):
+    r"""TransformerEncoderLayer is made up of self-attn and feedforward network.
+    This standard encoder layer is based on the paper "Attention Is All You Need".
+    Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+    Lukasz Kaiser, and Illia Polosukhin. 2017. Attention is all you need. In Advances in
+    Neural Information Processing Systems, pages 6000-6010. Users may modify or implement
+    in a different way during application.
+
+    Args:
+        d_model: the number of expected features in the input (required).
+        nhead: the number of heads in the multiheadattention models (required).
+        dim_feedforward: the dimension of the feedforward network model (default=2048).
+        dropout: the dropout value (default=0.1).
+        activation: the activation function of intermediate layer, relu or gelu (default=relu).
+
+    Examples::
+        >>> encoder_layer = nn.TransformerEncoderLayer(d_model=512, nhead=8)
+        >>> src = torch.rand(10, 32, 512)
+        >>> out = encoder_layer(src)
+    """
+
+    def __init__(self, d_model, nhead, max_dist, dim_feedforward=2048, dropout=0.1, activation="relu"):
+        super(RelPosTransformerLayer, self).__init__()
+        self.self_attn = PosBiasedMultiHeadedAttention(nhead,d_model,max_dist,dropout=dropout)
+        # Implementation of Feedforward model
+        self.linear1 = Linear(d_model, dim_feedforward)
+        self.dropout = Dropout(dropout)
+        self.linear2 = Linear(dim_feedforward, d_model)
+
+        self.norm1 = LayerNorm(d_model)
+        self.norm2 = LayerNorm(d_model)
+        self.dropout1 = Dropout(dropout)
+        self.dropout2 = Dropout(dropout)
+
+        self.activation = _get_activation_fn(activation)
+
+    def __setstate__(self, state):
+        if 'activation' not in state:
+            state['activation'] = F.relu
+        super(RelativePositionTransformerEncoderLayer, self).__setstate__(state)
+
+    def forward(self, 
+            tokens: Tensor, 
+            pos: Tensor, 
+            pos_mask: Tensor, # 1/0
+            att_mask: Tensor, 
+            padding_mask: Tensor, #False/True
+            auto_regressive=None) -> Tensor:
+        r"""Pass the input through the encoder layer.
+        
+        All masks are to be broadcast from the batch dim
+        Args:
+            docqa: the set to the encoder layer (required). (batch,length,dim)
+            docqa_x: the x position of each element of set (batch,length)
+            docqa_y: the y position of each element of set (batch,length)
+            docqa_mask: the mask for the docqa sequence (optional).
+            docqa_key_padding_mask: the mask for the docqa keys per batch (optional). False/True (batch,length)
+            pos_mask: mask for which places actually have a position 1/0 (1,lengthDoc,1)
+
+        """
+        batch_size = tokens.size(0)
+
+
+        if auto_regressive is None:
+            tokens2 = self.self_attn(tokens, tokens, tokens, 
+                    pos[:,:,0],pos[:,:,1],
+                    pos[:,:,0],pos[:,:,1], 
+                    mask=att_mask,
+                    key_padding_mask=padding_mask,
+                    pos_mask=pos_mask)
+        else:
+            tokens2 = self.self_attn(auto_regressive, tokens, tokens, 
+                    pos[:,-1:,0],pos[:,-1:,1],
+                    pos[:,:,0],pos[:,:,1], 
+                    mask=att_mask[:,-1:], 
+                    key_padding_mask=padding_mask,
+                    pos_mask=pos_mask[:,-1:])
+            tokens = auto_regressive
+
+        tokens = tokens + self.dropout1(tokens2)
+        tokens = self.norm1(tokens)
+        tokens2 = self.linear2(self.dropout(self.activation(self.linear1(tokens))))
+        tokens = tokens + self.dropout2(tokens2)
+        tokens = self.norm2(tokens)
+        return tokens
