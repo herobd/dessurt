@@ -16,12 +16,14 @@ from utils.character_tokenizer import CharacterTokenizer
 from collections import defaultdict
 from timm.models.layers import trunc_normal_
 import math
+from utils.util import calcXYWH
 
 import timeit
 
 def normalize_bbox2(bbox, dwidth, dheight, twidth, theight, max_dist):
      return [
          max(min(int(max_dist * (bbox[0] / dwidth)),max_dist),0),
+         cks_per_level
          max(min(int(max_dist * (bbox[1] / dheight)),max_dist),0),
          max(min(int(max_dist * (bbox[2] / twidth)),twidth),0),
          max(min(int(max_dist * (bbox[3] / theight)),theight),0),
@@ -81,19 +83,12 @@ class QAImDocGPT2(BaseModel):
 
         self.answer_embedding = nn.Embedding(self.tokenizer.vocab_size, d_model)
         self.pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000)
-        self.word_pos_enc = ReturnPositionalEncoding(d_model,dropout=dropout,max_len=1000)
-        self.pos_emb_x = UniformRealEmbedding(d_model,0,self.image_size[1],100)
-        self.pos_emb_y = UniformRealEmbedding(d_model,0,self.image_size[0],100)
-        self.pos_emb_w = PositiveRealEmbedding(d_model,0,int(0.5*self.image_size[1]),30)
-        self.pos_emb_h = PositiveRealEmbedding(d_model,0,int(0.3*self.image_size[0]),30)
+        self.ocr_1dpos_enc = ReturnPositionalEncoding(d_model,dropout=dropout,max_len=1000)
+        self.ocr_pos_emb_x = UniformRealEmbedding(d_model,0,self.image_size[1],100)
+        self.ocr_pos_emb_y = UniformRealEmbedding(d_model,0,self.image_size[0],100)
+        self.ocr_pos_emb_w = PositiveRealEmbedding(d_model,0,int(0.5*self.image_size[1]),30)
+        self.ocr_pos_emb_h = PositiveRealEmbedding(d_model,0,int(0.3*self.image_size[0]),30)
 
-        mlp_ratio=4.
-        qkv_bias=True
-        qk_scale=None
-        drop_rate=0.
-        attn_drop_rate=0.
-        drop_path_rate=dropout
-        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(blocks_per_level))]  # stochastic depth decay rule
 
         self.patch_embed =  ConvPatchEmbed(
                 img_size=self.image_size, 
@@ -117,42 +112,62 @@ class QAImDocGPT2(BaseModel):
         self.absolute_2dpos_embed = nn.Parameter(torch.zeros(1, num_patches, im_embed_dim))
         trunc_normal_(self.absolute_2dpos_embed, std=.02)
 
-        self.layers=nn.ModuleList()
-        for level,blocks in enumerate(blocks_per_level):
-            d_im = int(im_embed_dim * 2 ** level)
-            cur_resolution = (patches_resolution[0]//(2**level), patches_resolution[1]//(2**level))
+        if blocks_per_level is not None:
+            mlp_ratio=4.
+            qkv_bias=True
+            qk_scale=None
+            drop_rate=0.
+            attn_drop_rate=0.
+            drop_path_rate=dropout
+            dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(blocks_per_level))]  # stochastic depth decay rule
+            self.swin_layers=nn.ModuleList()
+            for level,blocks in enumerate(blocks_per_level):
+                d_im = int(im_embed_dim * 2 ** level)
+                cur_resolution = (patches_resolution[0]//(2**level), patches_resolution[1]//(2**level))
+                patch_size = (self.image_size[0]/cur_resolution[0],self.image_size[1]/cur_resolution[1])
+                im_xs = torch.arange(patch_size[1]/2,self.image_size[1],patch_size[1])[None,:].expand(cur_resolution[0],-1)
+                im_ys = torch.arange(patch_size[0]/2,self.image_size[0],patch_size[0])[:,None].expand(-1,cur_resolution[1])
+                #im_cords = torch.stack((im_xs,im_ys),dim=2).view(patches_resolution[0]*patches_resolution[1],2)
+                im_xs = im_xs.contiguous().view(1,cur_resolution[0]*cur_resolution[1])
+                im_ys = im_ys.contiguous().view(1,cur_resolution[0]*cur_resolution[1])
+                self.register_buffer("im_xs{}".format(level),im_xs,persistent=False)
+                self.register_buffer("im_ys{}".format(level),im_ys,persistent=False)
+                for block in range(blocks):
+                    last = level<len(blocks_per_level)-1 and block == blocks-1
+                    self.swin_layers.append( nn.ModuleList( [
+                        SwinTransformerBlock(dim=d_im, 
+                                    input_resolution=cur_resolution,
+                                     num_heads=swin_nhead[level], 
+                                     window_size=window_size[level],
+                                     shift_size=0 if (len(self.layers) % 2 == 0) else window_size[level] // 2,
+                                     mlp_ratio=mlp_ratio,
+                                     qkv_bias=qkv_bias,
+                                     qk_scale=qk_scale,
+                                     drop=drop_rate, 
+                                     attn_drop=attn_drop_rate,
+                                     drop_path=dpr[len(self.layers)],
+                                     norm_layer=nn.LayerNorm,
+                                     sees_docq=True),
+                        nn.Linear(d_model,d_im,bias=False) if d_model!=d_im else nn.Identity(),
+                        RelPosImTransformerLayer(d_model,nhead,max_dist,dim_ff,dropout=dropout),
+                        nn.Linear(d_im,d_model,bias=False) if d_model!=d_im else nn.Identity(),
+                        PatchMerging(cur_resolution, dim=d_im, norm_layer=nn.LayerNorm) if last else None 
+                        ] ) )
+
+            self.im_xs=[None]*len(blocks_per_level) #the x,y cords of each patch center for every level/resolution
+            self.im_ys=[None]*len(blocks_per_level)
+        else:
+            self.swin_layers=None
+            cur_resolution = patches_resolution
             patch_size = (self.image_size[0]/cur_resolution[0],self.image_size[1]/cur_resolution[1])
             im_xs = torch.arange(patch_size[1]/2,self.image_size[1],patch_size[1])[None,:].expand(cur_resolution[0],-1)
             im_ys = torch.arange(patch_size[0]/2,self.image_size[0],patch_size[0])[:,None].expand(-1,cur_resolution[1])
-            #im_cords = torch.stack((im_xs,im_ys),dim=2).view(patches_resolution[0]*patches_resolution[1],2)
             im_xs = im_xs.contiguous().view(1,cur_resolution[0]*cur_resolution[1])
             im_ys = im_ys.contiguous().view(1,cur_resolution[0]*cur_resolution[1])
-            self.register_buffer("im_xs{}".format(level),im_xs,persistent=False)
-            self.register_buffer("im_ys{}".format(level),im_ys,persistent=False)
-            for block in range(blocks):
-                last = level<len(blocks_per_level)-1 and block == blocks-1
-                self.layers.append( nn.ModuleList( [
-                    SwinTransformerBlock(dim=d_im, 
-                                input_resolution=cur_resolution,
-                                 num_heads=swin_nhead[level], 
-                                 window_size=window_size[level],
-                                 shift_size=0 if (len(self.layers) % 2 == 0) else window_size[level] // 2,
-                                 mlp_ratio=mlp_ratio,
-                                 qkv_bias=qkv_bias,
-                                 qk_scale=qk_scale,
-                                 drop=drop_rate, 
-                                 attn_drop=attn_drop_rate,
-                                 drop_path=dpr[len(self.layers)],
-                                 norm_layer=nn.LayerNorm,
-                                 sees_docq=True),
-                    nn.Linear(d_model,d_im,bias=False) if d_model!=d_im else nn.Identity(),
-                    RelPosImTransformerLayer(d_model,nhead,max_dist,dim_ff,dropout=dropout),
-                    nn.Linear(d_im,d_model,bias=False) if d_model!=d_im else nn.Identity(),
-                    PatchMerging(cur_resolution, dim=d_im, norm_layer=nn.LayerNorm) if last else None 
-                    ] ) )
-
-        self.im_xs=[None]*len(blocks_per_level) #the x,y cords of each patch center for every level/resolution
-        self.im_ys=[None]*len(blocks_per_level)
+            self.register_buffer("im_xs{}".format(0),im_xs,persistent=False)
+            self.register_buffer("im_ys{}".format(0),im_ys,persistent=False)
+            self.im_xs=[None]
+            self.im_ys=[None]
         
                 
         self.answer_decode = nn.Sequential(
@@ -166,7 +181,7 @@ class QAImDocGPT2(BaseModel):
 
 
     #we're building this for fixed images size
-    def forward(self,image,ocrBBs,ocrRes,questions,answers=None,useCurvedBBs=False,RUN=False):
+    def forward(self,image,ocrRes,questions,answers=None,useCurvedBBs=False,RUN=False):
         if self.blank_ocr:
             ocrRes=[[]]*len(questions)
         #torch.autograd.set_detect_anomaly(True)
@@ -180,148 +195,209 @@ class QAImDocGPT2(BaseModel):
                 self.im_ys[level]=buff
         #t#ticA=timeit.default_timer()#t#
         device = image.device
-        image_size = image.size()
 
         im_tokens = self.patch_embed(image)
         im_tokens += self.absolute_2dpos_embed #Swin doesn't use this as it can rely on the biased attention. We need the image tokens to know where they are so they can interact with the document and question tokens
         #Dropout?
 
+        all_ocr_res=[]
         all_ocr_bbs=[]
-        all_ocr_pos=[]
+        all_ocr_1dpos=[]
         max_len=0
-        for b,(preds,bbs) in enumerate(zip(ocrRes,ocrBBs)):
-            ocr_bbs = [[0,0,0,0]]
-            ocr_pos = [0]
-            for i,(pred,bb) in enumerate(zip(preds,bbs)):
-                if useCurvedBBs:
-                    x1,y1,x2,y2,r=bb[:5]
-                    h = y2-y1
-                    w = x2-x1
-                    xc = (x1+x2)/2
-                    yc = (y1+y2)/2
-                else:
-                    xc,yc,r,h,w=bb[:5]
-                    x1=xc-w
-                    x2=xc+w
-                    y1=yc-h
-                    y2=yc+h
-                #bb = normalize_bbox([x1,y1,x2,y2],image_size[3],image_size[2]) #x1y1x2y2
-                #bb = normalize_bbox2([xc,yc,w,h],image_size[3],image_size[2],500,300) #x1y1x2y2
-                bb = [xc,yc,w,h] #The images should already be normalized
-                word_tokens = self.tokenizer.tokenize(word)
-                #ocr_ids.extend(word_tokens)
-                #total_string+=word+' '
-                #word_token_map.append(range(len(ocr_bbs),len(ocr_bbs)+len(word_tokens)))
-                ocr_bbs.extend([bb]*len(word_tokens))
-                ocr_pos.extend(range(0,len(word_tokens)))
-            ocr_bbs.append([0,0,0,0])
-            ocr_pos.append(0)
+        for b,res_im in enumerate(ocrRes):
+            ocr_res = []#[torch.zeros_like(preds[0])]
+            ocr_bbs = []#[[0,0,0,0]]
+            ocr_1dpos = []#[0]
+            for i,(bb,(string,char_prob,score)) in enumerate(res_im):
+                #spread x,y location along span
+                tlX,tlY = bb[0]
+                trX,trY = bb[?]
+                brX,brY = bb[2]
+                blX,blY = bb[?]
+                lX,lY,rX,rY,width,height = calcXYWH(tlX,tlY,trX,trY,brX,brY,blX,blY)
+                cX = (lX+rX)/2
+                cY = (lY+rY)/2
+                #we'll use the entire height for each part
+                start_point = torch.FloatTensor([lX,lY])
+                end_point = torch.FloatTensor([rX,rY])
+                step = 1/char_prob.size(0)
+                forward = torch.arange(1,-step,-step)[:,None] #add xy dim
+                backward = torch.arange(0,1+step,step)[:,None]
+                assert forward.size(0)==char_prob.size(0) and backward.size(0)==char_prob.size(0)
+                all_xy = forward*start_point + backward*end_point
+
+
+
+                #rather than taking the whol sequence, we'll just take the probabilities at character predictions (nonblank)
+                char_pred = char_prob.argmax(dim=1)
+                char_loc = char_pred!=0
+                new_char_prob = char_prob[char_loc] #this will be on the GPU
+                new_xy = all_xy[char_loc]
+                wh = torch.FloatTensor([width,height])[None,:].expand(new_xy.size(0),-1)
+
+                bbs = torch.cat( (new_xy,wh), dim=1)
+
+                #We'll append one additional entry at the begining. Has 0 for all probs and uses the center xy
+                first_bb = torch.FloatTensor([[cX,cY,width,height]])
+                bbs = torch.cat( (first_bb,bbs), dim=0)
+                new_char_prob = torch.cat( (torch.zeros_like(new_char_prob[0:1]),new_char_prob), dim=0)
+                ocr_res.append(new_char_prob)
+                ocr_bbs.append(bbs)
+                ocr_1dpos.extend(range(0,new_char_prob.size(0)))
+            
+            #ocr_bbs.append([0,0,0,0])
+            #ocr_pos.append(0)
             max_len = max(max_len,len(ocr_bbs))
-            all_ocr_bbs.append(ocr_bbs)
-            all_ocr_pos.append(ocr_pos)
+            all_ocr_res.append(torch.cat(ocr_res,dim=0))
+            all_ocr_bbs.append(torch.cat(ocr_bbs,dim=0))
+            all_ocr_1dpos.append(ocr_1dpos)
 
+        ocr_tokens = self.ocr_emb(torch.stack(all_ocr_res,dim=0))
+        ocr_bbs = torch.stack(all_ocr_bbs,dim=0)
+        ocr_1dpos = torch.FloatTensor(all_ocr_1dpos)
+        all_ocr_res=None
+        all_ocr_bbs=None
+        all_ocr_1dpos=None
 
-
-        total_strings = [' '.join(gtT) for gtT in gtTrans]
-
-
+        #we need to extend batch entries with multiple questions
         repeats = [len(q) for q in questions] #different elements in batch may have different numbers of questions
 
-        repeat_docs = [[doc]*r for doc,r in zip(total_strings,repeats)]
-
+        #first expand tokens and other things
         im_tokens = torch.repeat_interleave(im_tokens,torch.LongTensor(repeats).to(device),dim=0)
+        ocr_tokens = torch.repeat_interleave(ocr_tokens,torch.LongTensor(repeats),dim=0)
+        ocr_bbs = torch.repeat_interleave(ocr_bbs,torch.LongTensor(repeats).to(device),dim=0)
+        ocr_1dpos = torch.repeat_interleave(ocr_1dpos,torch.LongTensor(repeats).to(device),dim=0)
 
-
-        repeat_docs=[d for bd in repeat_docs for d in bd]
+        #flatten the questions an answers to a single batch
         questions=[q for bq in questions for q in bq]
-        if answers is not None:
-            answers=[a for ba in answers for a in ba]
-
         new_batch_size = len(questions)
-
-        #Append question before answer
-        if not RUN:
-            docqa_str = [doc+':'+q+'[SEP]'+a for doc,q,a in zip(repeat_docs,questions,answers)]
+        if not RUN
+            answers=[a for ba in answers for a in ba]
         else:
-            docqa_str = [doc+':'+q+'[SEP]' for doc,q in zip(repeat_docs,questions)]
+            answers=['']*new_batch_size
+
+        if RUN:
             saved_docqa=[]
             saved_proj_im_tokens=[]
             output_tokens=[]
 
         #run question+answer through decoder
-        docqa_t = self.tokenizer(docqa_str,return_tensors="pt",padding=True)
-        docqa_to_emb = docqa_t['input_ids'][:,:-1].detach().to(device) #Remove end (SEP) token, as it doesn't need to predict anythin after that. emb needs to do position
-        docqa_emb = self.answer_embedding(docqa_to_emb) 
+        q_t = self.tokenizer(questions,return_tensors="pt",padding=True)
+        num_q = q_t.size(1)-1 #remove last SEP token
+        a_t = self.tokenizer(answers,return_tensors="pt",padding=True)
+        num_a = a_t.size(1)
+        qa_emb = self.text_embedding(torch.cat((q_t['input_ids'],a_t['input_ids'][:,1:-1]),dim=1)) #strip CLS and SEP off of answers, will recieve questions SEP
+        q_emb = qa_emb[:,:num_q] #no SEP
+        if not RUN:
+            a_emb = qa_emb[:,num_q:] #gets SEP at beginning
 
-        docqa_len = docqa_emb.size(1)
-        qa_mask = torch.FloatTensor(new_batch_size,docqa_len,1).fill_(1)
-        bbs = torch.FloatTensor(new_batch_size,docqa_len,4).fill_(0)#float('NaN'))
-        tok_pos = torch.LongTensor(new_batch_size,docqa_len).fill_(0)
-        new_i=0
-        for b,(ocr_bbs,ocr_pos) in enumerate(zip(all_ocr_bbs,all_ocr_pos)):
-            len_docqa = len(ocr_bbs)
-            ocr_bbs = torch.FloatTensor(ocr_bbs)[None,...]
-            ocr_pos = torch.FloatTensor(ocr_pos)[None,...]
-            r =repeats[b]
-            bbs[new_i:new_i+r,0:len_docqa,:] = ocr_bbs
-            tok_pos[new_i:new_i+r,0:len_docqa] = ocr_pos
-            qa_mask[new_i:new_i+r,0:len_docqa] = 0
-            new_i+=r
-        bbs=bbs.to(device)
-        xs=bbs[:,:,0]
-        ys=bbs[:,:,1]
-        ws=bbs[:,:,2]
-        hs=bbs[:,:,3]
-        qa_mask = qa_mask.to(device)
-        doc_mask = 1-qa_mask
+        #the model input ends up being [CLS] Question  [SEP] Answer
+        #                             { q tokens     }{ a tokens   }
 
-        docqa = self.pos_1d_enc(docqa_emb,qa_mask) #This only applies the 1d position embedding to the q+a part of the docqa
-        answer_padding_mask = (1-docqa_t['attention_mask'][:,:-1]).bool().to(device)
+        xs=ocr_bbs[:,:,0]
+        ys=ocr_bbs[:,:,1]
+        ws=ocr_bbs[:,:,2]
+        hs=ocr_bbs[:,:,3]
+        ocr_pos = ocr_bbs[:,:,0:2] #just x,y
 
-        docqa += doc_mask*(self.pos_emb_x(xs) + self.pos_emb_y(ys) + self.pos_emb_w(ws) + self.pos_emb_h(hs) + self.word_pos_enc(tok_pos))
+        q_emb = self.q_pos_1d_enc(q_emb)
+        q_padding_mask = (1-q_t['attention_mask'][:,:-1]).bool().to(device) #remove last SEP
+        if not RUN:
+            a_emb = self.a_pos_1d_enc(a_emb)
+            a_padding_mask = (1-a_t['attention_mask'][:,:-1]).bool().to(device) #remove last SEP
 
-        locs = (docqa_t['input_ids']==self.SEP_TOKEN).nonzero(as_tuple=False)[::2,1] #get first SEP, not second
-        att_mask = torch.BoolTensor(new_batch_size,docqa_len,docqa_len).fill_(1) #1/0
-        docq_padding_mask = torch.FloatTensor(new_batch_size,docqa_len).fill_(0) #0/-inf
-        for b,loc in enumerate(locs):
-            att_mask[b,:loc+1,loc+1:]=0 #doc and question tokens cannot attend to answer tokens
-            att_mask[b,loc+1:,loc+1:]=torch.tril(att_mask[b,loc+1:,loc+1:]) #causual attention for answer
-            docq_padding_mask[b,loc+1:]=float('-inf') #image cannot attend to answers
+        ocr_tokens += self.ocr_pos_emb_x(xs) + self.ocr_pos_emb_y(ys) + self.ocr_pos_emb_w(ws) + self.ocr_pos_emb_h(hs) + self.ocr_1dpos_enc(ocr_1dpos)
 
-        att_mask = att_mask.to(device)
-        docq_padding_mask = docq_padding_mask.to(device)
+        num_all = num_im+num_ocr+num_q+num_a
+        all_att_mask = torch.BoolTensor(1,num_all,num_all).fill_(1) #1/0
+        all_att_mask[:,-num_a:,-num_a] = torch.tril(all_att_mask[:,-num_a:,-num_a])
+        all_att_mask = all_att_mask.to(device)
+
+        #make position (2d) masks. Controls whether relative position attention bias is applied
+        im_pos_mask = torch.FloatTensor(1,num_im,1).fill_(1).to(device)
+        ocr_pos_mask = ocr_padding_mask[:,:,None]
+        q_pos_mask = torch.FloatTensor(1,num_q,1).fill_(0).to(device)
+        a_pos_mask = torch.FloatTensor(1,num_a,1).fill_(0).to(device)
+
+        q_pos = torch.FloatTensor(1,num_q,2).fill_(0).to(device)
+        a_pos = torch.FloatTensor(1,num_a,2).fill_(0).to(device)
+
+
 
         level=0
-        for swin_layer, proj_d2i, layout_layer, proj_i2d, im_downsample, ocr_downsample in self.swin_layers:
+        if self.swin_layers is not None:
+            ocrqa_tokens = torch.cat( (ocr_tokens,q_tokens,a_tokens),dim=1)
+            ocrq_padding_mask = torch.cat( (ocr_padding_mask,q_padding_mask,torch.zeros_like(a_padding_mask)), dim=1)
+            #convert to 0/-inf as that's what the Swin code expects
+            ocrq_padding_mask_inf = torch.where(ocrq_padding_mask,torch.zeros_like(ocrq_padding_mask),torch.empty_like(ocrq_padding_mask).fill_('-inf'))
+            ocrq_pos_mask = torch.cat( (ocr_pos_mask,q_pos_mask,blank_a_pos_mask), dim=1)
+            ocrq_pos = torch.cat( (ocr_pos,q_pos,blank_a_pos), dim=1)
+            #ocrqa_att_mask = torch.BoolTensor(1,num_ocr+num_q+num_a,num_ocr+num_q+num_a).fill_(1) #1/0
+            #ocrqa_att_mask[:,-num_a:,-num_a] = torch.tril(ocrqa_att_mask[:,-num_a:,-num_a])
+            ocrqa_att_mask = ocrqa_att_mask[:,num_im:,num_im:]
+            for swin_layer, proj_d2i, layout_layer, proj_i2d, im_downsample, ocr_downsample in self.swin_layers:
 
-            #could be run in parallel
-            docq_tokens = torch.cat( (ocr_tokens,q_tokens),dim=1)
-            im_tokens = swin_layer(im_tokens,proj_d2i(docqa),   #we pass it the answers
-                    docq_padding_mask=docq_padding_mask) #but we'll mask them out
-            proj_im_tokens = proj_i2d(im_tokens)
-            if RUN:
-                saved_docqa.append(docqa)
-                saved_proj_im_tokens.append(proj_im_tokens)
-            docqa = layout_layer(
-                    docqa,xs,ys,
-                    proj_im_tokens,
-                    self.im_xs[level].expand(new_batch_size,-1),
-                    self.im_ys[level].expand(new_batch_size,-1),
-                    docqa_mask=att_mask,
-                    docqa_padding_mask=answer_padding_mask,
-                    pos_mask = doc_mask)
+                #could be run in parallel
+
+                im_tokens = swin_layer(im_tokens,proj_d2i(ocrqa_tokens),   #we pass it the answers
+                        docq_padding_mask=ocrq_padding_mask_inf) #but we'll mask them out
+                proj_im_tokens = proj_i2d(im_tokens)
+                if RUN:
+                    saved_ocrqa.append(ocrqa_tokens)
+                    saved_proj_im_tokens.append(proj_im_tokens)
+                ocrqa_tokens = layout_layer(
+                        ocrqa_tokens,
+                        ocrqa_pos[:,:,0], #x
+                        ocrqa_pos[:,:,1], #y
+                        proj_im_tokens,
+                        self.im_xs[level].expand(new_batch_size,-1),
+                        self.im_ys[level].expand(new_batch_size,-1),
+                        docqa_mask=ocrqa_att_mask.expand(new_batch_size,-1,-1),
+                        docqa_padding_mask=ocrqa_padding_mask.expand(new_batch_size,-1),
+                        pos_mask = ocrqa_pos_mask.expand(new_batch_size,-1))
 
 
+                
+
+                if im_downsample is not None:
+                    im_tokens = im_downsample(im_tokens)
+                    level+=1
+                    im_tokens = im_downsample(im_tokens)
+                    num_im = im_tokens.size(1)
+                    im_pos_mask = im_pos_mask[:,:num_im]#torch.FloatTensor(new_batch_size,num_im,1).fill_(1).to(device)
+                    im_padding_mask = im_padding_mask[:,:num_im]#torch.BoolTensor(new_batch_size,num_im).fill_(1).to(device)
+                if ocr_downsample is not None:
+                    ocr_tokens = ocrqa_tokens[:,:num_ocr]
+                    ocr_tokens,ocr_pos,ocr_padding_mask = ocr_downsample(ocr_tokens,ocr_pos,ocr_padding_mask)
+                    num_ocr = ocr_tokens.size(1)
+                    ocr_pos_mask = ocr_padding_mask[:,:,None]#torch.FloatTensor(new_batch_size,ocr_tokens.size(1),1).fill_(1).to(device)
+                if q_downsample is not None:
+                    q_tokens = ocrqa_tokens[:,num_ocr:num_ocr+num_q]
+                    q_tokens,q_padding_mask = q_downsample(q_tokens,q_padding_mask)
+                    num_q = q_tokens.size(1)
+                    q_pos_mask = q_pos_mask[:,:num_q]#torch.FloatTensor(new_batch_size,num_q,1).fill_(0).to(device)
+
+                if im_downsample is not None or ocr_downsample is not None or q_downsample is not None:
+                    ocrqa_att_mask = ocrqa_att_mask[
+                if ocr_downsample is not None or q_downsample is not None:
+                    ocrqa_tokens = torch.cat( (ocr_tokens,q_tokens,a_tokens),dim=1)
+                    ocrq_padding_mask = torch.cat( (ocr_padding_mask,q_padding_mask,torch.zeros_like(a_padding_mask)), dim=1)
+                    ocrq_padding_mask_inf = torch.where(ocrq_padding_mask,torch.zeros_like(ocrq_padding_mask),torch.empty_like(ocrq_padding_mask).fill_('-inf'))
+                    ocrq_pos_mask = torch.cat( (ocr_pos_mask,q_pos_mask,blank_a_pos_mask), dim=1)
+                    ocrq_pos = torch.cat( (ocr_pos,q_pos,blank_a_pos), dim=1)
             
+            ocr_tokens = ocrqa_tokens[:,:num_ocr]
+            q_tokens = ocrqa_tokens[:,num_ocr:num_ocr+num_q]
+            a_tokens = ocrqa_tokens[:,num_ocr+num_q:num_ocr+num_q+num+a]
+        #Swin DONE
 
-            if im_downsample is not None:
-                im_tokens = im_downsample(im_tokens)
-                level+=1
-            if ocr_downsample is not None:
-                ocr_tokens = ocr_downsample(ocr_tokens)
+        im_pos = torch.stack( (self.im_xs[level],self.im_ys[level]),dim=2).expand(new_batch_size,-1,-1)
 
         all_tokens = torch.cat( (im_tokens,ocr_tokens,q_tokens,a_tokens),dim=1)
-        for layer, im_downsample, ocr_downsample in self.layers:
+        all_pos = torch.cat( (im_pos,ocr_pos,q_pos,a_pos),dim=1)
+        all_pos_mask = torch.cat( (im_pos_mask,ocr_pos_mask,q_pos_mask,a_pos_mask),dim=1)
+        all_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask,a_padding_mask),dim=1)
+        for layer, im_downsample, ocr_downsample, q_downsample in self.layers:
             #all_tokens = torch.cat( (im_tokens,ocr_tokens,q_tokens,a_tokens),dim=1)
             all_tokens = layer(
                     all_tokens,
@@ -340,15 +416,20 @@ class QAImDocGPT2(BaseModel):
                 im_tokens = all_tokens[:,:num_im]
                 im_tokens,im_pos = im_downsample(im_tokens,im_pos)
                 num_im = im_tokens.size(1)
-                im_pos_mask = torch.FloatTensor(new_batch_size,num_im,1).fill_(1).to(device)
-                im_padding_mask = torch.BoolTensor(new_batch_size,num_im).fill_(1).to(device)
+                im_pos_mask = im_pos_mask[:,:num_im]#torch.FloatTensor(new_batch_size,num_im,1).fill_(1).to(device)
+                im_padding_mask = im_padding_mask[:,:num_im]#torch.BoolTensor(new_batch_size,num_im).fill_(1).to(device)
             if ocr_downsample is not None:
                 ocr_tokens = all_tokens[:,num_im:num_im+num_ocr]
                 ocr_tokens,ocr_pos,ocr_padding_mask = ocr_downsample(ocr_tokens,ocr_pos,ocr_padding_mask)
                 num_ocr = ocr_tokens.size(1)
                 ocr_pos_mask = ocr_padding_mask[:,:,None]#torch.FloatTensor(new_batch_size,ocr_tokens.size(1),1).fill_(1).to(device)
+            if q_downsample is not None:
+                q_tokens = all_tokens[:,num_im+num_ocr:num_im+num_ocr+num_q]
+                q_tokens,q_padding_mask = q_downsample(q_tokens,q_padding_mask)
+                num_q = q_tokens.size(1)
+                q_pos_mask = q_pos_mask[:,:num_q]#torch.FloatTensor(new_batch_size,num_q,1).fill_(0).to(device)
 
-            if im_downsample is not None or ocr_downsample is not None:
+            if im_downsample is not None or ocr_downsample is not None or q_downsample is not None:
                 all_tokens = torch.cat( (im_tokens,ocr_tokens,q_tokens,a_tokens),dim=1)
                 all_pos = torch.cat( (im_pos,ocr_pos,q_pos,a_pos),dim=1)
                 all_pos_mask = torch.cat( (im_pos_mask,ocr_pos_mask,q_pos_mask,a_pos_mask),dim=1)
