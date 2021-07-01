@@ -200,10 +200,14 @@ class QAImDocGPT2(BaseModel):
                 raise NotImplementedError('unknown image pooling method: {}'.format(im_pool_p))
             if ocr_pool_p=='n':
                 ocr_pool = None
+            elif ocr_pool_p=='p':
+                ocr_pool = nn.Conv2d(fd_model,fd_model,kernel_size=4,stride=2,padding=1)
             else:
                 raise NotImplementedError('unknown ocr pooling method: {}'.format(ocr_pool_p))
             if q_pool_p=='n':
                 q_pool = None
+            elif q_pool_p=='p':
+                q_pool = nn.Conv2d(fd_model,fd_model,kernel_size=4,stride=2,padding=1)
             else:
                 raise NotImplementedError('unknown question pooling method: {}'.format(q_pool_p))
 
@@ -455,6 +459,9 @@ class QAImDocGPT2(BaseModel):
         im_pos_mask = torch.FloatTensor(1,num_im,1).fill_(1).expand(new_batch_size,-1,-1).to(device)
         im_padding_mask = torch.BoolTensor(1,num_im).fill_(0).expand(new_batch_size,-1).to(device)
         im_tokens = self.im_transition(im_tokens)
+
+        num_all = num_im+num_ocr+num_q+num_a
+        all_att_mask = all_att_mask[:,-num_all:,-num_all:] 
 
         all_tokens = torch.cat( (im_tokens,ocr_tokens,q_tokens,a_tokens),dim=1)
         all_pos = torch.cat( (im_pos,ocr_pos,q_pos_ex,a_pos_ex),dim=1)

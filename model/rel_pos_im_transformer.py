@@ -195,14 +195,14 @@ class RelPosTransformerLayer(nn.Module):
                     pos[:,:,0],pos[:,:,1], 
                     mask=att_mask,
                     key_padding_mask=padding_mask,
-                    pos_mask=pos_mask)
+                    pos_mask=new_pos_mask)
         else:
             tokens2 = self.self_attn(auto_regressive, tokens, tokens, 
                     pos[:,-1:,0],pos[:,-1:,1],
                     pos[:,:,0],pos[:,:,1], 
                     mask=att_mask[:,-1:], 
                     key_padding_mask=padding_mask,
-                    pos_mask=pos_mask[:,-1:])
+                    pos_mask=new_pos_mask[:,-1:,-1:])
             tokens = auto_regressive
 
         tokens = tokens + self.dropout1(tokens2)
