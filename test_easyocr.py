@@ -11,6 +11,7 @@ img = (255*(img/img.max())).astype(np.uint8)
 #img = img/img.max()
 results=reader.readtext(img,decoder='greedy+softmax')
 for i,r in enumerate(results):
+    print(r[0])
     tlx,tly = r[0][0]
     brx,bry = r[0][2]
     img_window = img[round(tly):round(bry)+1,round(tlx):round(brx)+1]
