@@ -7,6 +7,7 @@ from model.pairing_g_graph_layoutlm import  runLayoutLM
 from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding
 from model.rel_pos_im_transformer import RelPosImTransformerLayer, RelPosTransformerLayer
 from model.swin_transformer import ConvPatchEmbed, SwinTransformerBlock, PatchMerging
+from model.trans_pooling import OCRPooler, QPooler
 try:
     from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
     from transformers import LayoutLMTokenizer, LayoutLMModel
@@ -198,16 +199,18 @@ class QAImDocGPT2(BaseModel):
                 im_pool = None
             else:
                 raise NotImplementedError('unknown image pooling method: {}'.format(im_pool_p))
+
             if ocr_pool_p=='n':
                 ocr_pool = None
             elif ocr_pool_p=='p':
-                ocr_pool = nn.Conv2d(fd_model,fd_model,kernel_size=4,stride=2,padding=1)
+                ocr_pool = OCRPooler(fd_model)#nn.Conv2d(fd_model,fd_model,kernel_size=4,stride=2,padding=1)
             else:
                 raise NotImplementedError('unknown ocr pooling method: {}'.format(ocr_pool_p))
+
             if q_pool_p=='n':
                 q_pool = None
             elif q_pool_p=='p':
-                q_pool = nn.Conv2d(fd_model,fd_model,kernel_size=4,stride=2,padding=1)
+                q_pool = QPooler(fd_model)
             else:
                 raise NotImplementedError('unknown question pooling method: {}'.format(q_pool_p))
 
