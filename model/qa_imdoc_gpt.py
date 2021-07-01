@@ -166,7 +166,8 @@ class QAImDocGPT(BaseModel):
 
 
     #we're building this for fixed images size
-    def forward(self,image,gtBBs,gtTrans,questions,answers=None,useCurvedBBs=False,RUN=False):
+    def forward(self,image,ocr_res,questions,answers=None,useCurvedBBs=False,RUN=False):
+        gtBBs,gtTrans = ocr_res
         if self.blank_ocr:
             gtTrans=[[]]*len(questions)
         #torch.autograd.set_detect_anomaly(True)

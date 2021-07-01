@@ -3,7 +3,7 @@ import utils.img_f as img_f
 import struct
 import torch
 from . import string_utils
-
+import numpy as np
 
 def ensure_dir(path):
     if not os.path.exists(path):

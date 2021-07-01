@@ -11,6 +11,7 @@ from utils.group_pairing import getGTGroup, pure, purity
 from datasets.testforms_graph_pair import display
 import random, os, math
 import editdistance
+import easyocr
 
 from model.oversegment_loss import build_oversegmented_targets_multiscale
 from model.overseg_box_detector import build_box_predictions
@@ -86,6 +87,9 @@ class QATrainer(BaseTrainer):
         self.print_pred_every = config['trainer']['print_pred_every'] if  'print_pred_every' in config['trainer'] else 200
         
         #t#self.opt_history = defaultdict(list)#t#
+        self.do_ocr = config['trainer']['do_ocr'] if 'do_ocr' in config['trainer'] else False
+        if self.do_ocr:
+            self.ocr_reader = easyocr.Reader(['en'],gpu=config['cuda'])
 
 
 
@@ -304,26 +308,35 @@ class QATrainer(BaseTrainer):
         #-All correct
         #-partail corrupt, partail missing
         #-all missing (none)
-        
-        if self.ocr_word_bbs:
-            gtTrans = [form_metadata['word_trans'] for form_metadata in instance['form_metadata']]
-        else:
-            gtTrans = instance['transcription']
-        #t##t#tic=timeit.default_timer()#t##t#
-        if self.ocr_word_bbs: #useOnlyGTSpace and self.use_word_bbs_gt:
-            word_boxes = torch.stack([form_metadata['word_boxes'] for form_metadata in instance['form_metadata']],dim=0)
-            word_boxes = word_boxes.to(image.device) #I can change this as it isn't used later
-            ocrBoxes=word_boxes
 
-        if ocrBoxes is not None:
-            
-            #ocrBoxes[:,:,5:]=0 #zero out other information to ensure results aren't contaminated
-            ocr = gtTrans
+        if self.do_ocr:
+            ocr_res=[]
+            normal_img = (128*(image[:,0]+1)).cpu().numpy().astype(np.uint8)
+            for img in normal_img:
+                ocr_res.append( self.ocr_reader.readtext(img,decoder='greedy+softmax') )
         else:
-            ocr = None
+            if self.ocr_word_bbs:
+                gtTrans = [form_metadata['word_trans'] for form_metadata in instance['form_metadata']]
+            else:
+                gtTrans = instance['transcription']
+            #t##t#tic=timeit.default_timer()#t##t#
+            if self.ocr_word_bbs: #useOnlyGTSpace and self.use_word_bbs_gt:
+                word_boxes = torch.stack([form_metadata['word_boxes'] for form_metadata in instance['form_metadata']],dim=0)
+                word_boxes = word_boxes.to(image.device) #I can change this as it isn't used later
+                ocrBoxes=word_boxes
+
+            if ocrBoxes is not None:
+                
+                #ocrBoxes[:,:,5:]=0 #zero out other information to ensure results aren't contaminated
+                ocr = gtTrans
+            else:
+                ocr = None
+            ocr_res = (ocrBoxes,ocr)
 
         #import pdb;pdb.set_trace()
-        pred_a, target_a, string_a = self.model(image,ocrBoxes,ocr,questions,answers)
+        pred_a, target_a, string_a = self.model(image,ocr_res,questions,answers)
+
+
 
 
         if forward_only:
@@ -368,7 +381,12 @@ class QATrainer(BaseTrainer):
         if self.print_pred_every>0 and self.iteration%self.print_pred_every==0:
             self.logger.info('iteration {}'.format(self.iteration))
             for b,(b_question,b_answer,b_pred) in enumerate(zip(questions,answers,string_a)):
-                if ocr is not None and not self.model_ref.blank_ocr:
+                if self.do_ocr:
+                    self.logger.info('{} OCR: ')
+                    for res in ocr_res[b]:
+                        self.logger.info(res[1][0])
+
+                elif ocr is not None and not self.model_ref.blank_ocr:
                     self.logger.info('{} OCR: {}'.format(b,ocr[b]))
                 for question,answer,pred in zip(b_question,b_answer,b_pred):
                     self.logger.info('{} [Q]:{}\t[A]:{}\t[P]:{}'.format(b,question,answer,pred))
