@@ -104,5 +104,5 @@ def label_smoothing(x, target, padding_idx=0, smoothing=0.0): #huggingface padds
         #x.index_fill_(0, mask.squeeze(), 0.0)
         mask10 = torch.ones_like(x)
         mask10.index_fill_(0, mask.squeeze(), 0.0)
-        x*=mask10
+        x=x*mask10
     return F.kl_div(x.view(batchsize,lenn,size), true_dist.view(batchsize,lenn,size),reduction='batchmean')

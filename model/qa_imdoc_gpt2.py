@@ -33,8 +33,7 @@ class QAImDocGPT2(BaseModel):
         super(QAImDocGPT2, self).__init__(config)
         self.blank_ocr = config['blank_ocr'] if 'blank_ocr' in config else False
         self.image_size = config['image_size'] #start at 512?
-        window_size = config['window_size'] #7
-        blocks_per_level = config['blocks_per_level'] #[2,2,6,2] -> in:512,emb:64 then 64,32,16,8
+        blocks_per_level = config['swin_blocks_per_level'] #[2,2,6,2] -> in:512,emb:64 then 64,32,16,8
         dropout = 0 if 'no_dropout' in config and  config['no_dropout'] else 0.1
         lighter_conv_patch_emb = config['lighter_conv_patch_emb'] if 'lighter_conv_patch_emb' in config else False
 
@@ -43,6 +42,9 @@ class QAImDocGPT2(BaseModel):
         fdim_ff = config['fdim_ff']
         fnhead = config['full_num_heads']
         if blocks_per_level is not None:
+            window_size = config['window_size'] #7
+            if type(window_size) is int:
+                window_size = [window_size]*len(blocks_per_level)
             d_model = config['decode_dim']
             dim_ff = config['dim_ff']
             nhead = config['decode_num_heads']
@@ -52,8 +54,6 @@ class QAImDocGPT2(BaseModel):
             d_model = fd_model
             im_embed_dim = fd_model
 
-        if type(window_size) is int:
-            window_size = [window_size]*len(blocks_per_level)
         if type(self.image_size) is int:
             self.image_size = (self.image_size,self.image_size)
         max_dist = math.sqrt(self.image_size[0]**2 + self.image_size[1]**2)
@@ -65,8 +65,8 @@ class QAImDocGPT2(BaseModel):
         else:
             pre_trained_patch_emb = None
 
-        char_output = config['char_output'] if 'char_output' in config else False
-        char_tokens = config['char_tokens'] if 'char_tokens' in config else False
+        char_output = config['char_output']
+        char_tokens = config['char_tokens']
         if char_tokens:
             char_output=False
 
@@ -207,7 +207,7 @@ class QAImDocGPT2(BaseModel):
             else:
                 raise NotImplementedError('unknown question pooling method: {}'.format(q_pool_p))
 
-            layer = RelPosTransformerLayer(fd_model,fnhead,max_dist,fdim_ff,dropout=dropout),
+            layer = RelPosTransformerLayer(fd_model,fnhead,max_dist,fdim_ff,dropout=dropout)
 
             self.full_layers.append(nn.ModuleList([im_pool,ocr_pool,q_pool,layer]))
 
@@ -292,6 +292,7 @@ class QAImDocGPT2(BaseModel):
             all_ocr_res.append(torch.cat(ocr_res,dim=0))
             all_ocr_bbs.append(torch.cat(ocr_bbs,dim=0))
             all_ocr_1dpos.append(ocr_1dpos)
+            assert len(ocr_1dpos) ==  all_ocr_bbs[-1].size(0)
 
         #padding
         ocr_padding_mask = torch.BoolTensor(len(all_ocr_res),max_len).fill_(0) #0 / 1 on when a padded value
@@ -459,7 +460,7 @@ class QAImDocGPT2(BaseModel):
         all_pos = torch.cat( (im_pos,ocr_pos,q_pos_ex,a_pos_ex),dim=1)
         all_pos_mask = torch.cat( (im_pos_mask,ocr_pos_mask,q_pos_mask_ex,a_pos_mask_ex),dim=1)
         all_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask,a_padding_mask),dim=1)
-        for layer, im_downsample, ocr_downsample, q_downsample in self.full_layers:
+        for im_downsample, ocr_downsample, q_downsample, layer in self.full_layers:
             if im_downsample is not None:
                 im_tokens = all_tokens[:,:num_im]
                 im_tokens,im_pos = im_downsample(im_tokens,im_pos)

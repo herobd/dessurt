@@ -176,15 +176,17 @@ class RelPosTransformerLayer(nn.Module):
         
         All masks are to be broadcast from the batch dim
         Args:
-            docqa: the set to the encoder layer (required). (batch,length,dim)
-            docqa_x: the x position of each element of set (batch,length)
-            docqa_y: the y position of each element of set (batch,length)
-            docqa_mask: the mask for the docqa sequence (optional).
-            docqa_key_padding_mask: the mask for the docqa keys per batch (optional). False/True (batch,length)
-            pos_mask: mask for which places actually have a position 1/0 (1,lengthDoc,1)
+            tokens: the set to the encoder layer (required). (batch,length,dim)
+            pos: the x,y position of each element of set (batch,length,2)
+            pos_mask: mask for which places actually have a position 1/0 (batch,length,1)
+            att_mask: the attention mask for sequence (optional). (batch,length,length)
+            padding_mask: the mask for the keys per batch (optional, True if padded value). False/True(batch,length)
 
         """
         batch_size = tokens.size(0)
+        l = pos_mask.size(1)
+        assert l == tokens.size(1)
+        new_pos_mask = pos_mask[:,None,:].expand(-1,l,-1,1) * pos_mask[:,:,None].expand(-1,-1,l,1)
 
 
         if auto_regressive is None:
