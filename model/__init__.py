@@ -25,5 +25,6 @@ from model.qa_from_q import QAFromQ
 from model.qa_gpt import QAGPT
 from model.qa_layout_gpt import QALayoutGPT
 from model.qa_imdoc_gpt import QAImDocGPT
+from model.qa_imdoc_gpt2 import QAImDocGPT2
 #from .roi_align import ROIAlign
 #from .roi_align import roi_align
