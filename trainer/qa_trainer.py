@@ -11,7 +11,10 @@ from utils.group_pairing import getGTGroup, pure, purity
 from datasets.testforms_graph_pair import display
 import random, os, math
 import editdistance
-import easyocr
+try:
+    import easyocr
+except:
+    pass
 
 from model.oversegment_loss import build_oversegmented_targets_multiscale
 from model.overseg_box_detector import build_box_predictions
@@ -348,6 +351,7 @@ class QATrainer(BaseTrainer):
         
 
         losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
+        #losses['answerLoss'] = pred_a.sum()
 
 
         #t#tic=timeit.default_timer()#t#
