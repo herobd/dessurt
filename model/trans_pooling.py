@@ -13,7 +13,7 @@ class OCRPooler(nn.Module):
     def forward(self,tokens,pos,padding_mask):
         tokens = self.conv(tokens.permute(0,2,1))
         pos = self.avg_pool(pos.permute(0,2,1))
-        padding_mask = self.max_pool(padding_mask[:,None])
+        padding_mask = self.max_pool(padding_mask[:,None].float())>0
 
         return tokens.permute(0,2,1), pos.permute(0,2,1), padding_mask[:,0]
 
@@ -26,6 +26,6 @@ class QPooler(nn.Module):
 
     def forward(self,tokens,padding_mask):
         tokens = self.conv(tokens.permute(0,2,1))
-        padding_mask = self.max_pool(padding_mask[:,None])
+        padding_mask = self.max_pool(padding_mask[:,None].float())>0
 
         return tokens.permute(0,2,1), padding_mask[:,0]
