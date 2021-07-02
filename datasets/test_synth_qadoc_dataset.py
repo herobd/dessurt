@@ -10,7 +10,7 @@ import utils.img_f as cv2
 
 widths=[]
 
-def display(data):
+def display(data,write):
     batchSize = data['img'].size(0)
     #mask = makeMask(data['image'])
     for b in range(batchSize):
@@ -20,6 +20,7 @@ def display(data):
         #gt = data['gt'][b]
         #print(label[:data['label_lengths'][b],b])
         print(data['imgName'][b])
+        print('{} - {}'.format(data['img'].min(),data['img'].max()))
         #if data['spaced_label'] is not None:
         #    print('spaced label:')
         #    print(data['spaced_label'][:,b])
@@ -34,6 +35,8 @@ def display(data):
         #widths.append(img.size(1))
         
         draw=True
+        if write:
+            cv2.imwrite('test_single_512.png',(img.numpy()*255)[:,:,0].astype(np.uint8))
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -41,7 +44,6 @@ def display(data):
             #cv2.imwrite('out/fg_mask{}.png'.format(b),fg_mask.numpy()*255)
             #cv2.imwrite('out/img{}.png'.format(b),img.numpy()*255)
             #cv2.imwrite('out/changed_img{}.png'.format(b),changed_img.numpy()*255)
-            cv2.imwrite('test_512.png',img.numpy()[:,:,0])
 
 
             #plt.imshow(img.numpy()[:,:,0], cmap='gray')
@@ -50,7 +52,6 @@ def display(data):
             cv2.show()
 
             #cv2.waitKey()
-
 
         #fig = plt.figure()
 
@@ -71,9 +72,9 @@ if __name__ == "__main__":
     else:
         dirPath = '../data/english4line_fontslong'
     if len(sys.argv)>2:
-        start = int(sys.argv[2])
+        write = int(sys.argv[2])
     else:
-        start=0
+        write=False
     if len(sys.argv)>3:
         repeat = int(sys.argv[3])
     else:
@@ -92,15 +93,16 @@ if __name__ == "__main__":
         "change_size": False,
         "rescale_range": [1.0,1.0],
         "crop_params": None,
-        "augment_shade": 0.9,
+        "augment_shade": False,
         "additional_aug_params": {"better":True},
-        "wider": 200,
+        "wider": 1,
         "batch_size": 4,
         "questions": 10,
         "min_entries": None,
-        "max_entries": 160,
+        "max_entries": 4,
         "text_height": 32,
-        "image_size": [1152,768],
+        #"image_size": [1152,768],
+        "image_size": 512,
         "max_chars": 10,
         "min_chars": 1,
         "use_before_refresh": 99999999999999999999,
@@ -117,14 +119,10 @@ if __name__ == "__main__":
 
         #if start==0:
         #display(data[0])
-    for i in range(0,start):
-        print(i)
-        dataLoaderIter.next()
-        #display(data[i])
     try:
         while True:
             #print('?')
-            display(dataLoaderIter.next())
+            display(dataLoaderIter.next(),write)
     except StopIteration:
         print('done')
 
