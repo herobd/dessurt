@@ -257,6 +257,8 @@ class QAImDocGPT2(BaseModel):
             ocr_bbs = []#[[0,0,0,0]]
             ocr_1dpos = []#[0]
             for i,(bb,(string,char_prob),score) in enumerate(res_im):
+                if len(string)==0:
+                    continue
                 #spread x,y location along span
                 tlX,tlY = bb[0]
                 trX,trY = bb[1]
@@ -477,12 +479,12 @@ class QAImDocGPT2(BaseModel):
                 num_im = im_tokens.size(1)
                 im_pos_mask = im_pos_mask[:,:num_im]#torch.FloatTensor(new_batch_size,num_im,1).fill_(1).to(device)
                 im_padding_mask = im_padding_mask[:,:num_im]#torch.BoolTensor(new_batch_size,num_im).fill_(1).to(device)
-            if ocr_downsample is not None:
+            if ocr_downsample is not None and num_ocr>5:
                 ocr_tokens = all_tokens[:,num_im:num_im+num_ocr]
                 ocr_tokens,ocr_pos,ocr_padding_mask = ocr_downsample(ocr_tokens,ocr_pos,ocr_padding_mask)
                 num_ocr = ocr_tokens.size(1)
                 ocr_pos_mask = ocr_padding_mask[:,:,None]#torch.FloatTensor(new_batch_size,ocr_tokens.size(1),1).fill_(1).to(device)
-            if q_downsample is not None:
+            if q_downsample is not None and num_q>5:
                 q_tokens = all_tokens[:,num_im+num_ocr:num_im+num_ocr+num_q]
                 q_tokens,q_padding_mask = q_downsample(q_tokens,q_padding_mask)
                 num_q = q_tokens.size(1)
@@ -492,7 +494,7 @@ class QAImDocGPT2(BaseModel):
                 q_pos_mask_ex = q_pos_mask.expand(new_batch_size,-1,-1)
 
             if im_downsample is not None or ocr_downsample is not None or q_downsample is not None:
-                num_all = num_im+num_ocr+num_q+num+a
+                num_all = num_im+num_ocr+num_q+num_a
                 all_tokens = torch.cat( (im_tokens,ocr_tokens,q_tokens,a_tokens),dim=1)
                 all_pos = torch.cat( (im_pos,ocr_pos,q_pos_ex,a_pos_ex),dim=1)
                 all_pos_mask = torch.cat( (im_pos_mask,ocr_pos_mask,q_pos_mask_ex,a_pos_mask_ex),dim=1)
