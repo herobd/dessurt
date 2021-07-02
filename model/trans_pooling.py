@@ -29,3 +29,18 @@ class QPooler(nn.Module):
         padding_mask = self.max_pool(padding_mask[:,None].float())>0
 
         return tokens.permute(0,2,1), padding_mask[:,0]
+
+
+#class AttentionPrunning:#(nn.Module):
+#    def __init__(self,size):
+#        self.size=size
+#
+#    # tokens:   (batch,length,dim)
+#    # pos:      (batch,length,2)
+#    # attention:(length) 
+#    def forward(self,tokens,pos,attention,size):
+#        #tokens to 2d
+#        att2d = attention.view(?,self.size[0],self.size[1])
+#
+#        #find keeping (with randomness)
+        

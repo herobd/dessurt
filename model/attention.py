@@ -5,6 +5,8 @@ import torch.nn.functional as F
 from torch import nn
 from .pos_encode import RealEmbedding
 
+from testtest import PRINT_ATT, ATT_TEXT
+
 #These are taken from the Annotated Transformer (http://nlp.seas.harvard.edu/2018/04/03/attention.html#attention)
 def clones(module, N):
     "Produce N identical layers."
@@ -43,8 +45,8 @@ def attention(query, key, value, mask=None, key_padding_mask=None, dropout=None,
     if mask is not None and fixed:
         p_attn = p_attn.masked_fill(mask == 0, 0) #this is needed in casa node has no neigbors
         #will create a zero vector in those cases, instead of an average of all nodes
-    if dropout is not None:
-        p_attn = dropout(p_attn)
+    if PRINT_ATT:
+        ATT_TEXT.append( p_attn[0].cpu() )
 
     if DEBUG:
         ##Draw the attention (as ASCII)
@@ -75,11 +77,14 @@ def attention(query, key, value, mask=None, key_padding_mask=None, dropout=None,
             print('a'*siz)
             print(s)
             print('a'*siz)
-        printDocAtt(4,0)
-        printDocAtt(4,1)
-        printDocAtt(4,2)
-        printDocAtt(4,3)
+        printDocAtt(0,0)
+        printDocAtt(0,1)
+        printDocAtt(0,2)
+        printDocAtt(0,3)
         #import pdb;pdb.set_trace()
+
+    if dropout is not None:
+        p_attn = dropout(p_attn)
 
     return torch.matmul(p_attn, value), p_attn
 def learned_attention(query, key, value, mask=None, dropout=None,network=None):
