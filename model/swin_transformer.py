@@ -12,7 +12,7 @@ import torch.utils.checkpoint as checkpoint
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from .net_builder import getGroupSize
 from utils import img_f
-from testtest import PRINT_ATT,ATT_VIS
+from testtest import PRINT_ATT,ATT_VIS,ATT_VIS_TEXT
 
 
 class Mlp(nn.Module):
@@ -164,7 +164,8 @@ class WindowAttention(nn.Module):
 
 
         attn = self.softmax(attn)
-        att = attn
+        if PRINT_ATT:
+            att = attn.sum(dim=1)/4 #sum along heads
 
         attn = self.attn_drop(attn)
 
@@ -300,8 +301,12 @@ class SwinTransformerBlock(nn.Module):
 
         if PRINT_ATT:
             attn_windows, w_attn = self.attn(x_windows, docq=docq, mask=self.attn_mask, key_padding_mask=key_padding_mask)  # nW*B, window_size*window_size, C
-            w_attn = w_attn.view(-1, self.window_size, self.window_size)
-            shifted_a = window_reverse(w_attn, self.window_size, H, W)  # B H' W' C
+            from_attn = w_attn.sum(1)/w_attn.size(1)
+            img_attn = from_attn[:,:w_attn.size(1)]
+            text_attn = from_attn[:,w_attn.size(1):]
+
+            img_attn = img_attn.view(-1, self.window_size, self.window_size)
+            shifted_a = window_reverse(img_attn, self.window_size, H, W)  # B H' W' C
 
             # reverse cyclic shift
             if self.shift_size > 0:
@@ -310,7 +315,11 @@ class SwinTransformerBlock(nn.Module):
                 a = shifted_a
             #img_name = 'att/swin_{}x{}.png'.format(a.size(1),a.size(2))
             #img_f.imwrite(img_name,a[0].cpu().numpy())
-            ATT_VIS.append(a.cpu())
+            ATT_VIS.append(a[0,:,:,0].detach().cpu())
+
+            text_att = text_attn.sum(dim=0)/nW
+            ATT_VIS_TEXT.append(text_att)
+            #import pdb;pdb.set_trace()
         else:
             attn_windows = self.attn(x_windows, docq=docq, mask=self.attn_mask, key_padding_mask=key_padding_mask)  # nW*B, window_size*window_size, C
 
