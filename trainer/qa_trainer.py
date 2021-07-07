@@ -11,6 +11,8 @@ from utils.group_pairing import getGTGroup, pure, purity
 from datasets.testforms_graph_pair import display
 import random, os, math
 import editdistance
+from testtest import *
+
 try:
     import easyocr
 except:
@@ -340,8 +342,39 @@ class QATrainer(BaseTrainer):
         pred_a, target_a, string_a = self.model(image,ocr_res,questions,answers)
 
         ##HERE##
-        #pred_a[:,0].sum().backward()
-        #import pdb;pdb.set_trace()
+        
+        for a in self.model.a_tokens:
+            a.retain_grad()
+        Xs = [RA_QUERY,RA_VALUE,RA_SEND,RA_SFIRST,X_BEND,Q_BS,V_BS,A_BEFORE,A_BEFOREB,A_AFTER,BIAS, QUERY1, QUERY2, KEY1,KEY2,VALUE1,VALUE2,QUERYM,QUERYMM]
+        for X in Xs:
+            for a in X:
+                a.retain_grad()
+
+        pred_a[:,0].sum().backward()
+
+        l = self.model.a_tokens[0].size(1)
+        for ii,(a,name) in enumerate(zip(self.model.a_tokens,self.model.a_names)):
+            a=a[:,-l:]
+            if a.grad is None:
+                pass
+                #print('{} {} None'.format(ii,name))
+            else:
+                print('{} {} 0:{}, 1:{}, 2:{}'.format(ii,name,a.grad[0,0].sum(),a.grad[0,1].sum(),a.grad[0,2].sum()))
+
+
+        for X in Xs:
+            #print('==')
+            for ii,a in enumerate(X):
+                a=a[:,-l:]
+                if a.grad is None:
+                    pass
+                    #print('{} {} None'.format(ii,name))
+                else:
+                    print('{} {} 0:{}, 1:{}, 2:{}'.format(ii,name,a.grad[0,0].sum(),a.grad[0,1].sum(),a.grad[0,2].sum()))
+
+
+
+        import pdb;pdb.set_trace()
         ##HERE##
 
         if forward_only:

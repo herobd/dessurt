@@ -6,6 +6,27 @@ from torch import Tensor
 import torch.nn.functional as F
 from .attention import PosBiasedMultiHeadedAttention
 from torch.nn.modules.transformer import _get_activation_fn
+from testtest import A_BEFORE,A_AFTER,A_BEFOREB
+
+
+HHHc=0
+def hook():
+    global HHHc
+    number = HHHc
+    def hh(module,gradin,gradout):
+        print('[{}] RelPos after attention'.format(number))
+        for g in gradin:
+            print(g.size())
+            if len(g.size())>1:
+                print(g[0,-7:,0])
+        print(' >out')
+        for g in gradout:
+            print(g.size())
+            if len(g.size())>1:
+                print(g[0,-7:,0])
+    HHHc+=1
+    return hh
+
 class RelPosImTransformerLayer(nn.Module):
     r"""TransformerEncoderLayer is made up of self-attn and feedforward network.
     This standard encoder layer is based on the paper "Attention Is All You Need".
@@ -27,7 +48,7 @@ class RelPosImTransformerLayer(nn.Module):
         >>> out = encoder_layer(src)
     """
 
-    def __init__(self, d_model, nhead, max_dist, dim_feedforward=2048, dropout=0.1, activation="relu"):
+    def __init__(self, d_model, nhead, max_dist, dim_feedforward=2048, dropout=0.1, activation="relu",fixed=False):
         super(RelPosImTransformerLayer, self).__init__()
         self.self_attn = PosBiasedMultiHeadedAttention(nhead,d_model,max_dist,dropout=dropout)
         # Implementation of Feedforward model
@@ -41,6 +62,10 @@ class RelPosImTransformerLayer(nn.Module):
         self.dropout2 = Dropout(dropout)
 
         self.activation = _get_activation_fn(activation)
+
+        self.fixed=fixed
+
+        self.self_attn.register_backward_hook(hook())
 
     def __setstate__(self, state):
         if 'activation' not in state:
@@ -96,23 +121,33 @@ class RelPosImTransformerLayer(nn.Module):
             #printDiff(1,2)
             printDiff(3,4)
 
+        A_BEFOREB.append(docqa)
         full = torch.cat((im_tokens,docqa),dim=1)
         full_x = torch.cat((im_tokens_x,docqa_x),dim=1)
         full_y = torch.cat((im_tokens_y,docqa_y),dim=1)
         im_padding_mask = torch.BoolTensor(batch_size,im_tokens.size(1)).fill_(0).to(docqa_padding_mask.device)
         full_padding_mask = torch.cat((im_padding_mask,docqa_padding_mask),dim=1)
-        full_pos_mask= torch.cat((im_padding_mask[:,:,None],pos_mask),dim=1)
+        if self.fixed:
+            full_pos_mask= torch.cat(((~im_padding_mask[:,:,None]).float(),pos_mask),dim=1)
+        else:
+            full_pos_mask= torch.cat((im_padding_mask[:,:,None],pos_mask),dim=1)
         full_pos_mask= pos_mask[:,:,None].expand(-1,-1,full_pos_mask.size(1),1) * full_pos_mask[:,None,:].expand(-1,pos_mask.size(1),-1,1)
         imdoc_mask = torch.BoolTensor(batch_size,docqa.size(1),im_tokens.size(1)).fill_(1).to(docqa_mask.device)
         full_mask = torch.cat((imdoc_mask,docqa_mask),dim=-1)
-
+        
+        A_BEFORE.append(docqa)
+        
+        #if len(A_BEFORE)==4:
+        #    import pdb;pdb.set_trace()
         if auto_regressive is None:
+            #ERRROR is HERE
             docqa2 = self.self_attn(docqa, full, full, docqa_x,docqa_y,full_x,full_y, mask=full_mask,
                                   key_padding_mask=full_padding_mask,pos_mask=full_pos_mask)
         else:
             docqa = auto_regressive
             docqa2 = self.self_attn(auto_regressive, full, full, docqa_x[:,-1:],docqa_y[:,-1:],full_x,full_y, 
                     mask=full_mask[:,-1:], key_padding_mask=full_padding_mask,pos_mask=full_pos_mask[:,-1:])
+        A_AFTER.append(docqa2)
 
         docqa = docqa + self.dropout1(docqa2)
         docqa = self.norm1(docqa)
@@ -187,7 +222,6 @@ class RelPosTransformerLayer(nn.Module):
         l = pos_mask.size(1)
         assert l == tokens.size(1)
         new_pos_mask = pos_mask[:,None,:].expand(-1,l,-1,1) * pos_mask[:,:,None].expand(-1,-1,l,1)
-
 
         if auto_regressive is None:
             tokens2 = self.self_attn(tokens, tokens, tokens, 
