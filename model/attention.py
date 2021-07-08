@@ -52,7 +52,7 @@ def attention(query, key, value, mask=None, key_padding_mask=None, dropout=None,
     p_attn = F.softmax(scores, dim = -1)
 
 
-    assert( (p_attn[:,:,:-2,-1]==0).all() )
+    #assert( (p_attn[:,:,:-2,-1]==0).all() )
 
 
     if mask is not None and fixed:
