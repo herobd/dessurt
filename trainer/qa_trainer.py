@@ -11,6 +11,7 @@ from utils.group_pairing import getGTGroup, pure, purity
 from datasets.testforms_graph_pair import display
 import random, os, math
 import editdistance
+
 try:
     import easyocr
 except:
@@ -339,10 +340,10 @@ class QATrainer(BaseTrainer):
         #import pdb;pdb.set_trace()
         pred_a, target_a, string_a = self.model(image,ocr_res,questions,answers)
 
-        ##HERE##
         #pred_a[:,0].sum().backward()
+        #print(self.model.start_token.grad)
         #import pdb;pdb.set_trace()
-        ##HERE##
+
 
         if forward_only:
             return

@@ -175,7 +175,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False):
                     ocr=(ocrBoxes,ocr)
                 #answer = model(img,ocr,[[question]],RUN=run)
                 #print('Answer: '+answer)
-                answer = model(img,ocr,[[question]],[['olxccccc']])
+                answer = model(img,ocr,[[question]],[['ok']])
                 print(answer[-1])
 
                 question = input('Question ("q" to stop): ')
