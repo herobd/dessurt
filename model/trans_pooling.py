@@ -11,6 +11,8 @@ class OCRPooler(nn.Module):
         self.max_pool = nn.MaxPool1d(kernel_size=2,stride=2)
 
     def forward(self,tokens,pos,padding_mask):
+        if tokens.size(1)==0:
+            return tokens,pos,padding_mask
         #To prevent the pos being averaged with the end zeros (for odd length)
         #get the location of first pad
         batch_size = tokens.size(0)
