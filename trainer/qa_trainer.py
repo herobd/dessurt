@@ -340,6 +340,10 @@ class QATrainer(BaseTrainer):
         #import pdb;pdb.set_trace()
         pred_a, target_a, string_a = self.model(image,ocr_res,questions,answers)
 
+        #pred_a[:,0].sum().backward()
+        #print(self.model.start_token.grad)
+        #import pdb;pdb.set_trace()
+
 
         if forward_only:
             return

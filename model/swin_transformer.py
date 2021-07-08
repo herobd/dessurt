@@ -385,6 +385,7 @@ class PatchMerging(nn.Module):
 
         x = x.view(B, H, W, C)
 
+        #WHAT? Isn't this just doing a 2x2 stride 2 conv?
         x0 = x[:, 0::2, 0::2, :]  # B H/2 W/2 C
         x1 = x[:, 1::2, 0::2, :]  # B H/2 W/2 C
         x2 = x[:, 0::2, 1::2, :]  # B H/2 W/2 C
