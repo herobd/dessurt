@@ -1,0 +1,4 @@
+PRINT_ATT=False
+NUMS=[]
+ATT_TEXT=[]
+ATT_VIS=[]
