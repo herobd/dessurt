@@ -245,23 +245,6 @@ class QAImDocGPT2(BaseModel):
 
 
         #t#self.opt_history=defaultdict(list)#t#
-        ##HERE
-        #self.id = [nn.Identity()]*len(self.swin_layers)
-        #def hook(i):
-        #    def hook_id1(module,gradin,gradout):
-        #        print('[{}] MAIN id1 grad in '.format(i))
-        #        for gin in gradin:
-        #            if gin is not None and len(gin.size())>1:
-        #                print(gin.size())
-        #                print(gin[0,-7:,0])
-        #        print('  >out')
-        #        for gout in gradout:
-        #            if gout is not None and len(gout.size())>1:
-        #                print(gout.size())
-        #                print(gout[0,-7:,0])
-        #    return hook_id1
-        #for i in range(len(self.swin_layers)):
-        #    self.id[i].register_backward_hook(hook(i))
 
 
     #we're building this for fixed images size
@@ -412,11 +395,6 @@ class QAImDocGPT2(BaseModel):
         q_tokens = qa_tokens[:,:num_q] #no SEP
         a_tokens = qa_tokens[:,num_q:] #gets SEP at beginning
 
-        ##HERE##
-        a_tokens = torch.autograd.Variable(a_tokens,requires_grad=True)
-        self.a_tokens =[ a_tokens]
-        self.a_names = ['init']
-        ##HERE
 
 
         #the model input ends up being [CLS] Question  [SEP] Answer
@@ -519,15 +497,6 @@ class QAImDocGPT2(BaseModel):
                     saved_ocr_padding_mask.append(ocr_padding_mask)
                     saved_q_padding_mask.append(q_padding_mask)
                 
-                ##HERE##
-                #ocrqa_tokens = torch.autograd.Variable(ocrqa_tokens,requires_grad=True)
-                self.a_tokens.append ( ocrqa_tokens)
-                self.a_names.append('swin before')
-
-                #import pdb;pdb.set_trace()
-                #assert (ocrqa_att_mask[0,:-2,-2]==0).all()
-                #HERE!!!!
-                #ocrqa_tokens = self.id[i](ocrqa_tokens)
 
                 ocrqa_tokens = layout_layer(
                         ocrqa_tokens,
@@ -540,10 +509,6 @@ class QAImDocGPT2(BaseModel):
                         docqa_padding_mask=ocrqa_padding_mask,
                         pos_mask = ocrqa_pos_mask)
 
-                ##HERE##
-                #self.mid_token1.append(ocrqa_tokens)
-                self.a_tokens.append(ocrqa_tokens)
-                self.a_names.append('swin after')
 
                 if im_downsample is not None:
                     im_tokens = im_downsample(im_tokens)
@@ -556,7 +521,7 @@ class QAImDocGPT2(BaseModel):
                     num_ocr = ocr_tokens.size(1)
                     ocr_pos_mask = ocr_padding_mask[:,:,None]#torch.FloatTensor(new_batch_size,ocr_tokens.size(1),1).fill_(1).to(device)
                 if q_downsample is not None:
-                    q_tokens = ocrqa_tokens[:,num_ocr_old:num_ocr+num_q]
+                    q_tokens = ocrqa_tokens[:,num_ocr_old:num_ocr_old+num_q]
                     q_tokens,q_padding_mask = q_downsample(q_tokens,q_padding_mask)
                     num_q = q_tokens.size(1)
                     q_pos = q_pos[:,:num_q]
@@ -568,10 +533,11 @@ class QAImDocGPT2(BaseModel):
                     ocrqa_att_mask = ocrqa_att_mask[:,-(num_ocr+num_q+num_a):,-(num_ocr+num_q+num_a):]
                 if ocr_downsample is not None or q_downsample is not None:
                     ocrqa_tokens = torch.cat( (ocr_tokens,q_tokens,a_tokens),dim=1)
-                    ocrq_padding_mask = torch.cat( (ocr_padding_mask,q_padding_mask,torch.zeros_like(a_padding_mask)), dim=1)
-                    ocrq_padding_mask_inf = torch.where(ocrq_padding_mask,torch.zeros_like(ocrq_padding_mask),torch.empty_like(ocrq_padding_mask).fill_('-inf'))
-                    ocrq_pos_mask = torch.cat( (ocr_pos_mask,q_pos_mask,a_pos_mask_ex), dim=1)
-                    ocrq_pos = torch.cat( (ocr_pos,q_pos,a_pos_ex), dim=1)
+                    ocrqa_padding_mask = torch.cat( (ocr_padding_mask,q_padding_mask,a_padding_mask), dim=1)
+                    ocrq_padding_mask = torch.cat( (ocr_padding_mask,q_padding_mask,torch.ones_like(a_padding_mask)), dim=1)
+                    ocrq_padding_mask_inf = torch.FloatTensor(*ocrq_padding_mask.size()).fill_(0).to(device)
+                    ocrqa_pos_mask = torch.cat( (ocr_pos_mask,q_pos_mask,a_pos_mask_ex), dim=1)
+                    ocrqa_pos = torch.cat( (ocr_pos,q_pos,a_pos_ex), dim=1)
             
             ocrqa_tokens = self.ocrqa_transition(ocrqa_tokens)
             ocr_tokens = ocrqa_tokens[:,:num_ocr]
@@ -579,8 +545,6 @@ class QAImDocGPT2(BaseModel):
             a_tokens = ocrqa_tokens[:,num_ocr+num_q:num_ocr+num_q+num_a]
         #Swin DONE
         
-        ##HERE##
-        self.mid_token2= a_tokens
 
 
         im_pos = torch.stack( (self.im_xs[level],self.im_ys[level]),dim=2).expand(new_batch_size,-1,-1)
@@ -647,10 +611,6 @@ class QAImDocGPT2(BaseModel):
                 saved_ocr_padding_mask.append(ocr_padding_mask)
                 saved_q_padding_mask.append(q_padding_mask)
 
-            ##HERE##
-            #ocrqa_tokens = torch.autograd.Variable(all_tokens,requires_grad=True)
-            self.a_tokens.append ( all_tokens)
-            self.a_names.append('full')
 
             if PRINT_ATT:
                 NUMS.append((num_im,num_ocr,num_q,num_a))
@@ -764,8 +724,6 @@ class QAImDocGPT2(BaseModel):
 
         response = all_tokens[:,-(num_a):]
 
-        ##HERE
-        self.final_token=response
 
         response_decoded = self.answer_decode(response)
 

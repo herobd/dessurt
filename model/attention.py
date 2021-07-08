@@ -6,21 +6,8 @@ from torch import nn
 from .pos_encode import RealEmbedding
 
 from testtest import PRINT_ATT, ATT_TEXT
-from testtest import *
 from collections import defaultdict
 
-HHHc=defaultdict(int)
-def hhhh(name):
-    global HHHc
-    number = HHHc[name]
-    def hhh(grad):
-        print('[{}] HHHH {}'.format(number,name))
-        for g in grad:
-            print(g.size())
-            if len(g.size())>1:
-                print(g[0,-7:,0])
-    HHHc[name]+=1
-    return hhh
 
 #These are taken from the Annotated Transformer (http://nlp.seas.harvard.edu/2018/04/03/attention.html#attention)
 def clones(module, N):
@@ -30,19 +17,11 @@ def attention(query, key, value, mask=None, key_padding_mask=None, dropout=None,
     #print(query.size()) #batch,heads,len,feats
     "Compute 'Scaled Dot Product Attention'"
 
-    ##HERE
-    Q_BS.append(query)
-    V_BS.append(value)
 
     d_k = query.size(-1)
     #bsz, num_heads, src_len,d_k = key.size()
     scores = torch.matmul(query, key.transpose(-2, -1)) \
              / math.sqrt(d_k)
-    ##HERE
-    RA_SFIRST.append(scores)
-    RA_VALUE.append(value)
-    RA_QUERY.append(query)
-    ###
     #scores.fill_(0.1)
     ###
     #scores.size() = (batch heads queries keys)
@@ -63,8 +42,6 @@ def attention(query, key, value, mask=None, key_padding_mask=None, dropout=None,
         )
         #scores = scores.view(bsz * num_heads, tgt_len, src_len)
 
-    ##HERE
-    RA_SEND.append(scores)
     #scores.fill_(-1e9)
     #for h in range(scores.size(1)):
     #    scores[0,h,:,-scores.size(2):].fill_diagonal_(1)
@@ -74,9 +51,6 @@ def attention(query, key, value, mask=None, key_padding_mask=None, dropout=None,
 
     p_attn = F.softmax(scores, dim = -1)
 
-    #HERE
-    #print('masked p_attn')
-    #print(p_attn[0,:,-10:,-10:])
 
     assert( (p_attn[:,:,:-2,-1]==0).all() )
 
@@ -125,10 +99,7 @@ def attention(query, key, value, mask=None, key_padding_mask=None, dropout=None,
     if dropout is not None:
         p_attn = dropout(p_attn)
     
-    p_attn.register_hook(hhhh('p_attn'))
-    value.register_hook(hhhh('value'))
     x = torch.matmul(p_attn, value)
-    x.register_hook(hhhh('x'))
     return x, p_attn
 def learned_attention(query, key, value, mask=None, dropout=None,network=None):
     "Compute Attention using provided network"
@@ -244,13 +215,6 @@ class PosBiasedMultiHeadedAttention(nn.Module):
         self.non_pos_bias = nn.Parameter(torch.FloatTensor(1,1,1).zero_())
         #self.non_position = nn.Param(torch.FloatTensor(1,d_model//4).normal_(std=0.1))
 
-        #HERE
-        self.id1=nn.Identity()
-        #self.id1b=nn.Identity()
-        self.id2=nn.Identity()
-        self.id3=nn.Identity()
-        self.id4=nn.Identity()
-        self.DEBUG()
 
         
         
@@ -275,11 +239,6 @@ class PosBiasedMultiHeadedAttention(nn.Module):
             D = model dim
         """
 
-        ##HERE
-        QUERY1.append(query)
-        self.q1=query
-        KEY1.append(key)
-        VALUE1.append(value)
 
         if mask is not None:
             if len(mask.size())==2:
@@ -315,74 +274,21 @@ class PosBiasedMultiHeadedAttention(nn.Module):
         #att_bias = torch.matmul(pos_emb, pos_emb.transpose(-2, -1)) \
         #         / math.sqrt(self.pos_d_k)
 
-        ##HERE
-        BIAS.append(att_bias)
-        #if len(BIAS)==3:
-        #    import pdb;pdb.set_trace()
 
         # 1) Do all the linear projections in batch from d_model => h x d_k 
-        #query, key, value = \
-        #    [l(x).view(nbatches, -1, self.h, self.d_k).transpose(1, 2)
-        #     for l, x in zip(self.linears, (query, key, value))]
-        #query = query.view(nbatches*nquery,-1)
-        QUERYM.append(query)
-        query = self.id1(query)
-        #query = self.id1b(query)
-        query = self.linears[0](query)
-        query = self.id2(query)
-        QUERYMM.append(query)
-        query = query.view(nbatches, -1, self.h, self.d_k).transpose(1, 2)
-        key = self.linears[1](key)
-        key = key.view(nbatches, -1, self.h, self.d_k).transpose(1, 2)
-        value = self.linears[2](value)
-        value = value.view(nbatches, -1, self.h, self.d_k).transpose(1, 2)
+        query, key, value = \
+            [l(x).view(nbatches, -1, self.h, self.d_k).transpose(1, 2)
+             for l, x in zip(self.linears, (query, key, value))]
 
-        ##HERE
-        QUERY2.append(query)
-        KEY2.append(key)
-        VALUE2.append(value)
         
         # 2) Apply attention on all the projected vectors in batch. 
         x, self.attn = attention(query, key, value, mask=mask, key_padding_mask=key_padding_mask,
                                      dropout=self.dropout,fixed=True,att_bias=att_bias)
         assert not torch.isnan(x).any()
-        x = self.id3(x)
         
         # 3) "Concat" using a view and apply a final linear. 
         x = x.transpose(1, 2).contiguous() \
              .view(nbatches, -1, self.h * self.d_k)
 
-        x = self.id4(x)
-        ##HERE
-        X_BEND.append(x)
 
         return self.linears[-1](x)
-
-    def DEBUG(self):
-        number = AAA[0]
-        def hook_linear(module,gradin,gradout):
-            print('[{}] linear query grad in - out'.format(number))
-            for gin in gradin:
-                print(gin.size())
-            print(gradin[0][0,-7:,0])
-            print(gradout[0][0,-7:,0])
-        self.linears[0].register_backward_hook(hook_linear)
-        def hook_id(i):
-            def hook_id1(module,gradin,gradout):
-                print('[{}] id{} query grad in - out'.format(number,i))
-                for gin in gradin:
-                    if gin is not None and len(gin.size())>1:
-                        print(gin.size())
-                        print(gin[0,-7:,0])
-                print('  {} {}>out'.format(number,i))
-                for gout in gradout:
-                    if gout is not None and len(gout.size())>1:
-                        print(gout.size())
-                        print(gout[0,-7:,0])
-            return hook_id1
-        self.id1.register_backward_hook(hook_id(1))
-        #self.id1b.register_backward_hook(hook_id('1b'))
-        self.id2.register_backward_hook(hook_id(2))
-        self.id3.register_backward_hook(hook_id(3))
-        self.id4.register_backward_hook(hook_id(4))
-        AAA[0]+=1
