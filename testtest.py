@@ -6,29 +6,6 @@ ATT_VIS_TEXT=[]
 ATT_TEXT=[]
 NUMS=[]
 
-X_BEND=[]
-Q_BS=[]
-RA_SFIRST=[]
-RA_SEND=[]
-RA_VALUE=[]
-RA_QUERY=[]
-V_BS=[]
-
-BIAS=[]
-QUERY1=[]
-KEY1=[]
-VALUE1=[]
-QUERY2=[]
-KEY2=[]
-VALUE2=[]
-QUERYM=[]
-QUERYMM=[]
-
-A_BEFORE=[]
-A_BEFOREB=[]
-A_AFTER=[]
-
-AAA=[0]
 
 
 def attDisplay(img,ocr,q,a,pred):
