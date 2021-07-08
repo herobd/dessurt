@@ -17,10 +17,11 @@
                 "pad":0,
                 "rot_degree_std_dev": 1
             },
-	"questions": 11,
+	"questions": 6,
         "min_entries": null,
         "max_entries": 4,
         "text_height": 32,
+        "wider": 30,
         "image_size": [1152,768],
         "change_size": false,
         "word_questions": "simple",
@@ -69,7 +70,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 300000,
-        "accum_grad_steps": 3,
+        "accum_grad_steps": 5,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
