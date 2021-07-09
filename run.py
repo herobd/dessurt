@@ -49,7 +49,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False):
         config['cuda']=True
         config['gpu']=gpu
 
-    do_ocr=config['trainer']['do_ocr']
+    do_ocr=config['trainer']['do_ocr'] if 'do_ocr' in config['trainer'] else False
     if do_ocr:
         ocr_reader = easyocr.Reader(['en'],gpu=config['cuda'])
     addDATASET=False
@@ -173,10 +173,10 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False):
                     ocrBoxes=[[]]
                     ocr=[[]]
                     ocr=(ocrBoxes,ocr)
-                #answer = model(img,ocr,[[question]],RUN=run)
-                #print('Answer: '+answer)
-                answer = model(img,ocr,[[question]],[['ok']])
-                print(answer[-1])
+                answer = model(img,ocr,[[question]],RUN=run)
+                print('Answer: '+answer)
+                #answer = model(img,ocr,[[question]],[['ok']])
+                #print(answer[-1])
 
                 question = input('Question ("q" to stop): ')
             if loop:
