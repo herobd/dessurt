@@ -28,7 +28,7 @@ except:
 def norm_ed(s1,s2):
     return editdistance.eval(s1,s2)/max(len(s1),len(s2))
 
-def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False):
+def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=True):
     np.random.seed(1234)
     torch.manual_seed(1234)
     if resume is not None:
@@ -172,23 +172,25 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
 
 
             classes = [classes_lines[group[0]].argmax() for group in groups]
+            if draw:
+                draw_img = (255*(1-img.permute(1,2,0).expand(-1,-1,3).numpy())).astype(np.uint8)
             
             if do_pad and (img.shape[1]<do_pad[0] or img.shape[2]<do_pad[1]):
                 diff_x = do_pad[1]-img.shape[2]
                 diff_y = do_pad[0]-img.shape[1]
                 p_img = torch.FloatTensor(img.size(0),do_pad[0],do_pad[1]).fill_(-1)#np.zeros(do_pad,dtype=img.dtype)
+                pad_y = diff_y//2
+                pad_x = diff_x//2
                 if diff_x>=0 and diff_y>=0:
                     p_img[:,diff_y//2:-(diff_y//2 + diff_y%2),diff_x//2:-(diff_x//2 + diff_x%2)] = img
                 elif diff_x<0 and diff_y>=0:
-                    p_img[:,diff_y//2:-(diff_y//2 + diff_y%2),:] = img[:,(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
+                    p_img[:,diff_y//2:-(diff_y//2 + diff_y%2),:] = img[:,:,(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
                 elif diff_x>=0 and diff_y<0:
                     p_img[:,diff_x//2:-(diff_x//2 + diff_x%2)] = img[:,(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),:]
                 else:
                     p_img = img[:,(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
                 img=p_img
 
-            if draw:
-                draw_img = (255*(1-img.permute(1,2,0).expand(-1,-1,3).numpy())).astype(np.unint8)
             img = img[None,...] #re add batch 
 
             if do_ocr:
@@ -214,6 +216,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             question='t#>'
             answer = model(img,ocr,[[question]],RUN=True)
             print(question+' {:} '+answer)
+            if answer=='yes':
+                answer=1
             pred_cells=[]
             pred_cell_classes=[]
             for table_i in range(int(answer)):
@@ -270,23 +274,25 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
 
                         matching=[]
                         for gi,text in enumerate(transcription_groups):
-                            matching.append((gi,norm_ed(answer,text)))
-                        matching.sort(key=lambda a:a[1])
-                        matchings[i]=matching
-                        #it's possible there are several texts that are the same
-                        #so we'll take distance into account
-                        top_matching=matching[0:1]
-                        for gi,score in matching[1:]:
-                            if score-top_matching[0][1]<0.15:
-                                top_matching.append((gi,score))
-                            else:
-                                break
-                        if len(top_matching)>1:
-                            table_point = (loc_lines[groups[ch_to_g[ch]][0]][0], loc_lines[groups[rh_to_g[rh]][0]][1])
-                            matching = [(gi,pointDistance(loc_lines[groups[gi][0]],table_point)) for gi,score in top_matching]
+                            score = norm_ed(answer,text)
+                            if score<0.6:
+                                matching.append((gi,score))
+                        if len(matching)>0:
                             matching.sort(key=lambda a:a[1])
-                        best_gi, best_score = matching[0]
-                        if best_score<0.7:
+                            matchings[i]=matching
+                            #it's possible there are several texts that are the same
+                            #so we'll take distance into account
+                            top_matching=matching[0:1]
+                            for gi,score in matching[1:]:
+                                if score-top_matching[0][1]<0.15:
+                                    top_matching.append((gi,score))
+                                else:
+                                    break
+                            if len(top_matching)>1:
+                                table_point = (loc_lines[groups[ch_to_g[ch]][0]][0], loc_lines[groups[rh_to_g[rh]][0]][1])
+                                matching = [(gi,pointDistance(loc_lines[groups[gi][0]],table_point)) for gi,score in top_matching]
+                                matching.sort(key=lambda a:a[1])
+                            best_gi, best_score = matching[0]
                             if best_gi not in g_to_c:
                                 c_to_g[i] = best_gi
                                 g_to_c[best_gi] = (i,best_score)
@@ -422,15 +428,15 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                         if pclass==gclass:
                             alignment_class[pgi]=ggi
 
-                x = sum(loc_lines[li][0] for li in pgroup)/len(pgroup)
-                y = sum(loc_lines[li][1] for li in pgroup)/len(pgroup)
+                x = sum(loc_lines[li][0].item() for li in pgroup)/len(pgroup)
+                y = sum(loc_lines[li][1].item() for li in pgroup)/len(pgroup)
                 loc_pgroup.append((x,y))
 
             #we added the table groups to the end, so we'll bump their alignemtn
             rel_tables = [(a+len(pred_groups),b+len(groups)) for a,b in rel_tables]
 
-            entity_recall = true_pos/len(groups)
-            entity_prec = true_pos/len(pred_inst)
+            entity_recall = true_pos/len(groups) if len(groups)>0 else 1
+            entity_prec = true_pos/len(pred_inst) if len(pred_inst)>0 else 1
             print('Entity precision: {}'.format(entity_prec))
             print('Entity recall:    {}'.format(entity_recall))
             print('Entity Fm:        {}'.format(2*entity_recall*entity_prec/(entity_recall+entity_prec) if entity_recall+entity_prec>0 else 0))
@@ -445,39 +451,52 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 if pred_classes[pgi]==0: #header
                     qs=['hd~']
                 elif pred_classes[pgi]==1: #question
-                    qs=['qu~','l~']
+                    #qs=['qu~','l~']
+                    qs=['l~']
                 elif pred_classes[pgi]==2: #answer
                     qs=['v~']
                 for q in qs:
                     question=q+text
                     answer = model(img,ocr,[[question]],RUN=True)
                     print(question+' {:} '+answer)
+                    #if 'may' in answer or 'june' in answer:
+                    #if 'from' in answer or 'to :' in answer:
+                    #    import pdb;pdb.set_trace()
                     if len(answer)>0 and answer!='[ blank ]' and answer!='[ np ]':
                         matching=[]
                         for pgi2,text2 in enumerate(pred_inst):
                             if pgi!=pgi2:
-                                matching.append((pgi2,norm_ed(answer,text2)))
+                                score = norm_ed(answer,text2)
+                                if score<0.6:
+                                    matching.append((pgi2,score))
                         for pgi2,text2 in enumerate(pred_first):
                             if pgi!=pgi2:
-                                matching.append((pgi2,norm_ed(answer,text2)))
-                        matching.sort(key=lambda a:a[1])
-                        #it's possible there are several texts that are the same
-                        #so we'll take distance into account
-                        top_matching=matching[0:1]
-                        for pgi2,score in matching[1:]:
-                            if score-top_matching[0][1]<0.15:
-                                top_matching.append((pgi2,score))
-                            else:
-                                break
-                        if len(top_matching)>1:
-                            matching = [(pgi2,pointDistance(loc_pgroup[pgi],loc_pgroup[pgi2])) for pgi2,score in top_matching]
+                                score = norm_ed(answer,text2)
+                                if score<0.6:
+                                    matching.append((pgi2,score))
+                        #import pdb;pdb.set_trace()
+                        if len(matching)>0:
                             matching.sort(key=lambda a:a[1])
-                        best_ti2, best_score = matching[0]
-                        if best_score<0.8:
-                            rel = (min(pgi,pgi2),max(pgi,pgi2))
+                            #it's possible there are several texts that are the same
+                            #so we'll take distance into account
+                            top_matching=matching[0:1]
+                            for pgi2,score in matching[1:]:
+                                if score-top_matching[0][1]<0.15:
+                                    top_matching.append((pgi2,score))
+                                else:
+                                    break
+                            if len(top_matching)>1:
+                                matching = [(pgi2,pointDistance(loc_pgroup[pgi],loc_pgroup[pgi2])) for pgi2,score in top_matching]
+                                matching.sort(key=lambda a:a[1])
+                            best_pgi2, best_score = matching[0]
+                            #if 'stores' in pred_inst[pgi] or 'stores' in pred_inst[best_pgi2]:
+                            #    import pdb;pdb.set_trace()
+                            rel = (min(pgi,best_pgi2),max(pgi,best_pgi2))
                             rel_score[rel]+=1
-                            if (pred_classes[pgi]==0 and pred_classes[pgi2]!=1) or (pred_classes[pgi]==2 and pred_classes[pgi2]!=1) or (pred_classes[pgi]==1 and pred_classes[pgi2]==3):
+                            if (pred_classes[pgi]==0 and pred_classes[best_pgi2]!=1) or (pred_classes[pgi]==2 and pred_classes[best_pgi2]!=1) or (pred_classes[pgi]==1 and pred_classes[best_pgi2]==3):
                                 inconsistent_class_count+=1
+
+
             #This will be noisy, we'll try and make it a little more consistent
             solid_paired=set()
             for rel,score in rel_score.items():
@@ -509,8 +528,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             claimed_noclass=set()
             for rel in pred_rel+rel_tables:
                 try:
-                    a0 = aligned[rel[0]]
-                    a1 = aligned[rel[1]]
+                    a0 = alignment[rel[0]]
+                    a1 = alignment[rel[1]]
                     rel_a = (min(a0,a1),max(a0,a1))
                     if rel_a not in claimed and rel_a in pairs:
                         true_pos_noclass+=1
@@ -518,8 +537,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 except KeyError:
                     pass
                 try:
-                    a0 = aligned_class[rel[0]]
-                    a1 = aligned_class[rel[1]]
+                    a0 = alignment_class[rel[0]]
+                    a1 = alignment_class[rel[1]]
                     rel_a = (min(a0,a1),max(a0,a1))
                     if rel_a not in claimed and rel_a in pairs:
                         true_pos+=1
@@ -529,21 +548,23 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 if draw:
                     img_f.line(draw_img,loc_pgroup[rel[0]],loc_pgroup[rel[1]],(0,255,0),2)
 
-            rel_prec = true_pos/len(pred_rel+rel_tables)
-            rel_recall = true_pos/len(pairs)
-            rel_noclass_prec = true_pos_noclass/len(pred_rel+rel_tables)
-            rel_noclass_recall = true_pos_noclass/len(pairs)
+            rel_prec = true_pos/len(pred_rel+rel_tables) if len(pred_rel+rel_tables) > 0 else 1
+            rel_recall = true_pos/len(pairs) if len(pairs)>0 else 1
+            rel_noclass_prec = true_pos_noclass/len(pred_rel+rel_tables) if len(pred_rel+rel_tables)>0 else 1
+            rel_noclass_recall = true_pos_noclass/len(pairs) if len(pairs)>0 else 1
 
+            #import pdb;pdb.set_trace()
             print('Rel precision: {}'.format(rel_prec))
             print('Rel recall:    {}'.format(rel_recall))
-            print('Rel Fm:        {}'.format(2*rel_recall*rel_prec/(rel_recall+rel_prec)))
+            print('Rel Fm:        {}'.format(2*rel_recall*rel_prec/(rel_recall+rel_prec) if rel_recall+rel_prec> 0 else 0))
             print('Rel_noclass precision: {}'.format(rel_noclass_prec))
             print('Rel_noclass recall:    {}'.format(rel_noclass_recall))
-            print('Rel_noclass Fm:        {}'.format(2*rel_noclass_recall*rel_noclass_prec/(rel_noclass_recall+rel_noclass_prec)))
+            print('Rel_noclass Fm:        {}'.format(2*rel_noclass_recall*rel_noclass_prec/(rel_noclass_recall+rel_noclass_prec) if rel_noclass_recall+rel_noclass_prec>0 else 0))
             print('inconsistent_class_count={}'.format(inconsistent_class_count))
 
             if draw:
-                for cls,loc in zip(pred_class,loc_pgroup):
+                assert len(pred_classes) == len(loc_pgroup)
+                for cls,loc,pgroup in zip(pred_classes,loc_pgroup,pred_groups):
                     if cls==0:
                         color=(0,0,255) #header
                     elif cls==1:
@@ -552,7 +573,24 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                         color=(255,255,0) #answer
                     elif cls==3:
                         color=(255,0,255) #other 
-                    draw_img[loc[1]-3:loc[1]+3,loc[0]-3:loc[0]+3]=color
+                    draw_img[round(loc[1]-4):round(loc[1]+4),round(loc[0]-4):round(loc[0]+4)]=color
+                    min_x = draw_img.shape[1]
+                    max_x = 0
+                    min_y = draw_img.shape[0]
+                    max_y = 0
+                    for li in pgroup:
+                        x=int(loc_lines[li,0].item())
+                        y=int(loc_lines[li,1].item())
+                        draw_img[round(y-3):round(y+3),round(x-3):round(x+3)]=color
+                        min_x = min(x,min_x)
+                        max_x = max(x,max_x)
+                        min_y = min(y,min_y)
+                        max_y = max(y,max_y)
+                    img_f.line(draw_img,(min_x,min_y),(max_x,min_y),color,2)
+                    img_f.line(draw_img,(max_x,min_y),(max_x,max_y),color,2)
+                    img_f.line(draw_img,(max_x,max_y),(min_x,max_y),color,2)
+                    img_f.line(draw_img,(min_x,max_y),(min_x,min_y),color,2)
+
                 img_f.imshow('f',draw_img)
                 img_f.show()
 
