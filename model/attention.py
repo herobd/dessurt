@@ -5,6 +5,10 @@ import torch.nn.functional as F
 from torch import nn
 from .pos_encode import RealEmbedding
 
+from testtest import PRINT_ATT, ATT_TEXT
+from collections import defaultdict
+
+
 #These are taken from the Annotated Transformer (http://nlp.seas.harvard.edu/2018/04/03/attention.html#attention)
 def clones(module, N):
     "Produce N identical layers."
@@ -12,11 +16,12 @@ def clones(module, N):
 def attention(query, key, value, mask=None, key_padding_mask=None, dropout=None,fixed=False,att_bias=None):
     #print(query.size()) #batch,heads,len,feats
     "Compute 'Scaled Dot Product Attention'"
+
+
     d_k = query.size(-1)
     #bsz, num_heads, src_len,d_k = key.size()
     scores = torch.matmul(query, key.transpose(-2, -1)) \
              / math.sqrt(d_k)
-    ###
     #scores.fill_(0.1)
     ###
     #scores.size() = (batch heads queries keys)
@@ -37,14 +42,24 @@ def attention(query, key, value, mask=None, key_padding_mask=None, dropout=None,
         )
         #scores = scores.view(bsz * num_heads, tgt_len, src_len)
 
+    #scores.fill_(-1e9)
+    #for h in range(scores.size(1)):
+    #    scores[0,h,:,-scores.size(2):].fill_diagonal_(1)
+
+    #if len(RA_SEND)==4:
+    #    import pdb;pdb.set_trace()
+
     p_attn = F.softmax(scores, dim = -1)
 
-    
+
+    #assert( (p_attn[:,:,:-2,-1]==0).all() )
+
+
     if mask is not None and fixed:
         p_attn = p_attn.masked_fill(mask == 0, 0) #this is needed in casa node has no neigbors
         #will create a zero vector in those cases, instead of an average of all nodes
-    if dropout is not None:
-        p_attn = dropout(p_attn)
+    if PRINT_ATT:
+        ATT_TEXT.append( (p_attn[0].sum(dim=0)/4).cpu().detach() )
 
     if DEBUG:
         ##Draw the attention (as ASCII)
@@ -75,13 +90,17 @@ def attention(query, key, value, mask=None, key_padding_mask=None, dropout=None,
             print('a'*siz)
             print(s)
             print('a'*siz)
-        printDocAtt(4,0)
-        printDocAtt(4,1)
-        printDocAtt(4,2)
-        printDocAtt(4,3)
-        #import pdb;pdb.set_trace()
+        printDocAtt(0,0)
+        printDocAtt(0,1)
+        printDocAtt(0,2)
+        printDocAtt(0,3)
+    #import pdb;pdb.set_trace()
 
-    return torch.matmul(p_attn, value), p_attn
+    if dropout is not None:
+        p_attn = dropout(p_attn)
+    
+    x = torch.matmul(p_attn, value)
+    return x, p_attn
 def learned_attention(query, key, value, mask=None, dropout=None,network=None):
     "Compute Attention using provided network"
 
@@ -195,6 +214,8 @@ class PosBiasedMultiHeadedAttention(nn.Module):
 
         self.non_pos_bias = nn.Parameter(torch.FloatTensor(1,1,1).zero_())
         #self.non_position = nn.Param(torch.FloatTensor(1,d_model//4).normal_(std=0.1))
+
+
         
         
     def forward(self, query, key, value, query_x, query_y, key_x, key_y, mask=None, key_padding_mask=None, pos_mask=None):
@@ -217,6 +238,7 @@ class PosBiasedMultiHeadedAttention(nn.Module):
             Lk = num keys
             D = model dim
         """
+
 
         if mask is not None:
             if len(mask.size())==2:
@@ -251,11 +273,13 @@ class PosBiasedMultiHeadedAttention(nn.Module):
         att_bias = att_bias.permute(0,3,1,2) #-> batch,h,nquery,nkey
         #att_bias = torch.matmul(pos_emb, pos_emb.transpose(-2, -1)) \
         #         / math.sqrt(self.pos_d_k)
-        
+
+
         # 1) Do all the linear projections in batch from d_model => h x d_k 
         query, key, value = \
             [l(x).view(nbatches, -1, self.h, self.d_k).transpose(1, 2)
              for l, x in zip(self.linears, (query, key, value))]
+
         
         # 2) Apply attention on all the projected vectors in batch. 
         x, self.attn = attention(query, key, value, mask=mask, key_padding_mask=key_padding_mask,
@@ -265,4 +289,6 @@ class PosBiasedMultiHeadedAttention(nn.Module):
         # 3) "Concat" using a view and apply a final linear. 
         x = x.transpose(1, 2).contiguous() \
              .view(nbatches, -1, self.h * self.d_k)
+
+
         return self.linears[-1](x)

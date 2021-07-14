@@ -18,6 +18,10 @@ import warnings
 from utils.saliency import SimpleFullGradMod
 from utils.debug_graph import GraphChecker
 from utils import img_f
+try:
+    import easyocr
+except:
+    pass
 
 
 def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False):
@@ -39,11 +43,15 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False):
     config['optimizer_type']="none"
     config['trainer']['use_learning_schedule']=False
     config['trainer']['swa']=False
-    if gpu is None:
+    if not gpu:
         config['cuda']=False
     else:
         config['cuda']=True
         config['gpu']=gpu
+
+    do_ocr=config['trainer']['do_ocr'] if 'do_ocr' in config['trainer'] else False
+    if do_ocr:
+        ocr_reader = easyocr.Reader(['en'],gpu=config['cuda'])
     addDATASET=False
     if addToConfig is not None:
         for add in addToConfig:
@@ -109,6 +117,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False):
         do_pad = [int(p) for p in do_pad]
     else:
         do_pad = config['model']['image_size']
+        if type(do_pad) is int:
+            do_pad = (do_pad,do_pad)
 
     with torch.no_grad():
         if img_path is None:
@@ -134,6 +144,12 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False):
                 else:
                     p_img = img[(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
                 img=p_img
+
+            if do_ocr:
+                ocr_res = ocr_reader.readtext(img,decoder='greedy+softmax')
+                print('OCR:')
+                for res in ocr_res:
+                    print(res[1][0])
             if len(img.shape)==2:
                 img=img[...,None] #add color channel
             img = img.transpose([2,0,1])[None,...]
@@ -151,10 +167,16 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False):
                     question=question[4:]
                 else:
                     run=True
-                ocrBoxes=[[]]
-                ocr=[[]]
-                answer = model(img,ocrBoxes,ocr,[[question]],RUN=run)
+                if do_ocr:
+                    ocr = [ocr_res]
+                else:
+                    ocrBoxes=[[]]
+                    ocr=[[]]
+                    ocr=(ocrBoxes,ocr)
+                answer = model(img,ocr,[[question]],RUN=run)
                 print('Answer: '+answer)
+                #answer = model(img,ocr,[[question]],[['ok']])
+                #print(answer[-1])
 
                 question = input('Question ("q" to stop): ')
             if loop:
