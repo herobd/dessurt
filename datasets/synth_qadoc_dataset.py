@@ -291,6 +291,8 @@ class SynthQADocDataset(QADataset):
             for label_img_idx,label_text,label_dir,resize_l in l:
                 label_img_path = os.path.join(label_dir,'{}.png'.format(label_img_idx))
                 label_img = img_f.imread(label_img_path,False)
+                if label_img is None:
+                    return self.parseAnn(annotations,s)
 
 
                 if self.change_size:
@@ -318,6 +320,8 @@ class SynthQADocDataset(QADataset):
             for value_img_idx,value_text,value_dir,resize_v in v:
                 value_img_path = os.path.join(value_dir,'{}.png'.format(value_img_idx))
                 value_img = img_f.imread(value_img_path,False)
+                if value_img is None:
+                    return self.parseAnn(annotations,s)
                 if self.change_size:
                     value_width = round(value_img.shape[1]*value_height/value_img.shape[0])
                     value_img = img_f.resize(value_img,(value_height,value_width))
@@ -511,6 +515,7 @@ class SynthQADocDataset(QADataset):
             #    del entries[r]
             not_present_qs=[]
             selected_labels_stripped = []#[l[1].strip() for i,l in enumerate(labels) if i not in removed]
+            selected_values_stripped = []
             for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
                 if ei not in removed:
                     if type(label_img) is list:
@@ -568,13 +573,13 @@ class SynthQADocDataset(QADataset):
                     selected_labels_stripped.append(label_text.strip())
                     if type(value_text) is list:
                         value_text = ' '.join(value_text)
+                    selected_values_stripped.append(label_text.strip())
 
                     if self.word_questions=='simple':
                         qa.append(('l~{}'.format(label_text),value_text,None))
                         qa.append(('v~{}'.format(value_text),label_text,None))
-                        if self.multiline:
-                            self.addRead(qa,label_text)
-                            self.addRead(qa,value_text)
+                        self.addRead(qa,label_text)
+                        self.addRead(qa,value_text)
                     elif self.word_questions:
                         question_to_value = random.choice(self.ask_for_value)
                         question_to_label = random.choice(self.ask_for_label)
@@ -637,6 +642,9 @@ class SynthQADocDataset(QADataset):
                             break
                 if self.word_questions=='simple':
                     qa.append(('l~{}'.format(q_text),'[ np ]',None))
+                    if q_text not in selected_values_stripped:
+                        self.addRead(qa,q_text,np=True)
+                        qa.append(('v~{}'.format(q_text),'[ np ]',None))
                 elif self.word_questions:
                     question = random.choice(self.ask_for_value)
                     qa.append((question.format(q_text),'[ np ]',None))
@@ -660,7 +668,7 @@ class SynthQADocDataset(QADataset):
 
         return bbs, list(range(bbs.shape[0])), ocr, {'image':image}, {}, qa
 
-    def addRead(self,qa,text):
+    def addRead(self,qa,text,np=False):
         if len(text)>2:
             if len(text)>self.min_start_read+1:
                 start_point = random.randrange(self.min_start_read,len(text)-1)
@@ -668,7 +676,10 @@ class SynthQADocDataset(QADataset):
                 start_point = random.randrange(len(text)//2,len(text)-1)
             start_text = text[:start_point]
             finish_text = text[start_point:]
-            qa.append(('re~{}'.format(start_text),finish_text,None))
+            if np:
+                qa.append(('re~{}'.format(start_text),'[ np ]',None))
+            else:
+                qa.append(('re~{}'.format(start_text),finish_text,None))
     
     def addText(self,label_text,label_x,label_y,l_horz,l_vert,value_text=None,value_x=None,value_y=None,v_horz=None,v_vert=None,boxes=None,trans=None,s=1):
         #corrupt text
