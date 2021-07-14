@@ -130,7 +130,15 @@ def rectangle(img,c1,c2,color,thickness=1):
     line(img,(c1[0],c2[1]),c1,color,thickness)
 
 def imread(path,color=True):
-    return io.imread(path,not color)
+    try:
+        return io.imread(path,not color)
+    except ValueError as e:
+        print('!!!!!!!!!!!!!!!!!!')
+        print(e)
+        print('failed to read {}'.format(path))
+        print('!!!!!!!!!!!!!!!!!!')
+        return None
+        
 
 def imwrite(path,img):
     minV = img.min()
