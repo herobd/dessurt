@@ -493,10 +493,10 @@ class SynthQADocDataset(QADataset):
                     #worst_offender = random.randrange(intersections_per.shape[0])
                     #first remove table intersections
                     if did_table and intersections[-1].sum()>0:
-                        worst_offender = intersections[-1].nonzero()[0].item()
+                        worst_offender = intersections[-1].nonzero(as_tuple=False)[0].item()
                     else:
                         #favor keeping longer
-                        offenders = intersections_per.nonzero()
+                        offenders = intersections_per.nonzero(as_tuple=False)
                         off_weights = [weights[o] for o in offenders]
                         worst_offender = random.choices(offenders,weights=off_weights)[0].item()
                 #print('removing {} i:{} (of {})'.format(worst_offender,intersections_per[worst_offender],len(entries)))
