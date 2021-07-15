@@ -46,6 +46,8 @@ class FUNSDQA(QADataset):
 
         self.min_start_read = 7
 
+        self.extra_np = 0.05
+
         if images is not None:
             self.images=images
         else:
@@ -351,6 +353,7 @@ class FUNSDQA(QADataset):
 
         relationships_q_a=defaultdict(list)
         relationships_a_q=defaultdict(list)
+        qs_without_h=set()
         for q_gi in questions_gs:
             found=False
             for gi1,gi2 in groups_adj:
@@ -367,6 +370,8 @@ class FUNSDQA(QADataset):
             if not found:
                 #q_a_pairs.append((q_gi,None))
                 relationships_q_a[q_gi].append(None)
+            if q_gi not in relationships_q_h:
+                qs_without_h.add(q_gi)
 
 
         #find duplicate labels and differentiate using header
@@ -499,11 +504,16 @@ class FUNSDQA(QADataset):
                 if trans_qi not in ambiguous:
                     if self.char_qs:
                         all_q_a.append(('l~{}'.format(trans_qi),trans_ai,[qi,ai]))
+                        if random.random()<self.extra_np:
+                            all_q_a.append(('v~{}'.format(trans_qi),'[ np ]',[qi,ai]))
+
                     else:
                         all_q_a.append(('value for "{}"?'.format(trans_qi),trans_ai,[qi,ai]))
                 if trans_ai not in ambiguous:
                     if self.char_qs:
                         all_q_a.append(('v~{}'.format(trans_ai),trans_qi,[qi,ai]))
+                        if random.random()<self.extra_np:
+                            all_q_a.append(('l~{}'.format(trans_ai),'[ np ]',[qi,ai]))
                     else:
                         all_q_a.append(('label of "{}"?'.format(trans_ai),trans_qi,[qi,ai]))
             elif trans_qi not in ambiguous:
@@ -574,6 +584,10 @@ class FUNSDQA(QADataset):
                     all_q_a.append(('l~{}'.format(trans_gi),'[ np ]',None))
                     all_q_a.append(('v~{}'.format(trans_gi),'[ np ]',None))
                     all_q_a.append(('hd~{}'.format(trans_gi),'[ np ]',None))
+                    all_q_a.append(('qu~{}'.format(trans_gi),'[ np ]',None))
+            for gi in qs_without_h:
+                trans_gi = all_trans[qi]
+                if trans_gi not in ambiguous:
                     all_q_a.append(('qu~{}'.format(trans_gi),'[ np ]',None))
 
         #addTable can cause two tables to be made in odd cases (uneven rows, etc), so we'll simply combine all the table information and generate questions from it.
@@ -715,9 +729,12 @@ class FUNSDQA(QADataset):
         #   This uses groups_id, which can be the word BB ids
         new_all_q_a =[]
         for q,a,group_ids in all_q_a:
-            bb_ids=[]
-            for gid in group_ids:
-                bb_ids+=groups_id[gid]
+            if group_ids is not None:
+                bb_ids=[]
+                for gid in group_ids:
+                    bb_ids+=groups_id[gid]
+            else:
+                bb_ids=None
             new_all_q_a.append((q,a,bb_ids))
         return new_all_q_a
 
