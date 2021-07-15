@@ -11,6 +11,8 @@ import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from .net_builder import getGroupSize
+from utils import img_f
+from testtest import PRINT_ATT,ATT_VIS,ATT_VIS_TEXT
 
 
 class Mlp(nn.Module):
@@ -162,12 +164,17 @@ class WindowAttention(nn.Module):
 
 
         attn = self.softmax(attn)
+        if PRINT_ATT:
+            att = attn.sum(dim=1)/4 #sum along heads
 
         attn = self.attn_drop(attn)
 
         x = (attn @ v).transpose(1, 2).reshape(B_, N, C)
         x = self.proj(x)
         x = self.proj_drop(x)
+
+        if PRINT_ATT:
+            return x, att
         return  x
 
     def extra_repr(self) -> str:
@@ -292,7 +299,29 @@ class SwinTransformerBlock(nn.Module):
         else:
             key_padding_mask = None
 
-        attn_windows = self.attn(x_windows, docq=docq, mask=self.attn_mask, key_padding_mask=key_padding_mask)  # nW*B, window_size*window_size, C
+        if PRINT_ATT:
+            attn_windows, w_attn = self.attn(x_windows, docq=docq, mask=self.attn_mask, key_padding_mask=key_padding_mask)  # nW*B, window_size*window_size, C
+            from_attn = w_attn.sum(1)/w_attn.size(1)
+            img_attn = from_attn[:,:w_attn.size(1)]
+            text_attn = from_attn[:,w_attn.size(1):]
+
+            img_attn = img_attn.view(-1, self.window_size, self.window_size)
+            shifted_a = window_reverse(img_attn, self.window_size, H, W)  # B H' W' C
+
+            # reverse cyclic shift
+            if self.shift_size > 0:
+                a = torch.roll(shifted_a, shifts=(self.shift_size, self.shift_size), dims=(1, 2))
+            else:
+                a = shifted_a
+            #img_name = 'att/swin_{}x{}.png'.format(a.size(1),a.size(2))
+            #img_f.imwrite(img_name,a[0].cpu().numpy())
+            ATT_VIS.append(a[0,:,:,0].detach().cpu())
+
+            text_att = text_attn.sum(dim=0)/nW
+            ATT_VIS_TEXT.append(text_att)
+            #import pdb;pdb.set_trace()
+        else:
+            attn_windows = self.attn(x_windows, docq=docq, mask=self.attn_mask, key_padding_mask=key_padding_mask)  # nW*B, window_size*window_size, C
 
         # merge windows
         attn_windows = attn_windows.view(-1, self.window_size, self.window_size, C)
@@ -356,6 +385,7 @@ class PatchMerging(nn.Module):
 
         x = x.view(B, H, W, C)
 
+        #WHAT? Isn't this just doing a 2x2 stride 2 conv?
         x0 = x[:, 0::2, 0::2, :]  # B H/2 W/2 C
         x1 = x[:, 1::2, 0::2, :]  # B H/2 W/2 C
         x2 = x[:, 0::2, 1::2, :]  # B H/2 W/2 C

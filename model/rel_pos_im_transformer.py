@@ -6,6 +6,9 @@ from torch import Tensor
 import torch.nn.functional as F
 from .attention import PosBiasedMultiHeadedAttention
 from torch.nn.modules.transformer import _get_activation_fn
+
+
+
 class RelPosImTransformerLayer(nn.Module):
     r"""TransformerEncoderLayer is made up of self-attn and feedforward network.
     This standard encoder layer is based on the paper "Attention Is All You Need".
@@ -27,7 +30,7 @@ class RelPosImTransformerLayer(nn.Module):
         >>> out = encoder_layer(src)
     """
 
-    def __init__(self, d_model, nhead, max_dist, dim_feedforward=2048, dropout=0.1, activation="relu"):
+    def __init__(self, d_model, nhead, max_dist, dim_feedforward=2048, dropout=0.1, activation="relu",fixed=False):
         super(RelPosImTransformerLayer, self).__init__()
         self.self_attn = PosBiasedMultiHeadedAttention(nhead,d_model,max_dist,dropout=dropout)
         # Implementation of Feedforward model
@@ -41,6 +44,9 @@ class RelPosImTransformerLayer(nn.Module):
         self.dropout2 = Dropout(dropout)
 
         self.activation = _get_activation_fn(activation)
+
+        self.fixed=fixed
+
 
     def __setstate__(self, state):
         if 'activation' not in state:
@@ -78,34 +84,19 @@ class RelPosImTransformerLayer(nn.Module):
             new_pos_mask = pos_mask[:,None,:].expand(-1,l,-1,1) * pos_mask[:,:,None].expand(-1,-1,l,1)
         else:
             new_pos_mask = None
-
-        if DEBUG:
-            def printDiff(a,b):
-                siz = int(im_tokens.size(1)**0.5)
-                diff = (torch.abs(im_tokens[a]-im_tokens[b]).max(dim=-1)[0]>0.01).view(siz,siz)
-                s=''
-                for y in range(diff.size(0)):
-                    for x in range(diff.size(1)):
-                        s+='d' if diff[y,x] else ' '
-                    s+='\n'
-                print('diff {} and {}'.format(a,b))
-                print('='*diff.size(1))
-                print(s)
-                print('='*diff.size(1))
-            printDiff(0,1)
-            #printDiff(1,2)
-            printDiff(3,4)
-
         full = torch.cat((im_tokens,docqa),dim=1)
         full_x = torch.cat((im_tokens_x,docqa_x),dim=1)
         full_y = torch.cat((im_tokens_y,docqa_y),dim=1)
         im_padding_mask = torch.BoolTensor(batch_size,im_tokens.size(1)).fill_(0).to(docqa_padding_mask.device)
         full_padding_mask = torch.cat((im_padding_mask,docqa_padding_mask),dim=1)
-        full_pos_mask= torch.cat((im_padding_mask[:,:,None],pos_mask),dim=1)
+        if self.fixed:
+            full_pos_mask= torch.cat(((~im_padding_mask[:,:,None]).float(),pos_mask),dim=1)
+        else:
+            full_pos_mask= torch.cat((im_padding_mask[:,:,None],pos_mask),dim=1)
         full_pos_mask= pos_mask[:,:,None].expand(-1,-1,full_pos_mask.size(1),1) * full_pos_mask[:,None,:].expand(-1,pos_mask.size(1),-1,1)
         imdoc_mask = torch.BoolTensor(batch_size,docqa.size(1),im_tokens.size(1)).fill_(1).to(docqa_mask.device)
         full_mask = torch.cat((imdoc_mask,docqa_mask),dim=-1)
-
+        
         if auto_regressive is None:
             docqa2 = self.self_attn(docqa, full, full, docqa_x,docqa_y,full_x,full_y, mask=full_mask,
                                   key_padding_mask=full_padding_mask,pos_mask=full_pos_mask)
@@ -187,7 +178,6 @@ class RelPosTransformerLayer(nn.Module):
         l = pos_mask.size(1)
         assert l == tokens.size(1)
         new_pos_mask = pos_mask[:,None,:].expand(-1,l,-1,1) * pos_mask[:,:,None].expand(-1,-1,l,1)
-
 
         if auto_regressive is None:
             tokens2 = self.self_attn(tokens, tokens, tokens, 

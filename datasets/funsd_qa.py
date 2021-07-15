@@ -287,6 +287,7 @@ class FUNSDQA(QADataset):
         questions_gs=set()
         answers_gs=set()
         headers_gs=set()
+        others_gs=set()
         all_trans={}
         group_count = len(groups)
         for gi,group in enumerate(groups):
@@ -317,6 +318,8 @@ class FUNSDQA(QADataset):
                 answers_gs.add(gi)
             elif self.index_class_map[cls] == 'header':
                 headers_gs.add(gi)
+            else:
+                others_gs.add(gi)
 
             if self.char_qs=='full':
                 #classify all together
@@ -564,6 +567,14 @@ class FUNSDQA(QADataset):
                 else:
                     trans_qs = trans_qs[0][0]
                 all_q_a.append(('hd~{}'.format(trans_h),trans_qs,[hi]+qis))
+
+            for gi in others_gs:
+                trans_gi = all_trans[qi]
+                if trans_gi not in ambiguous:
+                    all_q_a.append(('l~{}'.format(trans_gi),'[ np ]',None))
+                    all_q_a.append(('v~{}'.format(trans_gi),'[ np ]',None))
+                    all_q_a.append(('hd~{}'.format(trans_gi),'[ np ]',None))
+                    all_q_a.append(('qu~{}'.format(trans_gi),'[ np ]',None))
 
         #addTable can cause two tables to be made in odd cases (uneven rows, etc), so we'll simply combine all the table information and generate questions from it.
         #print(tables)
