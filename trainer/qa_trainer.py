@@ -342,6 +342,8 @@ class QATrainer(BaseTrainer):
 
         #pred_a[:,0].sum().backward()
         #print(self.model.start_token.grad)
+        pred_a.sum().backward()
+        print(self.model.image.grad)
         #import pdb;pdb.set_trace()
 
 

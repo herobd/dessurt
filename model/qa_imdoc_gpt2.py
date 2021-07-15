@@ -269,6 +269,13 @@ class QAImDocGPT2(BaseModel):
 
     #we're building this for fixed images size
     def forward(self,image,ocrRes,questions,answers=None,useCurvedBBs=False,RUN=False):
+        ##DDD
+        image = torch.autograd.Variable(image,requires_grad=True)S
+        self.image=image
+        self.image.retain_grad()
+        ##DDD
+
+
         #if self.blank_ocr:
         #   ocrRes=[[]]*len(questions)
         torch.autograd.set_detect_anomaly(True)
