@@ -3,7 +3,7 @@ import utils.img_f as img_f
 import struct
 import torch
 from . import string_utils
-
+import numpy as np
 
 def ensure_dir(path):
     if not os.path.exists(path):
@@ -144,6 +144,27 @@ def xyrhwToCorners(xc,yc,rot,h,w):
     br = ( (w*math.cos(-rot)+h*math.sin(-rot) + xc),  (w*math.sin(-rot)-h*math.cos(-rot) + yc) )
     bl = ( (-w*math.cos(-rot)+h*math.sin(-rot) + xc), (-w*math.sin(-rot)-h*math.cos(-rot) + yc) )
     return tl,tr,br,bl
+def calcXYWH(tlX,tlY,trX,trY,brX,brY,blX,blY):
+    lX = (tlX+blX)/2.0
+    lY = (tlY+blY)/2.0
+    rX = (trX+brX)/2.0
+    rY = (trY+brY)/2.0
+    d=np.sqrt((lX-rX)**2 + (lY-rY)**2)
+
+    if (d==0).any():
+        print('ERROR: zero length bb {}'.format(bbs[0][d[0]==0]))
+        d[d==0]=1
+
+    hl = ((tlX-lX)*-(rY-lY) + (tlY-lY)*(rX-lX))/d #projection of half-left edge onto transpose horz run
+    hr = ((brX-rX)*-(lY-rY) + (brY-rY)*(lX-rX))/d #projection of half-right edge onto transpose horz run
+    h = (hl+hr)/2.0
+
+    #cX = (lX+rX)/2.0
+    #cY = (lY+rY)/2.0
+    rot = np.arctan2(-(rY-lY),rX-lX)
+    height = np.abs(h)*2    #this is FULL height
+    width = d #and FULL width
+    return lX,lY, rX,rY,width,height
 
 def plotRect(img,color,xyrhw,lineWidth=1):
     xc=xyrhw[0].item()

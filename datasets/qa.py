@@ -60,6 +60,7 @@ class QADataset(torch.utils.data.Dataset):
                     os.mkdir(self.cache_path)
         else:
             self.cache_resized = False
+        self.augment_shade = config['augment_shade'] if 'augment_shade' in config else False
         self.aug_params = config['additional_aug_params'] if 'additional_aug_params' in config else {}
 
 
@@ -217,6 +218,7 @@ class QADataset(torch.utils.data.Dataset):
 
 
             ##tic=timeit.default_timer()
+        if self.augment_shade and self.augment_shade>random.random():
             if np_img.shape[2]==3:
                 np_img = augmentation.apply_random_color_rotation(np_img)
                 np_img = augmentation.apply_tensmeyer_brightness(np_img,**self.aug_params)

@@ -1,5 +1,5 @@
 {
-    "name": "test",
+    "name": "synthqa_2_singlefont",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -13,16 +13,12 @@
         "batch_size": 1,
         "num_workers": 4,
         "rescale_range": [1.0,1.0],
-        "crop_params": {
-                "crop_size":512,
-                "pad":0,
-                "rot_degree_std_dev": 1
-            },
-	"questions": 1,
+        "crop_params": null,
+	"questions": 12,
         "min_entries": null,
-        "max_entries": 3,
+        "max_entries": 5,
 	"multiline": 0.000001,
-	"word_questions": "simple",
+        "word_questions": "simple",
         "text_height": 32,
         "image_size": 512,
         "max_chars": 10,
@@ -67,7 +63,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 300000,
-        "accum_grad_steps": 30,
+        "accum_grad_steps": 5,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
@@ -96,26 +92,21 @@
 	    "char_output": true,
 	    "char_tokens": true,
             "image_size": 512,
-	    "no_dropout": false,
             "window_size": 8,
-	    "decode_dim": 256,
-	    "dim_ff": 512,
+	    "decode_dim": 128,
+	    "dim_ff": 256,
 	    "decode_num_heads": 4,
 	    "no_dropout": false,
-            "swin_blocks_per_level": [2,2],
-	    "swin_text_downsample": [true,true],
-            "swin_nheads": [4,4],
+            "swin_blocks_per_level": [2,2,4],
+            "swin_nheads": [4,4,8],
             "im_embed_dim": 64,
             "pre_trained": {
                 "patch_emb": "saved/synth_ocr_crnnskipforswin_new/checkpoint-iteration400000.pth"
             },
-	    "full_layers": [
-		    ["n","p","p"],
-		    ["n","n","n"]
-	    ],
-	    "full_dim": 256,
-	    "fdim_ff": 512,
-	    "full_num_heads": 8
+	    "full_layers": [],
+	    "full_dim": 128,
+	    "fdim_ff": 256,
+	    "full_num_heads": 4
 	    
     }
 }
