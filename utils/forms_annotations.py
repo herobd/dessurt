@@ -25,6 +25,7 @@ def calcCornersTorch(x,y,r,h,w):
     blY =  h*torch.cos(r) +w*torch.sin(r) +y
     return tlX,tlY,trX,trY,brX,brY,blX,blY
 
+
 def avg_y(bb):
     points = bb['poly_points']
     return (points[0][1]+points[1][1]+points[2][1]+points[3][1])/4.0

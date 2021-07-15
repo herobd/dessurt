@@ -90,13 +90,16 @@ class SynthQADocDataset(QADataset):
             self.image_size = (self.image_size,self.image_size)
         self.min_entries = config['min_entries'] if 'min_entries' in config else self.questions
         self.max_entries = config['max_entries'] if 'max_entries' in config else self.questions
+        self.not_pack = 0.2
         self.change_size = config['change_size'] if 'change_size' in config else False
         self.min_text_height = config['min_text_height'] if 'min_text_height' in config else 8
         self.max_text_height = config['max_text_height'] if 'max_text_height' in config else 32
         self.np_qs = 0.02
+        self.wider = config['wider'] if 'wider' in config else False
         self.use_hw = config['use_hw'] if 'use_hw' in config else False
         self.word_questions = config['word_questions'] if 'word_questions' in config else False
         self.multiline = config['multiline'] if 'multiline' in config else False
+        self.min_start_read = 7
         self.max_num_lines = config['max_num_lines'] if 'max_num_lines' in config else 6
         self.tables = config['tables'] if 'tables' in config else False
         assert not self.tables or self.word_questions
@@ -238,6 +241,8 @@ class SynthQADocDataset(QADataset):
         entries=[]
         heights=[]
 
+        wider = round(random.triangular(0,self.wider,0)) if self.wider else False
+
         if self.use_hw:
             num_hw_entries = int(self.use_hw*num_entries)
             num_entries = num_entries-num_hw_entries
@@ -250,8 +255,8 @@ class SynthQADocDataset(QADataset):
 
         if self.multiline:
             assert not self.ocr
-            labels_linec = [random.randrange(1,self.max_num_lines) if random.random()<self.multiline else 1 for i in range(num_entries)]
-            values_linec = [random.randrange(1,self.max_num_lines) if random.random()<self.multiline else 1 for i in range(num_entries)]
+            labels_linec = [random.randrange(2,self.max_num_lines) if random.random()<self.multiline else 1 for i in range(num_entries)]
+            values_linec = [random.randrange(2,self.max_num_lines) if random.random()<self.multiline else 1 for i in range(num_entries)]
         else:
             labels_linec = [1]*num_entries
             values_linec = [1]*num_entries
@@ -286,6 +291,8 @@ class SynthQADocDataset(QADataset):
             for label_img_idx,label_text,label_dir,resize_l in l:
                 label_img_path = os.path.join(label_dir,'{}.png'.format(label_img_idx))
                 label_img = img_f.imread(label_img_path,False)
+                if label_img is None:
+                    return self.parseAnn(annotations,s)
 
 
                 if self.change_size:
@@ -313,6 +320,8 @@ class SynthQADocDataset(QADataset):
             for value_img_idx,value_text,value_dir,resize_v in v:
                 value_img_path = os.path.join(value_dir,'{}.png'.format(value_img_idx))
                 value_img = img_f.imread(value_img_path,False)
+                if value_img is None:
+                    return self.parseAnn(annotations,s)
                 if self.change_size:
                     value_width = round(value_img.shape[1]*value_height/value_img.shape[0])
                     value_img = img_f.resize(value_img,(value_height,value_width))
@@ -322,7 +331,10 @@ class SynthQADocDataset(QADataset):
             v_h-=pad
 
             heights.append(max(l_h,v_h))
-            rel_x = random.randrange(10)
+            if wider:
+                rel_x = random.randrange(10+wider)
+            else:
+                rel_x = random.randrange(10)
             rel_y = random.randrange(-10,10)
             if not self.multiline or len(l)==1:
                 entries.append((label_img,label_text,value_img,value_text,rel_x,rel_y))
@@ -400,8 +412,15 @@ class SynthQADocDataset(QADataset):
 
             #Assign random positions and collect bounding boxes
             full_bbs=torch.FloatTensor(len(entries)+(1 if did_table else 0),4)
-            pad_v=1
-            pad_h=30
+            if wider:
+                pad_v=1+int(0.1*wider)
+                pad_h=30+int(1.2*wider)
+            else:
+                pad_v=1
+                pad_h=30
+
+
+            removed = set()
             for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
                 if type(label_img) is list:
                     label_height, label_width = get_height_width_from_list(label_img[1:],label_img[0])
@@ -420,10 +439,20 @@ class SynthQADocDataset(QADataset):
                 
                 if width>=self.image_size[1]:
                     x=0
+                    if width-self.image_size[1]>9:
+                        y=0
+                        width=-1
+                        height=-1
+                        removed.add(ei)
                 else:
                     x = random.randrange(int(self.image_size[1]-width))
                 if height>=self.image_size[0]:
                     y=0
+                    if height-self.image_size[0]>9:
+                        x=0
+                        width=-1
+                        height=-1
+                        removed.add(ei)
                 else:
                     y = random.randrange(int(self.image_size[0]-height))
                 full_bbs[ei,0]=x
@@ -454,23 +483,39 @@ class SynthQADocDataset(QADataset):
             intersections_per = intersections.sum(dim=0)
             if did_table:
                 intersections_per[-1]=0 #clear Table so it is not selected
-            removed = set()
+            pack = self.not_pack<random.random()
+            if not pack:
+                weights = [ 1/(len(label_text)+len(value_text)) for label_img,label_text,value_img,value_text,rel_x,rel_y in entries]
+                if did_table:
+                    weights += [0]
+
             while intersections_per.sum()>0:
                 #print_iter(intersections)
-                worst_offender = intersections_per.argmax()
+                if pack:
+                    worst_offender = intersections_per.argmax().item()
+                else:
+                    #worst_offender = random.randrange(intersections_per.shape[0])
+                    #first remove table intersections
+                    if did_table and intersections[-1].sum()>0:
+                        worst_offender = intersections[-1].nonzero()[0].item()
+                    else:
+                        #favor keeping longer
+                        offenders = intersections_per.nonzero()
+                        off_weights = [weights[o] for o in offenders]
+                        worst_offender = random.choices(offenders,weights=off_weights)[0].item()
                 #print('removing {} i:{} (of {})'.format(worst_offender,intersections_per[worst_offender],len(entries)))
-                removed.add(worst_offender.item())
+                removed.add(worst_offender)
                 intersections[:,worst_offender]=0
                 intersections[worst_offender,:]=0
                 intersections_per = intersections.sum(dim=0)
                 if did_table:
                     intersections_per[-1]=0 #clear Table so it is not selected
-
             #removed.sort(reverse=True)
             #for r in removed:
             #    del entries[r]
             not_present_qs=[]
             selected_labels_stripped = []#[l[1].strip() for i,l in enumerate(labels) if i not in removed]
+            selected_values_stripped = []
             for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
                 if ei not in removed:
                     if type(label_img) is list:
@@ -528,10 +573,13 @@ class SynthQADocDataset(QADataset):
                     selected_labels_stripped.append(label_text.strip())
                     if type(value_text) is list:
                         value_text = ' '.join(value_text)
+                    selected_values_stripped.append(label_text.strip())
 
                     if self.word_questions=='simple':
                         qa.append(('l~{}'.format(label_text),value_text,None))
                         qa.append(('v~{}'.format(value_text),label_text,None))
+                        self.addRead(qa,label_text)
+                        self.addRead(qa,value_text)
                     elif self.word_questions:
                         question_to_value = random.choice(self.ask_for_value)
                         question_to_label = random.choice(self.ask_for_label)
@@ -594,6 +642,9 @@ class SynthQADocDataset(QADataset):
                             break
                 if self.word_questions=='simple':
                     qa.append(('l~{}'.format(q_text),'[ np ]',None))
+                    if q_text not in selected_values_stripped:
+                        self.addRead(qa,q_text,np=True)
+                        qa.append(('v~{}'.format(q_text),'[ np ]',None))
                 elif self.word_questions:
                     question = random.choice(self.ask_for_value)
                     qa.append((question.format(q_text),'[ np ]',None))
@@ -617,6 +668,18 @@ class SynthQADocDataset(QADataset):
 
         return bbs, list(range(bbs.shape[0])), ocr, {'image':image}, {}, qa
 
+    def addRead(self,qa,text,np=False):
+        if len(text)>2:
+            if len(text)>self.min_start_read+1:
+                start_point = random.randrange(self.min_start_read,len(text)-1)
+            else:
+                start_point = random.randrange(len(text)//2,len(text)-1)
+            start_text = text[:start_point]
+            finish_text = text[start_point:]
+            if np:
+                qa.append(('re~{}'.format(start_text),'[ np ]',None))
+            else:
+                qa.append(('re~{}'.format(start_text),finish_text,None))
     
     def addText(self,label_text,label_x,label_y,l_horz,l_vert,value_text=None,value_x=None,value_y=None,v_horz=None,v_vert=None,boxes=None,trans=None,s=1):
         #corrupt text

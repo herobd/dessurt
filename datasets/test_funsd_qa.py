@@ -1,4 +1,4 @@
-from datasets import synth_qadoc_dataset
+from datasets import funsd_qa
 import math
 import sys
 from matplotlib import pyplot as plt
@@ -10,7 +10,7 @@ import utils.img_f as cv2
 
 widths=[]
 
-def display(data,write):
+def display(data):
     batchSize = data['img'].size(0)
     #mask = makeMask(data['image'])
     for b in range(batchSize):
@@ -20,7 +20,6 @@ def display(data,write):
         #gt = data['gt'][b]
         #print(label[:data['label_lengths'][b],b])
         print(data['imgName'][b])
-        print('{} - {}'.format(data['img'].min(),data['img'].max()))
         #if data['spaced_label'] is not None:
         #    print('spaced label:')
         #    print(data['spaced_label'][:,b])
@@ -35,8 +34,6 @@ def display(data,write):
         #widths.append(img.size(1))
         
         draw=True
-        if write:
-            cv2.imwrite('test_single_512.png',(img.numpy()*255)[:,:,0].astype(np.uint8))
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -44,14 +41,12 @@ def display(data,write):
             #cv2.imwrite('out/fg_mask{}.png'.format(b),fg_mask.numpy()*255)
             #cv2.imwrite('out/img{}.png'.format(b),img.numpy()*255)
             #cv2.imwrite('out/changed_img{}.png'.format(b),changed_img.numpy()*255)
-
-
-            #plt.imshow(img.numpy()[:,:,0], cmap='gray')
-            #plt.show()
-            cv2.imshow('fd',img.numpy()[:,:,0])
-            cv2.show()
+            plt.imshow(img.numpy()[:,:,0], cmap='gray')
+            plt.show()
 
             #cv2.waitKey()
+
+            cv2.imwrite('testsinglesize_1024.png',img.numpy()[:,:,0])
 
         #fig = plt.figure()
 
@@ -70,59 +65,42 @@ if __name__ == "__main__":
     if len(sys.argv)>1:
         dirPath = sys.argv[1]
     else:
-        dirPath = '../data/english4line_fontslong'
+        dirPath = '../data/FUNSD'
     if len(sys.argv)>2:
-        write = int(sys.argv[2])
+        start = int(sys.argv[2])
     else:
-        write=False
+        start=0
     if len(sys.argv)>3:
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=synth_qadoc_dataset.SynthQADocDataset(dirPath=dirPath,split='train',config={
-        "create": True,
-	"fontdir": "../data/fonts",
-        "textdir": "../data/",
-        "word_questions": "simple",
-        "use_hw": False,
-        "tables": False,
-        "header_dir": "../data/english4line_fonts",
-        "hw_dir": "../data/IAM_lines/train",
-        "num_workers": 0,
-        "include_ocr": False,
-        "change_size": False,
-        "rescale_range": [1.0,1.0],
-        "crop_params": None,
-        "augment_shade": False,
-        "additional_aug_params": {"better":True},
-        "wider": 1,
-        "batch_size": 4,
-        "questions": 10,
-        "min_entries": None,
-        "max_entries": 4,
-        "text_height": 32,
-        #"image_size": [1152,768],
-        "image_size": 512,
-        "max_chars": 10,
-        "min_chars": 1,
-        "use_before_refresh": 99999999999999999999,
-        "set_size": 50000,
-        "num_processes": 3,
-        "gen_type": "veryclean",
-        "char_file": "../data/english_char_set.json"
-
+    data=funsd_qa.FUNSDQA(dirPath=dirPath,split='train',config={
+        'rescale_range':[0.8,1.2],
+        'crop_params': {
+            "crop_size":[1024,1024],
+            "pad":0,
+            "rot_degree_std_dev": 1
+            },
+        'split_to_lines': True,
+        'questions':50,
+        'do_words': False,
+        'char_qs': "full"
 
 })
 
-    dataLoader = torch.utils.data.DataLoader(data, batch_size=4, shuffle=True, num_workers=0, collate_fn=synth_qadoc_dataset.collate)
+    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=funsd_qa.collate)
     dataLoaderIter = iter(dataLoader)
 
         #if start==0:
         #display(data[0])
+    for i in range(0,start):
+        print(i)
+        dataLoaderIter.next()
+        #display(data[i])
     try:
         while True:
             #print('?')
-            display(dataLoaderIter.next(),write)
+            display(dataLoaderIter.next())
     except StopIteration:
         print('done')
 

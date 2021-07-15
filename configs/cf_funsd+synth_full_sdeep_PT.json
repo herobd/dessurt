@@ -1,5 +1,5 @@
 {
-    "name": "funsd+synth_sdeep_PT",
+    "name": "funsd+synth_full_sdeep_PT",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -12,7 +12,7 @@
         "num_workers": 4,
         "datasets": [
             {
-                "freq": 0.2,
+                "freq": 0.1,
                 "config": {
             "data_set_name": "FUNSDQA",
             "data_dir": "../data/FUNSD",
@@ -23,7 +23,7 @@
                 "rot_degree_std_dev": 1
             },
             "questions": 1,
-            "char_qs": true,
+            "char_qs": "full",
             "split_to_lines": true,
             "do_words": false,
             "color": false,
@@ -31,20 +31,20 @@
                 }
             },
             {
-                "freq": 0.8,
+                "freq": 0.9,
                 "config": {
             "data_set_name": "SynthQADocDataset",
             "batch_size": 1,
             "fontdir": "../data/fonts/",
             "textdir": "../data/",
-            "data_dir": "../data/english4line_fontslong",
+            "data_dir": "../data/english4line_fontslonger2",
             "rescale_range": [1.0,1.0],
             "crop_params": {
                 "crop_size":[1152,768],
                 "pad":0,
                 "rot_degree_std_dev": 1
             },
-            "questions": 2,
+            "questions": 1,
             "min_entries": null,
             "max_entries": 160,
             "text_height": 32,
@@ -53,12 +53,12 @@
             "change_size": true,
             "word_questions": "simple",
             "tables": 0.2,
-            "multiline": 0.1,
+            "multiline": 0.6,
             "header_dir": "../data/english4line_fonts",
             "max_chars": 10,
             "min_chars": 1,
             "use_before_refresh": 99999999999999999999,
-            "set_size": 500000,
+            "set_size": 1000000,
             "num_processes": -1,
             "gen_type": "veryclean",
             "char_file": "../data/english_char_set.json",
@@ -117,8 +117,8 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 1000000,
-        "accum_grad_steps": 15,
+        "iterations": 2100000,
+        "accum_grad_steps": 30,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",

@@ -33,7 +33,7 @@ for rank in [[0..3]]
 do
     srun -N 1 -n 1 --gpus 1 --exclusive  python  train.py --supercomputer -c configs/cf_{}.json -s saved/{}/checkpoint-latest.pth --rank $rank --worldsize 4 &
     if [ $rank==0 ]; then
-        sleep 1.5
+        sleep 2.5
     fi
 done
 

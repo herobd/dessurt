@@ -1,30 +1,33 @@
 {
-    "name": "test",
+    "name": "synthqa_singlefontlines_few_simple_newsize_shorter",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
         "data_set_name": "SynthQADocDataset",
-        "fontdir": "../data/fonts",
+        "fontdir": "../data/fonts/",
         "textdir": "../data/",
         "data_dir": "../data/english4line",
-        "include_ocr": false,
         "batch_size": 1,
         "num_workers": 4,
         "rescale_range": [1.0,1.0],
         "crop_params": {
-                "crop_size":512,
+                "crop_size":[1152,768],
                 "pad":0,
                 "rot_degree_std_dev": 1
             },
-	"questions": 1,
+	"questions": 6,
         "min_entries": null,
-        "max_entries": 3,
-	"multiline": 0.000001,
-	"word_questions": "simple",
+        "max_entries": 4,
         "text_height": 32,
-        "image_size": 512,
+        "wider": 30,
+        "image_size": [1152,768],
+        "change_size": false,
+        "word_questions": "simple",
+        "tables": false,
+        "multiline": 0.2,
+        "header_dir": "../data/english4line_fonts",
         "max_chars": 10,
         "min_chars": 1,
         "use_before_refresh": 99999999999999999999,
@@ -67,7 +70,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 300000,
-        "accum_grad_steps": 30,
+        "accum_grad_steps": 5,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
@@ -81,8 +84,6 @@
         "monitor_mode": "none",
         "retry_count":0,
 
-	"do_ocr": true,
-
 
         "#use_learning_schedule": "multi_rise then ramp_to_swa",
         "use_learning_schedule": "multi_rise",
@@ -91,31 +92,20 @@
         "#swa_lr_mul": 0.01
 
     },
-    "arch": "QAImDocGPT2", 
+    "arch": "QAImDocGPT", 
     "model": {
-	    "char_output": true,
-	    "char_tokens": true,
-            "image_size": 512,
-	    "no_dropout": false,
-            "window_size": 8,
-	    "decode_dim": 256,
-	    "dim_ff": 512,
+            "blank_ocr": true,
+            "image_size": [1152,768],
+            "window_size": 6,
+	    "decode_dim": 128,
+	    "dim_ff": 256,
 	    "decode_num_heads": 4,
 	    "no_dropout": false,
-            "swin_blocks_per_level": [2,2],
-	    "swin_text_downsample": [true,true],
-            "swin_nheads": [4,4],
-            "im_embed_dim": 64,
+            "blocks_per_level": [2,6],
+            "swin_nheads": [4,8],
+            "im_embed_dim": 128,
             "pre_trained": {
                 "patch_emb": "saved/synth_ocr_crnnskipforswin_new/checkpoint-iteration400000.pth"
-            },
-	    "full_layers": [
-		    ["n","p","p"],
-		    ["n","n","n"]
-	    ],
-	    "full_dim": 256,
-	    "fdim_ff": 512,
-	    "full_num_heads": 8
-	    
+                        }
     }
 }

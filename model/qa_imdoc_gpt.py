@@ -166,7 +166,8 @@ class QAImDocGPT(BaseModel):
 
 
     #we're building this for fixed images size
-    def forward(self,image,gtBBs,gtTrans,questions,answers=None,useCurvedBBs=False,RUN=False):
+    def forward(self,image,ocr_res,questions,answers=None,useCurvedBBs=False,RUN=False):
+        gtBBs,gtTrans = ocr_res
         if self.blank_ocr:
             gtTrans=[[]]*len(questions)
         #torch.autograd.set_detect_anomaly(True)
@@ -332,7 +333,7 @@ class QAImDocGPT(BaseModel):
             max_pred_len=self.max_pred_len
             holder_xs = torch.cat((xs,torch.FloatTensor(new_batch_size,max_pred_len).fill_(0).to(device)),dim=1)
             holder_ys = torch.cat((ys,torch.FloatTensor(new_batch_size,max_pred_len).fill_(0).to(device)),dim=1)
-            holder_answer_padding_mask = torch.FloatTensor(new_batch_size,max_pred_len).fill_(0).to(device) #assumes here batch size of 1
+            holder_answer_padding_mask = torch.BoolTensor(new_batch_size,max_pred_len).fill_(0).to(device) #assumes here batch size of 1
             holder_doc_mask = torch.cat((doc_mask,torch.FloatTensor(new_batch_size,max_pred_len,1).fill_(0).to(device)),dim=1)
 
             holder_att_mask = torch.BoolTensor(new_batch_size,max_pred_len,max_pred_len).fill_(1) #1/0
