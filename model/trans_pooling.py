@@ -13,27 +13,29 @@ class OCRPooler(nn.Module):
     def forward(self,tokens,pos,padding_mask):
         if tokens.size(1)==0:
             return tokens,pos,padding_mask
-        #To prevent the pos being averaged with the end zeros (for odd length)
+        #NOT NEEDED ANYMORE, wil never be odd length
+        ##To prevent the pos being averaged with the end zeros (for odd length)
         #get the location of first pad
-        batch_size = tokens.size(0)
+        #batch_size = tokens.size(0)
 
-        #pad_first = torch.arange(batch_size)[None,:].expand(2,-1).clone().to(padding_mask.device)
-        pad_first = []
-        for b in range(batch_size):
-            if (padding_mask[b]!=0).any():
-                #pad_first[1,b] = padding_mask[b].nonzero(as_tuple=False)[0]
-                pad_first.append((b,padding_mask[b].nonzero(as_tuple=False)[0]))
-        if len(pad_first)>0:
-            pad_first = torch.LongTensor(pad_first)
-            
-            pad_first_minus=pad_first[1,:]-1
-            pos[pad_first[0,:],pad_first[1,:]]=pos[pad_first[0,:],pad_first_minus]
-            
-        if tokens.size(1)<2:
-            tokens = F.pad(tokens,(0,0,0,1))
-        else:
-            pos = self.avg_pool(pos.permute(0,2,1)).permute(0,2,1)
-            padding_mask = (self.max_pool(padding_mask[:,None].float())>0)[:,0]
+        #pad_first = []
+        #for b in range(batch_size):
+        #    if (padding_mask[b]!=0).any():
+        #        #pad_first[1,b] = padding_mask[b].nonzero(as_tuple=False)[0]
+        #        pad_first.append((b,padding_mask[b].nonzero(as_tuple=False)[0]))
+        #if len(pad_first)>0:
+        #    pad_first = torch.LongTensor(pad_first)
+        #    
+        #    pad_first_minus=pad_first[1,:]-1
+        #    pos[pad_first[0,:],pad_first[1,:]]=pos[pad_first[0,:],pad_first_minus]
+        #    
+        #if tokens.size(1)<2:
+        #    tokens = F.pad(tokens,(0,0,0,1))
+        #else:
+        #    pos = self.avg_pool(pos.permute(0,2,1)).permute(0,2,1)
+        #    padding_mask = (self.max_pool(padding_mask[:,None].float())>0)[:,0]
+        pos = self.avg_pool(pos.permute(0,2,1)).permute(0,2,1)
+        padding_mask = (self.max_pool(padding_mask[:,None].float())>0)[:,0]
         tokens = self.conv(tokens.permute(0,2,1))
 
         return tokens.permute(0,2,1), pos, padding_mask
