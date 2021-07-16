@@ -28,12 +28,15 @@ class OCRPooler(nn.Module):
             
             pad_first_minus=pad_first[1,:]-1
             pos[pad_first[0,:],pad_first[1,:]]=pos[pad_first[0,:],pad_first_minus]
-
+            
+        if tokens.size(1)<2:
+            tokens = F.pad(tokens,(0,0,0,1))
+        else:
+            pos = self.avg_pool(pos.permute(0,2,1)).permute(0,2,1)
+            padding_mask = (self.max_pool(padding_mask[:,None].float())>0)[:,0]
         tokens = self.conv(tokens.permute(0,2,1))
-        pos = self.avg_pool(pos.permute(0,2,1))
-        padding_mask = self.max_pool(padding_mask[:,None].float())>0
 
-        return tokens.permute(0,2,1), pos.permute(0,2,1), padding_mask[:,0]
+        return tokens.permute(0,2,1), pos, padding_mask
 
 class QPooler(nn.Module):
 
