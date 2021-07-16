@@ -22,7 +22,7 @@ No `opencv` any more
 `pytorch-geometric`: https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html
 
 
-`pip install gensim bpemb editdistance knockknock`
+`pip install gensim bpemb editdistance timm knockknock`
 
 
 for cvxpy (optimization, not used now), you must have python 3.7 or later:
