@@ -141,37 +141,37 @@ class SynthQADocDataset(QADataset):
             self.train=True
             self.augmentation = config['augmentation'] if 'augmentation' in config else None
 	    
-            fontdir = config['fontdir'] if 'fontdir' in config else '../data/fonts/textfonts'
-            textdir = config['textdir'] if 'textdir' in config else '../data/OANC_text'
-            text_len = config['max_chars'] if 'max_chars' in config else 35
-            self.text_max_len=text_len
-            text_min_len = config['min_chars'] if 'min_chars' in config else 33
-
-            gen_type = config['gen_type'] if 'gen_type' in config else 'normal'
-
-            if gen_type=='cropped_aug':
-                self.synth_gen= SyntheticText(fontdir,textdir,line_prob=0.8,line_thickness=70,line_var=30,pad=20,gaus_noise=0.15,hole_prob=0.6, hole_size=400,neighbor_gap_var=25,rot=2.5,text_len=text_len, text_min_len=text_min_len, use_warp=0.4,warp_std=[1,1.4])
-            elif gen_type=='clean':
-                self.synth_gen= SyntheticText(fontdir,textdir,text_len=text_len,text_min_len=text_min_len,line_prob=0.0,line_thickness=70,line_var=0,mean_pad=10,pad=0,gaus_noise=0.001,hole_prob=0.0, hole_size=400,neighbor_gap_var=0,rot=0, use_warp=0.0,warp_std=[1,1.4], linesAboveAndBelow=False)
-            elif gen_type=='veryclean':
-                self.synth_gen= SyntheticText(fontdir,textdir,text_len=text_len,text_min_len=text_min_len,line_prob=0.0,line_thickness=70,line_var=0,mean_pad=10,pad=0,gaus_noise=0,gaus_std=0.0000001,blur_std=0.000001,hole_prob=0.0, hole_size=400,neighbor_gap_var=0,rot=0, use_warp=0.0,warp_std=[1,1.4], linesAboveAndBelow=False,useBrightness=False)
-            elif gen_type=='normal':
-                self.synth_gen= SyntheticText(fontdir,textdir,text_len=text_len,text_min_len=text_min_len,line_prob=0.0,line_thickness=70,line_var=30,mean_pad=10,pad=15,gaus_noise=0.05,hole_prob=0.0, hole_size=400,neighbor_gap_var=25,rot=0, use_warp=0.4,warp_std=[1,1.4], linesAboveAndBelow=False)
-            elif gen_type=='small noise':
-                self.synth_gen= SyntheticText(fontdir,textdir,text_len=text_len,text_min_len=text_min_len,line_prob=0.0,line_thickness=70,line_var=30,mean_pad=20,pad=5,gaus_noise=0.06,hole_prob=0.0, hole_size=400,neighbor_gap_var=25,rot=0, use_warp=0.3,warp_std=[1,1.4], linesAboveAndBelow=False)
-            elif gen_type=='NAF':
-                self.synth_gen= SyntheticText(fontdir,textdir,text_len=text_len,text_min_len=text_min_len,line_prob=0.8,line_thickness=70,line_var=30,mean_pad=0,pad=17,gaus_noise=0.1,hole_prob=0.6, hole_size=400,neighbor_gap_var=25,rot=5, use_warp=0.0, linesAboveAndBelow=True, clean=True)
-                self.warp_freq=0.1
-            else:
-                raise NotImplementedError('SynthTextGen unknown gen_type: {}'.format(gen_type))
-
-
-            self.used=-1
-            self.used_instances=0
-            self.num_processes = config['num_processes']
-            self.per_process = config['per_process'] if 'per_process' in config else 100
-            
             if 'create' in config:
+                fontdir = config['fontdir'] if 'fontdir' in config else '../data/fonts/textfonts'
+                textdir = config['textdir'] if 'textdir' in config else '../data/OANC_text'
+                text_len = config['max_chars'] if 'max_chars' in config else 35
+                self.text_max_len=text_len
+                text_min_len = config['min_chars'] if 'min_chars' in config else 33
+
+                gen_type = config['gen_type'] if 'gen_type' in config else 'normal'
+
+                if gen_type=='cropped_aug':
+                    self.synth_gen= SyntheticText(fontdir,textdir,line_prob=0.8,line_thickness=70,line_var=30,pad=20,gaus_noise=0.15,hole_prob=0.6, hole_size=400,neighbor_gap_var=25,rot=2.5,text_len=text_len, text_min_len=text_min_len, use_warp=0.4,warp_std=[1,1.4])
+                elif gen_type=='clean':
+                    self.synth_gen= SyntheticText(fontdir,textdir,text_len=text_len,text_min_len=text_min_len,line_prob=0.0,line_thickness=70,line_var=0,mean_pad=10,pad=0,gaus_noise=0.001,hole_prob=0.0, hole_size=400,neighbor_gap_var=0,rot=0, use_warp=0.0,warp_std=[1,1.4], linesAboveAndBelow=False)
+                elif gen_type=='veryclean':
+                    self.synth_gen= SyntheticText(fontdir,textdir,text_len=text_len,text_min_len=text_min_len,line_prob=0.0,line_thickness=70,line_var=0,mean_pad=10,pad=0,gaus_noise=0,gaus_std=0.0000001,blur_std=0.000001,hole_prob=0.0, hole_size=400,neighbor_gap_var=0,rot=0, use_warp=0.0,warp_std=[1,1.4], linesAboveAndBelow=False,useBrightness=False)
+                elif gen_type=='normal':
+                    self.synth_gen= SyntheticText(fontdir,textdir,text_len=text_len,text_min_len=text_min_len,line_prob=0.0,line_thickness=70,line_var=30,mean_pad=10,pad=15,gaus_noise=0.05,hole_prob=0.0, hole_size=400,neighbor_gap_var=25,rot=0, use_warp=0.4,warp_std=[1,1.4], linesAboveAndBelow=False)
+                elif gen_type=='small noise':
+                    self.synth_gen= SyntheticText(fontdir,textdir,text_len=text_len,text_min_len=text_min_len,line_prob=0.0,line_thickness=70,line_var=30,mean_pad=20,pad=5,gaus_noise=0.06,hole_prob=0.0, hole_size=400,neighbor_gap_var=25,rot=0, use_warp=0.3,warp_std=[1,1.4], linesAboveAndBelow=False)
+                elif gen_type=='NAF':
+                    self.synth_gen= SyntheticText(fontdir,textdir,text_len=text_len,text_min_len=text_min_len,line_prob=0.8,line_thickness=70,line_var=30,mean_pad=0,pad=17,gaus_noise=0.1,hole_prob=0.6, hole_size=400,neighbor_gap_var=25,rot=5, use_warp=0.0, linesAboveAndBelow=True, clean=True)
+                    self.warp_freq=0.1
+                else:
+                    raise NotImplementedError('SynthTextGen unknown gen_type: {}'.format(gen_type))
+
+
+                self.used=-1
+                self.used_instances=0
+                self.num_processes = config['num_processes']
+                self.per_process = config['per_process'] if 'per_process' in config else 100
+            
                 ensure_dir(self.directory)
 
 
