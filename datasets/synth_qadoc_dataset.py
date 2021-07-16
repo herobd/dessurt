@@ -141,37 +141,37 @@ class SynthQADocDataset(QADataset):
             self.train=True
             self.augmentation = config['augmentation'] if 'augmentation' in config else None
 	    
-            fontdir = config['fontdir'] if 'fontdir' in config else '../data/fonts/textfonts'
-            textdir = config['textdir'] if 'textdir' in config else '../data/OANC_text'
-            text_len = config['max_chars'] if 'max_chars' in config else 35
-            self.text_max_len=text_len
-            text_min_len = config['min_chars'] if 'min_chars' in config else 33
-
-            gen_type = config['gen_type'] if 'gen_type' in config else 'normal'
-
-            if gen_type=='cropped_aug':
-                self.synth_gen= SyntheticText(fontdir,textdir,line_prob=0.8,line_thickness=70,line_var=30,pad=20,gaus_noise=0.15,hole_prob=0.6, hole_size=400,neighbor_gap_var=25,rot=2.5,text_len=text_len, text_min_len=text_min_len, use_warp=0.4,warp_std=[1,1.4])
-            elif gen_type=='clean':
-                self.synth_gen= SyntheticText(fontdir,textdir,text_len=text_len,text_min_len=text_min_len,line_prob=0.0,line_thickness=70,line_var=0,mean_pad=10,pad=0,gaus_noise=0.001,hole_prob=0.0, hole_size=400,neighbor_gap_var=0,rot=0, use_warp=0.0,warp_std=[1,1.4], linesAboveAndBelow=False)
-            elif gen_type=='veryclean':
-                self.synth_gen= SyntheticText(fontdir,textdir,text_len=text_len,text_min_len=text_min_len,line_prob=0.0,line_thickness=70,line_var=0,mean_pad=10,pad=0,gaus_noise=0,gaus_std=0.0000001,blur_std=0.000001,hole_prob=0.0, hole_size=400,neighbor_gap_var=0,rot=0, use_warp=0.0,warp_std=[1,1.4], linesAboveAndBelow=False,useBrightness=False)
-            elif gen_type=='normal':
-                self.synth_gen= SyntheticText(fontdir,textdir,text_len=text_len,text_min_len=text_min_len,line_prob=0.0,line_thickness=70,line_var=30,mean_pad=10,pad=15,gaus_noise=0.05,hole_prob=0.0, hole_size=400,neighbor_gap_var=25,rot=0, use_warp=0.4,warp_std=[1,1.4], linesAboveAndBelow=False)
-            elif gen_type=='small noise':
-                self.synth_gen= SyntheticText(fontdir,textdir,text_len=text_len,text_min_len=text_min_len,line_prob=0.0,line_thickness=70,line_var=30,mean_pad=20,pad=5,gaus_noise=0.06,hole_prob=0.0, hole_size=400,neighbor_gap_var=25,rot=0, use_warp=0.3,warp_std=[1,1.4], linesAboveAndBelow=False)
-            elif gen_type=='NAF':
-                self.synth_gen= SyntheticText(fontdir,textdir,text_len=text_len,text_min_len=text_min_len,line_prob=0.8,line_thickness=70,line_var=30,mean_pad=0,pad=17,gaus_noise=0.1,hole_prob=0.6, hole_size=400,neighbor_gap_var=25,rot=5, use_warp=0.0, linesAboveAndBelow=True, clean=True)
-                self.warp_freq=0.1
-            else:
-                raise NotImplementedError('SynthTextGen unknown gen_type: {}'.format(gen_type))
-
-
-            self.used=-1
-            self.used_instances=0
-            self.num_processes = config['num_processes']
-            self.per_process = config['per_process'] if 'per_process' in config else 100
-            
             if 'create' in config:
+                fontdir = config['fontdir'] if 'fontdir' in config else '../data/fonts/textfonts'
+                textdir = config['textdir'] if 'textdir' in config else '../data/OANC_text'
+                text_len = config['max_chars'] if 'max_chars' in config else 35
+                self.text_max_len=text_len
+                text_min_len = config['min_chars'] if 'min_chars' in config else 33
+
+                gen_type = config['gen_type'] if 'gen_type' in config else 'normal'
+
+                if gen_type=='cropped_aug':
+                    self.synth_gen= SyntheticText(fontdir,textdir,line_prob=0.8,line_thickness=70,line_var=30,pad=20,gaus_noise=0.15,hole_prob=0.6, hole_size=400,neighbor_gap_var=25,rot=2.5,text_len=text_len, text_min_len=text_min_len, use_warp=0.4,warp_std=[1,1.4])
+                elif gen_type=='clean':
+                    self.synth_gen= SyntheticText(fontdir,textdir,text_len=text_len,text_min_len=text_min_len,line_prob=0.0,line_thickness=70,line_var=0,mean_pad=10,pad=0,gaus_noise=0.001,hole_prob=0.0, hole_size=400,neighbor_gap_var=0,rot=0, use_warp=0.0,warp_std=[1,1.4], linesAboveAndBelow=False)
+                elif gen_type=='veryclean':
+                    self.synth_gen= SyntheticText(fontdir,textdir,text_len=text_len,text_min_len=text_min_len,line_prob=0.0,line_thickness=70,line_var=0,mean_pad=10,pad=0,gaus_noise=0,gaus_std=0.0000001,blur_std=0.000001,hole_prob=0.0, hole_size=400,neighbor_gap_var=0,rot=0, use_warp=0.0,warp_std=[1,1.4], linesAboveAndBelow=False,useBrightness=False)
+                elif gen_type=='normal':
+                    self.synth_gen= SyntheticText(fontdir,textdir,text_len=text_len,text_min_len=text_min_len,line_prob=0.0,line_thickness=70,line_var=30,mean_pad=10,pad=15,gaus_noise=0.05,hole_prob=0.0, hole_size=400,neighbor_gap_var=25,rot=0, use_warp=0.4,warp_std=[1,1.4], linesAboveAndBelow=False)
+                elif gen_type=='small noise':
+                    self.synth_gen= SyntheticText(fontdir,textdir,text_len=text_len,text_min_len=text_min_len,line_prob=0.0,line_thickness=70,line_var=30,mean_pad=20,pad=5,gaus_noise=0.06,hole_prob=0.0, hole_size=400,neighbor_gap_var=25,rot=0, use_warp=0.3,warp_std=[1,1.4], linesAboveAndBelow=False)
+                elif gen_type=='NAF':
+                    self.synth_gen= SyntheticText(fontdir,textdir,text_len=text_len,text_min_len=text_min_len,line_prob=0.8,line_thickness=70,line_var=30,mean_pad=0,pad=17,gaus_noise=0.1,hole_prob=0.6, hole_size=400,neighbor_gap_var=25,rot=5, use_warp=0.0, linesAboveAndBelow=True, clean=True)
+                    self.warp_freq=0.1
+                else:
+                    raise NotImplementedError('SynthTextGen unknown gen_type: {}'.format(gen_type))
+
+
+                self.used=-1
+                self.used_instances=0
+                self.num_processes = config['num_processes']
+                self.per_process = config['per_process'] if 'per_process' in config else 100
+            
                 ensure_dir(self.directory)
 
 
@@ -291,6 +291,8 @@ class SynthQADocDataset(QADataset):
             for label_img_idx,label_text,label_dir,resize_l in l:
                 label_img_path = os.path.join(label_dir,'{}.png'.format(label_img_idx))
                 label_img = img_f.imread(label_img_path,False)
+                if label_img is None:
+                    return self.parseAnn(annotations,s)
 
 
                 if self.change_size:
@@ -318,6 +320,8 @@ class SynthQADocDataset(QADataset):
             for value_img_idx,value_text,value_dir,resize_v in v:
                 value_img_path = os.path.join(value_dir,'{}.png'.format(value_img_idx))
                 value_img = img_f.imread(value_img_path,False)
+                if value_img is None:
+                    return self.parseAnn(annotations,s)
                 if self.change_size:
                     value_width = round(value_img.shape[1]*value_height/value_img.shape[0])
                     value_img = img_f.resize(value_img,(value_height,value_width))
@@ -511,6 +515,7 @@ class SynthQADocDataset(QADataset):
             #    del entries[r]
             not_present_qs=[]
             selected_labels_stripped = []#[l[1].strip() for i,l in enumerate(labels) if i not in removed]
+            selected_values_stripped = []
             for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
                 if ei not in removed:
                     if type(label_img) is list:
@@ -568,13 +573,13 @@ class SynthQADocDataset(QADataset):
                     selected_labels_stripped.append(label_text.strip())
                     if type(value_text) is list:
                         value_text = ' '.join(value_text)
+                    selected_values_stripped.append(label_text.strip())
 
                     if self.word_questions=='simple':
                         qa.append(('l~{}'.format(label_text),value_text,None))
                         qa.append(('v~{}'.format(value_text),label_text,None))
-                        if self.multiline:
-                            self.addRead(qa,label_text)
-                            self.addRead(qa,value_text)
+                        self.addRead(qa,label_text)
+                        self.addRead(qa,value_text)
                     elif self.word_questions:
                         question_to_value = random.choice(self.ask_for_value)
                         question_to_label = random.choice(self.ask_for_label)
@@ -637,6 +642,9 @@ class SynthQADocDataset(QADataset):
                             break
                 if self.word_questions=='simple':
                     qa.append(('l~{}'.format(q_text),'[ np ]',None))
+                    if q_text not in selected_values_stripped:
+                        self.addRead(qa,q_text,np=True)
+                        qa.append(('v~{}'.format(q_text),'[ np ]',None))
                 elif self.word_questions:
                     question = random.choice(self.ask_for_value)
                     qa.append((question.format(q_text),'[ np ]',None))
@@ -660,7 +668,7 @@ class SynthQADocDataset(QADataset):
 
         return bbs, list(range(bbs.shape[0])), ocr, {'image':image}, {}, qa
 
-    def addRead(self,qa,text):
+    def addRead(self,qa,text,np=False):
         if len(text)>2:
             if len(text)>self.min_start_read+1:
                 start_point = random.randrange(self.min_start_read,len(text)-1)
@@ -668,7 +676,10 @@ class SynthQADocDataset(QADataset):
                 start_point = random.randrange(len(text)//2,len(text)-1)
             start_text = text[:start_point]
             finish_text = text[start_point:]
-            qa.append(('re~{}'.format(start_text),finish_text,None))
+            if np:
+                qa.append(('re~{}'.format(start_text),'[ np ]',None))
+            else:
+                qa.append(('re~{}'.format(start_text),finish_text,None))
     
     def addText(self,label_text,label_x,label_y,l_horz,l_vert,value_text=None,value_x=None,value_y=None,v_horz=None,v_vert=None,boxes=None,trans=None,s=1):
         #corrupt text
