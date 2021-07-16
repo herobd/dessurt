@@ -8,7 +8,7 @@ class OCRPooler(nn.Module):
         super(OCRPooler, self).__init__()
         self.conv = nn.Conv1d(d_model,d_model,kernel_size=4,stride=2,padding=1)
         self.avg_pool = nn.AvgPool1d(kernel_size=2,stride=2,count_include_pad=False)
-        self.max_pool = nn.MaxPool1d(kernel_size=2,stride=2)
+        self.max_pool = nn.MaxPool1d(kernel_size=2,stride=2) #it doesn't need to be max pooling now that the ocr is padded
 
     def forward(self,tokens,pos,padding_mask):
         if tokens.size(1)==0:
