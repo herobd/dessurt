@@ -80,7 +80,6 @@ if __name__ == "__main__":
     else:
         repeat=1
     data=synth_qadoc_dataset.SynthQADocDataset(dirPath=dirPath,split='train',config={
-        "create": True,
 	"fontdir": "../data/fonts",
         "textdir": "../data/",
         "word_questions": "simple",
@@ -99,10 +98,10 @@ if __name__ == "__main__":
         "batch_size": 4,
         "questions": 10,
         "min_entries": None,
-        "max_entries": 4,
+        "max_entries": 3,
         "text_height": 32,
         #"image_size": [1152,768],
-        "image_size": 512,
+        "image_size": 192,
         "max_chars": 10,
         "min_chars": 1,
         "use_before_refresh": 99999999999999999999,

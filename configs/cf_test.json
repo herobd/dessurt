@@ -14,7 +14,7 @@
         "num_workers": 4,
         "rescale_range": [1.0,1.0],
         "crop_params": {
-                "crop_size":768,
+                "crop_size":192,
                 "pad":0,
                 "rot_degree_std_dev": 1
             },
@@ -24,7 +24,7 @@
 	"multiline": 0.000001,
 	"word_questions": "simple",
         "text_height": 32,
-        "image_size": 768,
+        "image_size": 192,
         "max_chars": 10,
         "min_chars": 1,
         "use_before_refresh": 99999999999999999999,
@@ -96,7 +96,7 @@
 	    "blank_ocr": 0.2,
 	    "char_output": true,
 	    "char_tokens": true,
-            "image_size": 768,
+            "image_size": 192,
 	    "no_dropout": false,
             "window_size": 12,
 	    "decode_dim": 64,
