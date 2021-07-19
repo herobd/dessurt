@@ -314,10 +314,13 @@ class QATrainer(BaseTrainer):
         #-all missing (none)
 
         if self.do_ocr:
-            ocr_res=[]
-            normal_img = (128*(image[:,0]+1)).cpu().numpy().astype(np.uint8)
-            for img in normal_img:
-                ocr_res.append( self.ocr_reader.readtext(img,decoder='greedy+softmax') )
+            if self.do_ocr == 'no':
+                ocr_res=[[]]*image.size(0)
+            else:
+                ocr_res=[]
+                normal_img = (128*(image[:,0]+1)).cpu().numpy().astype(np.uint8)
+                for img in normal_img:
+                    ocr_res.append( self.ocr_reader.readtext(img,decoder='greedy+softmax') )
         else:
             if self.ocr_word_bbs:
                 gtTrans = [form_metadata['word_trans'] for form_metadata in instance['form_metadata']]

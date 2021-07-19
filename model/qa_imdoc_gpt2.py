@@ -373,7 +373,7 @@ class QAImDocGPT2(BaseModel):
                 all_ocr_seqid.append(ocr_seqid)
             else:
                 all_ocr_res.append(torch.FloatTensor(0,97).to(device))
-                all_ocr_bbs.append(torch.FloatTensor(0,4).to(device))
+                all_ocr_bbs.append(torch.FloatTensor(0,4))#.to(device))
                 all_ocr_1dpos.append([])
                 all_ocr_seqid.append([])
             if PRINT_ATT:
@@ -387,6 +387,7 @@ class QAImDocGPT2(BaseModel):
                 all_ocr_res[i] = F.pad(all_ocr_res[i],(0,0,0,diff))
                 all_ocr_bbs[i] = F.pad(all_ocr_bbs[i],(0,0,0,diff))
                 all_ocr_1dpos[i] += [0]*diff
+                all_ocr_seqid[i] += [0]*diff
                 ocr_padding_mask[i,-diff:]=1
 
         ocr_tokens = self.ocr_emb(torch.stack(all_ocr_res,dim=0))
