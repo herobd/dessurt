@@ -325,6 +325,7 @@ class QATrainer(BaseTrainer):
             if self.ocr_word_bbs:
                 gtTrans = [form_metadata['word_trans'] for form_metadata in instance['form_metadata']]
             else:
+                
                 gtTrans = instance['transcription']
             #t##t#tic=timeit.default_timer()#t##t#
             if self.ocr_word_bbs: #useOnlyGTSpace and self.use_word_bbs_gt:
