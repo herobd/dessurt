@@ -10,6 +10,7 @@ from collections import defaultdict, OrderedDict
 from utils.funsd_annotations import createLines
 import timeit
 from .qa import QADataset
+from .synth_qadoc_dataset import addRead
 
 import utils.img_f as img_f
 
@@ -330,14 +331,7 @@ class FUNSDQA(QADataset):
                 all_q_a.append(random.choice(class_qs))
 
                 #complete (read)
-                if len(trans)>2:
-                    if len(trans)>self.min_start_read+1:
-                        start_point = random.randrange(self.min_start_read,len(trans)-1)
-                    else:
-                        start_point = random.randrange(len(trans)//2,len(trans)-1)
-                    start_text = trans[:start_point]
-                    finish_text = trans[start_point:]
-                    all_q_a.append(('re~{}'.format(start_text),finish_text,[gi]))
+                addRead(all_q_a,trans,self.min_start_read)
 
 
         relationships_h_q=defaultdict(list)

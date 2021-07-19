@@ -61,6 +61,19 @@ def attention(query, key, value, mask=None, key_padding_mask=None, dropout=None,
     if PRINT_ATT:
         ATT_TEXT.append( (p_attn[0].sum(dim=0)/4).cpu().detach() )
 
+    ##DEBUG
+    #aa='============= {}\n'.format(p_attn.size())
+    #for i in range(p_attn.size(2)):
+    #    aa+='|'
+    #    for j in range(max(0,p_attn.size(3)-80),p_attn.size(3)):
+    #        if p_attn[0,0,i,j]>0:
+    #            aa+='a'
+    #        else:
+    #            aa+=' '
+    #    aa+='|\n'
+    #aa+='===================  end'
+    #print(aa)
+
     if DEBUG:
         ##Draw the attention (as ASCII)
         siz = int(p_attn.size(-1)**0.5)

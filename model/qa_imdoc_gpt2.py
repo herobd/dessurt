@@ -54,6 +54,7 @@ class QAImDocGPT2(BaseModel):
             else:
                 swin_text_downsample = config['swin_text_downsample'] if 'swin_text_downsample' in config else [False]*len(blocks_per_level)
                 swin_text_downsample_dense=False
+            self.downsample_ocr = sum(swin_text_downsample)
 
             window_size = config['window_size'] #7
             if type(window_size) is int:
@@ -109,6 +110,7 @@ class QAImDocGPT2(BaseModel):
         self.q_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000)
         self.a_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000,offset_start=1000)
         self.ocr_1dpos_enc = ReturnPositionalEncoding(d_model,dropout=dropout,max_len=1000)
+        self.ocr_seqid_enc = ReturnPositionalEncoding(d_model,dropout=dropout,max_len=1000,offset_start=2000)
         self.ocr_pos_emb_x = UniformRealEmbedding(d_model,0,self.image_size[1],100)
         self.ocr_pos_emb_y = UniformRealEmbedding(d_model,0,self.image_size[0],100)
         self.ocr_pos_emb_w = PositiveRealEmbedding(d_model,0,int(0.5*self.image_size[1]),30)
@@ -269,6 +271,13 @@ class QAImDocGPT2(BaseModel):
 
     #we're building this for fixed images size
     def forward(self,image,ocrRes,questions,answers=None,useCurvedBBs=False,RUN=False):
+        ##DDD
+        #image = torch.autograd.Variable(image,requires_grad=True)
+        #self.image=image
+        #self.image.retain_grad()
+        ##DDD
+
+
         #if self.blank_ocr:
         #   ocrRes=[[]]*len(questions)
         torch.autograd.set_detect_anomaly(True)
@@ -291,6 +300,7 @@ class QAImDocGPT2(BaseModel):
         all_ocr_res=[]
         all_ocr_bbs=[]
         all_ocr_1dpos=[]
+        all_ocr_seqid=[]
         max_len=0
         if PRINT_ATT:
             assert image.size(0)==1
@@ -298,6 +308,7 @@ class QAImDocGPT2(BaseModel):
             ocr_res = []#[torch.zeros_like(preds[0])]
             ocr_bbs = []#[[0,0,0,0]]
             ocr_1dpos = []#[0]
+            ocr_seqid = []#[0]
             if PRINT_ATT:
                 full_ocr_string='$'
             for i,(bb,(string,char_prob),score) in enumerate(res_im):
@@ -331,14 +342,23 @@ class QAImDocGPT2(BaseModel):
 
                 bbs = torch.cat( (new_xy,wh), dim=1)
 
-                #We'll append one additional entry at the begining. Has 0 for all probs and uses the center xy
-                first_bb = torch.FloatTensor([[cX,cY,width,height]])
-                bbs = torch.cat( (first_bb,bbs), dim=0)
-                new_char_prob = torch.cat( (torch.zeros_like(new_char_prob[0:1]),new_char_prob), dim=0)
+                #We'll append additional entries at the begining and end. We'll first be sure there is one ad the front back, and then add however many needed to the back so that pooling always is self contained
+                start_bb = bbs[0:1]
+                end_bb = bbs[-1:]
+                empty_prob = -1*torch.ones_like(new_char_prob[0:1])
+                if self.downsample_ocr>0:
+                    missing = (2+new_char_prob.size(0))% (2**self.downsample_ocr)
+                    missing = ((2**self.downsample_ocr)-missing) % (2**self.downsample_ocr)
+                    add_front = 1
+                    add_back = 1+missing
+                    bbs = torch.cat( ([start_bb]*add_front) + [bbs] + ([end_bb]*add_back), dim=0)
+                    new_char_prob = torch.cat( ([empty_prob]*add_front) + [new_char_prob] + ([empty_prob]*add_back), dim=0)
+
                 ocr_res.append(new_char_prob)
                 ocr_bbs.append(bbs)
                 assert new_char_prob.size(0) == bbs.size(0)
                 ocr_1dpos.extend(range(0,new_char_prob.size(0)))
+                ocr_seqid.extend([len(ocr_bbs)]*new_char_prob.size(0))
 
                 if PRINT_ATT:
                     full_ocr_string+='|'+string
@@ -350,10 +370,12 @@ class QAImDocGPT2(BaseModel):
                 all_ocr_res.append(torch.cat(ocr_res,dim=0))
                 all_ocr_bbs.append(torch.cat(ocr_bbs,dim=0))
                 all_ocr_1dpos.append(ocr_1dpos)
+                all_ocr_seqid.append(ocr_seqid)
             else:
                 all_ocr_res.append(torch.FloatTensor(0,97).to(device))
-                all_ocr_bbs.append(torch.FloatTensor(0,4).to(device))
+                all_ocr_bbs.append(torch.FloatTensor(0,4))#.to(device))
                 all_ocr_1dpos.append([])
+                all_ocr_seqid.append([])
             if PRINT_ATT:
                 full_ocr_string+='^'
 
@@ -365,15 +387,18 @@ class QAImDocGPT2(BaseModel):
                 all_ocr_res[i] = F.pad(all_ocr_res[i],(0,0,0,diff))
                 all_ocr_bbs[i] = F.pad(all_ocr_bbs[i],(0,0,0,diff))
                 all_ocr_1dpos[i] += [0]*diff
+                all_ocr_seqid[i] += [0]*diff
                 ocr_padding_mask[i,-diff:]=1
 
         ocr_tokens = self.ocr_emb(torch.stack(all_ocr_res,dim=0))
         ocr_bbs = torch.stack(all_ocr_bbs,dim=0).to(device)
         ocr_1dpos = torch.LongTensor(all_ocr_1dpos).to(device)
+        ocr_seqid = torch.LongTensor(all_ocr_seqid).to(device)
         ocr_padding_mask = ocr_padding_mask.to(device)
         all_ocr_res=None
         all_ocr_bbs=None
         all_ocr_1dpos=None
+        all_ocr_seqid=None
         num_ocr = ocr_tokens.size(1)
 
         #we need to extend batch entries with multiple questions
@@ -385,6 +410,7 @@ class QAImDocGPT2(BaseModel):
         ocr_tokens = torch.repeat_interleave(ocr_tokens,repeats_cuda,dim=0)
         ocr_bbs = torch.repeat_interleave(ocr_bbs,repeats_cuda,dim=0)
         ocr_1dpos = torch.repeat_interleave(ocr_1dpos,repeats_cuda,dim=0)
+        ocr_seqid = torch.repeat_interleave(ocr_seqid,repeats_cuda,dim=0)
         ocr_padding_mask = torch.repeat_interleave(ocr_padding_mask,repeats_cuda,dim=0)
         repeats_cuda = None
 
@@ -413,12 +439,12 @@ class QAImDocGPT2(BaseModel):
 
         #run question+answer through decoder
         q_t = self.tokenizer(questions,return_tensors="pt",padding=True)
-        num_q = q_t['input_ids'].size(1)-1 #remove last SEP token
+        num_q = q_t['input_ids'].size(1)
         a_t = self.tokenizer(answers,return_tensors="pt",padding=True)
         num_a = a_t['input_ids'].size(1)-1 #remove last SEP token
-        qa_tokens = self.text_embedding(torch.cat((q_t['input_ids'],a_t['input_ids'][:,1:-1]),dim=1).to(device)) #strip CLS and SEP off of answers, will recieve questions SEP
-        q_tokens = qa_tokens[:,:num_q] #no SEP
-        a_tokens = qa_tokens[:,num_q:] #gets SEP at beginning
+        qa_tokens = self.text_embedding(torch.cat((q_t['input_ids'],a_t['input_ids'][:,:-1]),dim=1).to(device))
+        q_tokens = qa_tokens[:,:num_q] 
+        a_tokens = qa_tokens[:,num_q:] 
 
         #DDD
         #a_tokens=torch.autograd.Variable(a_tokens,requires_grad=True)
@@ -436,11 +462,11 @@ class QAImDocGPT2(BaseModel):
         ocr_pos = ocr_bbs[:,:,0:2] #just x,y
 
         q_tokens = self.q_pos_1d_enc(q_tokens)
-        q_padding_mask = (1-q_t['attention_mask'][:,:-1]).bool().to(device) #remove last SEP
+        q_padding_mask = (1-q_t['attention_mask']).bool().to(device) 
         a_tokens = self.a_pos_1d_enc(a_tokens)
-        a_padding_mask = (1-a_t['attention_mask'][:,:-1]).bool().to(device) #remove last SEP
+        a_padding_mask = (1-a_t['attention_mask'][:,1:]).bool().to(device) #remove last SEP
 
-        ocr_tokens += self.ocr_pos_emb_x(xs) + self.ocr_pos_emb_y(ys) + self.ocr_pos_emb_w(ws) + self.ocr_pos_emb_h(hs) + self.ocr_1dpos_enc(ocr_1dpos)
+        ocr_tokens += self.ocr_pos_emb_x(xs) + self.ocr_pos_emb_y(ys) + self.ocr_pos_emb_w(ws) + self.ocr_pos_emb_h(hs) + self.ocr_1dpos_enc(ocr_1dpos) + self.ocr_seqid_enc(ocr_seqid)
 
         num_all = num_im+num_ocr+num_q+num_a
 
@@ -526,7 +552,6 @@ class QAImDocGPT2(BaseModel):
                     saved_ocr_padding_mask.append(ocr_padding_mask)
                     saved_q_padding_mask.append(q_padding_mask)
                 
-
                 ocrqa_tokens = layout_layer(
                         ocrqa_tokens,
                         ocrqa_pos[:,:,0], #x

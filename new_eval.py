@@ -455,6 +455,7 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                 group_TP = None
                 DocStruct_hit = None
                 print('{} metrics'.format(validName))
+                rel_BROS_TP=group_TP=None
                 for i in range(len(metrics)):
                     print(metrics[i].__name__ + ': '+str(val_metrics_sum[i]))
                 for typ in val_comb_metrics:
