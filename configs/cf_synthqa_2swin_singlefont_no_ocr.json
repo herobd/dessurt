@@ -1,19 +1,38 @@
 {
-    "name": "nobrain_qa1_gpt2",
+    "name": "synthqa_2swin_singlefont_no_ocr",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
-        "data_set_name": "NobrainQA",
-        "data_dir": "../data/FUNSD",
-        "batch_size": 30,
-        "num_workers": 0,
+        "data_set_name": "SynthQADocDataset",
+        "fontdir": "../data/fonts",
+        "textdir": "../data/",
+        "data_dir": "../data/english4line",
+        "include_ocr": false,
+        "batch_size": 20,
+        "num_workers": 4,
         "rescale_range": [1.0,1.0],
-        "crop_params": null,
+        "crop_params": {
+                "crop_size":192,
+                "pad":0,
+                "rot_degree_std_dev": 1
+            },
 	"questions": 1,
-        "shuffle": false,
-        "#textfile":"../hw_with_style/data/lotr.txt"
+        "min_entries": null,
+        "max_entries": 1,
+	"multiline": 0.000001,
+	"word_questions": "simple",
+        "text_height": 32,
+        "image_size": 192,
+        "max_chars": 10,
+        "min_chars": 1,
+        "use_before_refresh": 99999999999999999999,
+        "set_size": 68000,
+        "num_processes": -1,
+        "gen_type": "veryclean",
+        "char_file": "../data/english_char_set.json",
+        "shuffle": true
 
 
     },
@@ -29,7 +48,7 @@
  
     "optimizer_type": "AdamW",
     "optimizer": {
-        "lr": 0.00001,
+        "lr": 0.0001,
         "weight_decay": 0.01
     },
     "loss": {
@@ -48,10 +67,11 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 300000,
+        "accum_grad_steps": 0,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
-        "val_step": 50000,
+        "val_step": 999999999999999,
         "save_step": 25000,
         "save_step_minor": 200,
         "log_step": 100,
@@ -59,7 +79,9 @@
         "verbosity": 1,
         "monitor": "loss",
         "monitor_mode": "none",
-        "retry_count":2,
+        "retry_count":0,
+
+	"do_ocr": "no",
 
 
         "#use_learning_schedule": "multi_rise then ramp_to_swa",
@@ -71,23 +93,24 @@
     },
     "arch": "QAImDocGPT2", 
     "model": {
-            "blank_ocr": 0.2,
-            "char_output": true,
-            "char_tokens": true,
+	    "blank_ocr": 0.2,
+	    "char_output": true,
+	    "char_tokens": true,
             "image_size": 192,
-            "no_dropout": false,
+	    "no_dropout": false,
             "window_size": 12,
-            "decode_dim": 256,
-            "dim_ff": 512,
-            "decode_num_heads": 8,
-            "no_dropout": false,
-            "swin_blocks_per_level": [2,2],
-            "swin_text_downsample": [true],
+	    "decode_dim": 256,
+	    "dim_ff": 512,
+	    "decode_num_heads": 8,
+	    "no_dropout": false,
+            "swin_blocks_per_level": [4,4],
+	    "swin_text_downsample": [true],
             "swin_nheads": [4,8],
-            "im_embed_dim": 16,
+            "im_embed_dim": 128,
             "pre_trained": {
                 "patch_emb": "saved/synth_ocr_crnnskipforswin_new/checkpoint-iteration400000.pth"
             },
-            "full_layers": null
+	    "full_layers": null
+	    
     }
 }

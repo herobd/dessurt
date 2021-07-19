@@ -337,13 +337,36 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             for ti,textline in enumerate(transcription_lines):
                 if ti in used:
                     continue
+                if len(textline)>too_long_read_thresh:
+                    textline=textline[too_long_read_thresh:]
                 question='re~'+textline
                 answer = model(img,ocr,[[question]],RUN=True)
                 print(question+' {:} '+answer)
-                if len(answer)>1:# and answer!=' ' and answer!=':':
+                
+                if len(answer)>too_long_gen_thresh:
+                    #If predictions are too long, they become unreliable
+                    #So we'll keep only the first part and requery with the (good) predicted part
+                    answer = ''
+                    new_textline = text_line
+                    while (part_answer)>too_long_gen_thresh:
+                        part_answer = pred_answer[:too_long_gen_thresh] #remove unreliable prediction
+                        new_textline = new_textline+' '+part_answer
+                        answer +=' '+part_answer
+                        if len(new_textline)>too_long_read_thresh:
+                            new_textline=new_textline[too_long_read_thresh:]
+                        new_question='re~'+new_textline
+                        part_answer = model(img,ocr,[[new_question]],RUN=True)
+                        print('TOO LONG> '+new_question+' {:} '+part_answer)
+                    if part_answer != '[ end ]':
+                        answer +=' '+part_answer
+
+                #if len(answer)>1:# and answer!=' ' and answer!=':':
+                if answer != '[ end ]':
                     matching=[]
                     for ti2,textline2 in enumerate(transcription_lines):
                         if ti!=ti2 and ti2 not in used:
+                            #if len(answer)-len(textline2)>6:
+                            #else:
                             matching.append((ti2,norm_ed(answer,textline2)))
                     matching.sort(key=lambda a:a[1])
                     #it's possible there are several texts that are the same
@@ -375,7 +398,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             pred_groups = []
             num_lines = len(transcription_lines)
             for ti in range(num_lines):
-                if ti not in claimed: #I'm not the middle of a chain
+                if ti not in claimed and ti not in used: #I'm not the middle of a chain
                     group=[ti]
                     full_text = transcription_lines[ti]
                     pred_first.append(full_text)
