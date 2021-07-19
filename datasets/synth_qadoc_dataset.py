@@ -98,6 +98,7 @@ class SynthQADocDataset(QADataset):
         self.wider = config['wider'] if 'wider' in config else False
         self.use_hw = config['use_hw'] if 'use_hw' in config else False
         self.word_questions = config['word_questions'] if 'word_questions' in config else False
+        self.no_read = config['no_read'] if 'no_read' in config else False
         self.multiline = config['multiline'] if 'multiline' in config else False
         self.min_start_read = 7
         self.max_num_lines = config['max_num_lines'] if 'max_num_lines' in config else 6
@@ -669,7 +670,7 @@ class SynthQADocDataset(QADataset):
         return bbs, list(range(bbs.shape[0])), ocr, {'image':image}, {}, qa
 
     def addRead(self,qa,text,np=False):
-        if len(text)>2:
+        if len(text)>2 and not self.no_read:
             if len(text)>self.min_start_read+1:
                 start_point = random.randrange(self.min_start_read,len(text)-1)
             else:
