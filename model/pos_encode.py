@@ -27,13 +27,13 @@ class PositionalEncoding(nn.Module):
 
 class ReturnPositionalEncoding(nn.Module):
     "Implement the PE function."
-    def __init__(self, d_model, dropout, max_len=5000):
+    def __init__(self, d_model, dropout, max_len=5000,offset_start=0):
         super(ReturnPositionalEncoding, self).__init__()
         self.dropout = nn.Dropout(p=dropout)
         
         # Compute the positional encodings once in log space.
         pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len).unsqueeze(1)
+        position = torch.arange(offset_start, offset_start+max_len).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2) *
                              -(math.log(10000.0) / d_model))
         pe[:, 0::2] = torch.sin(position * div_term)

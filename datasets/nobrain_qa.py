@@ -9,28 +9,13 @@ import math, random
 from collections import defaultdict, OrderedDict
 from utils.funsd_annotations import createLines
 import timeit
-from .qa import QADataset
+from .qa import QADataset, collate
 
 import utils.img_f as img_f
 
 SKIP=['174']#['193','194','197','200']
 ONE_DONE=[]
 
-def collate(batch):
-
-
-    return {
-            'img': torch.cat([b['img'] for b in batch],dim=0),
-            'bb_gt': torch.cat([b['bb_gt'] for b in batch],dim=0),
-            'imgName': [b['imgName'] for b in batch],
-            'scale': [b['scale'] for b in batch],
-            'cropPoint': [b['cropPoint'] for b in batch],
-            'transcription': [b['transcription'] for b in batch],
-            'metadata': [b['metadata'] for b in batch],
-            'form_metadata': [b['form_metadata'] for b in batch],
-            'questions': [b['questions'] for b in batch],
-            'answers': [b['answers'] for b in batch]
-            }
 
 
 class NobrainQA(QADataset):
@@ -409,12 +394,13 @@ class NobrainQA(QADataset):
             random.shuffle(b_and_t)
             word_boxes,word_trans = zip(*b_and_t)
 
+        
 
         word_boxes = np.array(word_boxes)
         #trans = []
         #groups = []
 
-        bbs=word_boxes[None,...]
+        bbs=word_boxes
         trans=word_trans
 
-        return bbs, list(range(bbs.shape[1])), trans, {}, {}, self.qa
+        return bbs, list(range(bbs.shape[0])), trans, {'image':np.zeros([192,192])}, {}, self.qa
