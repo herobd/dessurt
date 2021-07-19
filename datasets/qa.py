@@ -244,7 +244,7 @@ class QADataset(torch.utils.data.Dataset):
         #if 'word_boxes' in form_metadata:
         #     form_metadata['word_boxes'] = convertBBs(form_metadata['word_boxes'][None,...],self.rotate,0)[0,...]
 
-        
+        #import pdb;pdb.set_trace()
         transcription = [trans[id] for id in ids]
 
         #t#time = timeit.default_timer()#t#
