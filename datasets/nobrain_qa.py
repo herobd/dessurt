@@ -417,4 +417,4 @@ class NobrainQA(QADataset):
         bbs=word_boxes[None,...]
         trans=word_trans
 
-        return bbs, list(range(bbs.shape[1])), trans, {}, {}, self.qa
+        return bbs, list(range(bbs.shape[1])), trans, {'image':np.zeros([192,192])}, {}, self.qa
