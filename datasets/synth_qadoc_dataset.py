@@ -77,6 +77,26 @@ def create_image(x):
         break
     return gt,img
 
+
+def addRead(qa,text,min_start_read,np=False):
+    if len(text)<=2 or random.random()<0.05:
+        start_point=len(text) #so we get [end]s with long texts
+    elif len(text)>min_start_read+1:
+        start_point = random.randrange(min_start_read,len(text)+1)
+    else:
+        start_point = random.randrange(len(text)//2,len(text)+1)
+    start_text = text[:start_point].strip()
+    finish_text = text[start_point:].strip()
+    if len(finish_text)==0:
+        finish_text='[ end ]'
+    if len(start_text)-min_start_read*2>0 and random.random()>0.33:
+        real_start = random.randrange(0,len(start_text)-min_start_read*2)
+        start_text = start_text[real_start:]
+    if np:
+        qa.append(('re~{}'.format(start_text),'[ np ]',None))
+    else:
+        qa.append(('re~{}'.format(start_text),finish_text,None))
+
 class SynthQADocDataset(QADataset):
     def __init__(self, dirPath, split, config):
         super(SynthQADocDataset, self).__init__(dirPath,split,config)
@@ -578,8 +598,8 @@ class SynthQADocDataset(QADataset):
                     if self.word_questions=='simple':
                         qa.append(('l~{}'.format(label_text),value_text,None))
                         qa.append(('v~{}'.format(value_text),label_text,None))
-                        self.addRead(qa,label_text)
-                        self.addRead(qa,value_text)
+                        addRead(qa,label_text,self.min_start_read)
+                        addRead(qa,value_text,self.min_start_read)
                     elif self.word_questions:
                         question_to_value = random.choice(self.ask_for_value)
                         question_to_label = random.choice(self.ask_for_label)
@@ -643,7 +663,7 @@ class SynthQADocDataset(QADataset):
                 if self.word_questions=='simple':
                     qa.append(('l~{}'.format(q_text),'[ np ]',None))
                     if q_text not in selected_values_stripped:
-                        self.addRead(qa,q_text,np=True)
+                        addRead(qa,q_text,self.min_start_read,np=True)
                         qa.append(('v~{}'.format(q_text),'[ np ]',None))
                 elif self.word_questions:
                     question = random.choice(self.ask_for_value)
@@ -668,18 +688,6 @@ class SynthQADocDataset(QADataset):
 
         return bbs, list(range(bbs.shape[0])), ocr, {'image':image}, {}, qa
 
-    def addRead(self,qa,text,np=False):
-        if len(text)>2:
-            if len(text)>self.min_start_read+1:
-                start_point = random.randrange(self.min_start_read,len(text)-1)
-            else:
-                start_point = random.randrange(len(text)//2,len(text)-1)
-            start_text = text[:start_point]
-            finish_text = text[start_point:]
-            if np:
-                qa.append(('re~{}'.format(start_text),'[ np ]',None))
-            else:
-                qa.append(('re~{}'.format(start_text),finish_text,None))
     
     def addText(self,label_text,label_x,label_y,l_horz,l_vert,value_text=None,value_x=None,value_y=None,v_horz=None,v_vert=None,boxes=None,trans=None,s=1):
         #corrupt text
