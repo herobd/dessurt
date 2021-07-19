@@ -590,10 +590,10 @@ class SynthQADocDataset(QADataset):
                         cur_y += v_vert+pad
                     
                     if type(label_text) is list:
-                        label_text = ' '.join(label_text)
+                        label_text = '\\'.join(label_text)
                     selected_labels_stripped.append(label_text.strip())
                     if type(value_text) is list:
-                        value_text = ' '.join(value_text)
+                        value_text = '\\'.join(value_text)
                     selected_values_stripped.append(label_text.strip())
 
                     if self.word_questions=='simple':
@@ -614,7 +614,7 @@ class SynthQADocDataset(QADataset):
                         self.addText(label_text,label_x,label_y,l_horz,l_vert,value_text,value_x,value_y,v_horz,v_vert,boxes,trans,s)
                 else:
                     if type(label_text) is list:
-                        label_text = ' '.join(label_text)
+                        label_text = '\\'.join(label_text)
                     if label_text.strip() not in selected_labels_stripped:
                         not_present_qs.append(label_text)
 
