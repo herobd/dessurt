@@ -311,7 +311,7 @@ class FUNSDQA(QADataset):
             trans_bb.sort(key=lambda a:a[0] )
             trans=trans_bb[0][1]
             for y,t in trans_bb[1:]:
-                trans+=' '+t
+                trans+='\\'+t
             all_trans[gi]=trans
             #print('c:{} {},{} full group trans: {}'.format(cls,bbs[group[0],0],bbs[group[0],1],trans))
 
@@ -442,7 +442,7 @@ class FUNSDQA(QADataset):
                         trans_bb.sort(key=lambda a:a[0] )
                         trans=trans_bb[0][1]
                         for y,t in trans_bb[1:]:
-                            trans+=' '+t
+                            trans+='\\'+t
                         all_trans[gi]=trans
                         group_count+=1
                         bb_ids = groups[qi]+groups[other_qi]
@@ -469,7 +469,7 @@ class FUNSDQA(QADataset):
                     trans_bb.sort(key=lambda a:a[0] )
                     trans=trans_bb[0][1]
                     for y,t in trans_bb[1:]:
-                        trans+=' '+t
+                        trans+='\\'+t
                     all_trans[gi]=trans
                     group_count+=1
                     groups = groups+[bb_ids]
@@ -573,14 +573,15 @@ class FUNSDQA(QADataset):
                 all_q_a.append(('hd~{}'.format(trans_h),trans_qs,[hi]+qis))
 
             for gi in others_gs:
-                trans_gi = all_trans[qi]
+                trans_gi = all_trans[gi]
+                #if random.random()<0.1 and ':' not in trans_gi: 
                 if trans_gi not in ambiguous:
                     all_q_a.append(('l~{}'.format(trans_gi),'[ np ]',None))
                     all_q_a.append(('v~{}'.format(trans_gi),'[ np ]',None))
                     all_q_a.append(('hd~{}'.format(trans_gi),'[ np ]',None))
                     all_q_a.append(('qu~{}'.format(trans_gi),'[ np ]',None))
             for gi in qs_without_h:
-                trans_gi = all_trans[qi]
+                trans_gi = all_trans[gi]
                 if trans_gi not in ambiguous:
                     all_q_a.append(('qu~{}'.format(trans_gi),'[ np ]',None))
 
