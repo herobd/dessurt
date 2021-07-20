@@ -79,6 +79,8 @@ def create_image(x):
 
 
 def addRead(qa,text,min_start_read,np=False):
+    #if len(text)<=2 and random.random()<0.2:
+    #    return #skip,
     if len(text)<=2 or random.random()<0.05:
         start_point=len(text) #so we get [end]s with long texts
     elif len(text)>min_start_read+1:
@@ -118,7 +120,9 @@ class SynthQADocDataset(QADataset):
         self.wider = config['wider'] if 'wider' in config else False
         self.use_hw = config['use_hw'] if 'use_hw' in config else False
         self.word_questions = config['word_questions'] if 'word_questions' in config else False
-        self.no_read = config['no_read'] if 'no_read' in config else False
+        self.use_read = config['use_read'] if 'use_read' in config else 1
+        if 'no_read' in config and config['no_read']:
+            self.use_read = 0
         self.multiline = config['multiline'] if 'multiline' in config else False
         self.min_start_read = 7
         self.max_num_lines = config['max_num_lines'] if 'max_num_lines' in config else 6
@@ -599,7 +603,7 @@ class SynthQADocDataset(QADataset):
                     if self.word_questions=='simple':
                         qa.append(('l~{}'.format(label_text),value_text,None))
                         qa.append(('v~{}'.format(value_text),label_text,None))
-                        if not self.no_read:
+                        if self.use_read>random.random():
                             addRead(qa,label_text,self.min_start_read)
                             addRead(qa,value_text,self.min_start_read)
                     elif self.word_questions:
@@ -665,7 +669,7 @@ class SynthQADocDataset(QADataset):
                 if self.word_questions=='simple':
                     qa.append(('l~{}'.format(q_text),'[ np ]',None))
                     if q_text not in selected_values_stripped:
-                        if not self.no_read:
+                        if self.use_read>random.random():
                             addRead(qa,q_text,self.min_start_read,np=True)
                         qa.append(('v~{}'.format(q_text),'[ np ]',None))
                 elif self.word_questions:
