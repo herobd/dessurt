@@ -225,6 +225,13 @@ class GraphPairDataset(torch.utils.data.Dataset):
                 questions=[]
                 answers=[]
                 questions_and_answers = [(q,a,qids) for q,a,qids in questions_and_answers if all((i in ids) for i in qids)]
+            ##tic=timeit.default_timer()
+            if np_img.shape[2]==3:
+                np_img = augmentation.apply_random_color_rotation(np_img)
+                np_img = augmentation.apply_tensmeyer_brightness(np_img,**self.aug_params)
+            else:
+                np_img = augmentation.apply_tensmeyer_brightness(np_img,**self.aug_params)
+            ##print('augmentation: {}'.format(timeit.default_timer()-tic))
         if questions_and_answers is not None:
             if len(questions_and_answers) > self.questions:
                 questions_and_answers = random.sample(questions_and_answers,k=self.questions)
@@ -238,13 +245,6 @@ class GraphPairDataset(torch.utils.data.Dataset):
 
 
 
-            ##tic=timeit.default_timer()
-            if np_img.shape[2]==3:
-                np_img = augmentation.apply_random_color_rotation(np_img)
-                np_img = augmentation.apply_tensmeyer_brightness(np_img,**self.aug_params)
-            else:
-                np_img = augmentation.apply_tensmeyer_brightness(np_img,**self.aug_params)
-            ##print('augmentation: {}'.format(timeit.default_timer()-tic))
         newGroups = []
         for group in groups:
             newGroup=[ids.index(bbId) for bbId in group if bbId in ids]
