@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import numpy as np
 from model.pairing_g_graph_layoutlm import  runLayoutLM
 from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding
-from model.rel_pos_im_transformer import RelPosImTransformerLayer, RelPosTransformerLayer
+from model.rel_pos_im_transformer import RelPosQTransformerLayer, RelPosTransformerLayer
 from model.swin_transformer import ConvPatchEmbed, SwinTransformerBlock, PatchMerging
 from model.trans_pooling import OCRPooler, QPooler
 try:
@@ -30,9 +30,9 @@ def normalize_bbox2(bbox, dwidth, dheight, twidth, theight, max_dist):
          max(min(int(max_dist * (bbox[3] / theight)),theight),0),
      ]
 
-class QAImDocGPT2(BaseModel):
+class QAImDocGPT3(BaseModel):
     def __init__(self,config):
-        super(QAImDocGPT2, self).__init__(config)
+        super(QAImDocGPT3, self).__init__(config)
         self.blank_ocr = config['blank_ocr'] if 'blank_ocr' in config else False
         self.image_size = config['image_size'] #start at 512?
         dropout = 0 if 'no_dropout' in config and  config['no_dropout'] else 0.1
@@ -58,7 +58,6 @@ class QAImDocGPT2(BaseModel):
                 swin_text_downsample = config['swin_text_downsample'] if 'swin_text_downsample' in config else [False]*len(blocks_per_level)
                 swin_text_downsample_dense=False
                 self.downsample_ocr = sum(swin_text_downsample)
-                self.downsample_q = None
 
             window_size = config['window_size'] #7
             if type(window_size) is int:
@@ -188,7 +187,7 @@ class QAImDocGPT2(BaseModel):
                                      norm_layer=nn.LayerNorm,
                                      sees_docq=True),
                         nn.Linear(d_model,d_im,bias=False) if d_model!=d_im else nn.Identity(),
-                        RelPosImTransformerLayer(d_model,nhead,max_dist,dim_ff,dropout=dropout,fixed=True),
+                        RelPosQTransformerLayer(d_model,nhead,max_dist,dim_ff,dropout=dropout),
                         nn.Linear(d_im,d_model,bias=False) if d_model!=d_im else nn.Identity(),
                         PatchMerging(cur_resolution, dim=d_im, norm_layer=nn.LayerNorm) if last else None,
                         ocr_pool,
@@ -472,7 +471,7 @@ class QAImDocGPT2(BaseModel):
 
         q_tokens = self.q_pos_1d_enc(q_tokens)
         q_padding_mask = (1-q_t['attention_mask']).bool()#.to(device) 
-        if self.downsample_q is not None and self.downsample_q>0:
+        if self.downsample_q>0:
             #pad it out
             missing = q_tokens.size(1)% (2**self.downsample_q)
             missing = ((2**self.downsample_q)-missing) % (2**self.downsample_q)
@@ -571,16 +570,19 @@ class QAImDocGPT2(BaseModel):
                     saved_ocr_padding_mask.append(ocr_padding_mask)
                     saved_q_padding_mask.append(q_padding_mask)
                 
-                ocrqa_tokens = layout_layer(
-                        ocrqa_tokens,
-                        ocrqa_pos[:,:,0], #x
-                        ocrqa_pos[:,:,1], #y
-                        proj_im_tokens,
-                        self.im_xs[level].expand(new_batch_size,-1),
-                        self.im_ys[level].expand(new_batch_size,-1),
-                        docqa_mask=ocrqa_att_mask.expand(new_batch_size,-1,-1),
-                        docqa_padding_mask=ocrqa_padding_mask,
-                        pos_mask = ocrqa_pos_mask)
+                qa_tokens = layout_layer(
+                        qa_tokens,
+                        qa_pos[:,:,0], #x
+                        qa_pos[:,:,1], #y
+                        qa_pos_mask,
+                        all_tokens,
+                        torch.cat((proj_im_tokens,ocr_tokens,qa_tokens),dim=1),
+                        torch.cat((self.im_xs[level].expand(new_batch_size,-1),ocr_pos[:,:,0],qa_pos[:,:,0]),dim=1),
+                        torch.cat((self.im_xs[level].expand(new_batch_size,-1),ocr_pos[:,:,1],qa_pos[:,:,1]),dim=1),
+                        all_pos_mask,
+                        all_mask[:,num_q+num_a,num_all],
+                        all_padding_mask)
+                        
 
 
                 if im_downsample is not None:
@@ -622,6 +624,7 @@ class QAImDocGPT2(BaseModel):
         
 
         if self.full_layers is not None:
+            raise NotImplementedError()
             im_pos = torch.stack( (self.im_xs[level],self.im_ys[level]),dim=2).expand(new_batch_size,-1,-1)
             im_pos_mask = torch.FloatTensor(1,num_im,1).fill_(1).expand(new_batch_size,-1,-1).to(device)
             im_padding_mask = torch.BoolTensor(1,num_im).fill_(0).expand(new_batch_size,-1).to(device)
