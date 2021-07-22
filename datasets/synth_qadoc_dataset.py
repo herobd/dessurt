@@ -140,7 +140,6 @@ class SynthQADocDataset(QADataset):
         self.wider = config['wider'] if 'wider' in config else False
         self.use_hw = config['use_hw'] if 'use_hw' in config else False
         self.word_questions = config['word_questions'] if 'word_questions' in config else False
-        self.max_qa_len = config['max_qa_len'] if 'max_qa_len' in config else None
         self.use_read = config['use_read'] if 'use_read' in config else 1
         if 'no_read' in config and config['no_read']:
             self.use_read = 0
@@ -623,7 +622,7 @@ class SynthQADocDataset(QADataset):
                         q_text = random.choice(self.labels)
                         if q_text.strip() not in col_hs:
                             break
-                    if self.max_qa_len is not None and len(q_text)<self.max_qa_len:
+                    if self.max_qa_len is not None and len(q_text)>self.max_qa_len:
                         q_text = q_text[-self.max_qa_len:]
                     qa.append(('ac~{}'.format(q_text),'[ np ]',None))
                 elif random.random()<0.6:
@@ -631,7 +630,7 @@ class SynthQADocDataset(QADataset):
                         q_text = random.choice(self.labels)
                         if q_text.strip() not in row_hs:
                             break
-                    if self.max_qa_len is not None and len(q_text)<self.max_qa_len:
+                    if self.max_qa_len is not None and len(q_text)>self.max_qa_len:
                         q_text = q_text[-self.max_qa_len:]
                     qa.append(('ar~{}'.format(q_text),'[ np ]',None))
                 else:
@@ -643,10 +642,10 @@ class SynthQADocDataset(QADataset):
                         r_text = random.choice(self.labels)
                         if r_text.strip() not in row_hs+col_hs:
                             break
-                    if self.max_qa_len is not None and len(c_text)<self.max_qa_len:
-                        c_text = c_text[-self.max_qa_len:]
-                    if self.max_qa_len is not None and len(r_text)<self.max_qa_len:
-                        r_text = r_text[-self.max_qa_len:]
+                    if self.max_qa_len is not None and len(c_text)>self.max_qa_len//2:
+                        c_text = c_text[-self.max_qa_len//2:]
+                    if self.max_qa_len is not None and len(r_text)>self.max_qa_len//2:
+                        r_text = r_text[-self.max_qa_len//2:]
                     qa.append(('t~{}~~{}'.format(r_text,c_text),'[ np ]',None))
             else:
                 if len(not_present_qs)>0:
@@ -1030,11 +1029,11 @@ class SynthQADocDataset(QADataset):
                     #table_values.append((col_headers[c][1],row_headers[r][1],'[np]',cur_x,cur_y))
                     if self.word_questions=='simple':
                         rhdr = row_headers[r][1]
-                        if self.max_qa_len is not None and len(rhdr)>self.max_qa_len:
-                            rhdr = rhdr[-self.max_qa_len:]
+                        if self.max_qa_len is not None and len(rhdr)>self.max_qa_len//2:
+                            rhdr = rhdr[-self.max_qa_len//2:]
                         chdr = col_headers[c][1]
-                        if self.max_qa_len is not None and len(chdr)>self.max_qa_len:
-                            chdr = chdr[-self.max_qa_len:]
+                        if self.max_qa_len is not None and len(chdr)>self.max_qa_len//2:
+                            chdr = chdr[-self.max_qa_len//2:]
                         all_q_a.append(('t~{}~~{}'.format(rhdr,chdr),'[ blank ]',None))
                         all_q_a.append(('t~{}~~{}'.format(chdr,rhdr),'[ blank ]',None))
                     else:
@@ -1134,11 +1133,11 @@ class SynthQADocDataset(QADataset):
                 if self.word_questions=='simple':
 
                     rhdr = row_h
-                    if self.max_qa_len is not None and len(rhdr)>self.max_qa_len:
-                        rhdr = rhdr[-self.max_qa_len:]
+                    if self.max_qa_len is not None and len(rhdr)>self.max_qa_len//2:
+                        rhdr = rhdr[-self.max_qa_len//2:]
                     chdr = col_h
-                    if self.max_qa_len is not None and len(chdr)>self.max_qa_len:
-                        chdr = chdr[-self.max_qa_len:]
+                    if self.max_qa_len is not None and len(chdr)>self.max_qa_len//2:
+                        chdr = chdr[-self.max_qa_len//2:]
                     val = v
                     if self.max_qa_len is not None and len(val)>self.max_qa_len:
                         val = val[:self.max_qa_len-2]+'>>'

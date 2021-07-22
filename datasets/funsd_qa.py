@@ -10,7 +10,7 @@ from collections import defaultdict, OrderedDict
 from utils.funsd_annotations import createLines
 import timeit
 from .qa import QADataset
-from .synth_qadoc_dataset import addRead
+from .synth_qadoc_dataset import addRead, breakLong
 
 import utils.img_f as img_f
 
@@ -306,7 +306,10 @@ class FUNSDQA(QADataset):
                 #    continue
                 if self.char_qs=='full':
                     #classify individual lines
-                    class_qs.append(('cs~{}'.format(transcription[bbi]),class_answer,[gi])) #This can be ambigous, although generally the same text has the same class
+                    text=transcription[bbi]
+                    if self.max_qa_len is not None and len(text)>self.max_qa_len:
+                        text = text[:self.max_qa_len]
+                    class_qs.append(('cs~{}'.format(text),class_answer,[gi])) #This can be ambigous, although generally the same text has the same class
 
             trans_bb.sort(key=lambda a:a[0] )
             trans=trans_bb[0][1]
@@ -326,12 +329,16 @@ class FUNSDQA(QADataset):
 
             if self.char_qs=='full':
                 #classify all together
-                class_qs.append(('cs~{}'.format(trans),class_answer,[gi])) #This can be ambigous, although generally the same text has the same class
+                text=trans
+                if self.max_qa_len is not None and len(text)>self.max_qa_len:
+                    text = text[:self.max_qa_len]
+                class_qs.append(('cs~{}'.format(text),class_answer,[gi])) #This can be ambigous, although generally the same text has the same class
 
                 all_q_a.append(random.choice(class_qs))
 
                 #complete (read)
-                addRead(all_q_a,trans,self.min_start_read)
+                addRead(all_q_a,trans,self.min_start_read,max_qa_len=self.max_qa_len)
+                addRead(all_q_a,trans,self.min_start_read,max_qa_len=self.max_qa_len,backwards=True)
 
 
         relationships_h_q=defaultdict(list)
@@ -491,28 +498,38 @@ class FUNSDQA(QADataset):
 
         for qi,ai in q_a_pairs:
             trans_qi = all_trans[qi]
+            if self.max_qa_len is not None and len(trans_qi)>self.max_qa_len:
+                trans_qi_q = trans_qi[-self.max_qa_len:]
+                trans_qi_a = '<<'+trans_qi[-(self.max_qa_len-2):]
+            else:
+                trans_qi_q = trans_qi_a = trans_qi
             #if 'Group' in trans_qi:
             #    import pdb;pdb.set_trace()
             if ai is not None:
                 trans_ai = all_trans[ai]
+                if self.max_qa_len is not None and len(trans_ai)>self.max_qa_len:
+                    trans_ai_q = trans_ai[:self.max_qa_len]
+                    trans_ai_a = trans_ai[:self.max_qa_len-2]+'>>'
+                else:
+                    trans_ai_q = trans_ai_a = trans_ai
                 if trans_qi not in ambiguous:
                     if self.char_qs:
-                        all_q_a.append(('l~{}'.format(trans_qi),trans_ai,[qi,ai]))
+                        all_q_a.append(('l~{}'.format(trans_qi_q),trans_ai_a,[qi,ai]))
                         if random.random()<self.extra_np:
-                            all_q_a.append(('v~{}'.format(trans_qi),'[ np ]',[qi,ai]))
+                            all_q_a.append(('v~{}'.format(trans_qi_q),'[ np ]',[qi,ai]))
 
                     else:
                         all_q_a.append(('value for "{}"?'.format(trans_qi),trans_ai,[qi,ai]))
                 if trans_ai not in ambiguous:
                     if self.char_qs:
-                        all_q_a.append(('v~{}'.format(trans_ai),trans_qi,[qi,ai]))
+                        all_q_a.append(('v~{}'.format(trans_ai_q),trans_qi_a,[qi,ai]))
                         if random.random()<self.extra_np:
-                            all_q_a.append(('l~{}'.format(trans_ai),'[ np ]',[qi,ai]))
+                            all_q_a.append(('l~{}'.format(trans_ai_q),'[ np ]',[qi,ai]))
                     else:
                         all_q_a.append(('label of "{}"?'.format(trans_ai),trans_qi,[qi,ai]))
             elif trans_qi not in ambiguous:
                 if self.char_qs:
-                    all_q_a.append(('l~{}'.format(trans_qi),'[ blank ]',[qi]))
+                    all_q_a.append(('l~{}'.format(trans_qi_q),'[ blank ]',[qi]))
                 else:
                     all_q_a.append(('value for "{}"?'.format(trans_qi),'blank',[qi]))
 
@@ -522,6 +539,11 @@ class FUNSDQA(QADataset):
             #Do header and qestions
             for hi,qis in relationships_h_q.items():
                 trans_h = all_trans[hi]
+                if self.max_qa_len is not None and len(trans_h)>self.max_qa_len:
+                    trans_h_q = trans_h[-self.max_qa_len:]
+                    trans_h_a = '<<'+trans_h[-(self.max_qa_len-2):]
+                else:
+                    trans_h_q=trans_h_a=trans_h
                 trans_qs=[]
                 for qi in qis:
                     trans_q = all_trans[qi]
@@ -539,7 +561,9 @@ class FUNSDQA(QADataset):
                     else:
                         xc=yc=h=-1
                     trans_qs.append((trans_q,xc,yc,h))
-                    all_q_a.append(('qu~{}'.format(trans_q),trans_h,[hi,qi]))
+                    if self.max_qa_len is not None and len(trans_q)>self.max_qa_len:
+                        trans_q = trans_q[:self.max_qa_len]
+                    all_q_a.append(('qu~{}'.format(trans_q),trans_h_a,[hi,qi]))
 
                 #Now we need to put all the questions into read order
                 if len(trans_qs)>1:
@@ -567,22 +591,33 @@ class FUNSDQA(QADataset):
                         row.sort(key=lambda a:a[1])
                         for trans_q,x,y in row:
                             trans_qs.append(trans_q)
-                    trans_qs = ', '.join(trans_qs)
+                    trans_qs = '|'.join(trans_qs)
                 else:
                     trans_qs = trans_qs[0][0]
-                all_q_a.append(('hd~{}'.format(trans_h),trans_qs,[hi]+qis))
+
+                if self.max_qa_len is not None and len(trans_qs)>self.max_qa_len:
+                    breakLong(qa,trans_qs,'hd~{}'.format(trans_h_q),'hd>',self.max_qa_len)
+                else:
+                    all_q_a.append(('hd~{}'.format(trans_h_q),trans_qs,[hi]+qis))
 
             for gi in others_gs:
                 trans_gi = all_trans[gi]
                 #if random.random()<0.1 and ':' not in trans_gi: 
                 if trans_gi not in ambiguous:
-                    all_q_a.append(('l~{}'.format(trans_gi),'[ np ]',None))
-                    all_q_a.append(('v~{}'.format(trans_gi),'[ np ]',None))
-                    all_q_a.append(('hd~{}'.format(trans_gi),'[ np ]',None))
-                    all_q_a.append(('qu~{}'.format(trans_gi),'[ np ]',None))
+                    if self.max_qa_len is not None and len(trans_gi)>self.max_qa_len:
+                        trans_gi_end = trans_gi[-self.max_qa_len:]
+                        trans_gi_start = trans_gi[:self.max_qa_len]
+                    else:
+                        trans_gi_start=trans_gi_end=trans_gi
+                    all_q_a.append(('l~{}'.format(trans_gi_end),'[ np ]',None))
+                    all_q_a.append(('v~{}'.format(trans_gi_start),'[ np ]',None))
+                    all_q_a.append(('hd~{}'.format(trans_gi_end),'[ np ]',None))
+                    all_q_a.append(('qu~{}'.format(trans_gi_start),'[ np ]',None))
             for gi in qs_without_h:
                 trans_gi = all_trans[gi]
                 if trans_gi not in ambiguous:
+                    if self.max_qa_len is not None and len(trans_gi)>self.max_qa_len:
+                        trans_gi = trans_gi[:self.max_qa_len]
                     all_q_a.append(('qu~{}'.format(trans_gi),'[ np ]',None))
 
         #addTable can cause two tables to be made in odd cases (uneven rows, etc), so we'll simply combine all the table information and generate questions from it.
@@ -656,20 +691,42 @@ class FUNSDQA(QADataset):
 
             if col_h is not None and row_h is not None:
                 if self.char_qs:
-                    all_q_a.append(('t~{}~~{}'.format(all_trans[row_h],all_trans[col_h]),all_trans[v],[col_h,row_h,v]))
-                    all_q_a.append(('t~{}~~{}'.format(all_trans[col_h],all_trans[row_h]),all_trans[v],[col_h,row_h,v]))
+                    rhdr = all_trans[row_h]
+                    if self.max_qa_len is not None and len(rhdr)>self.max_qa_len//2:
+                        rhdr = rhdr[-self.max_qa_len//2:]
+                    chdr = all_trans[col_h]
+                    if self.max_qa_len is not None and len(chdr)>self.max_qa_len//2:
+                        chdr = chdr[-self.max_qa_len//2:]
+                    val = all_trans[v]
+                    if self.max_qa_len is not None and len(val)>self.max_qa_len:
+                        val = val[:self.max_qa_len-2]+'>>'
+
+                    all_q_a.append(('t~{}~~{}'.format(rhdr,chdr),val,[col_h,row_h,v]))
+                    all_q_a.append(('t~{}~~{}'.format(chdr,rhdr),val,[col_h,row_h,v]))
                 else:
                     all_q_a.append(('value of "{}" and "{}"?'.format(all_trans[row_h],all_trans[col_h]),all_trans[v],[col_h,row_h,v]))
                     all_q_a.append(('value of "{}" and "{}"?'.format(all_trans[col_h],all_trans[row_h]),all_trans[v],[col_h,row_h,v]))
             if all_trans[v] not in ambiguous:
                 if row_h is not None:
                     if self.char_qs:
-                        all_q_a.append(('ri~{}'.format(all_trans[v]),all_trans[row_h],[v,row_h]))
+                        rhdr = all_trans[row_h]
+                        if self.max_qa_len is not None and len(rhdr)>self.max_qa_len:
+                            rhdr = rhdr[-self.max_qa_len:]
+                        val = all_trans[v]
+                        if self.max_qa_len is not None and len(val)>self.max_qa_len:
+                            val = val[:self.max_qa_len-2]+'>>'
+                        all_q_a.append(('ri~{}'.format(val),rhdr,[v,row_h]))
                     else:
                         all_q_a.append(('row that "{}" is in?'.format(all_trans[v]),all_trans[row_h],[v,row_h]))
                 if col_h is not None:
                     if self.char_qs:
-                        all_q_a.append(('ci~{}'.format(all_trans[v]),all_trans[col_h],[v,col_h]))
+                        chdr = all_trans[col_h]
+                        if self.max_qa_len is not None and len(chdr)>self.max_qa_len:
+                            chdr = chdr[-self.max_qa_len:]
+                        val = all_trans[v]
+                        if self.max_qa_len is not None and len(val)>self.max_qa_len:
+                            val = val[:self.max_qa_len-2]+'>>'
+                        all_q_a.append(('ci~{}'.format(val),chdr,[v,col_h]))
                     else:
                         all_q_a.append(('column that "{}" is in?'.format(all_trans[v]),all_trans[col_h],[v,col_h]))
 
@@ -685,9 +742,14 @@ class FUNSDQA(QADataset):
                 vs.sort(key=lambda a:a[1])
                 a=all_trans[vs[0][0]]
                 for v,x in vs[1:]:
-                    a+=', '+all_trans[v]
+                    a+='|'+all_trans[v]
                 if self.char_qs:
-                    all_q_a.append(('ar~{}'.format(trans_row_h),a,[row_h,vs[0][0]]))
+                    if self.max_qa_len is not None and len(trans_row_h)>self.max_qa_len:
+                        trans_row_h = trans_row_h[-self.max_qa_len:]
+                    if self.max_qa_len is not None and len(a)>self.max_qa_len:
+                        breakLong(all_q_a,a,'ar~{}'.format(trans_row_h),'ar>',self.max_qa_len)
+                    else:
+                        all_q_a.append(('ar~{}'.format(trans_row_h),a,[row_h,vs[0][0]]))
                 else:
                     all_q_a.append(('all values in row "{}"?'.format(trans_row_h),a,[row_h,vs[0][0]]))
         for col_h, vs in col_vs.items():
@@ -696,9 +758,14 @@ class FUNSDQA(QADataset):
                 vs.sort(key=lambda a:a[1])
                 a=all_trans[vs[0][0]]
                 for v,y in vs[1:]:
-                    a+=', '+all_trans[v]
+                    a+='|'+all_trans[v]
                 if self.char_qs: 
-                    all_q_a.append(('ac~{}'.format(trans_col_h),a,[col_h,vs[0][0]]))
+                    if self.max_qa_len is not None and len(trans_col_h)>self.max_qa_len:
+                        trans_col_h = trans_col_h[-self.max_qa_len:]
+                    if self.max_qa_len is not None and len(a)>self.max_qa_len:
+                        breakLong(all_q_a,a,'ac~{}'.format(trans_col_h),'ac>',self.max_qa_len)
+                    else:
+                        all_q_a.append(('ac~{}'.format(trans_col_h),a,[col_h,vs[0][0]]))
                 else:
                     all_q_a.append(('all values in column "{}"?'.format(trans_col_h),a,[col_h,vs[0][0]]))
 
@@ -714,8 +781,14 @@ class FUNSDQA(QADataset):
                 row_hs = [h[0] for h in row_hs]
                 row_h_strs = [all_trans[h] for h in row_hs]
                 
-                all_q_a.append(('ch~{}'.format(i),', '.join(col_h_strs),col_hs))
-                all_q_a.append(('rh~{}'.format(i),', '.join(row_h_strs),row_hs))
+                if self.max_qa_len is not None and len(col_h_strs)>self.max_qa_len:
+                    breakLong(all_q_a,col_h_strs,'ch~{}'.format(i),'ch>',self.max_qa_len)
+                else:
+                    all_q_a.append(('ch~{}'.format(i),'|'.join(col_h_strs),col_hs))
+                if self.max_qa_len is not None and len(row_h_strs)>self.max_qa_len:
+                    breakLong(all_q_a,row_h_strs,'rh~{}'.format(i),'rh>',self.max_qa_len)
+                else:
+                    all_q_a.append(('rh~{}'.format(i),'|'.join(row_h_strs),row_hs))
 
 
 
