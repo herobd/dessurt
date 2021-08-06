@@ -24,6 +24,7 @@
         "max_entries": 2,
 	"use_read": 0.01,
 	"multiline": 0.000001,
+        "change_size": true,
 	"word_questions": "simple",
         "text_height": 32,
         "image_size": 192,
