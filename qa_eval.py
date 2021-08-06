@@ -58,7 +58,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
         config['gpu']=gpu
 
     do_ocr=config['trainer']['do_ocr'] if 'do_ocr' in config['trainer'] else False
-    if do_ocr:
+    if do_ocr and do_ocr!='no':
         ocr_reader = easyocr.Reader(['en'],gpu=config['cuda'])
     addDATASET=False
     if addToConfig is not None:
@@ -204,7 +204,9 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
 
             img = img[None,...] #re add batch 
 
-            if do_ocr:
+            if do_ocr=='no':
+                ocr = [[]]
+            elif do_ocr:
                 np_img = (255*(1-img[0])/2).numpy().astype(np.uint64)
                 ocr_res = ocr_reader.readtext(np_img,decoder='greedy+softmax')
                 print('OCR:')
