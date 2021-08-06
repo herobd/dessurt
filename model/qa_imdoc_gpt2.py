@@ -481,7 +481,6 @@ class QAImDocGPT2(BaseModel):
             num_q+=missing
         q_padding_mask = q_padding_mask.to(device)
 
-
         a_tokens = self.a_pos_1d_enc(a_tokens)
         a_padding_mask = (1-a_t['attention_mask'][:,1:]).bool().to(device) #remove last SEP
 
@@ -571,6 +570,10 @@ class QAImDocGPT2(BaseModel):
                     saved_ocr_padding_mask.append(ocr_padding_mask)
                     saved_q_padding_mask.append(q_padding_mask)
                 
+                ##
+                #a_tokens = ocrqa_tokens[:,num_ocr+num_q:]
+                #import pdb;pdb.set_trace()
+                ##
                 ocrqa_tokens = layout_layer(
                         ocrqa_tokens,
                         ocrqa_pos[:,:,0], #x
@@ -581,21 +584,24 @@ class QAImDocGPT2(BaseModel):
                         docqa_mask=ocrqa_att_mask.expand(new_batch_size,-1,-1),
                         docqa_padding_mask=ocrqa_padding_mask,
                         pos_mask = ocrqa_pos_mask)
+                
 
 
                 if im_downsample is not None:
                     im_tokens = im_downsample(im_tokens)
                     level+=1
                     num_im = im_tokens.size(1)
-                num_ocr_old=num_ocr
+
+                ocr_tokens = ocrqa_tokens[:,:num_ocr]
+                q_tokens = ocrqa_tokens[:,num_ocr:num_ocr+num_q]
+                a_tokens = ocrqa_tokens[:,num_ocr+num_q:]
+                #num_ocr_old=num_ocr
                 if ocr_downsample is not None:
-                    ocr_tokens = ocrqa_tokens[:,:num_ocr]
                     ocr_tokens,ocr_pos,ocr_padding_mask = ocr_downsample(ocr_tokens,ocr_pos,ocr_padding_mask)
                     num_ocr = ocr_tokens.size(1)
                     ocr_pos_mask = ocr_padding_mask[:,:,None]#torch.FloatTensor(new_batch_size,ocr_tokens.size(1),1).fill_(1).to(device)
                 #num_q_old=num_q
                 if q_downsample is not None:
-                    q_tokens = ocrqa_tokens[:,num_ocr_old:num_ocr_old+num_q]
                     q_tokens,q_padding_mask = q_downsample(q_tokens,q_padding_mask)
                     num_q = q_tokens.size(1)
                     q_pos = q_pos[:,:num_q]
@@ -636,7 +642,9 @@ class QAImDocGPT2(BaseModel):
             all_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask,a_padding_mask),dim=1)
             for im_downsample, ocr_downsample, q_downsample, layer in self.full_layers:
                 num_im_old=num_im
+                did_downsample=False
                 if im_downsample is not None:
+                    did_downsample=True
                     im_tokens = all_tokens[:,:num_im]
                     im_tokens,im_pos = im_downsample(im_tokens,im_pos)
                     num_im = im_tokens.size(1)
@@ -644,12 +652,14 @@ class QAImDocGPT2(BaseModel):
                     im_padding_mask = im_padding_mask[:,:num_im]#torch.BoolTensor(new_batch_size,num_im).fill_(1).to(device)
                 num_ocr_old=num_ocr
                 if ocr_downsample is not None and num_ocr>5:
+                    did_downsample=True
                     ocr_tokens = all_tokens[:,num_im_old:num_im+num_ocr]
                     ocr_tokens,ocr_pos,ocr_padding_mask = ocr_downsample(ocr_tokens,ocr_pos,ocr_padding_mask)
                     num_ocr = ocr_tokens.size(1)
                     ocr_pos_mask = ocr_padding_mask[:,:,None]#torch.FloatTensor(new_batch_size,ocr_tokens.size(1),1).fill_(1).to(device)
                 #num_q_old=num_q
                 if q_downsample is not None and num_q>5:
+                    did_downsample=True
                     q_tokens = all_tokens[:,num_im_old+num_ocr_old:num_im_old+num_ocr_old+num_q]
                     q_tokens,q_padding_mask = q_downsample(q_tokens,q_padding_mask)
                     num_q = q_tokens.size(1)
@@ -658,7 +668,7 @@ class QAImDocGPT2(BaseModel):
                     q_pos_ex = q_pos.expand(new_batch_size,-1,-1)
                     q_pos_mask_ex = q_pos_mask.expand(new_batch_size,-1,-1)
 
-                if im_downsample is not None or ocr_downsample is not None or q_downsample is not None:
+                if did_downsample:
                     num_all = num_im+num_ocr+num_q+num_a
                     all_tokens = torch.cat( (im_tokens,ocr_tokens,q_tokens,a_tokens),dim=1)
                     all_pos = torch.cat( (im_pos,ocr_pos,q_pos_ex,a_pos_ex),dim=1)
@@ -732,7 +742,6 @@ class QAImDocGPT2(BaseModel):
                 num_a += 1
 
 
-
                 level=0
                 for li,(swin_layer, proj_d2i, layout_layer, proj_i2d, im_downsample, ocr_downsample, q_downsample) in enumerate(self.swin_layers):
 
@@ -749,6 +758,7 @@ class QAImDocGPT2(BaseModel):
                     ocrqa_att_mask = holder_all_att_mask[:,num_im:num_im+num_ocr+num_q+num_a,num_im:num_im+num_ocr+num_q+num_a]
                     ocrqa_padding_mask = torch.cat((saved_ocr_padding_mask[li],saved_q_padding_mask[li],holder_a_padding_mask[:,:num_a]),dim=1)
 
+                    #import pdb;pdb.set_trace()
                     ans = layout_layer(
                             ocrqa_tokens,
                             ocrqa_pos[:,:,0], #x

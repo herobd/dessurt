@@ -45,6 +45,7 @@ class FUNSDQA(QADataset):
         self.do_words = config['do_words']
         self.char_qs = config['char_qs'] if 'char_qs' in config else False
 
+
         self.min_start_read = 7
 
         self.extra_np = 0.05
@@ -534,6 +535,7 @@ class FUNSDQA(QADataset):
                     all_q_a.append(('value for "{}"?'.format(trans_qi),'blank',[qi]))
 
 
+
         if self.char_qs=="full":
 
             #Do header and qestions
@@ -596,7 +598,7 @@ class FUNSDQA(QADataset):
                     trans_qs = trans_qs[0][0]
 
                 if self.max_qa_len is not None and len(trans_qs)>self.max_qa_len:
-                    breakLong(qa,trans_qs,'hd~{}'.format(trans_h_q),'hd>',self.max_qa_len)
+                    breakLong(all_q_a,trans_qs,'hd~{}'.format(trans_h_q),'hd>',self.max_qa_len)
                 else:
                     all_q_a.append(('hd~{}'.format(trans_h_q),trans_qs,[hi]+qis))
 
@@ -781,14 +783,16 @@ class FUNSDQA(QADataset):
                 row_hs = [h[0] for h in row_hs]
                 row_h_strs = [all_trans[h] for h in row_hs]
                 
+                col_h_strs='|'.join(col_h_strs)
+                row_h_strs='|'.join(row_h_strs)
                 if self.max_qa_len is not None and len(col_h_strs)>self.max_qa_len:
                     breakLong(all_q_a,col_h_strs,'ch~{}'.format(i),'ch>',self.max_qa_len)
                 else:
-                    all_q_a.append(('ch~{}'.format(i),'|'.join(col_h_strs),col_hs))
+                    all_q_a.append(('ch~{}'.format(i),col_h_strs,col_hs))
                 if self.max_qa_len is not None and len(row_h_strs)>self.max_qa_len:
                     breakLong(all_q_a,row_h_strs,'rh~{}'.format(i),'rh>',self.max_qa_len)
                 else:
-                    all_q_a.append(('rh~{}'.format(i),'|'.join(row_h_strs),row_hs))
+                    all_q_a.append(('rh~{}'.format(i),row_h_strs,row_hs))
 
 
 
@@ -804,6 +808,8 @@ class FUNSDQA(QADataset):
             else:
                 bb_ids=None
             new_all_q_a.append((q,a,bb_ids))
+            if self.max_qa_len is not None:
+                assert len(q)<self.max_qa_len+5
         return new_all_q_a
 
 
