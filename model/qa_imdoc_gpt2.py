@@ -728,7 +728,7 @@ class QAImDocGPT2(BaseModel):
             response_greedy_token = response_decoded.argmax(dim=2)
 
             output_tokens.append(response_greedy_token[0,0].item())
-            print('first token: {}'.format(output_tokens[0]))
+            #print('first token: {}'.format(output_tokens[0]))
 
             offset = 1
 
@@ -798,7 +798,7 @@ class QAImDocGPT2(BaseModel):
                 
 
                 output_tokens.append(response_greedy_token[0,0].item())
-                print('next token: {}'.format(output_tokens[-1]))
+                #print('next token: {}'.format(output_tokens[-1]))
                 offset += 1
 
             
