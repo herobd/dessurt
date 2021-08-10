@@ -28,12 +28,23 @@ except:
 def norm_ed(s1,s2):
     return editdistance.eval(s1,s2)/max(len(s1),len(s2))
 
-def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=True):
+
+def unrollLongText(model,img,ocr,answer):
+    full_answer=''
+    while answer[-2:]=='>>':
+        full_answer += answer[:-2] #add to full text
+        new_question='re~'+answer[:-2] #form new question from last part
+        answer = model(img,ocr,[[new_question]],RUN=True)  #new response
+        print(' cont>> {}'.format(answer))
+    if answer != '[ end ]' and answer != '[ np ]':
+        full_answer += answer #finish text
+    return full_answer
+
+def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=True,max_qa_len=None):
     np.random.seed(1234)
     torch.manual_seed(1234)
     
-    too_long_read_thresh=100
-    too_long_gen_thresh=10
+    #too_long_gen_thresh=10
 
     if resume is not None:
         checkpoint = torch.load(resume, map_location=lambda storage, location: storage)
@@ -56,6 +67,9 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
     else:
         config['cuda']=True
         config['gpu']=gpu
+
+    if max_qa_len is None:
+        max_qa_len=config['data_loader']['max_qa_len']
 
     do_ocr=config['trainer']['do_ocr'] if 'do_ocr' in config['trainer'] else False
     if do_ocr and do_ocr!='no':
@@ -239,11 +253,15 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 question='ch~'+str(table_i)
                 answer = model(img,ocr,[[question]],RUN=True)
                 print(question+' {:} '+answer)
+                if answer[-2:]=='>>':
+                    answer = unrollLongText(model,img,ocr,answer)
                 column_headers = [h.strip() for h in answer.split(',')]
                 
                 question='rh~'+str(table_i)
                 answer = model(img,ocr,[[question]],RUN=True)
                 print(question+' {:} '+answer)
+                if answer[-2:]=='>>':
+                    answer = unrollLongText(model,img,ocr,answer)
                 row_headers = [h.strip() for h in answer.split(',')]
 
                 #align headers to gt
@@ -284,6 +302,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                         question='t~{}~~{}'.format(ch,rh)
                         answer = model(img,ocr,[[question]],RUN=True)
                         print(question+' {:} '+answer)
+                        if answer[-2:]=='>>':
+                            answer = unrollLongText(model,img,ocr,answer)
 
                         matching=[]
                         for gi,text in enumerate(transcription_groups):
@@ -352,33 +372,36 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             for ti,textline in enumerate(transcription_lines):
                 if ti in used:
                     continue
-                if len(textline)>too_long_read_thresh:
-                    textline=textline[-too_long_read_thresh:]
+                if len(textline)>max_qa_len:
+                    textline=textline[-max_qa_len:]
                 question='re~'+textline
                 answer = model(img,ocr,[[question]],RUN=True)
                 print(question+' {:} '+answer)
                 
                 #import pdb;pdb.set_trace()
-                if len(answer)>too_long_gen_thresh:
-                    #If predictions are too long, they become unreliable
-                    #So we'll keep only the first part and requery with the (good) predicted part
-                    part_answer=answer
-                    new_textline = textline
-                    answer = ''
-                    while len(part_answer)>too_long_gen_thresh:
-                        part_answer = part_answer[:too_long_gen_thresh] #remove unreliable prediction
-                        new_textline = new_textline+' '+part_answer
-                        answer +=part_answer+' '
-                        if len(new_textline)>too_long_read_thresh:
-                            new_textline=new_textline[-too_long_read_thresh:]
-                        new_question='re~'+new_textline
-                        part_answer = model(img,ocr,[[new_question]],RUN=True)
-                        print('TOO LONG, cur answer: {}'.format(answer))
-                        print('new question > '+new_question+' {:} '+part_answer)
-                    if part_answer != '[ end ]' and answer != '[ np ]':
-                        answer +=part_answer
-                    else:
-                        answer = answer[:-1] #remove last space
+                #if len(answer)>too_long_gen_thresh:
+                #    #If predictions are too long, they become unreliable
+                #    #So we'll keep only the first part and requery with the (good) predicted part
+                #    part_answer=answer
+                #    new_textline = textline
+                #    answer = ''
+                #    while len(part_answer)>too_long_gen_thresh:
+                #        part_answer = part_answer[:too_long_gen_thresh] #remove unreliable prediction
+                #        new_textline = new_textline+' '+part_answer
+                #        answer +=part_answer+' '
+                #        if len(new_textline)>max_qa_len:
+                #            new_textline=new_textline[-max_qa_len:]
+                #        new_question='re~'+new_textline
+                #        part_answer = model(img,ocr,[[new_question]],RUN=True)
+                #        print('TOO LONG, cur answer: {}'.format(answer))
+                #        print('new question > '+new_question+' {:} '+part_answer)
+                #    if part_answer != '[ end ]' and answer != '[ np ]':
+                #        answer +=part_answer
+                #    else:
+                #        answer = answer[:-1] #remove last space
+                if answer[-2:]=='>>':
+                    answer = unrollLongText(model,img,ocr,answer)
+                    
 
                 #if len(answer)>1:# and answer!=' ' and answer!=':':
                 if answer != '[ end ]' and answer != '[ np ]':
@@ -408,7 +431,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                         best_ti2, best_score = matching[0]
                         if best_score<0.7:
                             if last_ti in pred_chain:
-                                assert best_ti2 == pred_chain[last_ti] #hopefully we're consistent...
+                                if best_ti2 != pred_chain[last_ti]: #hopefully we're consistent...
+                                    print('Warning: Inconsistent chaining. Matched to [{}], but should be [{}]'.format(best_ti2,pred_chain[last_ti]))
 
                             print('matched [{}] to [{}]  {}'.format(answer_line,transcription_lines[best_ti2],best_score))
                             #rebuilt_answer+='\\'+transcription_lines[best_ti2]
@@ -468,7 +492,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             #Now get their class
             pred_classes = []
             for text in pred_inst:
-                text = text[:100] #if it's really long, that probably won't help
+                text = text[:max_qa_len] #if it's really long, that probably won't help
                 question='cs~'+text
                 answer = model(img,ocr,[[question]],RUN=True)
                 print(question+' {:} '+answer)
@@ -521,8 +545,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             rel_score=defaultdict(int)
             inconsistent_class_count=0
             for pgi,text in enumerate(pred_inst):
-                short_text_front = text[:100]
-                short_text_back = text[-100:]
+                short_text_front = text[:max_qa_len]
+                short_text_back = text[-max_qa_len:]
                 
                 if pred_classes[pgi]==0: #header
                     qs=[('hd~',short_text_back)]
@@ -535,6 +559,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     question=q+t
                     answer = model(img,ocr,[[question]],RUN=True)
                     print(question+' {:} '+answer)
+                    if answer[-2:]=='>>':
+                        answer = unrollLongText(model,img,ocr,answer)
                     #if 'may' in answer or 'june' in answer:
                     #if 'from' in answer or 'to :' in answer:
                     #    import pdb;pdb.set_trace()
@@ -591,7 +617,11 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 for rel in rel_score:
                     if rel!=examine and test in rel:
                         #The other instance has a relationship, this can probably to safely pruned
-                        del rel_score[examine]
+                        try:
+                            del rel_score[examine]
+                        except KeyError:
+                            #double del?
+                            pass
                         break
 
             pred_rel = list(rel_score.keys())
@@ -703,6 +733,8 @@ if __name__ == '__main__':
                         help='Arbitrary key-value pairs to add to config of the form "k1=v1,k2=v2,...kn=vn".  You can nest keys with k1=k2=k3=v')
     parser.add_argument('-T', '--test', default=False, type=bool,
                         help='run test set (default: False)')
+    parser.add_argument('-m', '--max-qa-len', default=None, type=int,
+                        help='max len for questions')
 
     args = parser.parse_args()
 
@@ -719,6 +751,6 @@ if __name__ == '__main__':
         exit()
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,test=args.test)
+            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len)
     else:
-        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,test=args.test)
+        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len)
