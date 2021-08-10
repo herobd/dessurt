@@ -77,14 +77,15 @@ if __name__ == "__main__":
     data=funsd_qa.FUNSDQA(dirPath=dirPath,split='train',config={
         'rescale_range':[0.8,1.2],
         'crop_params': {
-            "crop_size":[1024,1024],
+            "crop_size":[1152,768],
             "pad":0,
             "rot_degree_std_dev": 1
             },
         'split_to_lines': True,
         'questions':50,
         'do_words': False,
-        'char_qs': "full"
+        'char_qs': "full",
+        'max_qa_len': 20
 
 })
 
