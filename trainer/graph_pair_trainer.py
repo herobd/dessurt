@@ -2686,7 +2686,14 @@ class GraphPairTrainer(BaseTrainer):
             rel_types=['UP']*num_pred_pairs_with_blanks
         else:
             rel_types=[]
+        
+        XLM_predCount=0
+        relPrec_XLM=0
         for pi,(n0,n1) in enumerate(predPairs):
+            bb0 = predGroups[n0][0]
+            bb1 = predGroups[n0][0]
+            if outputBoxes[bb0][6:6+numClasses].argmax()!=0 and outputBoxes[bb1][6:6+numClasses].argmax()!=0:
+                XLM_predCount+=1
             BROS_gtG0 = predToGTGroup_BROS[n0]
             BROS_gtG1 = predToGTGroup_BROS[n1]
             hit=False
@@ -2695,6 +2702,8 @@ class GraphPairTrainer(BaseTrainer):
                 if pair_id in gt_groups_adj:
                     hit=True
                     relPrec_BROS+=1
+                    if outputBoxes[bb0][6:6+numClasses].argmax()!=0 and outputBoxes[bb1][6:6+numClasses].argmax()!=0:
+                        relPrec_XLM+=1
                     gtRelHit_BROS.add((min(BROS_gtG0,BROS_gtG1),max(BROS_gtG0,BROS_gtG1)))
                     if 'blank' in self.classMap:
                         old_pi = newToOldPredPairs[pi]
@@ -2750,6 +2759,17 @@ class GraphPairTrainer(BaseTrainer):
         log['final_rel_XX_BROS_TP']=relPrec_BROS
         log['final_rel_XX_predCount']=len(predPairs)
         log['final_rel_XX_gtCount']=len(gt_groups_adj)
+        
+        XLM_gtCount=0
+        for g0,g1 in gt_groups_adj:
+            bb0 = gtGroups[g0][0]
+            bb1 = gtGroups[g1][0]
+            
+            if target_for_b[bb0][-numClasses:].argmax()!=0 and target_for_b[bb1][-numClasses:].argmax()!=0:
+                XLM_gtCount+=1
+        log['final_rel_XX_XLM_TP']=relPrec_XLM
+        log['final_rel_XX_XLM_predCount']=XLM_predCount
+        log['final_rel_XX_XLM_gtCount']=XLM_gtCount
         if len(predPairs)>0:
             relPrec /= len(predPairs)
             relPrec_strict /= len(predPairs)
