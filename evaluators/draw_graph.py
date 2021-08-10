@@ -45,8 +45,6 @@ def draw_graph(outputBoxes,bb_thresh,nodePred,edgePred,edgeIndexes,predGroups,im
         image = (1-((1+np.transpose(image[b][:,:,:],(1,2,0)))/2.0))
         if image.shape[2]==1:
             image = img_f.gray2rgb(image)
-            #image = img_f.gray2rgb(image*255)/255
-        #if name=='text_start_gt':
 
         if verbosity>2 and targetBoxes is not None:
             #Draw GT bbs
