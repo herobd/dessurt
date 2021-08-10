@@ -28,12 +28,12 @@ except:
 def norm_ed(s1,s2):
     return editdistance.eval(s1,s2)/max(len(s1),len(s2))
 
-def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=True):
+def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False):
     np.random.seed(1234)
     torch.manual_seed(1234)
     
     too_long_read_thresh=100
-    too_long_gen_thresh=10
+    too_long_gen_thresh=30
 
     if resume is not None:
         checkpoint = torch.load(resume, map_location=lambda storage, location: storage)
@@ -364,7 +364,23 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     new_textline = textline
                     answer = ''
                     while len(part_answer)>too_long_gen_thresh:
-                        part_answer = part_answer[:too_long_gen_thresh] #remove unreliable prediction
+                        #we'll try to break at spaces
+                        break_pos = too_long_gen_thresh
+                        while part_answer[break_pos] != ' ':
+                            break_pos+=1
+                            if break_pos> too_long_gen_thresh*1.5 or break_pos>=len(part_answer):
+                                #not found? search backwards
+                                break_pos = too_long_gen_thresh
+                                while part_answer[break_pos] != ' ':
+                                    break_pos-=1
+                                    if break_pos< too_long_gen_thresh*0.5 or break_pos==0:
+                                        #still not found? ugh just  brak anywhere
+                                        break_pos = too_long_gen_thresh
+                                        break
+                                break
+                                
+                        part_answer = part_answer[:break_pos] #remove unreliable prediction
+
                         new_textline = new_textline+' '+part_answer
                         answer +=part_answer+' '
                         if len(new_textline)>too_long_read_thresh:
@@ -385,6 +401,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     #rebuilt_answer = ''
                     last_ti = ti
                     for ali,answer_line in enumerate(answer_lines):
+                        if answer_line == ' ' or len(answer_line)==0:
+                            continue
                         print('Trying to match: {}'.format(answer_line))
                         not_last = ali<len(answer_lines)-1
                         matching=[]
@@ -405,8 +423,13 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                             matching.sort(key=lambda a:a[1])
                         best_ti2, best_score = matching[0]
                         if best_score<0.7:
-                            if last_ti in pred_chain:
-                                assert best_ti2 == pred_chain[last_ti] #hopefully we're consistent...
+                            if last_ti in pred_chain and pred_chain[last_ti]<len(loc_lines):
+                                #assert best_ti2 == pred_chain[last_ti] #hopefully we're consistent...
+                                #of course it isn't... uhh, just pick the longest
+                                if len(transcription_lines[pred_chain[last_ti]]) > len(transcription_lines[best_ti2]):
+                                    print('INCONSISTENT CHAIN prediction "{}" vs "{}"'.format(transcription_lines[pred_chain[last_ti]],transcription_lines[best_ti2]))
+                                    #we're bad? stop here
+                                    break
 
                             print('matched [{}] to [{}]  {}'.format(answer_line,transcription_lines[best_ti2],best_score))
                             #rebuilt_answer+='\\'+transcription_lines[best_ti2]
