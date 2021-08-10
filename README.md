@@ -1,4 +1,4 @@
-# Pairing project
+# Pairing project (although now I'm doing QA...)
 
 This code is free to use for non-commericial purposes. Contact me if commericialization is desired.
 
