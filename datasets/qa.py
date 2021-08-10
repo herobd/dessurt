@@ -42,6 +42,7 @@ class QADataset(torch.utils.data.Dataset):
         #else:
         #    self.augmentation_params=None
         self.questions = config['questions']
+        self.max_qa_len = config['max_qa_len'] if 'max_qa_len' in config else None
         self.color = config['color'] if 'color' in config else False
         self.rotate = config['rotation'] if 'rotation' in config else False
         #patchSize=config['patch_size']

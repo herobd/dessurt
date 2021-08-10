@@ -49,6 +49,18 @@ def get_height_width_from_list(imgs,pad):
     #height-=pad
     return height,width
 
+def breakLong(qa,full,initial_prompt,continue_prompt,max_qa_len):
+    first_part = full[:max_qa_len-2] + '>>' #mark to indicate not complete
+    qa.append((initial_prompt,first_part,None))
+    prev_part = first_part[:-2] #remove mark
+    remainder = full[max_qa_len-2:]
+    while len(remainder)>max_qa_len:
+        next_part = remainder[:max_qa_len-2] + '>>'
+        qa.append((continue_prompt+prev_part,next_part,None))
+        prev_part = next_part[:-2] 
+        remainder = remainder[max_qa_len-2:]
+    qa.append((continue_prompt+prev_part,remainder,None))
+
 
 def create_image(x):
     synth_gen,text_height,image_size,seed = x
@@ -78,7 +90,12 @@ def create_image(x):
     return gt,img
 
 
-def addRead(qa,text,min_start_read,np=False):
+def addRead(qa,text,min_start_read,np=False,max_qa_len=None,backwards=False):
+    if backwards:
+        text = text[::-1]
+        prompt = 'bk~{}'
+    else:
+        prompt = 're~{}'
     if len(text)<=2 or random.random()<0.05:
         start_point=len(text) #so we get [end]s with long texts
     elif len(text)>min_start_read+1:
@@ -92,10 +109,16 @@ def addRead(qa,text,min_start_read,np=False):
     if len(start_text)-min_start_read*2>0 and random.random()>0.33:
         real_start = random.randrange(0,len(start_text)-min_start_read*2)
         start_text = start_text[real_start:]
+
+    if max_qa_len is not None:
+        if len(start_text) > max_qa_len:
+            start_text = start_text[-max_qa_len:]
+        if len(finish_text) > max_qa_len:
+            finish_text = finish_text[:max_qa_len-2]+'>>'
     if np:
-        qa.append(('re~{}'.format(start_text),'[ np ]',None))
+        qa.append((prompt.format(start_text),'[ np ]',None))
     else:
-        qa.append(('re~{}'.format(start_text),finish_text,None))
+        qa.append((prompt.format(start_text),finish_text,None))
 
 class SynthQADocDataset(QADataset):
     def __init__(self, dirPath, split, config):
@@ -108,7 +131,6 @@ class SynthQADocDataset(QADataset):
         self.image_size = config['image_size'] if 'image_size' in config else None
         if type(self.image_size) is int:
             self.image_size = (self.image_size,self.image_size)
-        self.min_entries = config['min_entries'] if 'min_entries' in config else self.questions
         self.max_entries = config['max_entries'] if 'max_entries' in config else self.questions
         self.not_pack = 0.2
         self.change_size = config['change_size'] if 'change_size' in config else False
@@ -118,14 +140,15 @@ class SynthQADocDataset(QADataset):
         self.wider = config['wider'] if 'wider' in config else False
         self.use_hw = config['use_hw'] if 'use_hw' in config else False
         self.word_questions = config['word_questions'] if 'word_questions' in config else False
-        self.no_read = config['no_read'] if 'no_read' in config else False
+        self.use_read = config['use_read'] if 'use_read' in config else 1
+        if 'no_read' in config and config['no_read']:
+            self.use_read = 0
         self.multiline = config['multiline'] if 'multiline' in config else False
         self.min_start_read = 7
         self.max_num_lines = config['max_num_lines'] if 'max_num_lines' in config else 6
         self.tables = config['tables'] if 'tables' in config else False
         assert not self.tables or self.word_questions
         assert not (self.use_hw and self.tables)
-        assert not self.tables or self.min_entries is None
         if self.word_questions:
             self.ask_for_value = [
                     'value for "{}"?',
@@ -254,10 +277,7 @@ class SynthQADocDataset(QADataset):
 
     def parseAnn(self,annotations,s):
         #make the image
-        if self.min_entries is not None:
-            num_entries = random.randrange(self.min_entries,self.max_entries+1)
-        else:
-            num_entries = self.max_entries
+        num_entries = self.max_entries
 
         entries=[]
         heights=[]
@@ -367,47 +387,208 @@ class SynthQADocDataset(QADataset):
         boxes=[]
         trans=[]
         qa=[]
-        if self.min_entries is not None:
+        #TABLE
+        if self.tables and random.random()<self.tables:
+            table_x,table_y,table_width,table_height,row_hs,col_hs = self.addTable(image,qa,boxes if self.ocr else None,trans if self.ocr else None)
+            if table_x is None:
+                did_table=False
+                row_hs=col_hs=[]
+            else:
+                did_table=True
+        else:
+            did_table=False
+            row_hs=col_hs=[]
 
-            y_pos=0
-            for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
-                width = label_img.shape[1] + value_img.shape[1] + rel_x
-                if width>=self.image_size[1]:
+        #Assign random positions and collect bounding boxes
+        full_bbs=torch.FloatTensor(len(entries)+(1 if did_table else 0),4)
+        if wider:
+            pad_v=1+int(0.1*wider)
+            pad_h=30+int(1.2*wider)
+        else:
+            pad_v=1
+            pad_h=30
+
+
+        removed = set()
+        for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
+            if type(label_img) is list:
+                label_height, label_width = get_height_width_from_list(label_img[1:],label_img[0])
+                extra_height = label_height*(len(label_img[1:])-1)/len(label_img[1:])
+            else:
+                label_height, label_width = label_img.shape
+                extra_height=0
+            if type(value_img) is list:
+                value_height, value_width = get_height_width_from_list(value_img[1:],value_img[0])
+                extra_height += value_height*(len(value_img[1:])-1)/len(value_img[1:])
+            else:
+                value_height, value_width = value_img.shape
+
+            height = max(label_height,value_height)+abs(rel_y)+pad_v*2 + extra_height
+            width = label_width+rel_x+value_width+pad_h*2
+            
+            if width>=self.image_size[1]:
+                x=0
+                if width-self.image_size[1]>9:
+                    y=0
+                    width=-1
+                    height=-1
+                    removed.add(ei)
+            else:
+                x = random.randrange(int(self.image_size[1]-width))
+            if height>=self.image_size[0]:
+                y=0
+                if height-self.image_size[0]>9:
                     x=0
+                    width=-1
+                    height=-1
+                    removed.add(ei)
+            else:
+                y = random.randrange(int(self.image_size[0]-height))
+            full_bbs[ei,0]=x
+            full_bbs[ei,1]=y
+            full_bbs[ei,2]=x+width+1
+            full_bbs[ei,3]=y+height+1
+
+
+        if did_table:
+            full_bbs[-1,0]=table_x
+            full_bbs[-1,1]=table_y
+            full_bbs[-1,2]=table_x+table_width+1
+            full_bbs[-1,3]=table_y+table_height+1
+
+
+        #find intersections and remove an entry until no more intersections
+        intersections = allIOU(full_bbs,full_bbs,x1y1x2y2=True)>0
+        intersections.diagonal()[:]=0
+
+        def print_iter(intersections):
+            s=''
+            for r in range(intersections.size(0)):
+                for c in range(intersections.size(1)):
+                    s += 'o' if intersections[r,c] else '.'
+                s+='\n'
+            print(s)
+        
+        intersections_per = intersections.sum(dim=0)
+        if did_table:
+            intersections_per[-1]=0 #clear Table so it is not selected
+        pack = self.not_pack<random.random()
+        if not pack:
+            weights = [ 1/(len(label_text)+len(value_text)) for label_img,label_text,value_img,value_text,rel_x,rel_y in entries]
+            if did_table:
+                weights += [0]
+
+        while intersections_per.sum()>0:
+            #print_iter(intersections)
+            if pack:
+                worst_offender = intersections_per.argmax().item()
+            else:
+                #worst_offender = random.randrange(intersections_per.shape[0])
+                #first remove table intersections
+                if did_table and intersections[-1].sum()>0:
+                    worst_offender = intersections[-1].nonzero()[0].item()
                 else:
-                    x = random.randrange(self.image_size[1] - width)
-                room_y = self.image_size[0] - sum(heights[ei:])
-                assert room_y >= 0
-                if ei == len(entries)-1:
-                    y = random.randrange(y_pos,room_y)
+                    #favor keeping longer
+                    offenders = intersections_per.nonzero()
+                    off_weights = [weights[o] for o in offenders]
+                    worst_offender = random.choices(offenders,weights=off_weights)[0].item()
+            #print('removing {} i:{} (of {})'.format(worst_offender,intersections_per[worst_offender],len(entries)))
+            removed.add(worst_offender)
+            intersections[:,worst_offender]=0
+            intersections[worst_offender,:]=0
+            intersections_per = intersections.sum(dim=0)
+            if did_table:
+                intersections_per[-1]=0 #clear Table so it is not selected
+        #removed.sort(reverse=True)
+        #for r in removed:
+        #    del entries[r]
+        not_present_qs=[]
+        selected_labels_stripped = []#[l[1].strip() for i,l in enumerate(labels) if i not in removed]
+        selected_values_stripped = []
+        for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
+            if ei not in removed:
+                if type(label_img) is list:
+                    label_height, label_width = get_height_width_from_list(label_img[1:],label_img[0])
                 else:
-                    y = int(random.triangular(y_pos,room_y,y_pos+1))
+                    label_height, label_width = label_img.shape
+
+                label_x = int(full_bbs[ei,0].item())+pad_h//2
+                label_y = int(full_bbs[ei,1].item())+pad_v//2
+                value_x = label_x + label_width + rel_x
+                value_y = label_y + rel_y
+
+                if value_y<0:
+                    if type(value_img) is list:
+                        value_img[1] = value_img[1][-value_y:]
+                    else:
+                        value_img = value_img[-value_y:]
+                    value_y=0
+
+
+                if type(label_img) is list:
+                    l_imgs = label_img[1:]
+                    pad = label_img[0]
+                else:
+                    l_imgs = [label_img]
+                    pad = 0
+                cur_y=label_y
+                for img in l_imgs:
+                    l_vert = img.shape[0]-max(cur_y+img.shape[0]-self.image_size[0],0)
+                    l_horz = img.shape[1]-max(label_x+img.shape[1]-self.image_size[1],0)
+                    if l_horz<=0 or l_vert<=0:
+                        continue
+                    image[cur_y:cur_y+l_vert,label_x:label_x+l_horz] = img[:l_vert,:l_horz]
+                    cur_y += l_vert+pad
+
+                cur_y -= l_vert+pad - rel_y
+                if cur_y<0:
+                    cur_y=0
+                if type(value_img) is list:
+                    v_imgs = value_img[1:]
+                    pad = value_img[0]
+                else:
+                    v_imgs = [value_img]
+                    pad = 0
+                for img in v_imgs:
+                    v_vert = img.shape[0]-max(cur_y+img.shape[0]-self.image_size[0],0)
+                    v_horz = img.shape[1]-max(value_x+img.shape[1]-self.image_size[1],0)
+                    if v_horz<=0 or v_vert<=0:
+                        continue
+                    image[cur_y:cur_y+v_vert,value_x:value_x+v_horz] = img[:v_vert,:v_horz]
+                    cur_y += v_vert+pad
                 
-                value_x = x + label_img.shape[1] + rel_x
-                value_y = y + rel_y
-                value_x = max(0,value_x)
-                value_y = max(0,value_y)
-                
+                if type(label_text) is list:
+                    label_text = '\\'.join(label_text)
+                selected_labels_stripped.append(label_text.strip())
+                if type(value_text) is list:
+                    value_text = '\\'.join(value_text)
+                selected_values_stripped.append(label_text.strip())
 
-                vert = value_img.shape[0]-max(value_y+value_img.shape[0]-self.image_size[0],0)
-                horz = value_img.shape[1]-max(value_x+value_img.shape[1]-self.image_size[1],0)
-                if horz<=0 or vert<=0:
-                    continue
-                l_vert = label_img.shape[0]-max(y+label_img.shape[0]-self.image_size[0],0)
-                l_horz = label_img.shape[1]-max(x+label_img.shape[1]-self.image_size[1],0)
-                if l_horz<=0 or l_vert<=0:
-                    continue
+                if self.ocr:
+                    self.addText(label_text,label_x,label_y,l_horz,l_vert,value_text,value_x,value_y,v_horz,v_vert,boxes,trans,s)
 
-
-                image[value_y:value_y+vert,value_x:value_x+horz] = value_img[:vert,:horz]
-
-                image[y:y+l_vert,x:x+l_horz] = label_img[:l_vert,:l_horz]
-
-                y_pos=y+heights[ei]
-                
                 if self.word_questions=='simple':
-                    qa.append(('l~{}'.format(label_text),value_text,None))
-                    qa.append(('v~{}'.format(value_text),label_text,None))
+                    if self.use_read>random.random():
+                        addRead(qa,label_text,self.min_start_read,max_qa_len=self.max_qa_len)
+                        addRead(qa,value_text,self.min_start_read,max_qa_len=self.max_qa_len)
+                        addRead(qa,label_text,self.min_start_read,max_qa_len=self.max_qa_len,backwards=True)
+                        addRead(qa,value_text,self.min_start_read,max_qa_len=self.max_qa_len,backwards=True)
+
+                    #resize, truncate
+                    if self.max_qa_len is not None and len(label_text) > self.max_qa_len:
+                        label_text_q = label_text[-self.max_qa_len:]
+                        label_text_a = '<<'+label_text[-(self.max_qa_len-2):] #you'll need to read backwards to recover
+                    else:
+                        label_text_q = label_text
+                        label_text_a = label_text
+                    if self.max_qa_len is not None and len(value_text) > self.max_qa_len:
+                        value_text_q = value_text[:self.max_qa_len]
+                        value_text_a = value_text[:self.max_qa_len-2]+'>>'
+                    else:
+                        value_text_q = value_text
+                        value_text_a = value_text
+                    qa.append(('l~{}'.format(label_text_q),value_text_a,None))
+                    qa.append(('v~{}'.format(value_text_q),label_text_a,None))
                 elif self.word_questions:
                     question_to_value = random.choice(self.ask_for_value)
                     question_to_label = random.choice(self.ask_for_label)
@@ -416,207 +597,11 @@ class SynthQADocDataset(QADataset):
                 else:
                     qa.append((label_text,value_text,None))
 
-                if self.ocr:
-                    self.addText(label_text,x,y,l_horz,l_vert,value_text,value_x,value_y,horz,vert,boxes,trans,s)
-        else:
-            #TABLE
-            if self.tables and random.random()<self.tables:
-                table_x,table_y,table_width,table_height,row_hs,col_hs = self.addTable(image,qa,boxes if self.ocr else None,trans if self.ocr else None)
-                if table_x is None:
-                    did_table=False
-                    row_hs=col_hs=[]
-                else:
-                    did_table=True
             else:
-                did_table=False
-                row_hs=col_hs=[]
-
-            #Assign random positions and collect bounding boxes
-            full_bbs=torch.FloatTensor(len(entries)+(1 if did_table else 0),4)
-            if wider:
-                pad_v=1+int(0.1*wider)
-                pad_h=30+int(1.2*wider)
-            else:
-                pad_v=1
-                pad_h=30
-
-
-            removed = set()
-            for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
-                if type(label_img) is list:
-                    label_height, label_width = get_height_width_from_list(label_img[1:],label_img[0])
-                    extra_height = label_height*(len(label_img[1:])-1)/len(label_img[1:])
-                else:
-                    label_height, label_width = label_img.shape
-                    extra_height=0
-                if type(value_img) is list:
-                    value_height, value_width = get_height_width_from_list(value_img[1:],value_img[0])
-                    extra_height += value_height*(len(value_img[1:])-1)/len(value_img[1:])
-                else:
-                    value_height, value_width = value_img.shape
-
-                height = max(label_height,value_height)+abs(rel_y)+pad_v*2 + extra_height
-                width = label_width+rel_x+value_width+pad_h*2
-                
-                if width>=self.image_size[1]:
-                    x=0
-                    if width-self.image_size[1]>9:
-                        y=0
-                        width=-1
-                        height=-1
-                        removed.add(ei)
-                else:
-                    x = random.randrange(int(self.image_size[1]-width))
-                if height>=self.image_size[0]:
-                    y=0
-                    if height-self.image_size[0]>9:
-                        x=0
-                        width=-1
-                        height=-1
-                        removed.add(ei)
-                else:
-                    y = random.randrange(int(self.image_size[0]-height))
-                full_bbs[ei,0]=x
-                full_bbs[ei,1]=y
-                full_bbs[ei,2]=x+width+1
-                full_bbs[ei,3]=y+height+1
-
-
-            if did_table:
-                full_bbs[-1,0]=table_x
-                full_bbs[-1,1]=table_y
-                full_bbs[-1,2]=table_x+table_width+1
-                full_bbs[-1,3]=table_y+table_height+1
-
-
-            #find intersections and remove an entry until no more intersections
-            intersections = allIOU(full_bbs,full_bbs,x1y1x2y2=True)>0
-            intersections.diagonal()[:]=0
-
-            def print_iter(intersections):
-                s=''
-                for r in range(intersections.size(0)):
-                    for c in range(intersections.size(1)):
-                        s += 'o' if intersections[r,c] else '.'
-                    s+='\n'
-                print(s)
-            
-            intersections_per = intersections.sum(dim=0)
-            if did_table:
-                intersections_per[-1]=0 #clear Table so it is not selected
-            pack = self.not_pack<random.random()
-            if not pack:
-                weights = [ 1/(len(label_text)+len(value_text)) for label_img,label_text,value_img,value_text,rel_x,rel_y in entries]
-                if did_table:
-                    weights += [0]
-
-            while intersections_per.sum()>0:
-                #print_iter(intersections)
-                if pack:
-                    worst_offender = intersections_per.argmax().item()
-                else:
-                    #worst_offender = random.randrange(intersections_per.shape[0])
-                    #first remove table intersections
-                    if did_table and intersections[-1].sum()>0:
-                        worst_offender = intersections[-1].nonzero(as_tuple=False)[0].item()
-                    else:
-                        #favor keeping longer
-                        offenders = intersections_per.nonzero(as_tuple=False)
-                        off_weights = [weights[o] for o in offenders]
-                        worst_offender = random.choices(offenders,weights=off_weights)[0].item()
-                #print('removing {} i:{} (of {})'.format(worst_offender,intersections_per[worst_offender],len(entries)))
-                removed.add(worst_offender)
-                intersections[:,worst_offender]=0
-                intersections[worst_offender,:]=0
-                intersections_per = intersections.sum(dim=0)
-                if did_table:
-                    intersections_per[-1]=0 #clear Table so it is not selected
-            #removed.sort(reverse=True)
-            #for r in removed:
-            #    del entries[r]
-            not_present_qs=[]
-            selected_labels_stripped = []#[l[1].strip() for i,l in enumerate(labels) if i not in removed]
-            selected_values_stripped = []
-            for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
-                if ei not in removed:
-                    if type(label_img) is list:
-                        label_height, label_width = get_height_width_from_list(label_img[1:],label_img[0])
-                    else:
-                        label_height, label_width = label_img.shape
-
-                    label_x = int(full_bbs[ei,0].item())+pad_h//2
-                    label_y = int(full_bbs[ei,1].item())+pad_v//2
-                    value_x = label_x + label_width + rel_x
-                    value_y = label_y + rel_y
-
-                    if value_y<0:
-                        if type(value_img) is list:
-                            value_img[1] = value_img[1][-value_y:]
-                        else:
-                            value_img = value_img[-value_y:]
-                        value_y=0
-
-
-                    if type(label_img) is list:
-                        l_imgs = label_img[1:]
-                        pad = label_img[0]
-                    else:
-                        l_imgs = [label_img]
-                        pad = 0
-                    cur_y=label_y
-                    for img in l_imgs:
-                        l_vert = img.shape[0]-max(cur_y+img.shape[0]-self.image_size[0],0)
-                        l_horz = img.shape[1]-max(label_x+img.shape[1]-self.image_size[1],0)
-                        if l_horz<=0 or l_vert<=0:
-                            continue
-                        image[cur_y:cur_y+l_vert,label_x:label_x+l_horz] = img[:l_vert,:l_horz]
-                        cur_y += l_vert+pad
-
-                    cur_y -= l_vert+pad - rel_y
-                    if cur_y<0:
-                        cur_y=0
-                    if type(value_img) is list:
-                        v_imgs = value_img[1:]
-                        pad = value_img[0]
-                    else:
-                        v_imgs = [value_img]
-                        pad = 0
-                    for img in v_imgs:
-                        v_vert = img.shape[0]-max(cur_y+img.shape[0]-self.image_size[0],0)
-                        v_horz = img.shape[1]-max(value_x+img.shape[1]-self.image_size[1],0)
-                        if v_horz<=0 or v_vert<=0:
-                            continue
-                        image[cur_y:cur_y+v_vert,value_x:value_x+v_horz] = img[:v_vert,:v_horz]
-                        cur_y += v_vert+pad
-                    
-                    if type(label_text) is list:
-                        label_text = '\\'.join(label_text)
-                    selected_labels_stripped.append(label_text.strip())
-                    if type(value_text) is list:
-                        value_text = '\\'.join(value_text)
-                    selected_values_stripped.append(label_text.strip())
-
-                    if self.word_questions=='simple':
-                        qa.append(('l~{}'.format(label_text),value_text,None))
-                        qa.append(('v~{}'.format(value_text),label_text,None))
-                        if not self.no_read:
-                            addRead(qa,label_text,self.min_start_read)
-                            addRead(qa,value_text,self.min_start_read)
-                    elif self.word_questions:
-                        question_to_value = random.choice(self.ask_for_value)
-                        question_to_label = random.choice(self.ask_for_label)
-                        qa.append((question_to_value.format(label_text),value_text,None))
-                        qa.append((question_to_label.format(value_text),label_text,None))
-                    else:
-                        qa.append((label_text,value_text,None))
-
-                    if self.ocr:
-                        self.addText(label_text,label_x,label_y,l_horz,l_vert,value_text,value_x,value_y,v_horz,v_vert,boxes,trans,s)
-                else:
-                    if type(label_text) is list:
-                        label_text = '\\'.join(label_text)
-                    if label_text.strip() not in selected_labels_stripped:
-                        not_present_qs.append(label_text)
+                if type(label_text) is list:
+                    label_text = '\\'.join(label_text)
+                if label_text.strip() not in selected_labels_stripped:
+                    not_present_qs.append(label_text)
 
 
 
@@ -637,12 +622,16 @@ class SynthQADocDataset(QADataset):
                         q_text = random.choice(self.labels)
                         if q_text.strip() not in col_hs:
                             break
+                    if self.max_qa_len is not None and len(q_text)>self.max_qa_len:
+                        q_text = q_text[-self.max_qa_len:]
                     qa.append(('ac~{}'.format(q_text),'[ np ]',None))
                 elif random.random()<0.6:
                     while True:
                         q_text = random.choice(self.labels)
                         if q_text.strip() not in row_hs:
                             break
+                    if self.max_qa_len is not None and len(q_text)>self.max_qa_len:
+                        q_text = q_text[-self.max_qa_len:]
                     qa.append(('ar~{}'.format(q_text),'[ np ]',None))
                 else:
                     while True:
@@ -653,6 +642,10 @@ class SynthQADocDataset(QADataset):
                         r_text = random.choice(self.labels)
                         if r_text.strip() not in row_hs+col_hs:
                             break
+                    if self.max_qa_len is not None and len(c_text)>self.max_qa_len//2:
+                        c_text = c_text[-self.max_qa_len//2:]
+                    if self.max_qa_len is not None and len(r_text)>self.max_qa_len//2:
+                        r_text = r_text[-self.max_qa_len//2:]
                     qa.append(('t~{}~~{}'.format(r_text,c_text),'[ np ]',None))
             else:
                 if len(not_present_qs)>0:
@@ -663,11 +656,16 @@ class SynthQADocDataset(QADataset):
                         if q_text.strip() not in selected_labels_stripped:
                             break
                 if self.word_questions=='simple':
-                    qa.append(('l~{}'.format(q_text),'[ np ]',None))
+                    if self.max_qa_len is not None and len(q_text)>self.max_qa_len:
+                        v_text = q_text[:self.max_qa_len]
+                        l_text = q_text[-self.max_qa_len:]
+                    else:
+                        v_text=l_text=q_text
+                    qa.append(('l~{}'.format(l_text),'[ np ]',None))
                     if q_text not in selected_values_stripped:
-                        if not self.no_read:
-                            addRead(qa,q_text,self.min_start_read,np=True)
-                        qa.append(('v~{}'.format(q_text),'[ np ]',None))
+                        if self.use_read>random.random():
+                            addRead(qa,q_text,self.min_start_read,np=True,max_qa_len=self.max_qa_len,backwards=True)
+                        qa.append(('v~{}'.format(v_text),'[ np ]',None))
                 elif self.word_questions:
                     question = random.choice(self.ask_for_value)
                     qa.append((question.format(q_text),'[ np ]',None))
@@ -676,18 +674,26 @@ class SynthQADocDataset(QADataset):
         
         if self.tables and self.word_questions=='simple':
             if did_table:
-                qa.append(('t>','yes',None))
-                rows = ', '.join(row_hs)
-                qa.append(('rh>',rows,None))
-                cols = ', '.join(col_hs)
-                qa.append(('ch>',cols,None))
+                qa.append(('t#>','1',None))
+                rows = '|'.join(row_hs)
+                if self.max_qa_len is not None and len(rows)>self.max_qa_len:
+                    breakLong(qa,rows,'rh~0','rh>',self.max_qa_len)
+                else:
+                    qa.append(('rh~0',rows,None))
+
+                cols = '|'.join(col_hs)
+                if self.max_qa_len is not None and len(cols)>self.max_qa_len:
+                    breakLong(qa,cols,'ch~0','ch>',self.max_qa_len)
+                else:
+                    qa.append(('ch~0',cols,None))
             else:
-                qa.append(('t>','no',None))
+                qa.append(('t#>','0',None))
 
 
 
         if self.questions<len(qa):
             qa = random.sample(qa,k=self.questions)
+
 
         return bbs, list(range(bbs.shape[0])), ocr, {'image':image}, {}, qa
 
@@ -1022,8 +1028,14 @@ class SynthQADocDataset(QADataset):
                 else:
                     #table_values.append((col_headers[c][1],row_headers[r][1],'[np]',cur_x,cur_y))
                     if self.word_questions=='simple':
-                        all_q_a.append(('t~{}~~{}'.format(row_headers[r][1],col_headers[c][1]),'[ blank ]',None))
-                        all_q_a.append(('t~{}~~{}'.format(col_headers[c][1],row_headers[r][1]),'[ blank ]',None))
+                        rhdr = row_headers[r][1]
+                        if self.max_qa_len is not None and len(rhdr)>self.max_qa_len//2:
+                            rhdr = rhdr[-self.max_qa_len//2:]
+                        chdr = col_headers[c][1]
+                        if self.max_qa_len is not None and len(chdr)>self.max_qa_len//2:
+                            chdr = chdr[-self.max_qa_len//2:]
+                        all_q_a.append(('t~{}~~{}'.format(rhdr,chdr),'[ blank ]',None))
+                        all_q_a.append(('t~{}~~{}'.format(chdr,rhdr),'[ blank ]',None))
                     else:
                         all_q_a.append(('value of "{}" and "{}"?'.format(row_headers[r][1],col_headers[c][1]),'[np]',None))
                         all_q_a.append(('value of "{}" and "{}"?'.format(col_headers[c][1],row_headers[r][1]),'[np]',None))
@@ -1119,8 +1131,19 @@ class SynthQADocDataset(QADataset):
         for (col_h,row_h,v,x,y) in table_values:
             if col_h is not None and row_h is not None:
                 if self.word_questions=='simple':
-                    all_q_a.append(('t~{}~~{}'.format(row_h,col_h),v,None))
-                    all_q_a.append(('t~{}~~{}'.format(col_h,row_h),v,None))
+
+                    rhdr = row_h
+                    if self.max_qa_len is not None and len(rhdr)>self.max_qa_len//2:
+                        rhdr = rhdr[-self.max_qa_len//2:]
+                    chdr = col_h
+                    if self.max_qa_len is not None and len(chdr)>self.max_qa_len//2:
+                        chdr = chdr[-self.max_qa_len//2:]
+                    val = v
+                    if self.max_qa_len is not None and len(val)>self.max_qa_len:
+                        val = val[:self.max_qa_len-2]+'>>'
+
+                    all_q_a.append(('t~{}~~{}'.format(rhdr,chdr),v,None))
+                    all_q_a.append(('t~{}~~{}'.format(chdr,rhdr),v,None))
                 else:
                     if random.random()<0.5:
                         all_q_a.append(('value of "{}" and "{}"?'.format(row_h,col_h),v,None))
@@ -1131,9 +1154,21 @@ class SynthQADocDataset(QADataset):
             if v not in ambiguous:
                 if self.word_questions=='simple':
                     if row_h is not None:
-                        all_q_a.append(('ri~{}'.format(v),row_h,None))
+                        rhdr = row_h
+                        if self.max_qa_len is not None and len(rhdr)>self.max_qa_len:
+                            rhdr = rhdr[-self.max_qa_len:]
+                        val = v
+                        if self.max_qa_len is not None and len(val)>self.max_qa_len:
+                            val = val[:self.max_qa_len-2]+'>>'
+                        all_q_a.append(('ri~{}'.format(val),rhdr,None))
                     if col_h is not None:
-                        all_q_a.append(('ci~{}'.format(v),col_h,None))
+                        chdr = col_h
+                        if self.max_qa_len is not None and len(chdr)>self.max_qa_len:
+                            chdr = chdr[-self.max_qa_len:]
+                        val = v
+                        if self.max_qa_len is not None and len(val)>self.max_qa_len:
+                            val = val[:self.max_qa_len-2]+'>>'
+                        all_q_a.append(('ci~{}'.format(val),chdr,None))
                 else:
                     if row_h is not None:
                         all_q_a.append(('row that "{}" is in?'.format(v),row_h,None))
@@ -1150,9 +1185,15 @@ class SynthQADocDataset(QADataset):
                 vs.sort(key=lambda a:a[1])
                 a=vs[0][0]
                 for v,x in vs[1:]:
-                    a+=', '+v
+                    a+='|'+v
                 if self.word_questions=='simple':
-                    all_q_a.append(('ar~{}'.format(row_h),a,None))
+                    rhdr = row_h
+                    if self.max_qa_len is not None and len(rhdr)>self.max_qa_len:
+                        rhdr = rhdr[-self.max_qa_len:]
+                    if self.max_qa_len is not None and len(a)>self.max_qa_len:
+                        breakLong(all_q_a,a,'ar~{}'.format(rhdr),'ar>',self.max_qa_len)
+                    else:
+                        all_q_a.append(('ar~{}'.format(rhdr),a,None))
                 else:
                     if random.random()<0.5:
                         all_q_a.append(('all values in row "{}"?'.format(row_h),a,None))
@@ -1163,9 +1204,15 @@ class SynthQADocDataset(QADataset):
                 vs.sort(key=lambda a:a[1])
                 a=vs[0][0]
                 for v,y in vs[1:]:
-                    a+=', '+v
+                    a+='|'+v
                 if self.word_questions=='simple':
-                    all_q_a.append(('ac~{}'.format(col_h),a,None))
+                    chdr = col_h
+                    if self.max_qa_len is not None and len(chdr)>self.max_qa_len:
+                        chdr = chdr[-self.max_qa_len:]
+                    if self.max_qa_len is not None and len(a)>self.max_qa_len:
+                        breakLong(all_q_a,a,'ac~{}'.format(chdr),'ac>',self.max_qa_len)
+                    else:
+                        all_q_a.append(('ac~{}'.format(chdr),a,None))
                 else:
                     if random.random()<0.5:
                         all_q_a.append(('all values in column "{}"?'.format(col_h),a,None))
