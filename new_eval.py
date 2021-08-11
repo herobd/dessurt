@@ -467,6 +467,12 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                         rel_strict_TP = sum(val_comb_metrics[typ])
                     elif 'final_rel_XX_BROS_TP'==typ:
                         rel_BROS_TP = sum(val_comb_metrics[typ])
+                    elif 'final_rel_XX_XLM_TP'==typ:
+                        rel_XLM_TP = sum(val_comb_metrics[typ])
+                    elif 'final_rel_XX_XLM_predCount'==typ:
+                        XLM_rel_pred_count = sum(val_comb_metrics[typ])
+                    elif 'final_rel_XX_XLM_gtCount'==typ:
+                        XLM_rel_gt_count = sum(val_comb_metrics[typ])
                     elif 'final_group_XX_TP'==typ:
                         group_TP = sum(val_comb_metrics[typ])
                     elif 'final_group_XX_gtCount'==typ:
@@ -509,6 +515,10 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                     BROS_recall = rel_BROS_TP/rel_gt_count
                     BROS_prec = rel_BROS_TP/rel_pred_count
                     print('BROS relationships Recall Prec F1: {:.2f} , {:.2f} , {:.2f}'.format(100*BROS_recall,100*BROS_prec,100*2*BROS_recall*BROS_prec/(BROS_prec+BROS_recall)))
+
+                    XLM_recall = rel_XLM_TP/XLM_rel_gt_count
+                    XLM_prec = rel_XLM_TP/XLM_rel_pred_count
+                    print('XLM relationships Recall Prec F1: {:.2f} , {:.2f} , {:.2f}'.format(100*XLM_recall,100*XLM_prec,100*2*XLM_recall*XLM_prec/(XLM_prec+XLM_recall)))
                     #strict_recall = rel_strict_TP/rel_gt_count
                     #strict_prec = rel_strict_TP/rel_pred_count
                     #print('strict relationships Recall Prec F1: {:.2f} , {:.2f} , {:.2f}'.format(100*strict_recall,100*strict_prec,100*2*strict_recall*strict_prec/(strict_prec+strict_recall)))
