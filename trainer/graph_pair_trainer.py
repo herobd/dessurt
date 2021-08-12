@@ -2677,9 +2677,11 @@ class GraphPairTrainer(BaseTrainer):
         gtRelHit=set()
         gtRelHit_BROS=set()
         gtRelHit_strict=set()
+        gtRelHit_XLMstrict=set()
         relPrec=0
         relPrec_BROS=0
         relPrec_strict=0
+        relPrec_XLMstrict=0
         if predPairs is None:
             predPairs=[]
         if 'blank' in self.classMap and predGroups is not None:
@@ -2697,6 +2699,7 @@ class GraphPairTrainer(BaseTrainer):
             BROS_gtG0 = predToGTGroup_BROS[n0]
             BROS_gtG1 = predToGTGroup_BROS[n1]
             hit=False
+            hit_XLM=False
             if BROS_gtG0>=0 and BROS_gtG1>=0:
                 pair_id = (min(BROS_gtG0,BROS_gtG1),max(BROS_gtG0,BROS_gtG1))
                 if pair_id in gt_groups_adj:
@@ -2704,6 +2707,7 @@ class GraphPairTrainer(BaseTrainer):
                     relPrec_BROS+=1
                     if outputBoxes[bb0][6:6+numClasses].argmax()!=0 and outputBoxes[bb1][6:6+numClasses].argmax()!=0:
                         relPrec_XLM+=1
+                        hit_XML=True
                     gtRelHit_BROS.add((min(BROS_gtG0,BROS_gtG1),max(BROS_gtG0,BROS_gtG1)))
                     if 'blank' in self.classMap:
                         old_pi = newToOldPredPairs[pi]
@@ -2731,6 +2735,14 @@ class GraphPairTrainer(BaseTrainer):
                     if groupPurity[gtG0]==1 and groupPurity[gtG1]==1 and n0 in groupCompleteness and groupCompleteness[n0]==1 and n1 in groupCompleteness and groupCompleteness[n1]==1:
                         relPrec_strict+=1
                         gtRelHit_strict.add((min(gtG0,gtG1),max(gtG0,gtG1)))
+
+                        bb0 = predGroups[n0][0]
+                        bb1 = predGroups[n1][0]
+                        if outputBoxes[bb0][6:6+numClasses].argmax()!=0 and outputBoxes[bb1][6:6+numClasses].argmax()!=0:
+                            relPrec_XLMstrict+=1
+                            gtRelHit_XLMstrict.add((min(gtG0,gtG1),max(gtG0,gtG1)))
+                            if not hit_XML:
+                                import pdb;pdb.set_trace()
                         #TODO failed in training
                         #assert BROS_gtG0==gtG0
                         #assert BROS_gtG1==gtG1
@@ -2770,6 +2782,7 @@ class GraphPairTrainer(BaseTrainer):
         log['final_rel_XX_XLM_TP']=relPrec_XLM
         log['final_rel_XX_XLM_predCount']=XLM_predCount
         log['final_rel_XX_XLM_gtCount']=XLM_gtCount
+        log['final_rel_XX_XLMstrict_TP']=relPrec_XLMstrict
         if len(predPairs)>0:
             relPrec /= len(predPairs)
             relPrec_strict /= len(predPairs)
