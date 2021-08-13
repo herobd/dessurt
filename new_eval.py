@@ -469,6 +469,8 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                         rel_BROS_TP = sum(val_comb_metrics[typ])
                     elif 'final_rel_XX_XLM_TP'==typ:
                         rel_XLM_TP = sum(val_comb_metrics[typ])
+                    elif 'final_rel_XX_XLMstrict_TP'==typ:
+                        rel_XLMstrict_TP = sum(val_comb_metrics[typ])
                     elif 'final_rel_XX_XLM_predCount'==typ:
                         XLM_rel_pred_count = sum(val_comb_metrics[typ])
                     elif 'final_rel_XX_XLM_gtCount'==typ:
@@ -519,6 +521,9 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                     XLM_recall = rel_XLM_TP/XLM_rel_gt_count
                     XLM_prec = rel_XLM_TP/XLM_rel_pred_count
                     print('XLM relationships Recall Prec F1: {:.2f} , {:.2f} , {:.2f}'.format(100*XLM_recall,100*XLM_prec,100*2*XLM_recall*XLM_prec/(XLM_prec+XLM_recall)))
+                    XLMstrict_recall = rel_XLMstrict_TP/XLM_rel_gt_count
+                    XLMstrict_prec = rel_XLMstrict_TP/XLM_rel_pred_count
+                    print('XLM[strict] relationships Recall Prec F1: {:.2f} , {:.2f} , {:.2f}'.format(100*XLMstrict_recall,100*XLMstrict_prec,100*2*XLMstrict_recall*XLMstrict_prec/(XLMstrict_prec+XLMstrict_recall)))
                     #strict_recall = rel_strict_TP/rel_gt_count
                     #strict_prec = rel_strict_TP/rel_pred_count
                     #print('strict relationships Recall Prec F1: {:.2f} , {:.2f} , {:.2f}'.format(100*strict_recall,100*strict_prec,100*2*strict_recall*strict_prec/(strict_prec+strict_recall)))
