@@ -195,6 +195,10 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
 
             gt_line_to_group = instance['targetIndexToGroup']
 
+            transcription_groups = []
+            for group in groups:
+                transcription_groups.append('\\'.join([transcription_lines[t] for t in group]))
+
 
             classes = [classes_lines[group[0]].argmax() for group in groups]
             if draw:
@@ -266,6 +270,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
 
                 #align headers to gt
                 h_to_g = [None]*(len(column_headers)+len(row_headers))
+                c_to_g = {}
                 g_to_h = {}
                 matchings = [None]*(len(column_headers)+len(row_headers))
                 for i,h in enumerate(column_headers+row_headers):
@@ -293,12 +298,12 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 ch_to_g = h_to_g[:len(column_headers)]
                 rh_to_g = h_to_g[len(column_headers):]
 
-                pred_cells += [group[g] for g in h_to_g] #is this cheating?
+                pred_cells += [groups[g] if g is not None else [-1] for g in h_to_g] #is this cheating?
                 pred_cell_classes += [1]*len(pred_cells)
                 
                 i=len(column_headers)+len(row_headers)
                 for ch in column_headers:
-                    for rh in column_headers:
+                    for rh in row_headers:
                         question='t~{}~~{}'.format(ch,rh)
                         answer = model(img,ocr,[[question]],RUN=True)
                         print(question+' {:} '+answer)
@@ -345,17 +350,20 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 for ci,ch in enumerate(column_headers):
                     for ri,rh in enumerate(column_headers):
                         assert i == len(pred_cells)
-                        g = c_to_g[i]
-                        pred_cells.append(groups[g])
+                        if i in c_to_g:
+                            g = c_to_g[i]
+                            pred_cells.append(groups[g])
+                        else:
+                            pred_cells.append([-1])
                         pred_cell_classes.append(2)
                         rel_tables.append((index_start+ci,index_start+i))
                         rel_tables.append((index_start+ri+len(column_headers),index_start+i))
                         i+=1
-                used.extend(c_to_g)
+                used.extend(c_to_g.values())
 
                 #TODO use 'ac~' and 'ar~' as a second check?
 
-                used = [li for g in used for li in group[g]]
+                used = [li for g in used if g is not None for li in groups[g]]
                 #we purge the table from being processed latter
                 #used.sort(reverse=True)
                 #for ti in used:
@@ -672,8 +680,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             print('inconsistent_class_count={}'.format(inconsistent_class_count))
 
             if draw:
-                assert len(pred_classes) == len(loc_pgroup)
-                for cls,loc,pgroup in zip(pred_classes,loc_pgroup,pred_groups):
+                assert len(pred_classes+pred_cell_classes) == len(loc_pgroup)
+                for cls,loc,pgroup in zip(pred_classes+pred_cell_classes,loc_pgroup,pred_groups+pred_cells):
                     if cls==0:
                         color=(0,0,255) #header
                     elif cls==1:

@@ -3,10 +3,10 @@ import torch
 import numpy as np
 from utils import img_f
 
-reader = easyocr.Reader(['en'],gpu=True)#,quantize=False)
+reader = easyocr.Reader(['en'],gpu=False)#,quantize=False)
 characters = "0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ €ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 #results=reader.readtext('../pairing/test3.png',text_threshold=0.01,min_size=5,low_text=0.01)
-img = img_f.imread('../pairing/test3.png',False)
+img = img_f.imread('../test-0.png',False)
 img = (255*(img/img.max())).astype(np.uint8)
 #img = img/img.max()
 results=reader.readtext(img,decoder='greedy+softmax')
@@ -57,8 +57,8 @@ for i,r in enumerate(results):
     print(first)
     print(second)
     print('===-======')
-    img_f.imshow(str(i),img_window)
-    img_f.show()
+    #img_f.imshow(str(i),img_window)
+    #img_f.show()
     #print('{}: {}'.format(i,r[1]))
 #import pdb;pdb.set_trace()
 #print(results)
