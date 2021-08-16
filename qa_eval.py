@@ -356,8 +356,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                         else:
                             pred_cells.append([-1])
                         pred_cell_classes.append(2)
-                        rel_tables.append((index_start+ci,index_start+i))
-                        rel_tables.append((index_start+ri+len(column_headers),index_start+i))
+                        rel_tables.append((index_start+ci,i))
+                        rel_tables.append((index_start+ri+len(column_headers),i))
                         i+=1
                 used.extend(c_to_g.values())
 
