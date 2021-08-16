@@ -151,9 +151,18 @@ class QADataset(torch.utils.data.Dataset):
         #t#time = timeit.default_timer()-tic#t#
         #t#self.opt_history['parseAnn'].append(time)#t#
         #t#tic=timeit.default_timer()#t#
+        
+        mask_bbs=[]
+        mask_ids=[]
+        for i,(q,a,bb_ids,inmask_bbs,outmask_bbs) for enumerate(questions_and_answers):
+            mask_bbs+=inmask_bbs+outmask_bbs
+            mask_ids+=(['in{}'.format(i)]*len(inmask_bbs)) + (['out{}'.format(i)]*len(outmask_bbs))
+        mask_bbs = np.array(mask_bbs)
+
 
         if self.transform is not None:
             if 'word_boxes' in form_metadata:
+                raise NotImplementedError('have not added mask_bbs')
                 word_bbs = form_metadata['word_boxes']
                 dif_f = bbs.shape[2]-word_bbs.shape[1]
                 blank = np.zeros([word_bbs.shape[0],dif_f])
@@ -161,8 +170,8 @@ class QADataset(torch.utils.data.Dataset):
                 crop_bbs = np.concatenate([bbs,prep_word_bbs],axis=1)
                 crop_ids=ids+['word{}'.format(i) for i in range(word_bbs.shape[0])]
             else:
-                crop_bbs = bbs
-                crop_ids = ids
+                crop_bbs = np.concatenate([bbs,mask_bbs])
+                crop_ids = ids+mask_ids
             out, cropPoint = self.transform({
                 "img": np_img,
                 "bb_gt": crop_bbs[None,...],
@@ -180,6 +189,8 @@ class QADataset(torch.utils.data.Dataset):
             }, cropPoint)
             np_img = out['img']
 
+            new_q_inboxes={}
+            new_q_outboxes{}
             if 'word_boxes' in form_metadata:
                 saw_word=False
                 word_index=-1
@@ -196,8 +207,17 @@ class QADataset(torch.utils.data.Dataset):
                 word_ids=out['bb_auxs'][word_index:]
                 form_metadata['word_trans'] = [form_metadata['word_trans'][int(id[4:])] for id in word_ids]
             else:
-                bbs = out['bb_gt'][0]
-                ids= out['bb_auxs'] 
+                for bb_id,bb in zip(out['bb_auxs'],out['bb_gt'][0]):
+                    if bb_id.startswith('in'):
+                        i = int(bb_id[2:])
+                        new_q_inboxes[i].append(bb)
+                    elif bb_id.startswith('out'):
+                        i = int(bb_id[3:])
+                        new_q_outboxes[i].append(bb)
+                    else:
+                        bbs.append(bb)...
+                #bbs = out['bb_gt'][0]
+                #ids= out['bb_auxs'] 
 
             if questions_and_answers is not None:
                 questions=[]
