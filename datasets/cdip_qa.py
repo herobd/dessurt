@@ -37,14 +37,18 @@ class CDIPQA(QADataset):
 
     def __init__(self, dirPath=None, split=None, config=None, images=None):
         super(CDIPQA, self).__init__(dirPath,split,config,images)
-
+        assert self.questions==1 #current set up (with masks being appended to image) requires only 1 qa pair per image
+        self.do_masks=True
         self.cache_resized = False
 
         self.corruption_p = config['text_corruption'] if 'text_corruption' in config else 0
 
         self.extra_np = 0.05
 
-        self.num_question_types=15
+        self.min_read_start_no_mask=9
+        self.min_read_start_with_mask=4
+
+        self.num_question_types=1 #15
         #question types
         #0. Read from prompt (no highlight) including new lines (stops at block end) and draw where you read
         # . Read from prompt (with highlight) including new lines (stops at block end) and draw where you read
@@ -90,14 +94,17 @@ class CDIPQA(QADataset):
                 if type(split) is str:
                     toUse = readFile[split]
                     imagesAndAnn = []
-                    for path in toUse['images']:
-                        name = path[path.rindex('/')+1:]
+                    for path in toUse:#['images']:
+                        try:
+                            name = path[path.rindex('/')+1:]
+                        except ValueError:
+                            name = path
                         imagesAndAnn.append( (name,os.path.join(dirPath,path+'.png'),os.path.join(dirPath,name+'.json')) )
                 elif type(split) is list:
                     imagesAndAnn = []
                     for spstr in split:
                         toUse = readFile[spstr]
-                        for path in toUse['images']:
+                        for path in toUse:#['images']:
                             name = path[path.rindex('/')+1:]
                             imagesAndAnn.append( (name,os.path.join(dirPath,path+'.png'),os.path.join(dirPath,name+'.json')) )
                 else:
@@ -125,7 +132,7 @@ class CDIPQA(QADataset):
                                     fy=self.rescale_range[1], 
                                     )
                             img_f.imwrite(path,resized)
-                    self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale ]})
+                    self.images.append({'id':imageName, 'imageName':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale })
                 else:
                     print('{} does not exist'.format(jsonPath))
                     print('No json found for {}'.format(imagePath))
@@ -137,13 +144,14 @@ class CDIPQA(QADataset):
     def parseAnn(self,ocr,s):
         image_h=ocr['height']
         image_w=ocr['width']
-        ocr=['blocks']
+        ocr=ocr['blocks']
         qa = self.makeQuestions(ocr,image_h,image_w)
 
         qbbs=[]
         t_id_to_bb={}
         new_qa = []
-        for q,a,t_ids,in_mask,out_mask in qa
+        for q,a,t_ids,in_mask,out_mask,blank_mask in qa:
+            new_ids=[]
             for t_id in t_ids:
                 if t_id in t_id_to_bb:
                     bb_id = t_id_to_bb[t_id]
@@ -151,11 +159,11 @@ class CDIPQA(QADataset):
                     b,p,l,w = t_id
                     inst = ocr[b]
                     if p is not None:
-                        inst = inst[b]
+                        inst = inst['paragraphs'][p]
                         if l is not None:
-                            inst = inst[p]
+                            inst = inst['lines'][l]
                             if w is not None:
-                                inst = inst[w]
+                                inst = inst['words'][w]
                     
                     box = inst['box']
                     #text = inst['text']
@@ -188,11 +196,21 @@ class CDIPQA(QADataset):
                         bb = [lX*s, tY*s, rX*s, tY*s, rX*s, bY*s, lX*s, bY*s,
                                s*lX, s*(tY+bY)/2.0, s*rX, s*(tY+bY)/2.0, s*(lX+rX)/2.0, s*tY, s*(rX+lX)/2.0, s*bY]  #we add these for conveince to crop BBs within window
                         bb_id = len(qbbs)
+                        new_ids.append(bb_id)
                         qbbs.append(bb)
+
+            new_inmask = getAllBBs(ocr,in_mask,s)
+            new_outmask = getAllBBs(ocr,out_mask,s)
+            print(out_mask)
+            print(new_outmask)
+            new_blankmask = getAllBBs(ocr,blank_mask,s)
+
+
+            new_qa.append((q,a,new_ids,new_inmask,new_outmask,new_blankmask))
         qa_bbs = np.array(qbbs)
 
 
-        return qa_bbs, list(range(qa_bbs.shape[0])), None, {}, {}, qa
+        return qa_bbs, list(range(qa_bbs.shape[0])), None, {}, {}, new_qa
 
 
     def getResponseBBIdList(self,queryId,annotations):
@@ -214,66 +232,89 @@ class CDIPQA(QADataset):
         qa=[]
         for i in range(self.questions):
             question_type = random.randrange(self.num_question_types)
+            print('make question {} of type {}'.format(i,question_type))
             if question_type ==0:
                 #0. Read from prompt (no highlight) including new lines (stops at block end) and draw where you read
                 # . Read from prompt (with highlight) including new lines (stops at block end) and draw where you read
                 use_highlight = random.random()<0.5
+                if use_highlight:
+                    min_read_start = self.min_read_start_with_mask
+                else:
+                    min_read_start = self.min_read_start_no_mask
                 if wordmap is None:
                     wordmap = makeWordmap(ocr)
                 start_word_idx = random.randrange(len(wordmap))
-                goal_prompt_len = random.randrange(self.min_read_start,self.max_qa_len+1)
+                goal_prompt_len = random.randrange(min_read_start,self.max_qa_len+1)
                 
                 words_in_prompt=[start_word_idx]
                 start_word = wordmap[start_word_idx]
-                prompt = ocr[start_word[0],start_word[1],start_word[2],start_word[3]]['text']
+                prompt = ocr[start_word[0]]['paragraphs'][start_word[1]]['lines'][start_word[2]]['words'][start_word[3]]['text']
                 start_block = start_word[0]
                 next_word_idx = start_word_idx+1
-                next_word = wordmap[next_word_idx]
-                next_text = ocr[next_word[0]]['paragraphs'][next_word[1]]['lines'][next_word[2]['text']
+                if next_word_idx>=len(wordmap):
+                    next_word=(None,None,None,None)
+                else:
+                    next_word = wordmap[next_word_idx]
+                    next_text = ocr[next_word[0]]['paragraphs'][next_word[1]]['lines'][next_word[2]]['words'][next_word[3]]['text']
                 while len(prompt)+1+len(next_text)<self.max_qa_len and next_word[0]==start_block:
                     prompt+=' '+next_text
                     words_in_prompt.append(next_word_idx)
                     next_word_idx = next_word_idx+1
-                    next_word = wordmap[next_word_idx]
-                    next_text = ocr[next_word[0]]['paragraphs'][next_word[1]]['lines'][next_word[2]['text']
+                    if next_word_idx>=len(wordmap):
+                        next_word=(None,None,None,None)
+                    else:
+                        next_word = wordmap[next_word_idx]
+                        next_text = ocr[next_word[0]]['paragraphs'][next_word[1]]['lines'][next_word[2]]['words'][next_word[3]]['text']
                     if len(prompt)>=goal_prompt_len:
                         break
-                if prompt>self.max_qa_len:
-                    prompt = prompt[-self.max_qa_len:]A
+                if len(prompt)>self.max_qa_len:
+                    prompt = prompt[-self.max_qa_len:]
 
                 if next_word[0]!=start_block:
-                    response='[ end ]'
+                    response='‡'
                     words_in_response=[]
                 else:
                     goal_response_len = self.max_qa_len
                     response=next_text
                     words_in_response=[next_word_idx]
-                    next_word_idx = start_word_idx+1
-                    next_word = wordmap[next_word_idx]
-                    next_text = ocr[next_word[0]]['paragraphs'][next_word[1]]['lines'][next_word[2]['text']
+                    print(words_in_response)
+                    next_word_idx = next_word_idx+1
+                    if next_word_idx>=len(wordmap):
+                        next_word=(None,None,None,None)
+                    else:
+                        next_word = wordmap[next_word_idx]
+                        next_text = ocr[next_word[0]]['paragraphs'][next_word[1]]['lines'][next_word[2]]['words'][next_word[3]]['text']
                     while len(response)+1+len(next_text)<self.max_qa_len and next_word[0]==start_block:
                         response+=' '+next_text
                         words_in_response.append(next_word_idx)
+                        print(words_in_response)
                         next_word_idx = next_word_idx+1
-                        next_word = wordmap[next_word_idx]
-                        next_text = ocr[next_word[0]]['paragraphs'][next_word[1]]['lines'][next_word[2]['text']
+                        if next_word_idx>=len(wordmap):
+                            next_word=(None,None,None,None)
+                        else:
+                            next_word = wordmap[next_word_idx]
+                            next_text = ocr[next_word[0]]['paragraphs'][next_word[1]]['lines'][next_word[2]]['words'][next_word[3]]['text']
+
                         if len(response)>=goal_response_len:
                             break
-                    if response>self.max_qa_len:
-                        response = response[-self.max_qa_len:]A
+                    if len(response)>self.max_qa_len:
+                        response = response[-self.max_qa_len:]
+                    if next_word[0]!=start_block and len(response)<self.max_qa_len:
+                        response+='‡'#if we can, add an end-of-block sign
                 if use_highlight:
                     question = 'r0~'
-                    indexes =  [wordmap[i] for i in words_in_prompt]
+                    inmask =  [wordmap[i] for i in words_in_prompt]
                     #inmask = highlightAll(image_h,image_w,ocr,indexes)
-                    inmask = allBoxes(ocr,indexes)
+                    #inmask = allBoxes(ocr,indexes)
                 else:
                     question = 're~'
                     inmask = []
 
                 #outmask = highlightAll(image_h,image_w,ocr,[wordmap[i] for i in words_in_response])
-                outmask = allBoxes(ocr,indexes)
+                outmask = [wordmap[i] for i in words_in_response]
+                #outmask = allBoxes(ocr,indexes)
 
-                qa.append([question+prompt,response,[wordmap[i] for i in words_in_prompt+words_in_response],inmask,outmask])
+                qa.append([question+prompt,response,[wordmap[i] for i in words_in_prompt+words_in_response],inmask,outmask,None])
 
                 #1. Read backwards from prompt (no highlight) including new lines (stops at block end) and draw where you read
                 # . Read backwards from prompt (with highlight) including new lines (stops at block end) and draw where you read
@@ -314,7 +355,7 @@ class CDIPQA(QADataset):
 #        mask[t:b+1,l:r+1]=value
 #    return mask
 
-def allMasks(ocr,indexes,value=1):
+def allBoxes(ocr,indexes):
     ret=[]
     for idx in indexes:
         if idx[3] is not None:
@@ -336,3 +377,23 @@ def makeWordmap(ocr):
                 for w in range(len(line['words'])):
                     wordmap.append((b,p,l,w))
     return wordmap
+
+def getAllBBs(ocr,t_ids,s):
+    bbs=[]
+    if t_ids is not None:
+        for t_id in t_ids:
+            b,p,l,w = t_id
+            inst = ocr[b]
+            if p is not None:
+                inst = inst['paragraphs'][p]
+                if l is not None:
+                    inst = inst['lines'][l]
+                    if w is not None:
+                        inst = inst['words'][w]
+            
+            box = inst['box']
+            lX,tY,rX,bY = box
+            bb = [lX*s, tY*s, rX*s, tY*s, rX*s, bY*s, lX*s, bY*s,
+                   s*lX, s*(tY+bY)/2.0, s*rX, s*(tY+bY)/2.0, s*(lX+rX)/2.0, s*tY, s*(rX+lX)/2.0, s*bY]  #we add these for conveince to crop BBs within window
+            bbs.append(bb)
+    return bbs
