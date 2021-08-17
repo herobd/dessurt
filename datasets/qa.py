@@ -29,6 +29,13 @@ def collate(batch):
             'answers': [b['answers'] for b in batch]
             }
 
+def addMask(img,boxes):
+    mask = torch.FloatTensor(1,1,img.shape[2],img.shape[3]).fill_(0)
+    for box in boxes:
+        l,t,r,b = box[0:4]
+        mask[0,0,round(t):round(b+1),round(l):round(r+1)]=1 
+    return torch.cat((img,mask),dim=0)
+
 
 class QADataset(torch.utils.data.Dataset):
     """
@@ -67,6 +74,7 @@ class QADataset(torch.utils.data.Dataset):
 
         self.pixel_count_thresh = config['pixel_count_thresh'] if 'pixel_count_thresh' in config else 10000000
         self.max_dim_thresh = config['max_dim_thresh'] if 'max_dim_thresh' in config else 2700
+        self.do_masks=False    
 
         #t#self.opt_history = defaultdict(list)#t#
 
@@ -101,11 +109,11 @@ class QADataset(torch.utils.data.Dataset):
                 return self.__getitem__((index+1)%self.__len__())
         else:
             np_img = None#np.zeros([1000,1000])
-        #if scaleP is None:
-        #    s = np.random.uniform(self.rescale_range[0], self.rescale_range[1])
-        #else:
-        #    s = scaleP
-        #partial_rescale = s/rescaled
+        if scaleP is None:
+            s = np.random.uniform(self.rescale_range[0], self.rescale_range[1])
+        else:
+            s = scaleP
+        partial_rescale = s/rescaled
         #if self.transform is None: #we're doing the whole image
         #    #this is a check to be sure we don't send too big images through
         #    pixel_count = partial_rescale*partial_rescale*np_img.shape[0]*np_img.shape[1]
@@ -123,10 +131,6 @@ class QADataset(torch.utils.data.Dataset):
 
         #
         ##np_img = img_f.resize(np_img,(target_dim1, target_dim0))
-        #np_img = img_f.resize(np_img,(0,0),
-        #        fx=partial_rescale,
-        #        fy=partial_rescale,
-        #)
 
         #np_img = np.zeros([1000,1000])
         
@@ -134,12 +138,17 @@ class QADataset(torch.utils.data.Dataset):
         #t#self.opt_history['image read and setup'].append(time)#t#
         #t#tic=timeit.default_timer()#t#
 
-        s=1
+        
         bbs,ids,trans, metadata, form_metadata, questions_and_answers = self.parseAnn(annotations,s)
 
         if np_img is None:
             np_img=metadata['image']
             del metadata['image']
+        if partial_rescale!=1:
+            np_img = img_f.resize(np_img,(0,0),
+                    fx=partial_rescale,
+                    fy=partial_rescale,
+            )
 
 
         if len(np_img.shape)==2:
@@ -152,14 +161,22 @@ class QADataset(torch.utils.data.Dataset):
         #t#self.opt_history['parseAnn'].append(time)#t#
         #t#tic=timeit.default_timer()#t#
         
-        mask_bbs=[]
-        mask_ids=[]
-        for i,qa in enumerate(questions_and_answers):
-            if len(qa)==5:
-                q,a,bb_ids,inmask_bbs,outmask_bbs = qa
-                mask_bbs+=inmask_bbs+outmask_bbs
-                mask_ids+=(['in{}'.format(i)]*len(inmask_bbs)) + (['out{}'.format(i)]*len(outmask_bbs))
-        mask_bbs = np.array(mask_bbs)
+        if self.do_masks:
+            mask_bbs=[]
+            mask_ids=[]
+            for i,qa in enumerate(questions_and_answers):
+                #if len(qa)==5:
+                q,a,bb_ids,inmask_bbs,outmask_bbs,blank_bbs = qa
+                print(outmask_bbs)
+                mask_bbs+=inmask_bbs+outmask_bbs+blank_bbs
+                #mask_ids+=(['in{}'.format(i)]*len(inmask_bbs)) + (['out{}'.format(i)]*len(outmask_bbs)) + (['blank{}'.format(i)]*len(blank_bbs))
+                mask_ids+=  ['in{}_{}'.format(i,ii) for ii in range(len(inmask_bbs))] + \
+                            ['out{}_{}'.format(i,ii) for ii in range(len(outmask_bbs))] + \
+                            ['blank{}_{}'.format(i,ii) for ii in range(len(blank_bbs))]
+                assert i==0 #right now, we only allow 1 qa pair if using masking
+            mask_bbs = np.array(mask_bbs)
+            #if len(mask_bbs.shape)==1:
+            #    mask_bbs=mask_bbs[None]
 
 
         if self.transform is not None:
@@ -171,9 +188,12 @@ class QADataset(torch.utils.data.Dataset):
                 prep_word_bbs = np.concatenate([word_bbs,blank],axis=1)[None,...]
                 crop_bbs = np.concatenate([bbs,prep_word_bbs],axis=1)
                 crop_ids=ids+['word{}'.format(i) for i in range(word_bbs.shape[0])]
+            elif self.do_masks and len(mask_bbs.shape)==2:
+                crop_bbs = np.concatenate([bbs,mask_bbs])
+                crop_ids = ids+mask_ids
             else:
-                crop_bbs = bbs#np.concatenate([bbs,mask_bbs])
-                crop_ids = ids#+mask_ids
+                crop_bbs = bbs
+                crop_ids = ids
             out, cropPoint = self.transform({
                 "img": np_img,
                 "bb_gt": crop_bbs[None,...],
@@ -191,8 +211,9 @@ class QADataset(torch.utils.data.Dataset):
             }, cropPoint)
             np_img = out['img']
 
-            new_q_inboxes={}
-            new_q_outboxes={}
+            new_q_inboxes=defaultdict(list)
+            new_q_outboxes=defaultdict(list)
+            new_q_blankboxes=defaultdict(list)
             if 'word_boxes' in form_metadata:
                 saw_word=False
                 word_index=-1
@@ -208,25 +229,36 @@ class QADataset(torch.utils.data.Dataset):
                 form_metadata['word_boxes'] = out['bb_gt'][0,word_index:,:8]
                 word_ids=out['bb_auxs'][word_index:]
                 form_metadata['word_trans'] = [form_metadata['word_trans'][int(id[4:])] for id in word_ids]
-            else:
+            elif self.do_masks:
                 orig_idx=0
                 for ii,(bb_id,bb) in enumerate(zip(out['bb_auxs'],out['bb_gt'][0])):
+                    print(bb_id)
                     if type(bb_id) is int:
                         assert orig_idx==ii
                         orig_idx+=1
                     elif bb_id.startswith('in'):
-                        i = int(bb_id[2:])
+                        nums = bb_id[2:].split('_')
+                        i=int(nums[0])
                         new_q_inboxes[i].append(bb)
                     elif bb_id.startswith('out'):
-                        i = int(bb_id[3:])
+                        nums = bb_id[3:].split('_')
+                        i=int(nums[0])
                         new_q_outboxes[i].append(bb)
+                    elif bb_id.startswith('blank'):
+                        nums = bb_id[5:].split('_')
+                        i=int(nums[0])
+                        new_q_blankboxes[i].append(bb)
                 bbs = out['bb_gt'][0,:orig_idx]
                 ids= out['bb_auxs'][:orig_idx]
+            else:
+                bbs = out['bb_gt'][0]
+                ids= out['bb_auxs']
 
             if questions_and_answers is not None:
                 questions=[]
                 answers=[]
-                questions_and_answers = [(q,a,qids) for q,a,qids in questions_and_answers if qids is None or all((i in ids) for i in qids)]
+                #questions_and_answers = [(q,a,qids) for q,a,qids in questions_and_answers if qids is None or all((i in ids) for i in qids)]
+                questions_and_answers = [qa[0:3] for qa in questions_and_answers if qa[2] is None or all((i in ids) for i in qa[2])]
         if questions_and_answers is not None:
             if len(questions_and_answers) > self.questions:
                 questions_and_answers = random.sample(questions_and_answers,k=self.questions)
@@ -235,6 +267,7 @@ class QADataset(torch.utils.data.Dataset):
                 questions = [q.lower() for q in questions]
                 answers = [a.lower() for a in answers]
             else:
+                print('Had no questions...')
                 return self.getitem((index+1)%len(self))
         else:
             questions=answers=None
@@ -255,11 +288,22 @@ class QADataset(torch.utils.data.Dataset):
         img = img.astype(np.float32)
         img = torch.from_numpy(img)
         img = 1.0 - img / 128.0 #ideally the median value would be 0
+
+        if self.do_masks:
+            assert len(new_q_inboxes)<=1 and len(new_q_outboxes)<=1
+            img = addMask(img,new_q_inboxes[0])
+            for blank_box in new_q_blankboxes[0]:
+                l,t,r,b = blank_box
+                img[0,:-1,t:b+1,l:r+1]=0 #blank on image
+                img[0,-1,t:b+1,l:r+1]=-1 #flip mask to indicate was blanked
+            img = addMask(img,new_q_outboxes[0])
         #if pixel_gt is not None:
         #    pixel_gt = pixel_gt.transpose([2,0,1])[None,...]
         #    pixel_gt = torch.from_numpy(pixel_gt)
+
+
         if bbs is not None:
-            bbs = convertBBs(bbs[None,...],self.rotate,1)
+            bbs = convertBBs(bbs[None,...],self.rotate,0)
             if bbs is not None:
                 bbs=bbs[0]
             else:
@@ -270,7 +314,10 @@ class QADataset(torch.utils.data.Dataset):
         #     form_metadata['word_boxes'] = convertBBs(form_metadata['word_boxes'][None,...],self.rotate,0)[0,...]
 
         #import pdb;pdb.set_trace()
-        transcription = [trans[id] for id in ids]
+        if trans is not None:
+            transcription = [trans[id] for id in ids]
+        else:
+            transcription = None
 
         #t#time = timeit.default_timer()#t#
         #t#self.opt_history['remainder'].append(time-tic)#t#

@@ -23,8 +23,8 @@ def display(data):
         #if data['spaced_label'] is not None:
         #    print('spaced label:')
         #    print(data['spaced_label'][:,b])
-        for bb,text in zip(data['bb_gt'][b],data['transcription'][b]):
-            print('ocr: {} {}'.format(text,bb))
+        #for bb,text in zip(data['bb_gt'][b],data['transcription'][b]):
+        #    print('ocr: {} {}'.format(text,bb))
         #print('questions: {}'.format(data['questions'][b]))
         #print('answers: {}'.format(data['answers'][b]))
         print('questions and answers')
@@ -41,12 +41,12 @@ def display(data):
             #cv2.imwrite('out/fg_mask{}.png'.format(b),fg_mask.numpy()*255)
             #cv2.imwrite('out/img{}.png'.format(b),img.numpy()*255)
             #cv2.imwrite('out/changed_img{}.png'.format(b),changed_img.numpy()*255)
-            plt.imshow(img.numpy()[:,:,0], cmap='gray')
-            plt.show()
+            #plt.imshow(img.numpy()[:,:,0], cmap='gray')
+            #plt.show()
+            cv2.imshow('x',(img*255).numpy().astype(np.uint8))
+            cv2.show()
 
-            #cv2.waitKey()
-
-            cv2.imwrite('testsinglesize_1024.png',img.numpy()[:,:,0])
+            #cv2.imwrite('testsinglesize_1024.png',img.numpy()[:,:,0])
 
         #fig = plt.figure()
 
@@ -65,7 +65,7 @@ if __name__ == "__main__":
     if len(sys.argv)>1:
         dirPath = sys.argv[1]
     else:
-        dirPath = '../data/CDIP'
+        dirPath = '../ocr/'#'../data/CDIP'
     if len(sys.argv)>2:
         start = int(sys.argv[2])
     else:
@@ -81,7 +81,7 @@ if __name__ == "__main__":
             "pad":0,
             "rot_degree_std_dev": 1
             },
-        'questions':50,
+        'questions':1,
         'max_qa_len': 26
 
 })

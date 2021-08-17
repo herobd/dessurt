@@ -10,7 +10,7 @@ from model.swin_transformer import ConvPatchEmbed, SwinTransformerBlock, PatchMe
 from model.trans_pooling import OCRPooler, QPooler
 try:
     from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
-    from transformers import LayoutLMTokenizer, LayoutLMModel
+    #from transformers import LayoutLMTokenizer, LayoutLMModel
 except:
     pass
 from utils.character_tokenizer import CharacterTokenizer
