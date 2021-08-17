@@ -201,8 +201,7 @@ class CDIPQA(QADataset):
 
             new_inmask = getAllBBs(ocr,in_mask,s)
             new_outmask = getAllBBs(ocr,out_mask,s)
-            print(out_mask)
-            print(new_outmask)
+           
             new_blankmask = getAllBBs(ocr,blank_mask,s)
 
 
@@ -232,7 +231,6 @@ class CDIPQA(QADataset):
         qa=[]
         for i in range(self.questions):
             question_type = random.randrange(self.num_question_types)
-            print('make question {} of type {}'.format(i,question_type))
             if question_type ==0:
                 #0. Read from prompt (no highlight) including new lines (stops at block end) and draw where you read
                 # . Read from prompt (with highlight) including new lines (stops at block end) and draw where you read
@@ -277,7 +275,6 @@ class CDIPQA(QADataset):
                     goal_response_len = self.max_qa_len
                     response=next_text
                     words_in_response=[next_word_idx]
-                    print(words_in_response)
                     next_word_idx = next_word_idx+1
                     if next_word_idx>=len(wordmap):
                         next_word=(None,None,None,None)
@@ -287,7 +284,6 @@ class CDIPQA(QADataset):
                     while len(response)+1+len(next_text)<self.max_qa_len and next_word[0]==start_block:
                         response+=' '+next_text
                         words_in_response.append(next_word_idx)
-                        print(words_in_response)
                         next_word_idx = next_word_idx+1
                         if next_word_idx>=len(wordmap):
                             next_word=(None,None,None,None)
