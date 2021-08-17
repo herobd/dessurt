@@ -16,6 +16,8 @@ def display(data):
     for b in range(batchSize):
         #print (data['img'].size())
         img = (1-data['img'][b].permute(1,2,0))/2.0
+        img[1,img[1]<1]=0
+        img[2,img[2]<1]=0
         #label = data['label']
         #gt = data['gt'][b]
         #print(label[:data['label_lengths'][b],b])

@@ -32,9 +32,12 @@ def collate(batch):
 def addMask(img,boxes):
     mask = torch.FloatTensor(1,1,img.shape[2],img.shape[3]).fill_(0)
     for box in boxes:
-        l,t,r,b = box[0:4]
-        mask[0,0,round(t):round(b+1),round(l):round(r+1)]=1 
-    return torch.cat((img,mask),dim=0)
+        #tlX,tlY,trX,trY,brX,brY,blX,blY = box[0:8]
+        points = box[0:8].reshape(4,2)
+        #mask[0,0,round(t):round(b+1),round(l):round(r+1)]=1 
+        #img_f.fillConvexPoly(img,((tlX,tlY),(trX,trY),(brX,brY),(blX,blY)),1)
+        img_f.fillConvexPoly(mask[0,0],points,1)
+    return torch.cat((img,mask),dim=1)
 
 
 class QADataset(torch.utils.data.Dataset):
@@ -167,7 +170,6 @@ class QADataset(torch.utils.data.Dataset):
             for i,qa in enumerate(questions_and_answers):
                 #if len(qa)==5:
                 q,a,bb_ids,inmask_bbs,outmask_bbs,blank_bbs = qa
-                print(outmask_bbs)
                 mask_bbs+=inmask_bbs+outmask_bbs+blank_bbs
                 #mask_ids+=(['in{}'.format(i)]*len(inmask_bbs)) + (['out{}'.format(i)]*len(outmask_bbs)) + (['blank{}'.format(i)]*len(blank_bbs))
                 mask_ids+=  ['in{}_{}'.format(i,ii) for ii in range(len(inmask_bbs))] + \
@@ -190,6 +192,7 @@ class QADataset(torch.utils.data.Dataset):
                 crop_ids=ids+['word{}'.format(i) for i in range(word_bbs.shape[0])]
             elif self.do_masks and len(mask_bbs.shape)==2:
                 crop_bbs = np.concatenate([bbs,mask_bbs])
+                #print(crop_bbs)
                 crop_ids = ids+mask_ids
             else:
                 crop_bbs = bbs
@@ -232,7 +235,6 @@ class QADataset(torch.utils.data.Dataset):
             elif self.do_masks:
                 orig_idx=0
                 for ii,(bb_id,bb) in enumerate(zip(out['bb_auxs'],out['bb_gt'][0])):
-                    print(bb_id)
                     if type(bb_id) is int:
                         assert orig_idx==ii
                         orig_idx+=1
