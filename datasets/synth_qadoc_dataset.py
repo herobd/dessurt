@@ -343,7 +343,7 @@ class SynthQADocDataset(QADataset):
                         label_img = img_f.resize(label_img,(label_height,label_width))
                     except OverflowError as e:
                         print(e)
-                        print('image {} to {}'.format(label_img.shape,(label_height,label_width)))
+                        print('image {} to {}  min={} max={}'.format(label_img.shape,(label_height,label_width),label_img.min(),label_img.max()))
                 l_h += label_img.shape[0]+pad
                 label_imgs.append(label_img)
                 label_texts.append(label_text)
@@ -361,11 +361,15 @@ class SynthQADocDataset(QADataset):
             for value_img_idx,value_text,value_dir,resize_v in v:
                 value_img_path = os.path.join(value_dir,'{}.png'.format(value_img_idx))
                 value_img = img_f.imread(value_img_path,False)
-                if value_img is None:
+                if value_img is None or value_img.shape[0]==0 or value_img.shape[1]==0:
                     return self.parseAnn(annotations,s)
                 if self.change_size:
                     value_width = round(value_img.shape[1]*value_height/value_img.shape[0])
-                    value_img = img_f.resize(value_img,(value_height,value_width))
+                    try:
+                        value_img = img_f.resize(value_img,(value_height,value_width))
+                    except:
+                        print('Error resizing value image. min={} max={}'.format(value_img.min(),value_img.max()))
+                        return self.parseAnn(annotations,s)
                 v_h += value_img.shape[0]+pad
                 value_imgs.append(value_img)
                 value_texts.append(value_text)
