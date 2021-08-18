@@ -5,7 +5,7 @@ template= """#!/bin/bash
 #SBATCH --gpus-per-task=1
 #SBATCH  --cpus-per-task=4
 #SBATCH -J "{}"
-#SBATCH --mem-per-cpu=2G
+#SBATCH --mem-per-cpu=4G
 #SBATCH --mail-user=herobd@gmail.com   # email address
 #SBATCH --mail-type=END
 #SBATCH --mail-type=FAIL
@@ -23,7 +23,6 @@ module remove miniconda3
 module load cuda/10.1
 module load cudnn/7.6
 cd ~/pairing
-source deactivate
 source activate /fslhome/brianld/miniconda3/envs/new
 
 
