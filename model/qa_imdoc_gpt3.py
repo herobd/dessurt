@@ -217,6 +217,25 @@ class QAImDocGPT3(BaseModel):
         #        ocrp.register_backward_hook(hookf('ocrpool [{}]'.format(i)))
         #    if qp is not None:
         #        qp.register_backward_hook(hookf('qpool[{}]'.format(i)))
+
+        self.final_resolution = cur_resolution
+        upsample_net = [nn.ConvTranspose2d(d_im,d_im//2,4,2,1),
+                        nn.InstanceNorm2d(d_dim//2),
+                        nn.Dropout2d(p=0.125,inplace=True),
+                        nn.ReLU(inplace=True),
+                        nn.Conv2d(d_im//2,d_im//4,3,1,1),
+                        nn.InstanceNorm2d(d_dim//4),
+                        nn.Dropout2d(p=0.125,inplace=True),
+                        nn.ReLU(inplace=True)]
+        d_im = d_im//4
+        for i in range(len(blocks_per_level)-1):
+            upsample_net+=[ nn.ConvTranspose2d(d_im,d_im//2,4,2,1)
+                            nn.InstanceNorm2d(d_dim//2),
+                            nn.Dropout2d(p=0.125,inplace=True),
+                            nn.ReLU(inplace=True)]
+            d_im = d_im//2
+        upsample_net.append(nn.Conv2d(d_im,1,1,1,0)
+        self.upsample_net= nn.Sequential(*upsample_net)
         
         
         if d_im != fd_model:
@@ -734,11 +753,13 @@ class QAImDocGPT3(BaseModel):
 
         ##############
         #Visual output
-        im_tokens
+        H,W = self.final_resolution
+        im_feats = im_tokens.view(new_batch_size,H,W,im_feats.size(2))
+        out = self.upsample_net(im_feats)
 
 
 
-        return response_decoded, target_decoded.to(device), batch_string_response
+        return response_decoded, target_decoded.to(device), batch_string_response, out
 
     #t#def print_opt_times(self):#t#
         #t#for name,times in self.opt_history.items():#t#

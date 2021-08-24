@@ -848,7 +848,7 @@ class QAImDocGPT2(BaseModel):
         #import pdb;pdb.set_trace()
         if PRINT_ATT:
             attDisplay(image[0],full_ocr_string,'|'+questions[0],'|'+answers[0]+'^',batch_string_response[0])
-        return response_decoded, target_decoded.to(device), batch_string_response
+        return response_decoded, target_decoded.to(device), batch_string_response, None
 
     #t#def print_opt_times(self):#t#
         #t#for name,times in self.opt_history.items():#t#

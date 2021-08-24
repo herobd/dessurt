@@ -5,28 +5,14 @@ import json
 #from skimage import draw
 #import skimage.transform as sktransform
 import os
-import math, random, string
+import math, random, string, re
 from collections import defaultdict, OrderedDict
 from utils.funsd_annotations import createLines
 import timeit
-from .qa import QADataset
+from .qa import QADataset, collate
 from .synth_qadoc_dataset import addRead, breakLong
 
 import utils.img_f as img_f
-
-def collate(batch):
-    return {
-            'img': torch.cat([b['img'] for b in batch],dim=0),
-            'bb_gt': [b['bb_gt'] for b in batch], #torch.cat([b['bb_gt'] for b in batch],dim=0),
-            'imgName': [b['imgName'] for b in batch],
-            'scale': [b['scale'] for b in batch],
-            'cropPoint': [b['cropPoint'] for b in batch],
-            'transcription': [b['transcription'] for b in batch],
-            'metadata': [b['metadata'] for b in batch],
-            'form_metadata': [b['form_metadata'] for b in batch],
-            'questions': [b['questions'] for b in batch],
-            'answers': [b['answers'] for b in batch]
-            }
 
 
 class CDIPQA(QADataset):
@@ -48,16 +34,20 @@ class CDIPQA(QADataset):
         self.min_read_start_no_mask=9
         self.min_read_start_with_mask=4
 
-        self.num_question_types=1 #15
+        self.num_question_types=4 #15
+
+        sub_vocab_file = config['sub_vocab_file'] if 'sub_vocab_file' in config else '../data/wordsEn.txt'
+        with open(sub_vocab_file) as f:
+            self.vocab = [w.strip() for w in f.readlines()]
         #question types
         #0. Read from prompt (no highlight) including new lines (stops at block end) and draw where you read
         # . Read from prompt (with highlight) including new lines (stops at block end) and draw where you read
         #1. Read backwards from prompt (no highlight) including new lines (stops at block end) and draw where you read
         # . Read backwards from prompt (with highlight) including new lines (stops at block end) and draw where you read
-        #2. Return blanked words (no highlight) and draw where it is "the [blank] chased the cat" > "cat"
-        # . Return blanked words (with highlight) and draw where it is "the [blank] chased the cat" > "cat"
-        #3. Return replaced word (no highlight) and draw where it is "the industrial chased the cat" > "cat"
-        # . Return replaced word (with highlight) and draw where it is "the industrial chased the cat" > "cat"
+        #2. Return blanked words (no highlight) and draw where it is "the [blank] chased the cat" > "dog"
+        # . Return blanked words (with highlight) and draw where it is "the [blank] chased the cat" > "dog"
+        #3. Return replaced word (no highlight) and draw where it is "the industrial chased the cat" > "dog"
+        # . Return replaced word (with highlight) and draw where it is "the industrial chased the cat" > "dog"
         #4. Read line above (no highlight)and draw where it is. based on position, not just para/block
         # . Read line above (with highlight) and draw where it is. based on position, not just para/block
         #5. Read line below (no highlight)and draw where it is. based on position, not just para/block
@@ -91,25 +81,22 @@ class CDIPQA(QADataset):
                 #else:
                 #    trainTest=split
                 readFile = json.loads(f.read())
-                if type(split) is str:
-                    toUse = readFile[split]
+                if split in readFile:
+                    subdirs = readFile[split]
+                    toUse=[]
+                    for subdir in subdirs:
+                        with open(os.path.join(dirPath,subdir+'.list')) as lst:
+                            toUse += [path.strip() for path in lst.readlines()]
                     imagesAndAnn = []
                     for path in toUse:#['images']:
                         try:
                             name = path[path.rindex('/')+1:]
                         except ValueError:
                             name = path
-                        imagesAndAnn.append( (name,os.path.join(dirPath,path+'.png'),os.path.join(dirPath,name+'.json')) )
-                elif type(split) is list:
-                    imagesAndAnn = []
-                    for spstr in split:
-                        toUse = readFile[spstr]
-                        for path in toUse:#['images']:
-                            name = path[path.rindex('/')+1:]
-                            imagesAndAnn.append( (name,os.path.join(dirPath,path+'.png'),os.path.join(dirPath,name+'.json')) )
+                        imagesAndAnn.append( (name,os.path.join(dirPath,path+'.png'),os.path.join(dirPath,path+'.json')) )
                 else:
                     print("Error, unknown split {}".format(split))
-                    exit()
+                    exit(1)
             self.images=[]
             for imageName,imagePath,jsonPath in imagesAndAnn:
                 if os.path.exists(jsonPath):
@@ -136,8 +123,10 @@ class CDIPQA(QADataset):
                 else:
                     print('{} does not exist'.format(jsonPath))
                     print('No json found for {}'.format(imagePath))
-                    exit(1)
+                    #exit(1)
         self.errors=[]
+
+        self.punc_regex = re.compile('[%s]' % re.escape(string.punctuation))
 
 
 
@@ -227,42 +216,57 @@ class CDIPQA(QADataset):
             return cto
 
     def makeQuestions(self,ocr,image_h,image_w):
-        wordmap=None
+        wordmap = makeWordmap(ocr)
+        linemap = makeLinemap(ocr)
         qa=[]
         for i in range(self.questions):
             question_type = random.randrange(self.num_question_types)
-            if question_type ==0:
+            if question_type ==0 or question_type==1:
                 #0. Read from prompt (no highlight) including new lines (stops at block end) and draw where you read
                 # . Read from prompt (with highlight) including new lines (stops at block end) and draw where you read
+                #1. Read backwards from prompt (no highlight) including new lines (stops at block end) and draw where you read
+                # . Read backwards from prompt (with highlight) including new lines (stops at block end) and draw where you read
+                forward = question_type ==0
                 use_highlight = random.random()<0.5
                 if use_highlight:
                     min_read_start = self.min_read_start_with_mask
                 else:
                     min_read_start = self.min_read_start_no_mask
-                if wordmap is None:
-                    wordmap = makeWordmap(ocr)
                 start_word_idx = random.randrange(len(wordmap))
                 goal_prompt_len = random.randrange(min_read_start,self.max_qa_len+1)
                 
                 words_in_prompt=[start_word_idx]
                 start_word = wordmap[start_word_idx]
                 prompt = ocr[start_word[0]]['paragraphs'][start_word[1]]['lines'][start_word[2]]['words'][start_word[3]]['text']
+                if not forward:
+                    prompt=prompt[::-1]
                 start_block = start_word[0]
-                next_word_idx = start_word_idx+1
-                if next_word_idx>=len(wordmap):
+                last_line_id = start_word[0:3]
+                next_word_idx = start_word_idx+(1 if forward else -1)
+                if next_word_idx>=len(wordmap) or next_word_idx<0:
                     next_word=(None,None,None,None)
                 else:
                     next_word = wordmap[next_word_idx]
                     next_text = ocr[next_word[0]]['paragraphs'][next_word[1]]['lines'][next_word[2]]['words'][next_word[3]]['text']
-                while len(prompt)+1+len(next_text)<self.max_qa_len and next_word[0]==start_block:
-                    prompt+=' '+next_text
+                    if not forward:
+                        next_text = next_text[::-1]
+                    next_line_id = next_word[0:3]
+                while next_word[0]==start_block and len(prompt)+1+len(next_text)<self.max_qa_len:
+                    if last_line_id==next_line_id:
+                        prompt+=' '+next_text
+                    else:
+                        prompt+='\\'+next_text
                     words_in_prompt.append(next_word_idx)
-                    next_word_idx = next_word_idx+1
+                    next_word_idx = next_word_idx+(1 if forward else -1)
+                    last_line_id=next_line_id
                     if next_word_idx>=len(wordmap):
                         next_word=(None,None,None,None)
                     else:
                         next_word = wordmap[next_word_idx]
                         next_text = ocr[next_word[0]]['paragraphs'][next_word[1]]['lines'][next_word[2]]['words'][next_word[3]]['text']
+                        if not forward:
+                            next_text = next_text[::-1]
+                        next_line_id = next_word[0:3]
                     if len(prompt)>=goal_prompt_len:
                         break
                 if len(prompt)>self.max_qa_len:
@@ -273,23 +277,37 @@ class CDIPQA(QADataset):
                     words_in_response=[]
                 else:
                     goal_response_len = self.max_qa_len
-                    response=next_text
+                    if last_line_id==next_line_id:
+                        response=next_text
+                    else:
+                        response='\\'+next_text
                     words_in_response=[next_word_idx]
-                    next_word_idx = next_word_idx+1
+                    next_word_idx = next_word_idx+(1 if forward else -1)
+                    last_line_id=next_line_id
                     if next_word_idx>=len(wordmap):
                         next_word=(None,None,None,None)
                     else:
                         next_word = wordmap[next_word_idx]
                         next_text = ocr[next_word[0]]['paragraphs'][next_word[1]]['lines'][next_word[2]]['words'][next_word[3]]['text']
+                        if not forward:
+                            next_text = next_text[::-1]
+                        next_line_id = next_word[0:3]
                     while len(response)+1+len(next_text)<self.max_qa_len and next_word[0]==start_block:
-                        response+=' '+next_text
+                        if last_line_id==next_line_id:
+                            response+=' '+next_text
+                        else:
+                            response+='\\'+next_text
                         words_in_response.append(next_word_idx)
-                        next_word_idx = next_word_idx+1
+                        next_word_idx = next_word_idx+(1 if forward else -1)
+                        last_line_id=next_line_id
                         if next_word_idx>=len(wordmap):
                             next_word=(None,None,None,None)
                         else:
                             next_word = wordmap[next_word_idx]
                             next_text = ocr[next_word[0]]['paragraphs'][next_word[1]]['lines'][next_word[2]]['words'][next_word[3]]['text']
+                            if not forward:
+                                next_text = next_text[::-1]
+                            next_line_id = next_word[0:3]
 
                         if len(response)>=goal_response_len:
                             break
@@ -298,12 +316,12 @@ class CDIPQA(QADataset):
                     if next_word[0]!=start_block and len(response)<self.max_qa_len:
                         response+='‡'#if we can, add an end-of-block sign
                 if use_highlight:
-                    question = 'r0~'
+                    question = 'r0~' if forward else 'b0~'
                     inmask =  [wordmap[i] for i in words_in_prompt]
                     #inmask = highlightAll(image_h,image_w,ocr,indexes)
                     #inmask = allBoxes(ocr,indexes)
                 else:
-                    question = 're~'
+                    question = 're~' if forward else 'bk~'
                     inmask = []
 
                 #outmask = highlightAll(image_h,image_w,ocr,[wordmap[i] for i in words_in_response])
@@ -311,17 +329,126 @@ class CDIPQA(QADataset):
                 #outmask = allBoxes(ocr,indexes)
 
                 qa.append([question+prompt,response,[wordmap[i] for i in words_in_prompt+words_in_response],inmask,outmask,None])
+            elif question_type == 2 or question_type == 3:
 
-                #1. Read backwards from prompt (no highlight) including new lines (stops at block end) and draw where you read
-                # . Read backwards from prompt (with highlight) including new lines (stops at block end) and draw where you read
-                #2. Return blanked words (no highlight) and draw where it is "the [blank] chased the cat" > "cat"
-                # . Return blanked words (with highlight) and draw where it is "the [blank] chased the cat" > "cat"
-                #3. Return replaced word (no highlight) and draw where it is "the industrial chased the cat" > "cat"
-                # . Return replaced word (with highlight) and draw where it is "the industrial chased the cat" > "cat"
+                #2. Return blanked words (no highlight) and draw where it is "the [blank] chased the cat" > "dog"
+                # . Return blanked words (with highlight) and draw where it is "the [blank] chased the cat" > "dog"
+                #3. Return replaced word (no highlight) and draw where it is "the industrial chased the cat" > "dog"
+                # . Return replaced word (with highlight) and draw where it is "the industrial chased the cat" > "dog"
+                use_highlight = random.random()<0.5
+                blank = question_type == 2
+                blank_word_idx = random.randrange(len(wordmap))
+                outmask = [wordmap[blank_word_idx]]
+                blank_word_map = wordmap[blank_word_idx]
+                start_word_idx = blank_word_idx
+                start_word_map = wordmap[start_word_idx]
+                last_start_block = start_word_map[0]
+                last_start_line = start_word_map[0:3]
+                end_word_idx = blank_word_idx
+                end_word_map = wordmap[end_word_idx]
+                last_end_block = end_word_map[0]
+                last_end_line = end_word_map[0:3]
+                at_front_end = start_word_idx==0
+                at_back_end = end_word_idx==len(wordmap)-1
+
+                response=ocr[blank_word_map[0]]['paragraphs'][blank_word_map[1]]['lines'][blank_word_map[2]]['words'][blank_word_map[3]]['text']
+                if blank:
+                    prompt='ø'
+                else:
+                    prompt=random.choice(self.vocab)
+                    no_punc_response = self.punc_regex.sub('',response)
+                    while prompt==no_punc_response:
+                        prompt=random.choice(self.vocab)
+                words_in_prompt=[blank_word_idx]
+                while len(prompt)<self.max_qa_len-1: #-1 to account for adding a space
+                    if not at_front_end and not at_back_end:
+                        step_front = random.random()<0.5
+                    elif at_front_end and not at_back_end:
+                        step_front=False
+                    elif not at_front_end and at_back_end:
+                        step_front=True
+                    else:
+                        break
+
+                    if step_front:
+                        start_word_idx -= 1
+                        start_word_map = wordmap[start_word_idx]
+                        changed_block = last_start_block != start_word_map[0]
+                        changed_line = last_start_line != start_word_map[0:3]
+                        if start_word_idx==0:
+                            at_front_end=True
+                        if changed_block:
+                            at_front_end=True
+                        else:
+                            text = ocr[start_word_map[0]]['paragraphs'][start_word_map[1]]['lines'][start_word_map[2]]['words'][start_word_map[3]]['text']
+                            if len(text)+len(prompt)+1<=self.max_qa_len:
+                                last_start_block = start_word_map[0]
+                                last_start_line = start_word_map[0:3]
+
+                                if changed_line:
+                                    prompt = text+'\\'+prompt
+                                else:
+                                    prompt = text+' '+prompt
+                                words_in_prompt.append(start_word_idx)
+                            else:
+                                at_front_end=True #force check back if a word will fit
+                    else:
+                        end_word_idx += 1
+                        end_word_map = wordmap[end_word_idx]
+                        changed_block = last_end_block != end_word_map[0]
+                        changed_line = last_end_line != end_word_map[0:3]
+                        if end_word_idx==len(wordmap)-1:
+                            at_front_end=True
+                        if changed_block:
+                            at_front_end=True
+                        else:
+                            text = ocr[end_word_map[0]]['paragraphs'][end_word_map[1]]['lines'][end_word_map[2]]['words'][end_word_map[3]]['text']
+                            if len(text)+len(prompt)+1<=self.max_qa_len:
+                                last_end_block = end_word_map[0]
+                                last_end_line = end_word_map[0:3]
+
+                                if changed_line:
+                                    prompt += '\\'+text
+                                else:
+                                    prompt += ' '+text
+                                words_in_prompt.append(end_word_idx)
+                            else:
+                                at_back_end=True #force check front if a word will fit
+                    
+                if use_highlight:
+                    question = 'k0~' if blank else 's0~'
+                    inmask =  [wordmap[i] for i in words_in_prompt]
+                else:
+                    question = 'kb~' if blank else 'su~'
+                    inmask = []
+                qa.append([question+prompt,response,[wordmap[i] for i in words_in_prompt+[blank_word_idx]],inmask,outmask,None])
+
+            elif question_type == 4 or question_type == 5:
                 #4. Read line above (no highlight)and draw where it is. based on position, not just para/block
                 # . Read line above (with highlight) and draw where it is. based on position, not just para/block
                 #5. Read line below (no highlight)and draw where it is. based on position, not just para/block
                 # . Read line below (with highlight) and draw where it is. based on position, not just para/block
+                use_highlight = random.random()<0.5
+                above = question_type == 4
+
+
+                line_idx = random.randrange(len(linemap))
+                line_map = linemap[line_idx]
+                if above:
+                    next_line_idx = line_idx-1
+                    if line_idx==0:
+                        next_line_idx=None
+                    else:
+                        next_line_map = linemap[next_line_idx]
+                        if line_map[0:2] != next_line_map[0:2]:
+                            #get line above line_idx
+
+                else:
+                    next_line_idx = line_idx+=1
+                    #...
+
+
+
                 #6. bool is start of block (no highlight) (line) if no, hightlight next line
                 # . bool is start of block (with highlight) (line) if no, hightlight next line
                 #7. bool is end of block (no highlight) if no, hightlight next line
@@ -373,6 +500,13 @@ def makeWordmap(ocr):
                 for w in range(len(line['words'])):
                     wordmap.append((b,p,l,w))
     return wordmap
+def makeLinemap(ocr):
+    linemap=[]
+    for b,block in enumerate(ocr):
+        for p,para in enumerate(block['paragraphs']):
+            for l,line in enumerate(para['lines']):
+                    linemap.append((b,p,l))
+    return linemap
 
 def getAllBBs(ocr,t_ids,s):
     bbs=[]

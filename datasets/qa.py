@@ -26,18 +26,19 @@ def collate(batch):
             'metadata': [b['metadata'] for b in batch],
             'form_metadata': [b['form_metadata'] for b in batch],
             'questions': [b['questions'] for b in batch],
-            'answers': [b['answers'] for b in batch]
+            'answers': [b['answers'] for b in batch],
+            'mask_label': torch.cat([b['mask_label'] for b in batch],dim=0) if batch[0]['mask_label'] is not None else None,
             }
 
-def addMask(img,boxes):
-    mask = torch.FloatTensor(1,1,img.shape[2],img.shape[3]).fill_(0)
+def getMask(shape,boxes):
+    mask = torch.FloatTensor(1,1,shape[2],shape[3]).fill_(0)
     for box in boxes:
         #tlX,tlY,trX,trY,brX,brY,blX,blY = box[0:8]
         points = box[0:8].reshape(4,2)
         #mask[0,0,round(t):round(b+1),round(l):round(r+1)]=1 
         #img_f.fillConvexPoly(img,((tlX,tlY),(trX,trY),(brX,brY),(blX,blY)),1)
         img_f.fillConvexPoly(mask[0,0],points,1)
-    return torch.cat((img,mask),dim=1)
+    return mask
 
 
 class QADataset(torch.utils.data.Dataset):
@@ -293,12 +294,16 @@ class QADataset(torch.utils.data.Dataset):
 
         if self.do_masks:
             assert len(new_q_inboxes)<=1 and len(new_q_outboxes)<=1
-            img = addMask(img,new_q_inboxes[0])
+            mask = getMask(img.shape,new_q_inboxes[0])
+            img = torch.cat((img,mask),dim=1)
             for blank_box in new_q_blankboxes[0]:
                 l,t,r,b = blank_box
                 img[0,:-1,t:b+1,l:r+1]=0 #blank on image
                 img[0,-1,t:b+1,l:r+1]=-1 #flip mask to indicate was blanked
-            img = addMask(img,new_q_outboxes[0])
+            #img = addMask(img,new_q_outboxes[0])
+            mask_label = getMask(img.shape,new_q_outboxes[0])
+        else:
+            mask_label = None
         #if pixel_gt is not None:
         #    pixel_gt = pixel_gt.transpose([2,0,1])[None,...]
         #    pixel_gt = torch.from_numpy(pixel_gt)
@@ -338,7 +343,8 @@ class QADataset(torch.utils.data.Dataset):
                 "metadata": [metadata[id] for id in ids if id in metadata],
                 "form_metadata": None,
                 "questions": questions,
-                "answers": answers
+                "answers": answers,
+                "mask_label": mask_label
                 }
 
     #t#def print_opt_times(self):#t#
