@@ -97,12 +97,10 @@ class QATrainer(BaseTrainer):
 
 
 
-    def _to_tensor(self, instance):
-        image = instance['img']
-
+    def _to_tensor(self, t):
         if self.with_cuda:
-            image = image.to(self.gpu)
-        return image
+            t = t.to(self.gpu)
+        return t
 
     def _eval_metrics(self, typ,name,output, target):
         if len(self.metrics[typ])>0:
@@ -303,10 +301,11 @@ class QATrainer(BaseTrainer):
 
 
     def run(self,instance,get=[],forward_only=False):#
-        image = self._to_tensor(instance)
+        image = self._to_tensor(instance['img'])
         ocrBoxes = instance['bb_gt']
         questions = instance['questions']
         answers = instance['answers']
+        gt_mask = instance['mask_label']
 
         #OCR possibilities
         #-All correct
@@ -342,7 +341,7 @@ class QATrainer(BaseTrainer):
             ocr_res = (ocrBoxes,ocr)
 
         #import pdb;pdb.set_trace()
-        pred_a, target_a, string_a = self.model(image,ocr_res,questions,answers)
+        pred_a, target_a, string_a, pred_mask = self.model(image,ocr_res,questions,answers)
 
         #pred_a[:,0].sum().backward()
         #print(self.model.start_token.grad)
@@ -361,6 +360,8 @@ class QATrainer(BaseTrainer):
 
         losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
         #losses['answerLoss'] = pred_a.sum()
+        if 'mask' in self.loss:
+            losses['maskLoss'] = self.loss['mask'](pred_mask,self._to_tensor(gt_mask))
 
 
         #t#tic=timeit.default_timer()#t#

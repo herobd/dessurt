@@ -11,13 +11,19 @@ import utils.img_f as cv2
 widths=[]
 
 def display(data):
+    print(data.keys())
     batchSize = data['img'].size(0)
     #mask = makeMask(data['image'])
     for b in range(batchSize):
         #print (data['img'].size())
-        img = (1-data['img'][b].permute(1,2,0))/2.0
-        img[1,img[1]<1]=0
-        img[2,img[2]<1]=0
+        img = (1-data['img'][b,0:1].permute(1,2,0))/2.0
+        #img[:,:,1][img[:,:,1]<1]=0
+        #img = torch.cat((img,1-data['img'][b,1:2].permute(1,2,0),1-data['mask_label'][b].permute(1,2,0)),dim=2)
+        img = torch.cat((img,img,img),dim=2)
+        img[:,:,1] *= 1-data['img'][b,1]
+        img[:,:,2] *= 1-data['mask_label'][b,0]
+        #img[2,img[2]<1]=0
+
         #label = data['label']
         #gt = data['gt'][b]
         #print(label[:data['label_lengths'][b],b])
@@ -67,7 +73,7 @@ if __name__ == "__main__":
     if len(sys.argv)>1:
         dirPath = sys.argv[1]
     else:
-        dirPath = '../ocr/'#'../data/CDIP'
+        dirPath = '../data/CDIP_ready'
     if len(sys.argv)>2:
         start = int(sys.argv[2])
     else:
