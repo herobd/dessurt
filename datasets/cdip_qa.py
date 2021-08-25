@@ -34,7 +34,7 @@ class CDIPQA(QADataset):
         self.min_read_start_no_mask=9
         self.min_read_start_with_mask=4
 
-        self.num_question_types=4 #15
+        self.num_question_types=11 #14
 
         sub_vocab_file = config['sub_vocab_file'] if 'sub_vocab_file' in config else '../data/wordsEn.txt'
         with open(sub_vocab_file) as f:
@@ -52,10 +52,10 @@ class CDIPQA(QADataset):
         # . Read line above (with highlight) and draw where it is. based on position, not just para/block
         #5. Read line below (no highlight)and draw where it is. based on position, not just para/block
         # . Read line below (with highlight) and draw where it is. based on position, not just para/block
-        #6. bool is start of block (no highlight) (line) if no, hightlight next line
-        # . bool is start of block (with highlight) (line) if no, hightlight next line
-        #7. bool is end of block (no highlight) if no, hightlight next line
-        # . bool is end of block (with highlight) if no, hightlight next line
+        #6. Read line above (no highlight)and draw where it is. based on para/block
+        # . Read line above (with highlight) and draw where it is. based on para/block
+        #7. Read line below (no highlight)and draw where it is. based on  para/block
+        # . Read line below (with highlight) and draw where it is. based on  para/block
         #8. draw the line this is in 
         #9. draw the para this is in
         #10. draw the block this is in
@@ -161,26 +161,13 @@ class CDIPQA(QADataset):
                     lX,tY,rX,bY = box
                     h=bY-tY
                     w=rX-lX
+                    if h==0 or w ==0:
+                        continue
                     if h/w>5 and self.rotate: #flip labeling, since FUNSD doesn't label verticle text correctly
-                        assert False #Do i need to do this?
+                        #assert False #Do i need to do this?
                         #I don't know if it needs rotated clockwise or countercw, so I just say countercw
-                        bbs[j,0]=lX*s
-                        bbs[j,1]=bY*s
-                        bbs[j,2]=lX*s
-                        bbs[j,3]=tY*s
-                        bbs[j,4]=rX*s
-                        bbs[j,5]=tY*s
-                        bbs[j,6]=rX*s
-                        bbs[j,7]=bY*s
-                        #we add these for conveince to crop BBs within window
-                        bbs[j,8]=s*(lX+rX)/2.0
-                        bbs[j,9]=s*bY
-                        bbs[j,10]=s*(lX+rX)/2.0
-                        bbs[j,11]=s*tY
-                        bbs[j,12]=s*lX
-                        bbs[j,13]=s*(tY+bY)/2.0
-                        bbs[j,14]=s*rX
-                        bbs[j,15]=s*(tY+bY)/2.0
+                        bb = [lX*s, bY*s, lX*s, tY*s, rX*s, tY*s,rX*s, bY*s,
+                                s*(lX+rX)/2.0, s*bY, s*(lX+rX)/2.0, s*tY, s*lX, s*(tY+bY)/2.0, s*rX, s*(tY+bY)/2.0]
                     else:
                         bb = [lX*s, tY*s, rX*s, tY*s, rX*s, bY*s, lX*s, bY*s,
                                s*lX, s*(tY+bY)/2.0, s*rX, s*(tY+bY)/2.0, s*(lX+rX)/2.0, s*tY, s*(rX+lX)/2.0, s*bY]  #we add these for conveince to crop BBs within window
@@ -220,7 +207,8 @@ class CDIPQA(QADataset):
         linemap = makeLinemap(ocr)
         qa=[]
         for i in range(self.questions):
-            question_type = random.randrange(self.num_question_types)
+            #question_type = random.randrange(self.num_question_types)
+            question_type = random.randrange(8,self.num_question_types)
             if question_type ==0 or question_type==1:
                 #0. Read from prompt (no highlight) including new lines (stops at block end) and draw where you read
                 # . Read from prompt (with highlight) including new lines (stops at block end) and draw where you read
@@ -328,7 +316,7 @@ class CDIPQA(QADataset):
                 outmask = [wordmap[i] for i in words_in_response]
                 #outmask = allBoxes(ocr,indexes)
 
-                qa.append([question+prompt,response,[wordmap[i] for i in words_in_prompt+words_in_response],inmask,outmask,None])
+                qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
             elif question_type == 2 or question_type == 3:
 
                 #2. Return blanked words (no highlight) and draw where it is "the [blank] chased the cat" > "dog"
@@ -423,44 +411,197 @@ class CDIPQA(QADataset):
                     inmask = []
                 qa.append([question+prompt,response,[wordmap[i] for i in words_in_prompt+[blank_word_idx]],inmask,outmask,None])
 
-            elif question_type == 4 or question_type == 5:
+            elif question_type >= 4 and question_type <= 7:
                 #4. Read line above (no highlight)and draw where it is. based on position, not just para/block
                 # . Read line above (with highlight) and draw where it is. based on position, not just para/block
                 #5. Read line below (no highlight)and draw where it is. based on position, not just para/block
                 # . Read line below (with highlight) and draw where it is. based on position, not just para/block
+                #6. Read line above (no highlight)and draw where it is. based on para/block
+                # . Read line above (with highlight) and draw where it is. based on para/block
+                #7. Read line below (no highlight)and draw where it is. based on  para/block
+                # . Read line below (with highlight) and draw where it is. based on  para/block
                 use_highlight = random.random()<0.5
-                above = question_type == 4
+                above = question_type%2 ==0
+                beyond_block = question_type<6
 
-
+                if len(linemap)==0:
+                    continue
                 line_idx = random.randrange(len(linemap))
                 line_map = linemap[line_idx]
                 if above:
-                    next_line_idx = line_idx-1
                     if line_idx==0:
-                        next_line_idx=None
+                        next_line_map = getLineAboveBlock(ocr,linemap,line_idx) if beyond_block else None
                     else:
+                        next_line_idx = line_idx-1
+                        next_line_map = linemap[next_line_idx]
+                        if line_map[0] != next_line_map[0]:
+                            #get line above line_idx
+                            next_line_map = getLineAboveBlock(ocr,linemap,line_idx) if beyond_block else None
+
+                else:
+                    if line_idx==len(linemap)-1:
+                        next_line_map = getLineAboveBlock(ocr,linemap,line_idx,below=True) if beyond_block else None
+                    else:
+                        next_line_idx = line_idx+1
                         next_line_map = linemap[next_line_idx]
                         if line_map[0:2] != next_line_map[0:2]:
                             #get line above line_idx
-
+                            next_line_map = getLineAboveBlock(ocr,linemap,line_idx,below=True) if beyond_block else None
+                
+                prompt = ocr[line_map[0]]['paragraphs'][line_map[1]]['lines'][line_map[2]]['text']
+                if next_line_map is not None:
+                    response = ocr[next_line_map[0]]['paragraphs'][next_line_map[1]]['lines'][next_line_map[2]]['text']
+                    outmask = [next_line_map+(i,) for i in range(len(ocr[next_line_map[0]]['paragraphs'][next_line_map[1]]['lines'][next_line_map[2]]['words']))]
                 else:
-                    next_line_idx = line_idx+=1
-                    #...
+                    response= 'ø'
+                    outmask = []
 
 
+                if use_highlight:
+                    inmask = [line_map+(i,) for i in range(len(ocr[line_map[0]]['paragraphs'][line_map[1]]['lines'][line_map[2]]['words']))]
+                    if beyond_block:
+                        question = 'u0~' if above else 'd0~'
+                    else:
+                        question = '^0~' if above else 'v0~'
+                else:
+                    inmask = []
+                    if beyond_block:
+                        question = 'up~' if above else 'dn~'
+                    else:
+                        question = '^^~' if above else 'vv~'
 
-                #6. bool is start of block (no highlight) (line) if no, hightlight next line
-                # . bool is start of block (with highlight) (line) if no, hightlight next line
-                #7. bool is end of block (no highlight) if no, hightlight next line
-                # . bool is end of block (with highlight) if no, hightlight next line
+                qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
+
+
+            elif question_type == 8:
                 #8. draw the line this is in 
-                #9. draw the para this is in
-                #10. draw the block this is in
+                line_idx = random.randrange(len(linemap))
+                line_map = linemap[line_idx]
+                line = ocr[line_map[0]]['paragraphs'][line_map[1]]['lines'][line_map[2]]
+                num_words = len(line['words'])
+                
+                if num_words>self.min_read_start_no_mask:
+                    use_words = random.randrange(self.min_read_start_no_mask,num_words+1)
+                    start_word_idx = random.randrange(num_words-use_words+1)
+                else:
+                    use_words = num_words
+                    start_word_idx = 0
+                end_word_idx = start_word_idx+use_words-1
+
+                if random.random() < 0.5:
+                    #build prompt forwards
+                    prompt = line['words'][start_word_idx]['text']
+                    word_idx =start_word_idx+1
+                    while word_idx<=end_word_idx and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len:
+                        prompt+= ' '+line['words'][word_idx]['text']
+                        word_idx+=1
+                else:
+                    #build prompt backwards
+                    prompt = line['words'][end_word_idx]['text']
+                    word_idx =end_word_idx-1
+                    while word_idx>=0 and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len:
+                        prompt= line['words'][word_idx]['text']+' '+prompt
+                        word_idx-=1
+                response = ''
+                
+                #outmask = [line_map+(i,) for i in range(num_words)]
+                outmask = [line_map+(None,)]
+                inmask=[]
+                question = '0l~'
+                qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
+
+            elif question_type == 9:
+                #9. draw the block this is in
+                use_highlight = random.random()<0.5
+                block_idx = random.randrange(len(ocr))
+                lines = ocr[block_idx]['paragraphs'][0]['lines']
+                line_idx = random.randrange(len(lines))
+
+                line = ocr[block_idx]['paragraphs'][0]['lines'][line_idx]
+                num_words = len(line['words'])
+                
+                if num_words>self.min_read_start_no_mask:
+                    use_words = random.randrange(self.min_read_start_no_mask,num_words+1)
+                    start_word_idx = random.randrange(num_words-use_words+1)
+                else:
+                    use_words = num_words
+                    start_word_idx = 0
+                end_word_idx = start_word_idx+use_words-1
+
+                if random.random() < 0.5:
+                    #build prompt forwards
+                    prompt = line['words'][start_word_idx]['text']
+                    word_idxs = [start_word_idx]
+                    word_idx =start_word_idx+1
+                    while word_idx<=end_word_idx and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len:
+                        prompt+= ' '+line['words'][word_idx]['text']
+                        word_idxs.append(word_idx)
+                        word_idx+=1
+                else:
+                    #build prompt backwards
+                    prompt = line['words'][end_word_idx]['text']
+                    word_idxs = [end_word_idx]
+                    word_idx =end_word_idx-1
+                    while word_idx>=0 and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len:
+                        prompt= line['words'][word_idx]['text']+' '+prompt
+                        word_idxs.append(word_idx)
+                        word_idx-=1
+                response = ''
+                
+                outmask = [(block_idx,None,None,None)]
+                #for ln,line in enumerate(lines):
+                #    outmask += [(block_idx,0,ln,i) for i in range(len(line['words']))]
+                if use_highlight:
+                    inmask=[(block_idx,0,line_idx,i) for i in word_idxs]
+                    question = '00~'
+                else:
+                    inmask=[]
+                    question = '0p~'
+                qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
                 #=========
-                #11. draw where this text is 
-                #12. Read highlighted section
-                #13. Read highlighted section filling in masked word
-                #14. guess masked word (HARD!)
+            elif question_type == 10:
+                #10. draw where this text is 
+                line_idx = random.randrange(len(linemap))
+                line_map = linemap[line_idx]
+                line = ocr[line_map[0]]['paragraphs'][line_map[1]]['lines'][line_map[2]]
+                num_words = len(line['words'])
+                
+                if num_words>self.min_read_start_no_mask:
+                    use_words = random.randrange(self.min_read_start_no_mask,num_words+1)
+                    start_word_idx = random.randrange(num_words-use_words+1)
+                else:
+                    use_words = num_words
+                    start_word_idx = 0
+                end_word_idx = start_word_idx+use_words-1
+                if random.random() < 0.5:
+                    #build prompt forwards
+                    prompt = line['words'][start_word_idx]['text']
+                    word_idxs=[start_word_idx]
+
+                    word_idx =start_word_idx+1
+                    while word_idx<=end_word_idx and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len:
+                        prompt+= ' '+line['words'][word_idx]['text']
+                        word_idxs.append(word_idx)
+                        word_idx+=1
+                else:
+                    #build prompt backwards
+                    prompt = line['words'][end_word_idx]['text']
+                    word_idxs = [end_word_idx]
+
+                    word_idx =end_word_idx-1
+                    while word_idx>=0 and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len:
+                        prompt= line['words'][word_idx]['text']+' '+prompt
+                        word_idxs.append(word_idx)
+                        word_idx-=1
+                response = ''
+                
+                outmask = [line_map+(i,) for i in word_idxs]
+                inmask=[]
+                question = '0w~'
+                qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
+                #11. Read highlighted section
+                #12. Read highlighted section filling in masked word
+                #13. guess masked word (HARD!)
         return qa
 
 #def highlightAll(image_h,image_w,ocr,indexes,value=1):
@@ -505,7 +646,7 @@ def makeLinemap(ocr):
     for b,block in enumerate(ocr):
         for p,para in enumerate(block['paragraphs']):
             for l,line in enumerate(para['lines']):
-                    linemap.append((b,p,l))
+                linemap.append((b,p,l))
     return linemap
 
 def getAllBBs(ocr,t_ids,s):
@@ -527,3 +668,46 @@ def getAllBBs(ocr,t_ids,s):
                    s*lX, s*(tY+bY)/2.0, s*rX, s*(tY+bY)/2.0, s*(lX+rX)/2.0, s*tY, s*(rX+lX)/2.0, s*bY]  #we add these for conveince to crop BBs within window
             bbs.append(bb)
     return bbs
+
+def getLineAboveBlock(ocr,linemap,line_idx,below=False):
+    line_map = linemap[line_idx]
+    #get block width
+    #x1=999999
+    #x2=0
+    #for line in ocr[line_map[0]]['lines']:
+    #    l,t,r,b = line['box']
+    #    x1 = min(x1,l)
+    #    x2 = max(x2,r)
+    l,t,r,b = ocr[line_map[0]]['box']
+
+    closest_block=None
+    cb_dist=99999999
+    for bid,block in enumerate(ocr):
+        if bid == line_map[0]:
+            continue
+        l2,t2,r2,b2 = block['box']
+        covered_horz = max(min(r,r2) - max(l,l2),0)
+        covered_horz/=min(r2-l2,r-l)
+        if below:
+            dist = t2-b
+        else:
+            dist = t-b2
+        if covered_horz>0.7 and dist>=-2 and dist<cb_dist:
+            cb_dist = dist
+            closest_block=bid
+    if closest_block is None:
+        return None
+
+    lowest_line=0
+    assert len(ocr[closest_block]['paragraphs'])==1
+    ll_y=ocr[closest_block]['paragraphs'][0]['lines'][0]['box'][1 if below else 3]
+    for l in range(1,len(ocr[closest_block]['paragraphs'][0]['lines'])):
+        y = ocr[closest_block]['paragraphs'][0]['lines'][l]['box'][1 if below else 3]
+        if (below and y<ll_y) or (not below and y>ll_y):
+            lowest_line=l
+            ll_y=y
+
+    return (closest_block,0,lowest_line)
+
+
+
