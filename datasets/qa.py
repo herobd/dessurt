@@ -297,9 +297,12 @@ class QADataset(torch.utils.data.Dataset):
             mask = getMask(img.shape,new_q_inboxes[0])
             img = torch.cat((img,mask),dim=1)
             for blank_box in new_q_blankboxes[0]:
-                l,t,r,b = blank_box
-                img[0,:-1,t:b+1,l:r+1]=0 #blank on image
-                img[0,-1,t:b+1,l:r+1]=-1 #flip mask to indicate was blanked
+                assert(img.shape[1]==2)
+                x1,y1,x2,y2,x3,y3,x4,y4 = blank_box[:8]
+                img_f.polylines(img[0,0],np.array([(x1,y1),(x2,y2),(x3,y3),(x4,y4)]),True,0) #blank on image
+                img_f.polylines(img[0,-1],np.array([(x1,y1),(x2,y2),(x3,y3),(x4,y4)]),True,-1) #flip mask to indicate it was blanked
+                #img[0,:-1,t:b+1,l:r+1]=0 #blank on image
+                #img[0,-1,t:b+1,l:r+1]=-1 #flip mask to indicate was blanked
             #img = addMask(img,new_q_outboxes[0])
             mask_label = getMask(img.shape,new_q_outboxes[0])
         else:

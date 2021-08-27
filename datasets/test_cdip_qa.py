@@ -7,20 +7,24 @@ from matplotlib.patches import Polygon
 import numpy as np
 import torch
 import utils.img_f as cv2
+from collections import defaultdict
 
 widths=[]
 
 def display(data):
-    print(data.keys())
     batchSize = data['img'].size(0)
     #mask = makeMask(data['image'])
+    question_types=[]
     for b in range(batchSize):
         #print (data['img'].size())
         img = (1-data['img'][b,0:1].permute(1,2,0))/2.0
         #img[:,:,1][img[:,:,1]<1]=0
         #img = torch.cat((img,1-data['img'][b,1:2].permute(1,2,0),1-data['mask_label'][b].permute(1,2,0)),dim=2)
         img = torch.cat((img,img,img),dim=2)
-        img[:,:,1] *= 1-data['img'][b,1]
+        show = data['img'][b,1]>0
+        mask = data['img'][b,1]<0
+        img[:,:,0] *= ~mask
+        img[:,:,1] *= ~show
         img[:,:,2] *= 1-data['mask_label'][b,0]
         #img[2,img[2]<1]=0
 
@@ -38,10 +42,17 @@ def display(data):
         print('questions and answers')
         for q,a in zip(data['questions'][b],data['answers'][b]):
             print(q+' : '+a)
+            
+            loc = q.find('~')
+            if loc ==-1:
+                loc = q.find('>')
+                if loc ==-1:
+                    loc = len(q)
+            question_types.append(q[:loc])
 
         #widths.append(img.size(1))
         
-        draw=True
+        draw=False
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -67,7 +78,7 @@ def display(data):
 
         #plt.show()
     print('batch complete')
-
+    return question_types
 
 if __name__ == "__main__":
     if len(sys.argv)>1:
@@ -83,7 +94,7 @@ if __name__ == "__main__":
     else:
         repeat=1
     data=cdip_qa.CDIPQA(dirPath=dirPath,split='train',config={
-        'rescale_range':[0.38,0.5],
+        'rescale_range':[0.42,0.5],
         'crop_params': {
             "crop_size":[1152,768],
             "pad":0,
@@ -104,9 +115,14 @@ if __name__ == "__main__":
         dataLoaderIter.next()
         #display(data[i])
     try:
+        question_types = defaultdict(int)
         while True:
             #print('?')
-            display(dataLoaderIter.next())
+            q_t=display(dataLoaderIter.next())
+            for q in q_t:
+                question_types[q]+=1
+            print('question_types:')
+            print(question_types)
     except StopIteration:
         print('done')
 
