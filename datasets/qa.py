@@ -165,17 +165,24 @@ class QADataset(torch.utils.data.Dataset):
         #t#self.opt_history['parseAnn'].append(time)#t#
         #t#tic=timeit.default_timer()#t#
         
+        outmasks=False
         if self.do_masks:
             mask_bbs=[]
             mask_ids=[]
             for i,qa in enumerate(questions_and_answers):
                 #if len(qa)==5:
                 q,a,bb_ids,inmask_bbs,outmask_bbs,blank_bbs = qa
-                mask_bbs+=inmask_bbs+outmask_bbs+blank_bbs
+                if outmask_bbs is not None:
+                    outmasks=True
+                    mask_bbs+=inmask_bbs+outmask_bbs+blank_bbs
+                    mask_ids+=  ['in{}_{}'.format(i,ii) for ii in range(len(inmask_bbs))] + \
+                                ['out{}_{}'.format(i,ii) for ii in range(len(outmask_bbs))] + \
+                                ['blank{}_{}'.format(i,ii) for ii in range(len(blank_bbs))]
+                else:
+                    mask_bbs+=inmask_bbs+blank_bbs
+                    mask_ids+=  ['in{}_{}'.format(i,ii) for ii in range(len(inmask_bbs))] + \
+                                ['blank{}_{}'.format(i,ii) for ii in range(len(blank_bbs))]
                 #mask_ids+=(['in{}'.format(i)]*len(inmask_bbs)) + (['out{}'.format(i)]*len(outmask_bbs)) + (['blank{}'.format(i)]*len(blank_bbs))
-                mask_ids+=  ['in{}_{}'.format(i,ii) for ii in range(len(inmask_bbs))] + \
-                            ['out{}_{}'.format(i,ii) for ii in range(len(outmask_bbs))] + \
-                            ['blank{}_{}'.format(i,ii) for ii in range(len(blank_bbs))]
                 assert i==0 #right now, we only allow 1 qa pair if using masking
             mask_bbs = np.array(mask_bbs)
             #if len(mask_bbs.shape)==1:
@@ -216,7 +223,10 @@ class QADataset(torch.utils.data.Dataset):
             np_img = out['img']
 
             new_q_inboxes=defaultdict(list)
-            new_q_outboxes=defaultdict(list)
+            if outmasks:
+                new_q_outboxes=defaultdict(list)
+            else:
+                new_q_outboxes=None
             new_q_blankboxes=defaultdict(list)
             if 'word_boxes' in form_metadata:
                 saw_word=False
@@ -293,7 +303,8 @@ class QADataset(torch.utils.data.Dataset):
         img = 1.0 - img / 128.0 #ideally the median value would be 0
 
         if self.do_masks:
-            assert len(new_q_inboxes)<=1 and len(new_q_outboxes)<=1
+            assert len(new_q_inboxes)<=1
+            assert new_q_outboxes is None or len(new_q_outboxes)<=1
             mask = getMask(img.shape,new_q_inboxes[0])
             img = torch.cat((img,mask),dim=1)
             for blank_box in new_q_blankboxes[0]:
@@ -304,7 +315,10 @@ class QADataset(torch.utils.data.Dataset):
                 #img[0,:-1,t:b+1,l:r+1]=0 #blank on image
                 #img[0,-1,t:b+1,l:r+1]=-1 #flip mask to indicate was blanked
             #img = addMask(img,new_q_outboxes[0])
-            mask_label = getMask(img.shape,new_q_outboxes[0])
+            if new_q_outboxes is not None:
+                mask_label = getMask(img.shape,new_q_outboxes[0])
+            else:
+                mask_label = None
         else:
             mask_label = None
         #if pixel_gt is not None:

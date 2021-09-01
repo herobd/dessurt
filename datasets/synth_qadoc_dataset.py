@@ -49,17 +49,6 @@ def get_height_width_from_list(imgs,pad):
     #height-=pad
     return height,width
 
-def breakLong(qa,full,initial_prompt,continue_prompt,max_qa_len):
-    first_part = full[:max_qa_len-2] + '>>' #mark to indicate not complete
-    qa.append((initial_prompt,first_part,None))
-    prev_part = first_part[:-2] #remove mark
-    remainder = full[max_qa_len-2:]
-    while len(remainder)>max_qa_len:
-        next_part = remainder[:max_qa_len-2] + '>>'
-        qa.append((continue_prompt+prev_part,next_part,None))
-        prev_part = next_part[:-2] 
-        remainder = remainder[max_qa_len-2:]
-    qa.append((continue_prompt+prev_part,remainder,None))
 
 
 def create_image(x):
@@ -90,35 +79,6 @@ def create_image(x):
     return gt,img
 
 
-def addRead(qa,text,min_start_read,np=False,max_qa_len=None,backwards=False):
-    if backwards:
-        text = text[::-1]
-        prompt = 'bk~{}'
-    else:
-        prompt = 're~{}'
-    if len(text)<=2 or random.random()<0.05:
-        start_point=len(text) #so we get [end]s with long texts
-    elif len(text)>min_start_read+1:
-        start_point = random.randrange(min_start_read,len(text)+1)
-    else:
-        start_point = random.randrange(len(text)//2,len(text)+1)
-    start_text = text[:start_point].strip()
-    finish_text = text[start_point:].strip()
-    if len(finish_text)==0:
-        finish_text='[ end ]'
-    if len(start_text)-min_start_read*2>0 and random.random()>0.33:
-        real_start = random.randrange(0,len(start_text)-min_start_read*2)
-        start_text = start_text[real_start:]
-
-    if max_qa_len is not None:
-        if len(start_text) > max_qa_len:
-            start_text = start_text[-max_qa_len:]
-        if len(finish_text) > max_qa_len:
-            finish_text = finish_text[:max_qa_len-2]+'>>'
-    if np:
-        qa.append((prompt.format(start_text),'[ np ]',None))
-    else:
-        qa.append((prompt.format(start_text),finish_text,None))
 
 class SynthQADocDataset(QADataset):
     def __init__(self, dirPath, split, config):
@@ -140,6 +100,7 @@ class SynthQADocDataset(QADataset):
         self.wider = config['wider'] if 'wider' in config else False
         self.use_hw = config['use_hw'] if 'use_hw' in config else False
         self.word_questions = config['word_questions'] if 'word_questions' in config else False
+        self.do_masks = config['do_masks'] if 'do_masks' in config else False
         self.use_read = config['use_read'] if 'use_read' in config else 1
         if 'no_read' in config and config['no_read']:
             self.use_read = 0
@@ -166,6 +127,14 @@ class SynthQADocDataset(QADataset):
                     'prompt for "{}"?',
                     'prompt of "{}"?'
                     ]
+        if self.do_masks:
+            self.np_token = '№'
+            self.blank_token = 'ø'
+            self.end_token='‡'
+        else:
+            self.end_token='[ end ]'
+            self.np_token = '[ np ]'
+            self.blank_token = '[ blank ]'
         if self.use_hw or self.tables:
             self.header_dir = config['header_dir']
             header_gt_filename = os.path.join(self.header_dir,'gt.txt')
@@ -409,6 +378,7 @@ class SynthQADocDataset(QADataset):
             pad_h=30
 
 
+        #Go and assign each pair a location
         removed = set()
         for ei,(label_img,label_text,value_img,value_text,rel_x,rel_y) in enumerate(entries):
             if type(label_img) is list:
@@ -429,6 +399,7 @@ class SynthQADocDataset(QADataset):
             if width>=self.image_size[1]:
                 x=0
                 if width-self.image_size[1]>9:
+                    #if we're going off the image a lot
                     y=0
                     width=-1
                     height=-1
@@ -438,6 +409,7 @@ class SynthQADocDataset(QADataset):
             if height>=self.image_size[0]:
                 y=0
                 if height-self.image_size[0]>9:
+                    #if we're going off the image a lot
                     x=0
                     width=-1
                     height=-1
@@ -461,13 +433,13 @@ class SynthQADocDataset(QADataset):
         intersections = allIOU(full_bbs,full_bbs,x1y1x2y2=True)>0
         intersections.diagonal()[:]=0
 
-        def print_iter(intersections):
-            s=''
-            for r in range(intersections.size(0)):
-                for c in range(intersections.size(1)):
-                    s += 'o' if intersections[r,c] else '.'
-                s+='\n'
-            print(s)
+        #def print_iter(intersections):
+        #    s=''
+        #    for r in range(intersections.size(0)):
+        #        for c in range(intersections.size(1)):
+        #            s += 'o' if intersections[r,c] else '.'
+        #        s+='\n'
+        #    print(s)
         
         intersections_per = intersections.sum(dim=0)
         if did_table:
@@ -502,6 +474,8 @@ class SynthQADocDataset(QADataset):
         #removed.sort(reverse=True)
         #for r in removed:
         #    del entries[r]
+
+        #Actually draw the text images into the document image.
         not_present_qs=[]
         selected_labels_stripped = []#[l[1].strip() for i,l in enumerate(labels) if i not in removed]
         selected_values_stripped = []
@@ -567,26 +541,45 @@ class SynthQADocDataset(QADataset):
                 if self.ocr:
                     self.addText(label_text,label_x,label_y,l_horz,l_vert,value_text,value_x,value_y,v_horz,v_vert,boxes,trans,s)
 
-                if self.word_questions=='simple':
+                if 'simple' in  self.word_questions:
                     if self.use_read>random.random():
-                        addRead(qa,label_text,self.min_start_read,max_qa_len=self.max_qa_len)
-                        addRead(qa,value_text,self.min_start_read,max_qa_len=self.max_qa_len)
-                        addRead(qa,label_text,self.min_start_read,max_qa_len=self.max_qa_len,backwards=True)
-                        addRead(qa,value_text,self.min_start_read,max_qa_len=self.max_qa_len,backwards=True)
+                        self.addRead(qa,label_text)
+                        self.addRead(qa,value_text)
+                        self.addRead(qa,label_text,backwards=True)
+                        self.addRead(qa,value_text,backwards=True)
 
                     #resize, truncate
-                    if self.max_qa_len is not None and len(label_text) > self.max_qa_len:
-                        label_text_q = label_text[-self.max_qa_len:]
-                        label_text_a = '<<'+label_text[-(self.max_qa_len-2):] #you'll need to read backwards to recover
+                    if self.do_masks:
+                        if self.max_qa_len is not None and len(label_text) > self.max_qa_len:
+                            label_text_q = label_text[-self.max_qa_len:]
+                            label_text_a = label_text[-self.max_qa_len:][::-1] #we'll read backwards
+                        else:
+                            label_text_q = label_text
+                            label_text_a = label_text[::-1]
+                            if len(label_text)+1 <= self.max_qa_len:
+                                label_text_a += '‡'
+                        if self.max_qa_len is not None and len(value_text) > self.max_qa_len:
+                            value_text_q = value_text[:self.max_qa_len]
+                            value_text_a = value_text[:self.max_qa_len]
+                        else:
+                            value_text_q = value_text
+                            if len(value_text)+1 >= self.max_qa_len:
+                                value_text_a = value_text+'‡'
+                            else:
+                                value_text_a = value_text
                     else:
-                        label_text_q = label_text
-                        label_text_a = label_text
-                    if self.max_qa_len is not None and len(value_text) > self.max_qa_len:
-                        value_text_q = value_text[:self.max_qa_len]
-                        value_text_a = value_text[:self.max_qa_len-2]+'>>'
-                    else:
-                        value_text_q = value_text
-                        value_text_a = value_text
+                        if self.max_qa_len is not None and len(label_text) > self.max_qa_len:
+                            label_text_q = label_text[-self.max_qa_len:]
+                            label_text_a = '<<'+label_text[-(self.max_qa_len-2):] #you'll need to read backwards to recover
+                        else:
+                            label_text_q = label_text
+                            label_text_a = label_text
+                        if self.max_qa_len is not None and len(value_text) > self.max_qa_len:
+                            value_text_q = value_text[:self.max_qa_len]
+                            value_text_a = value_text[:self.max_qa_len-2]+'>>'
+                        else:
+                            value_text_q = value_text
+                            value_text_a = value_text
                     qa.append(('l~{}'.format(label_text_q),value_text_a,None))
                     qa.append(('v~{}'.format(value_text_q),label_text_a,None))
                 elif self.word_questions:
@@ -624,7 +617,7 @@ class SynthQADocDataset(QADataset):
                             break
                     if self.max_qa_len is not None and len(q_text)>self.max_qa_len:
                         q_text = q_text[-self.max_qa_len:]
-                    qa.append(('ac~{}'.format(q_text),'[ np ]',None))
+                    qa.append(('ac~{}'.format(q_text),self.np_token,None))
                 elif random.random()<0.6:
                     while True:
                         q_text = random.choice(self.labels)
@@ -632,7 +625,7 @@ class SynthQADocDataset(QADataset):
                             break
                     if self.max_qa_len is not None and len(q_text)>self.max_qa_len:
                         q_text = q_text[-self.max_qa_len:]
-                    qa.append(('ar~{}'.format(q_text),'[ np ]',None))
+                    qa.append(('ar~{}'.format(q_text),self.np_token,None))
                 else:
                     while True:
                         c_text = random.choice(self.labels)
@@ -646,7 +639,7 @@ class SynthQADocDataset(QADataset):
                         c_text = c_text[-self.max_qa_len//2:]
                     if self.max_qa_len is not None and len(r_text)>self.max_qa_len//2:
                         r_text = r_text[-self.max_qa_len//2:]
-                    qa.append(('t~{}~~{}'.format(r_text,c_text),'[ np ]',None))
+                    qa.append(('t~{}~~{}'.format(r_text,c_text),self.np_token,None))
             else:
                 if len(not_present_qs)>0:
                     q_text = not_present_qs.pop()
@@ -661,31 +654,26 @@ class SynthQADocDataset(QADataset):
                         l_text = q_text[-self.max_qa_len:]
                     else:
                         v_text=l_text=q_text
-                    qa.append(('l~{}'.format(l_text),'[ np ]',None))
+                    qa.append(('l~{}'.format(l_text),self.np_token,None))
                     if q_text not in selected_values_stripped:
                         if self.use_read>random.random():
-                            addRead(qa,q_text,self.min_start_read,np=True,max_qa_len=self.max_qa_len,backwards=True)
-                        qa.append(('v~{}'.format(v_text),'[ np ]',None))
+                            self.addRead(qa,q_text,np=True)
+                            self.addRead(qa,q_text[::-1],np=True,backwards=True)
+                        qa.append(('v~{}'.format(v_text),self.np_token,None))
                 elif self.word_questions:
                     question = random.choice(self.ask_for_value)
-                    qa.append((question.format(q_text),'[ np ]',None))
+                    qa.append((question.format(q_text),self.np_token,None))
                 else:
-                    qa.append((q_text,'[ np ]',None))
+                    qa.append((q_text,self.np_token,None))
         
         if self.tables and self.word_questions=='simple':
             if did_table:
                 qa.append(('t#>','1',None))
                 rows = '|'.join(row_hs)
-                if self.max_qa_len is not None and len(rows)>self.max_qa_len:
-                    breakLong(qa,rows,'rh~0','rh>',self.max_qa_len)
-                else:
-                    qa.append(('rh~0',rows,None))
+                self.breakLong(qa,rows,'rh~0','rh>')
 
                 cols = '|'.join(col_hs)
-                if self.max_qa_len is not None and len(cols)>self.max_qa_len:
-                    breakLong(qa,cols,'ch~0','ch>',self.max_qa_len)
-                else:
-                    qa.append(('ch~0',cols,None))
+                self.breakLong(qa,cols,'ch~0','ch>')
             else:
                 qa.append(('t#>','0',None))
 
@@ -693,7 +681,10 @@ class SynthQADocDataset(QADataset):
 
         if self.questions<len(qa):
             qa = random.sample(qa,k=self.questions)
-
+        
+        if self.do_masks:
+            #add mask arrays, None for outmask so it does not supervise
+            qa = [(q,a,ids,[],None,[]) for q,a,ids in qa]
 
         return bbs, list(range(bbs.shape[0])), ocr, {'image':image}, {}, qa
 
@@ -1034,8 +1025,8 @@ class SynthQADocDataset(QADataset):
                         chdr = col_headers[c][1]
                         if self.max_qa_len is not None and len(chdr)>self.max_qa_len//2:
                             chdr = chdr[-self.max_qa_len//2:]
-                        all_q_a.append(('t~{}~~{}'.format(rhdr,chdr),'[ blank ]',None))
-                        all_q_a.append(('t~{}~~{}'.format(chdr,rhdr),'[ blank ]',None))
+                        all_q_a.append(('t~{}~~{}'.format(rhdr,chdr),self.blank_token,None))
+                        all_q_a.append(('t~{}~~{}'.format(chdr,rhdr),self.blank_token,None))
                     else:
                         all_q_a.append(('value of "{}" and "{}"?'.format(row_headers[r][1],col_headers[c][1]),'[np]',None))
                         all_q_a.append(('value of "{}" and "{}"?'.format(col_headers[c][1],row_headers[r][1]),'[np]',None))
@@ -1190,10 +1181,7 @@ class SynthQADocDataset(QADataset):
                     rhdr = row_h
                     if self.max_qa_len is not None and len(rhdr)>self.max_qa_len:
                         rhdr = rhdr[-self.max_qa_len:]
-                    if self.max_qa_len is not None and len(a)>self.max_qa_len:
-                        breakLong(all_q_a,a,'ar~{}'.format(rhdr),'ar>',self.max_qa_len)
-                    else:
-                        all_q_a.append(('ar~{}'.format(rhdr),a,None))
+                    self.breakLong(all_q_a,a,'ar~{}'.format(rhdr),'ar>')
                 else:
                     if random.random()<0.5:
                         all_q_a.append(('all values in row "{}"?'.format(row_h),a,None))
@@ -1209,13 +1197,83 @@ class SynthQADocDataset(QADataset):
                     chdr = col_h
                     if self.max_qa_len is not None and len(chdr)>self.max_qa_len:
                         chdr = chdr[-self.max_qa_len:]
-                    if self.max_qa_len is not None and len(a)>self.max_qa_len:
-                        breakLong(all_q_a,a,'ac~{}'.format(chdr),'ac>',self.max_qa_len)
-                    else:
-                        all_q_a.append(('ac~{}'.format(chdr),a,None))
+                    self.breakLong(all_q_a,a,'ac~{}'.format(chdr),'ac>')
                 else:
                     if random.random()<0.5:
                         all_q_a.append(('all values in column "{}"?'.format(col_h),a,None))
                     else:
                         all_q_a.append(('all values of column "{}"?'.format(col_h),a,None))
         return table_x-10, table_y-10, total_width+20, total_height+20, [r[1].strip() for r in row_headers], [c[1].strip() for c in col_headers]
+
+    #Add reading q+a, handeling subsectioning
+    def addRead(self,qa,text,np=False,backwards=False):
+        if backwards:
+            text = text[::-1]
+            prompt = 'bk~{}'
+        else:
+            prompt = 're~{}'
+        if len(text)<=2 or random.random()<0.05:
+            start_point=len(text) #so we get [end]s with long texts
+        elif len(text)>self.min_start_read+1:
+            start_point = random.randrange(self.min_start_read,len(text)+1)
+        else:
+            start_point = random.randrange(len(text)//2,len(text)+1)
+        start_text = text[:start_point].strip()
+        finish_text = text[start_point:].strip()
+        if len(finish_text)==0:
+            finish_text = self.end_token
+        if len(start_text)-self.min_start_read*2>0 and random.random()>0.33:
+            real_start = random.randrange(0,len(start_text)-self.min_start_read*2)
+            start_text = start_text[real_start:]
+
+        if self.max_qa_len is not None:
+            if len(start_text) > self.max_qa_len:
+                start_text = start_text[-self.max_qa_len:]
+            if self.do_masks:
+                if len(finish_text) > self.max_qa_len:
+                    finish_text = finish_text[:self.max_qa_len]
+                elif len(finish_text)+1 <= self.max_qa_len and finish_text!=self.end_token:
+                    finish_text += self.end_token
+            else:
+                if len(finish_text) > self.max_qa_len:
+                    finish_text = finish_text[:self.max_qa_len-2]+'>>'
+        if np:
+            qa.append((prompt.format(start_text),self.np_token,None))
+        else:
+            qa.append((prompt.format(start_text),finish_text,None))
+    
+    #Take a list thing (like row headers) and break it into multiple Q+As
+    def breakLong(self,qa,full,initial_prompt,continue_prompt):
+        if self.max_qa_len is not None and len(full)>self.max_qa_len:
+            if self.do_masks:
+                first_part = full[:self.max_qa_len]
+                qa.append((initial_prompt,first_part,None))
+                prev_part = first_part
+                remainder = full[self.max_qa_len:]
+                while len(remainder)>self.max_qa_len:
+                    next_part = remainder[:self.max_qa_len]
+                    qa.append((continue_prompt+prev_part,next_part,None))
+                    prev_part = next_part
+                    remainder = remainder[self.max_qa_len:]
+                if len(remainder)+1 < self.max_qa_len:
+                    qa.append((continue_prompt+prev_part,remainder+self.end_token,None))
+                else:
+                    qa.append((continue_prompt+prev_part,remainder,None))
+                    qa.append((continue_prompt+remainder,self.end_token,None))
+            else:
+                first_part = full[:self.max_qa_len-2] + '>>' #mark to indicate not complete
+                qa.append((initial_prompt,first_part,None))
+                prev_part = first_part[:-2] #remove mark
+                remainder = full[self.max_qa_len-2:]
+                while len(remainder)>self.max_qa_len:
+                    next_part = remainder[:self.max_qa_len-2] + '>>'
+                    qa.append((continue_prompt+prev_part,next_part,None))
+                    prev_part = next_part[:-2] 
+                    remainder = remainder[self.max_qa_len-2:]
+                qa.append((continue_prompt+prev_part,remainder,None))
+        elif len(full)+1<self.max_qa_len and self.do_masks:
+            qa.append((initial_prompt,full+self.end_token,None))
+        else:
+            qa.append((initial_prompt,full,None))
+            if self.max_qa_len:
+                qa.append((continue_prompt+full,self.end_token,None))

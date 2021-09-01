@@ -46,33 +46,33 @@ class CDIPQA(QADataset):
 
         #NEW the document must have a block_score above thresh for anything useing blocks (this is newline following too)
         self.block_score_thresh = 0.73 #eye-balled this one
-        self.num_question_types_all=12 #15
-        self.num_question_types_noblock=9
+        self.num_question_types_all=11 #15
+        self.num_question_types_noblock=8
         #question types
-        #0. Return blanked words (no highlight) and draw where it is "the [blank] chased the cat" > "dog"
-        # . Return blanked words (with highlight) and draw where it is "the [blank] chased the cat" > "dog"
-        #1. Return replaced word (no highlight) and draw where it is "the industrial chased the cat" > "dog"
-        # . Return replaced word (with highlight) and draw where it is "the industrial chased the cat" > "dog"
-        #2. Read line above (no highlight)and draw where it is. based on position, not just para/block
-        # . Read line above (with highlight) and draw where it is. based on position, not just para/block
-        # . Read line below (no highlight)and draw where it is. based on position, not just para/block
-        # . Read line below (with highlight) and draw where it is. based on position, not just para/block
-        # . (if using blocks) Read line above (no highlight)and draw where it is. based on para/block
-        # . (if using blocks) Read line above (with highlight) and draw where it is. based on para/block
-        # . (if using blocks) Read line below (no highlight)and draw where it is. based on  para/block
-        # . (if using blocks) Read line below (with highlight) and draw where it is. based on  para/block
-        #3. draw the line this is in  TODO, same task as below (4)
-        #4. draw where this text is 
-        #5. Read highlighted section
-        #6. Read highlighted section filling in masked word
-        #7. guess masked word (HARD!)
-        #8. given a word a several masked spots, hightlight which masked spot this belongs in
+        #0. Return blanked words (no highlight) and draw where it is "the [blank] chased the cat" > "dog" [kb]
+        # . Return blanked words (with highlight) and draw where it is "the [blank] chased the cat" > "dog" [k0]
+        #1. Return replaced word (no highlight) and draw where it is "the industrial chased the cat" > "dog" [su]
+        # . Return replaced word (with highlight) and draw where it is "the industrial chased the cat" > "dog" [s0]
+        #2. Read line above (no highlight)and draw where it is. based on position, not just para/block [up]
+        # . Read line above (with highlight) and draw where it is. based on position, not just para/block [u0]
+        # . Read line below (no highlight)and draw where it is. based on position, not just para/block  [dn]
+        # . Read line below (with highlight) and draw where it is. based on position, not just para/block [d0]
+        # . (if using blocks) Read line above (no highlight)and draw where it is. based on para/block [^^]
+        # . (if using blocks) Read line above (with highlight) and draw where it is. based on para/block [^0]
+        # . (if using blocks) Read line below (no highlight)and draw where it is. based on  para/block [vv]
+        # . (if using blocks) Read line below (with highlight) and draw where it is. based on  para/block [v0]
+        #3a. draw the line this is in  TODO, same task as below (4) [0l]
+        # b. draw where this text is [0w]
+        #4. Read highlighted section [w0]
+        #5. Read highlighted section filling in masked word [rm>]
+        #6. guess masked word (HARD!) [mk]
+        #7. given a word a several masked spots, hightlight which masked spot this belongs in [mm]
         #=========
-        #9. Read from prompt (no highlight) including new lines (stops at block end) and draw where you read
-        # . Read from prompt (with highlight) including new lines (stops at block end) and draw where you read
-        #10. Read backwards from prompt (no highlight) including new lines (stops at block end) and draw where you read
-        # . Read backwards from prompt (with highlight) including new lines (stops at block end) and draw where you read
-        #11. draw the block this is in
+        #8. Read from prompt (no highlight) including new lines (stops at block end) and draw where you read [re]
+        # . Read from prompt (with highlight) including new lines (stops at block end) and draw where you read [r0]
+        #9. Read backwards from prompt (no highlight) including new lines (stops at block end) and draw where you read [bk]
+        # . Read backwards from prompt (with highlight) including new lines (stops at block end) and draw where you read [b0]
+        #10. draw the block this is in [0p or 00]
 
         #input mask. 0 everywhere, 1 is highlight, -1 where removed
         #  Multi-channel for multiple questions?
@@ -245,21 +245,23 @@ class CDIPQA(QADataset):
         wordmap = makeWordmap(ocr)
         linemap = makeLinemap(ocr)
         qa=[]
-        for i in range(self.questions):
+        for i in range(self.questions*5): #run extra potentially
+            if len(qa)>=self.questions:
+                break
             #question_type = random.randrange(self.num_question_types)
             if use_blocks:
                 question_type = random.randrange(self.num_question_types_all)
             else:
                 question_type = random.randrange(self.num_question_types_noblock)
-            if question_type == 0 or question_type == 1 or question_type == 6:
+            if question_type == 0 or question_type == 1 or question_type == 5:
 
                 #0. Return blanked words (no highlight) and draw where it is "the [blank] chased the cat" > "dog"
                 # . Return blanked words (with highlight) and draw where it is "the [blank] chased the cat" > "dog"
                 #1. Return replaced word (no highlight) and draw where it is "the industrial chased the cat" > "dog"
                 # . Return replaced word (with highlight) and draw where it is "the industrial chased the cat" > "dog"
-                #6. Read highlighted section filling in masked word
+                #5. Read highlighted section filling in masked word
 
-                read_with_masked = question_type == 6
+                read_with_masked = question_type == 5
                 use_highlight = random.random()<0.5 or read_with_masked
                 blank = question_type == 0
                 blank_word_idx = random.randrange(len(wordmap))
@@ -406,13 +408,15 @@ class CDIPQA(QADataset):
                     response = ocr[next_line_map[0]]['paragraphs'][next_line_map[1]]['lines'][next_line_map[2]]['text']
                     outmask = [next_line_map+(i,) for i in range(len(ocr[next_line_map[0]]['paragraphs'][next_line_map[1]]['lines'][next_line_map[2]]['words']))]
                 else:
-                    response= 'ø'
+                    response= '№'
                     outmask = []
 
                 if len(prompt)>self.max_qa_len:
                     prompt = prompt[:self.max_qa_len-2] +'>>'
                 if len(response)>self.max_qa_len:
-                    response = response[:self.max_qa_len-2] +'>>'
+                    response = response[:self.max_qa_len]
+                elif len(response)+1 < self.max_qa_len:
+                    response = response+'‡'
 
 
                 if use_highlight:
@@ -431,8 +435,8 @@ class CDIPQA(QADataset):
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
 
 
-            elif question_type == 3:
-                #3. draw the line this is in 
+            elif question_type == 3 and random.random()<0.5:
+                #3a. draw the line this is in 
                 line_idx = random.randrange(len(linemap))
                 line_map = linemap[line_idx]
                 line = ocr[line_map[0]]['paragraphs'][line_map[1]]['lines'][line_map[2]]
@@ -468,10 +472,10 @@ class CDIPQA(QADataset):
                 question = '0l~'
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
 
-            elif question_type == 4 or question_type == 5:
-                #4. draw where this text is 
-                #5. Read highlighted section
-                do_draw = question_type == 4
+            elif question_type == 3 or question_type == 4:
+                #3b. draw where this text is 
+                #4. Read highlighted section
+                do_draw = question_type == 3
                 line_idx = random.randrange(len(linemap))
                 line_map = linemap[line_idx]
                 line = ocr[line_map[0]]['paragraphs'][line_map[1]]['lines'][line_map[2]]
@@ -518,9 +522,9 @@ class CDIPQA(QADataset):
                     inmask = [line_map+(i,) for i in word_idxs]
                     question = 'w0>'
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
-            #question_type 6 is under the first
-            elif question_type == 7:
-                #7. guess masked word (HARD!)
+            #question_type 5 is under the first
+            elif question_type == 6:
+                #6. guess masked word (HARD!)
                 blank_word_idx = random.randrange(len(wordmap))
                 maskmask = [wordmap[blank_word_idx]]
                 blank_word_map = wordmap[blank_word_idx]
@@ -528,8 +532,8 @@ class CDIPQA(QADataset):
                 question = 'mk>'
                 qa.append([question,response,maskmask,maskmask,None,maskmask])
 
-            elif question_type == 8:
-                #8. given a word a several masked spots, hightlight which masked spot this belongs in
+            elif question_type == 7 and len(wordmap)>1:
+                #7. given a word a several masked spots, hightlight which masked spot this belongs in
                 num_blanks = random.randrange(2,9)
                 it_word_idx = random.randrange(len(wordmap))
                 it_word_map = wordmap[it_word_idx]
@@ -547,8 +551,10 @@ class CDIPQA(QADataset):
                     else:
                         allmaps = random.sample(close_len_words,num_blanks)
                 else:
+                    if num_blanks-1 > len(wordmap):
+                        num_blanks = 2
                     word_idxs = random.sample(range(len(wordmap)),num_blanks-1)
-                    allmaps = [wordmap[i] for i in word_idxs]
+                    allmaps = [wordmap[i] for i in word_idxs if i != it_word_idx]
 
                 allmaps.append(it_word_map)
                 response=''
@@ -556,12 +562,12 @@ class CDIPQA(QADataset):
                 question = 'mm~'
                 qa.append([question+prompt,response,allmaps,None,[it_word_map],allmaps])
 
-            elif question_type ==9 or question_type==10:
-                #9. Read from prompt (no highlight) including new lines (stops at block end) and draw where you read
+            elif question_type ==8 or question_type==9:
+                #8. Read from prompt (no highlight) including new lines (stops at block end) and draw where you read
                 # . Read from prompt (with highlight) including new lines (stops at block end) and draw where you read
-                #10. Read backwards from prompt (no highlight) including new lines (stops at block end) and draw where you read
+                #9. Read backwards from prompt (no highlight) including new lines (stops at block end) and draw where you read
                 # . Read backwards from prompt (with highlight) including new lines (stops at block end) and draw where you read
-                forward = question_type ==9
+                forward = question_type ==8
                 use_highlight = random.random()<0.5
                 if use_highlight:
                     min_read_start = self.min_read_start_with_mask
@@ -666,8 +672,8 @@ class CDIPQA(QADataset):
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
 
 
-            elif question_type == 11:
-                #11. draw the block this is in
+            elif question_type == 10:
+                #10. draw the block this is in
                 use_highlight = random.random()<0.5
                 block_idx = random.randrange(len(ocr))
                 lines = ocr[block_idx]['paragraphs'][0]['lines']
