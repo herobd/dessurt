@@ -1,8 +1,9 @@
 from utils.filelock import FileLock, FileLockException
+from utils.util import ensure_dir
 import threading
 from synthetic_text_gen import SyntheticWord
 from datasets import load_dataset
-import os, random, re
+import os, random, re, time
 import unicodedata
 import numpy as np
 from utils import img_f
@@ -24,14 +25,17 @@ def threadFunction(self,nums):
         self.generate(i)
     #start iterating inifinitely
     while True:
+        did =0
         for i in nums:
-            self.generate(i)
-        print('{} finished gen pass'.format(nums))
+            did += self.generateSave(i)
+        if did/len(nums) < 0.2: #if we refreshed less than 20% of the data
+            time.sleep(60*30) #wait 30 minutes before contining
+        #print('{} finished gen pass'.format(nums))
 
 class GenDaemon:
-    def __init__(self,font_dir,out_dir,num_held):
+    def __init__(self,font_dir,out_dir=None,num_held=0):
         self.gen = SyntheticWord(font_dir)
-        self.used_thresh=2
+        self.used_thresh=-1
         self.multi_para = 0.1
         self.num_held = num_held
         self.text_data = load_dataset('wikipedia', '20200501.en', cache_dir='/Data6/davis/data_cache')['train']
@@ -44,41 +48,36 @@ class GenDaemon:
         self.dir_paths = []
         for i in range(num_held):
             self.dir_paths.append(os.path.join(out_dir,'{}'.format(i)))
+            ensure_dir(self.dir_paths[i])
             count_path = os.path.join(self.dir_paths[i],'count')
             self.locks.append(FileLock(count_path,timeout=3))
 
-    def generate(self,i):
-
-        words = self.getTextSample()
-        #text = re.sub(r'\s+',' ',text) #replace all whitespace with space
-        #words = text.split(' ')
-
-        font,font_name,fontN,fontN_name = self.gen.getFont()
+    def generateSave(self,i):
+        did=False
         try:
             #self.locks[i].acquire()
             with self.locks[i]:
-                with open(os.path.join(self.dir_paths[i],'count')) as f:
-                    used = int(f.read())
+                if os.path.exists(os.path.join(self.dir_paths[i],'count')):
+                    with open(os.path.join(self.dir_paths[i],'count')) as f:
+                        used = f.read()
+                        if used[0]=='i':
+                            used=999999
+                        else:
+                            used = int(used)
+                else:
+                    used=999999
                 if used >=self.used_thresh: #no need to rewrite an unused section
-                        
+                    did=True
+                    with open(os.path.join(self.dir_paths[i],'count'),'w') as f:
+                        f.write('incomplete') 
+                    
+                    generated = self.generate()
                     with open(os.path.join(self.dir_paths[i],'words.txt'),'w') as f:
-                        for wi,word in enumerate(words):
-                            if re.match(r'\d',word):
-                                _font = fontN
-                            else:
-                                _font = font
-                            if word[-1]=='\n':
-                                f.write(word+'¶\n')
-                                word = word[:-1]
-                            else:
-                                f.write(word+'\n')
-                            img = self.gen.getRenderedText(_font,word)
-
-                            img = (img*255).astype(np.uint8)
-
+                        for wi,(word,img) in enumerate(generated):
                             img_path = os.path.join(self.dir_paths[i],'{}.png'.format(wi))
 
                             img_f.imwrite(img_path,img)
+                            f.write(word+'\n')
 
                     with open(os.path.join(self.dir_paths[i],'count'),'w') as f:
                         f.write('0') #number of times used
@@ -87,11 +86,55 @@ class GenDaemon:
         except FileLockException:
             print('Daemon could not unlock {}'.format(i))
             pass 
+
+        return did
+
+    def generate(self):
+        words = self.getTextSample()
+        #text = re.sub(r'\s+',' ',text) #replace all whitespace with space
+        #words = text.split(' ')
+
+        font,font_name,fontN,fontN_name = self.gen.getFont()
+        out_words = []   
+        for word in words:
+            if re.match(r'\d',word):
+                _font = fontN
+            else:
+                _font = font
+            if word[-1]=='\n':
+                newline=True
+                word = word[:-1]
+            else:
+                newline=False
+            img = self.gen.getRenderedText(_font,word)
+            if img is None:
+                #retry generation
+                if _font!=fontN:
+                    img = self.gen.getRenderedText(fontN,word)
+
+                if img is None:
+                    _,_,font2,font2_name = self.gen.getFont()
+                    img = self.gen.getRenderedText(font2,word)
+
+                if img is None:
+                    print('no image for word: {}'.format(word))
+                    continue
+            
+            img = (img*255).astype(np.uint8)
+            if newline:
+                #f.write(word+'¶\n')
+                out_words.append((word+'¶',img))
+            else:
+                #f.write(word+'\n'
+                out_words.append((word,img))
+            
+        return out_words
+
     
     def getTextSample(self):
         instance_i = random.randrange(self.text_data.num_rows)
         text = self.text_data[instance_i]['text']
-        text = unicodedata.normalize(text)#.decode('utf')
+        #text = unicodedata.normalize(text,'NFC')#.decode('utf')
 
 
         #We first want to cut off the end of the wikipedia article, which has the references and stuff 
@@ -122,11 +165,12 @@ class GenDaemon:
                 i+=1
         
         #normalize whitespace
-        para=re.sub(r'  ',r' ',para)
+        para=re.sub(r' +',r' ',para)
         para=re.sub(r' ?\n ?',r'\n ',para)
 
         #text = re.sub('r\s+',' ',text) #normalize whitespace
         para = para.strip()
+        print('++++++\n'+para+'\n++++++++++')
         words = para.split(' ') #this includes newlines!
 
         #if len(words)<=num_words:
