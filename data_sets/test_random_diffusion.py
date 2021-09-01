@@ -1,5 +1,5 @@
-from datasets.random_diffusion import RandomDiffusionDataset
-from datasets.random_diffusion import collate
+from data_sets.random_diffusion import RandomDiffusionDataset
+from data_sets.random_diffusion import collate
 import networkx as nx
 from matplotlib import pyplot as plt
 import torch

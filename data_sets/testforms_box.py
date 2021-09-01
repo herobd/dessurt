@@ -1,5 +1,5 @@
-from datasets.forms_box_detect import FormsBoxDetect
-from datasets import forms_box_detect
+from data_sets.forms_box_detect import FormsBoxDetect
+from data_sets import forms_box_detect
 import math
 import sys
 from matplotlib import pyplot as plt

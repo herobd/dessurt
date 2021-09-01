@@ -1,5 +1,5 @@
-from datasets.forms_feature_pair import FormsFeaturePair
-from datasets import forms_feature_pair
+from data_sets.forms_feature_pair import FormsFeaturePair
+from data_sets import forms_feature_pair
 import math, cv2
 import sys
 from matplotlib import pyplot as plt

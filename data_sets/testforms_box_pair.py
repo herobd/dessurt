@@ -1,5 +1,5 @@
-from datasets.forms_box_pair import FormsBoxPair
-from datasets import forms_box_pair
+from data_sets.forms_box_pair import FormsBoxPair
+from data_sets import forms_box_pair
 import math
 import sys
 from matplotlib import pyplot as plt

@@ -6,7 +6,7 @@ from utils import util
 from collections import defaultdict
 from evaluators import FormsBoxDetect_printer
 from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist
-from datasets.testforms_box import display
+from data_sets.testforms_box import display
 
 
 class BoxDetectTrainer(BaseTrainer):

@@ -1,5 +1,5 @@
-from datasets.forms_graph_pair import FormsGraphPair
-from datasets import forms_graph_pair
+from data_sets.forms_graph_pair import FormsGraphPair
+from data_sets import forms_graph_pair
 import math
 import sys, os
 from matplotlib import pyplot as plt

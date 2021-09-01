@@ -1,4 +1,4 @@
-from datasets import funsd_qa
+from data_sets import funsd_qa
 import math
 import sys
 from matplotlib import pyplot as plt

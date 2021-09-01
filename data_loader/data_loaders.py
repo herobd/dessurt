@@ -1,35 +1,35 @@
 import torch
 import torch.utils.data
 import numpy as np
-#from datasets.cancer import CancerDataset
-from datasets.ai2d import AI2D
-from datasets import forms_detect
-from datasets.forms_detect import FormsDetect
-from datasets import forms_box_detect
-from datasets.forms_box_detect import FormsBoxDetect
-from datasets import ai2d_box_detect
-from datasets import multiple_dataset
-from datasets import synth_qa_dataset
-from datasets import synth_qadoc_dataset
-from datasets import funsd_qa
-from datasets import nobrain_qa
-from datasets import nobrain_graph_pair
-from datasets import forms_graph_pair
-from datasets import forms_box_pair
-from datasets import funsd_graph_pair
-from datasets import funsd_box_detect
-from datasets import adobe_graph_pair
-from datasets import adobe_box_detect
-from datasets.forms_box_pair import FormsBoxPair
-from datasets.forms_feature_pair import FormsFeaturePair
-from datasets import forms_feature_pair
-from datasets.forms_pair import FormsPair
-from datasets.forms_lf import FormsLF
-from datasets import random_messages
-from datasets import random_diffusion
-from datasets import random_maxpairs
-from datasets import formlines_atr_dataset
-#from torchvision import datasets, transforms
+#from data_sets.cancer import CancerDataset
+from data_sets.ai2d import AI2D
+from data_sets import forms_detect
+from data_sets.forms_detect import FormsDetect
+from data_sets import forms_box_detect
+from data_sets.forms_box_detect import FormsBoxDetect
+from data_sets import ai2d_box_detect
+from data_sets import multiple_dataset
+from data_sets import synth_qa_dataset
+from data_sets import synth_qadoc_dataset
+from data_sets import funsd_qa
+from data_sets import nobrain_qa
+from data_sets import nobrain_graph_pair
+from data_sets import forms_graph_pair
+from data_sets import forms_box_pair
+from data_sets import funsd_graph_pair
+from data_sets import funsd_box_detect
+from data_sets import adobe_graph_pair
+from data_sets import adobe_box_detect
+from data_sets.forms_box_pair import FormsBoxPair
+from data_sets.forms_feature_pair import FormsFeaturePair
+from data_sets import forms_feature_pair
+from data_sets.forms_pair import FormsPair
+from data_sets.forms_lf import FormsLF
+from data_sets import random_messages
+from data_sets import random_diffusion
+from data_sets import random_maxpairs
+from data_sets import formlines_atr_dataset
+#from torchvision import data_sets, transforms
 from base import BaseDataLoader
 
 
@@ -42,7 +42,7 @@ from base import BaseDataLoader
 #        super(MnistDataLoader, self).__init__(config)
 #        self.data_dir = config['data_loader']['data_dir']
 #        self.data_loader = torch.utils.data.DataLoader(
-#            datasets.MNIST('../data', train=True, download=True,
+#            data_sets.MNIST('../data', train=True, download=True,
 #                           transform=transforms.Compose([
 #                               transforms.ToTensor(),
 #                               transforms.Normalize((0.1307,), (0.3081,))

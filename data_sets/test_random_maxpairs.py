@@ -1,5 +1,5 @@
-from datasets.random_maxpairs import RandomMaxPairsDataset
-from datasets.random_maxpairs import collate
+from data_sets.random_maxpairs import RandomMaxPairsDataset
+from data_sets.random_maxpairs import collate
 import networkx as nx
 from matplotlib import pyplot as plt
 import torch

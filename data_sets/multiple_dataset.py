@@ -24,13 +24,13 @@ class MultipleDataset(Dataset):
         self.train = split=='train'
 
         frequencies=[]
-        self.datasets=[]
+        self.data_sets=[]
         total_freq=0
-        for dataset in config['datasets']:
+        for dataset in config['data_sets']:
             frequencies.append(dataset['freq'])
             total_freq += dataset['freq']
             d_config = dataset['config']
-            self.datasets.append(
+            self.data_sets.append(
                     eval(d_config['data_set_name'])(dirPath=d_config['data_dir'], split=split, config=d_config)
                     )
         if total_freq != 1:
@@ -40,9 +40,9 @@ class MultipleDataset(Dataset):
             self.d_ranges.append(f+self.d_ranges[-1])
 
         #if self.train:
-        self.lens = [len(d) for d in self.datasets]
+        self.lens = [len(d) for d in self.data_sets]
         #else:
-        #    self.lens = [min(len(d) for d in self.datasets)]*len(self.datasets)
+        #    self.lens = [min(len(d) for d in self.data_sets)]*len(self.datasets)
 
     def max_len(self):
         return None
@@ -57,13 +57,13 @@ class MultipleDataset(Dataset):
             while choice>self.d_ranges[dataset_i]:
                 dataset_i+=1
             index = random.randrange(0,self.lens[dataset_i])
-            ret = self.datasets[dataset_i][index]
+            ret = self.data_sets[dataset_i][index]
         else:
             dataset_i=0
             while idx>=self.lens[dataset_i]:
                 idx-=self.lens[dataset_i]
                 dataset_i+=1
-            ret = self.datasets[dataset_i][idx]
+            ret = self.data_sets[dataset_i][idx]
 
         ret['imgName'] = 'd{}>{}'.format(dataset_i,ret['imgName'])
         return ret
