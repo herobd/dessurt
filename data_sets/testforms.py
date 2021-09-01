@@ -1,5 +1,5 @@
-from datasets.forms_detect import FormsDetect
-from datasets import forms_detect
+from data_sets.forms_detect import FormsDetect
+from data_sets import forms_detect
 import sys
 from matplotlib import pyplot as plt
 from matplotlib import gridspec

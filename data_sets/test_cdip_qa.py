@@ -1,4 +1,4 @@
-from datasets import cdip_qa
+from data_sets import cdip_qa
 import math
 import sys
 from matplotlib import pyplot as plt

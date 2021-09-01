@@ -1,5 +1,5 @@
-from datasets.ai2d import AI2D
-from datasets.forms_pair import FormsPair
+from data_sets.ai2d import AI2D
+from data_sets.forms_pair import FormsPair
 import sys
 from matplotlib import pyplot as plt
 from matplotlib import gridspec

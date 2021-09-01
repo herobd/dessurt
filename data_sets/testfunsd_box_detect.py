@@ -1,5 +1,5 @@
-from datasets.adobe_box_detect import AdobeBoxDetect
-from datasets import adobe_box_detect
+from data_sets.funsd_box_detect import FUNSDBoxDetect
+from data_sets import funsd_box_detect
 import math
 import sys
 from matplotlib import pyplot as plt
@@ -46,18 +46,18 @@ def display(data):
             w=data['bb_gt'][b,i,4]
             header=data['bb_gt'][b,i,13]
             question=data['bb_gt'][b,i,14]
-            #answer=data['bb_gt'][b,i,15]
-            #other=data['bb_gt'][b,i,16]
+            answer=data['bb_gt'][b,i,15]
+            other=data['bb_gt'][b,i,16]
             if header:
                 color = (1,0,0)#'r-'
             elif question:
                 color = (0,0,1)#'b-'
-            #elif answer:
-            #    color = (0,1,0)#'g-'
-            #elif other:
-            #    color = (1,1,0)#'y-'
-            #else:
-            #    assert(False)
+            elif answer:
+                color = (0,1,0)#'g-'
+            elif other:
+                color = (1,1,0)#'y-'
+            else:
+                assert(False)
             tr = (math.cos(rot)*w-math.sin(rot)*h +xc, -math.sin(rot)*w-math.cos(rot)*h +yc)
             tl = (-math.cos(rot)*w-math.sin(rot)*h +xc, math.sin(rot)*w-math.cos(rot)*h +yc)
             br = (math.cos(rot)*w+math.sin(rot)*h +xc, -math.sin(rot)*w+math.cos(rot)*h +yc)
@@ -84,9 +84,9 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=AdobeBoxDetect(dirPath=dirPath,split='train',config={
+    data=FUNSDBoxDetect(dirPath=dirPath,split='train',config={
         "split_to_lines": True,
-        'rescale_range':[0.52,0.52],
+        'rescale_range':[1,1],
         #'crop_params':{ "crop_size":[652,1608], 
         'crop_params':{ "crop_size":[2000,1000], 
                         "pad":0, 
@@ -95,9 +95,9 @@ if __name__ == "__main__":
                         "flip_vert": False}, 
         'color': False
 })
-    #data.cluster(start,repeat,'AdobeLines_anchors_maxW100_{}.json',use_max_width=100)
+    data.cluster(start,repeat,'FUNSDLines_anchors_maxW100_{}.json',use_max_width=100)
 
-    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False, num_workers=0, collate_fn=adobe_box_detect.collate)
+    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False, num_workers=0, collate_fn=funsd_box_detect.collate)
     dataLoaderIter = iter(dataLoader)
 
         #if start==0:

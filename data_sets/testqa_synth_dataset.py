@@ -1,4 +1,4 @@
-from datasets import synth_qa_dataset
+from data_sets import synth_qa_dataset
 import math
 import sys
 from matplotlib import pyplot as plt

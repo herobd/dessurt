@@ -9,7 +9,7 @@ import math, random, string
 from collections import defaultdict, OrderedDict
 from utils.funsd_annotations import createLines
 import timeit
-from datasets.qa import QADataset
+from data_sets.qa import QADataset
 
 import utils.img_f as img_f
 

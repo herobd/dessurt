@@ -1,5 +1,5 @@
-from datasets.adobe_graph_pair import AdobeGraphPair
-from datasets import adobe_graph_pair
+from data_sets.adobe_graph_pair import AdobeGraphPair
+from data_sets import adobe_graph_pair
 import math
 import sys
 from matplotlib import pyplot as plt

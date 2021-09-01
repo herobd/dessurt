@@ -1,5 +1,5 @@
-from datasets.random_messages import RandomMessagesDataset
-from datasets.random_messages import collate
+from data_sets.random_messages import RandomMessagesDataset
+from data_sets.random_messages import collate
 import networkx as nx
 from matplotlib import pyplot as plt
 import torch

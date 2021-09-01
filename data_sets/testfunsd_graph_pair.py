@@ -1,5 +1,5 @@
-from datasets.funsd_graph_pair import FUNSDGraphPair
-from datasets import funsd_graph_pair
+from data_sets.funsd_graph_pair import FUNSDGraphPair
+from data_sets import funsd_graph_pair
 import math
 import sys
 from matplotlib import pyplot as plt

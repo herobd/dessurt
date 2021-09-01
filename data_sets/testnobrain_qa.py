@@ -1,5 +1,5 @@
-from datasets.nobrain_qa import NobrainQA
-from datasets import nobrain_qa
+from data_sets.nobrain_qa import NobrainQA
+from data_sets import nobrain_qa
 import math
 import sys
 from matplotlib import pyplot as plt

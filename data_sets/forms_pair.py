@@ -10,7 +10,7 @@ import math
 import utils.img_f as img_f
 from utils import augmentation
 from utils.crop_transform import CropBoxTransform
-from datasets.forms_box_pair import fixAnnotations, getDistMask
+from data_sets.forms_box_pair import fixAnnotations, getDistMask
 import random
 from random import shuffle
 
