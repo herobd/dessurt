@@ -229,12 +229,12 @@ class QAImDocGPT3(BaseModel):
                         nn.ReLU(inplace=True)]
         d_im = d_im//4
         for i in range(len(blocks_per_level)-1):
-            upsample_net+=[ nn.ConvTranspose2d(d_im,d_im//2,4,2,1)
+            upsample_net+=[ nn.ConvTranspose2d(d_im,d_im//2,4,2,1),
                             nn.InstanceNorm2d(d_dim//2),
                             nn.Dropout2d(p=0.125,inplace=True),
                             nn.ReLU(inplace=True)]
             d_im = d_im//2
-        upsample_net.append(nn.Conv2d(d_im,1,1,1,0)
+        upsample_net.append(nn.Conv2d(d_im,1,1,1,0))
         self.upsample_net= nn.Sequential(*upsample_net)
         
         
@@ -339,11 +339,11 @@ class QAImDocGPT3(BaseModel):
                 brX,brY = bb[2]
                 blX,blY = bb[3]
                 lX,lY,rX,rY,width,height = calcXYWH(tlX,tlY,trX,trY,brX,brY,blX,blY)
-                cX = (lX+rX)/2
+                #cX = (lX+rX)/2
                 cY = (lY+rY)/2
                 #we'll use the entire height for each part
-                start_point = torch.FloatTensor([lX,lY])
-                end_point = torch.FloatTensor([rX,rY])
+                start_point = torch.FloatTensor([lX,cY])
+                end_point = torch.FloatTensor([rX,cY])
                 step = 1/(char_prob.size(0)-1)
                 forward = torch.arange(1,-(step-0.00001),-step)[:,None] #add xy dim
                 backward = torch.arange(0,1+(step-0.00001),step)[:,None]

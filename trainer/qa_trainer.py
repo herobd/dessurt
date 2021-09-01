@@ -360,7 +360,7 @@ class QATrainer(BaseTrainer):
 
         losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
         #losses['answerLoss'] = pred_a.sum()
-        if 'mask' in self.loss:
+        if 'mask' in self.loss and gt_mask is not None: #we allow gt_mask to be none to not supervise
             losses['maskLoss'] = self.loss['mask'](pred_mask,self._to_tensor(gt_mask))
 
 

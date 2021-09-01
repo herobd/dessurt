@@ -9,24 +9,51 @@ import math, random, string
 from collections import defaultdict, OrderedDict
 from utils.funsd_annotations import createLines
 import timeit
-from .qa import QADataset
-from .synth_qadoc_dataset import addRead, breakLong
+from datasets.qa import QADataset
 
 import utils.img_f as img_f
 
-def collate(batch):
-    return {
-            'img': torch.cat([b['img'] for b in batch],dim=0),
-            'bb_gt': [b['bb_gt'] for b in batch], #torch.cat([b['bb_gt'] for b in batch],dim=0),
-            'imgName': [b['imgName'] for b in batch],
-            'scale': [b['scale'] for b in batch],
-            'cropPoint': [b['cropPoint'] for b in batch],
-            'transcription': [b['transcription'] for b in batch],
-            'metadata': [b['metadata'] for b in batch],
-            'form_metadata': [b['form_metadata'] for b in batch],
-            'questions': [b['questions'] for b in batch],
-            'answers': [b['answers'] for b in batch]
-            }
+def addRead(qa,text,min_start_read,np=False,max_qa_len=None,backwards=False):
+    if backwards:
+        text = text[::-1]
+        prompt = 'bk~{}'
+    else:
+        prompt = 're~{}'
+    if len(text)<=2 or random.random()<0.05:
+        start_point=len(text) #so we get [end]s with long texts
+    elif len(text)>min_start_read+1:
+        start_point = random.randrange(min_start_read,len(text)+1)
+    else:
+        start_point = random.randrange(len(text)//2,len(text)+1)
+    start_text = text[:start_point].strip()
+    finish_text = text[start_point:].strip()
+    if len(finish_text)==0:
+        finish_text='[ end ]'
+    if len(start_text)-min_start_read*2>0 and random.random()>0.33:
+        real_start = random.randrange(0,len(start_text)-min_start_read*2)
+        start_text = start_text[real_start:]
+
+    if max_qa_len is not None:
+        if len(start_text) > max_qa_len:
+            start_text = start_text[-max_qa_len:]
+        if len(finish_text) > max_qa_len:
+            finish_text = finish_text[:max_qa_len-2]+'>>'
+    if np:
+        qa.append((prompt.format(start_text),'[ np ]',None))
+    else:
+        qa.append((prompt.format(start_text),finish_text,None))
+
+def breakLong(qa,full,initial_prompt,continue_prompt,max_qa_len):
+    first_part = full[:max_qa_len-2] + '>>' #mark to indicate not complete
+    qa.append((initial_prompt,first_part,None))
+    prev_part = first_part[:-2] #remove mark
+    remainder = full[max_qa_len-2:]
+    while len(remainder)>max_qa_len:
+        next_part = remainder[:max_qa_len-2] + '>>'
+        qa.append((continue_prompt+prev_part,next_part,None))
+        prev_part = next_part[:-2] 
+        remainder = remainder[max_qa_len-2:]
+    qa.append((continue_prompt+prev_part,remainder,None))
 
 
 class FUNSDQA(QADataset):
