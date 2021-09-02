@@ -153,10 +153,10 @@ def imshow(name,img):
 def show(): #replaces cv2.waitKey()
     return io.show()
 
-def resize(img,dim,fx=None,fy=None): #remove ",interpolation = cv2.INTER_CUBIC"
+def resize(img,dim=None,fx=None,fy=None): #remove ",interpolation = cv2.INTER_CUBIC"
     hasColor = len(img.shape)==3
     assert not hasColor
-    if dim[0]==0:
+    if dim is None or dim[0]==0:
         downsize = fx<1 and fy<1
         
         return transform.rescale(img,(fy,fx),3,anti_aliasing=downsize,preserve_range=True)

@@ -364,6 +364,10 @@ class QADataset(torch.utils.data.Dataset):
                 "mask_label": mask_label
                 }
 
+    @abstractmethod
+    def parseAnn(self,annotations,s):
+        pass
+
     #t#def print_opt_times(self):#t#
         #t#for name,times in self.opt_history.items():#t#
             #t#print('time data {}({}): {}'.format(name,len(times),np.mean(times)))#t#
