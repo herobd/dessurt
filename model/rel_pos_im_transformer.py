@@ -72,7 +72,7 @@ class RelPosQTransformerLayer(nn.Module):
             all_tokens: B,A,D
             all_tokens_x,all_tokens_y: B,A
             all_pos_mask: B,A (bool)
-            full_mask: B,Q,A (?) This will be a subpart of all_mask[:,num_q+num_a,num_all]
+            full_mask: B,Q,A (?) This will be a subpart of all_mask[:,num_q+num_a,num_all] This is attention
             all_padding_mask: B,A
 
         """

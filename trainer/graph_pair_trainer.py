@@ -8,7 +8,7 @@ from evaluators.draw_graph import draw_graph
 import matplotlib.pyplot as plt
 from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist, AP_textLines, getTargIndexForPreds_iou, newGetTargIndexForPreds_iou, getTargIndexForPreds_dist, newGetTargIndexForPreds_textLines, computeAP, non_max_sup_overseg
 from utils.group_pairing import getGTGroup, pure, purity
-from datasets.testforms_graph_pair import display
+from data_sets.testforms_graph_pair import display
 import random, os, math
 
 from model.oversegment_loss import build_oversegmented_targets_multiscale
