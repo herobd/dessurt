@@ -170,7 +170,7 @@ class GenDaemon:
 
         #text = re.sub('r\s+',' ',text) #normalize whitespace
         para = para.strip()
-        print('++++++\n'+para+'\n++++++++++')
+        #print('++++++\n'+para+'\n++++++++++')
         words = para.split(' ') #this includes newlines!
 
         #if len(words)<=num_words:
