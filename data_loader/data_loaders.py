@@ -11,7 +11,9 @@ from data_sets import ai2d_box_detect
 from data_sets import multiple_dataset
 from data_sets import synth_qa_dataset
 from data_sets import synth_qadoc_dataset
+from data_sets import synth_para_qa
 from data_sets import funsd_qa
+from data_sets import cdip_qa
 from data_sets import nobrain_qa
 from data_sets import nobrain_graph_pair
 from data_sets import forms_graph_pair
@@ -122,6 +124,8 @@ def getDataLoader(config,split,rank=None,world_size=None):
             return withCollate(synth_qa_dataset.SynthQADataset,synth_qa_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='SynthQADocDataset':
             return withCollate(synth_qadoc_dataset.SynthQADocDataset,synth_qadoc_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='SynthParaQA':
+            return withCollate(synth_para_qa.SynthParaQA,synth_para_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='NobrainQA':
             return withCollate(nobrain_qa.NobrainQA,nobrain_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='NobrainGraphPair':
@@ -134,6 +138,8 @@ def getDataLoader(config,split,rank=None,world_size=None):
             return withCollate(funsd_graph_pair.FUNSDGraphPair,funsd_graph_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='FUNSDQA':
             return withCollate(funsd_qa.FUNSDQA,funsd_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='CDIPQA':
+            return withCollate(cdip_qa.CDIPQA,cdip_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='AdobeBoxDetect':
             return withCollate(adobe_box_detect.AdobeBoxDetect,adobe_box_detect.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='AdobeGraphPair':
@@ -188,7 +194,10 @@ def basic(setObj,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers
         validData = setObj(dirPath=data_dir, split=['train','valid'], config=config['validation'])
         validLoader = torch.utils.data.DataLoader(validData, batch_size=valid_batch_size, shuffle=shuffleValid, num_workers=numDataWorkers)
         return trainLoader, validLoader
+
 def withCollate(setObj,collateFunc,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config,rank=None,world_size=None):
+    prefetch_factor = config['data_loader']['prefetch_factor'] if 'prefetch_factor' in config else 2
+    persistent_workers = config['data_loader']['persistent_workers'] if 'persistent_workers' in config else False
     if split=='train':
         trainData = setObj(dirPath=data_dir, split='train', config=config['data_loader'])
         if rank is not None:
@@ -199,7 +208,7 @@ def withCollate(setObj,collateFunc,batch_size,valid_batch_size,shuffle,shuffleVa
         else:
             train_sampler = None
 
-        trainLoader = torch.utils.data.DataLoader(trainData, batch_size=batch_size, shuffle=shuffle, num_workers=numDataWorkers, collate_fn=collateFunc, sampler=train_sampler)
+        trainLoader = torch.utils.data.DataLoader(trainData, batch_size=batch_size, shuffle=shuffle, num_workers=numDataWorkers, collate_fn=collateFunc, sampler=train_sampler, prefetch_factor=prefetch_factor, persistent_workers=persistent_workers)
         if rank is None or rank==0:
             validData = setObj(dirPath=data_dir, split='valid', config=config['validation'])
             validLoader = torch.utils.data.DataLoader(validData, batch_size=valid_batch_size, shuffle=shuffleValid, num_workers=numDataWorkers, collate_fn=collateFunc)
