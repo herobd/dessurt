@@ -9,7 +9,7 @@ import math, random, string
 from collections import defaultdict, OrderedDict
 from utils.funsd_annotations import createLines
 import timeit
-from data_sets.qa import QADataset
+from data_sets.qa import QADataset,collate
 
 import utils.img_f as img_f
 
@@ -834,7 +834,7 @@ class FUNSDQA(QADataset):
                     bb_ids+=groups_id[gid]
             else:
                 bb_ids=None
-            new_all_q_a.append((q,a,bb_ids))
+            self.qaAdd(new_all_q_a,q,a,bb_ids)
             if self.max_qa_len is not None:
                 assert len(q)<self.max_qa_len+5
         return new_all_q_a

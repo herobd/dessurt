@@ -49,7 +49,7 @@ class RelPosQTransformerLayer(nn.Module):
     def __setstate__(self, state):
         if 'activation' not in state:
             state['activation'] = F.relu
-        super(RelativePosQTransformerEncoderLayer, self).__setstate__(state)
+        super(RelPosQTransformerLayer, self).__setstate__(state)
 
     def forward(self, 
             query_tokens: Tensor, 
@@ -77,18 +77,18 @@ class RelPosQTransformerLayer(nn.Module):
 
         """
         
-        full_pos_mask = all_pos_mask[:,None,:].expand(-1,query_x.size(1),-1,1) * query_pos_mask[:,:,None].expand(-1,-1,all_x.size(1),1)
-        docqa2 = self.self_attn(query_tokens, all_tokens, all_tokens, query_x,query_y,all_x,all_y, 
+        full_pos_mask = all_pos_mask[:,None,:].expand(-1,query_x.size(1),-1,1) * query_pos_mask[:,:,None].expand(-1,-1,all_tokens_x.size(1),1)
+        response = self.self_attn(query_tokens, all_tokens, all_tokens, query_x,query_y,all_tokens_x,all_tokens_y, 
                 mask=full_mask,
                 key_padding_mask=all_padding_mask,
                 pos_mask=full_pos_mask)
 
-        docqa = docqa + self.dropout1(docqa2)
-        docqa = self.norm1(docqa)
-        docqa2 = self.linear2(self.dropout(self.activation(self.linear1(docqa))))
-        docqa = docqa + self.dropout2(docqa2)
-        docqa = self.norm2(docqa)
-        return docqa
+        query_tokens = query_tokens + self.dropout1(response)
+        query_tokens = self.norm1(query_tokens)
+        response = self.linear2(self.dropout(self.activation(self.linear1(query_tokens))))
+        query_tokens = query_tokens + self.dropout2(response)
+        query_tokens = self.norm2(query_tokens)
+        return query_tokens
 
 
 class RelPosImTransformerLayer(nn.Module):

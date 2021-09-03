@@ -73,7 +73,7 @@ class QAImDocGPT3(BaseModel):
             d_model = fd_model
             im_embed_dim = fd_model
 
-        if type(self.image_size) is int:
+        if isinstance(self.image_size,int):
             self.image_size = (self.image_size,self.image_size)
         max_dist = math.sqrt(self.image_size[0]**2 + self.image_size[1]**2)
         self.max_pred_len = 500
@@ -220,17 +220,17 @@ class QAImDocGPT3(BaseModel):
 
         self.final_resolution = cur_resolution
         upsample_net = [nn.ConvTranspose2d(d_im,d_im//2,4,2,1),
-                        nn.InstanceNorm2d(d_dim//2),
+                        nn.InstanceNorm2d(d_im//2),
                         nn.Dropout2d(p=0.125,inplace=True),
                         nn.ReLU(inplace=True),
                         nn.Conv2d(d_im//2,d_im//4,3,1,1),
-                        nn.InstanceNorm2d(d_dim//4),
+                        nn.InstanceNorm2d(d_im//4),
                         nn.Dropout2d(p=0.125,inplace=True),
                         nn.ReLU(inplace=True)]
         d_im = d_im//4
         for i in range(len(blocks_per_level)-1):
             upsample_net+=[ nn.ConvTranspose2d(d_im,d_im//2,4,2,1),
-                            nn.InstanceNorm2d(d_dim//2),
+                            nn.InstanceNorm2d(d_im//2),
                             nn.Dropout2d(p=0.125,inplace=True),
                             nn.ReLU(inplace=True)]
             d_im = d_im//2
@@ -408,8 +408,10 @@ class QAImDocGPT3(BaseModel):
                 all_ocr_1dpos[i] += [0]*diff
                 all_ocr_seqid[i] += [0]*diff
                 ocr_padding_mask[i,-diff:]=1
-
-        ocr_tokens = self.ocr_emb(torch.stack(all_ocr_res,dim=0))
+        if max_len!=0:
+            ocr_tokens = self.ocr_emb(torch.stack(all_ocr_res,dim=0).permute(0,2,1)).permute(0,2,1)
+        else:
+            ocr_tokens =None
         ocr_bbs = torch.stack(all_ocr_bbs,dim=0).to(device)
         ocr_1dpos = torch.LongTensor(all_ocr_1dpos).to(device)
         ocr_seqid = torch.LongTensor(all_ocr_seqid).to(device)
@@ -418,7 +420,7 @@ class QAImDocGPT3(BaseModel):
         all_ocr_bbs=None
         all_ocr_1dpos=None
         all_ocr_seqid=None
-        num_ocr = ocr_tokens.size(1)
+        num_ocr = max_len#ocr_tokens.size(1)
 
         #we need to extend batch entries with multiple questions
         repeats = [len(q) for q in questions] #different elements in batch may have different numbers of questions
@@ -426,7 +428,8 @@ class QAImDocGPT3(BaseModel):
         #first expand tokens and other things
         repeats_cuda = torch.LongTensor(repeats).to(device)
         im_tokens = torch.repeat_interleave(im_tokens,repeats_cuda,dim=0)
-        ocr_tokens = torch.repeat_interleave(ocr_tokens,repeats_cuda,dim=0)
+        if ocr_tokens is not None:
+            ocr_tokens = torch.repeat_interleave(ocr_tokens,repeats_cuda,dim=0)
         ocr_bbs = torch.repeat_interleave(ocr_bbs,repeats_cuda,dim=0)
         ocr_1dpos = torch.repeat_interleave(ocr_1dpos,repeats_cuda,dim=0)
         ocr_seqid = torch.repeat_interleave(ocr_seqid,repeats_cuda,dim=0)
@@ -494,8 +497,11 @@ class QAImDocGPT3(BaseModel):
 
         a_tokens = self.a_pos_1d_enc(a_tokens)
         a_padding_mask = (1-a_t['attention_mask'][:,1:]).bool().to(device) #remove last SEP
-
-        ocr_tokens += self.ocr_pos_emb_x(xs) + self.ocr_pos_emb_y(ys) + self.ocr_pos_emb_w(ws) + self.ocr_pos_emb_h(hs) + self.ocr_1dpos_enc(ocr_1dpos) + self.ocr_seqid_enc(ocr_seqid)
+        
+        if num_ocr>0:
+            ocr_tokens += self.ocr_pos_emb_x(xs) + self.ocr_pos_emb_y(ys) + self.ocr_pos_emb_w(ws) + self.ocr_pos_emb_h(hs) + self.ocr_1dpos_enc(ocr_1dpos) + self.ocr_seqid_enc(ocr_seqid)
+        else:
+            ocr_tokens = self.ocr_pos_emb_x(xs) + self.ocr_pos_emb_y(ys) + self.ocr_pos_emb_w(ws) + self.ocr_pos_emb_h(hs) + self.ocr_1dpos_enc(ocr_1dpos) + self.ocr_seqid_enc(ocr_seqid)
 
         num_all = num_im+num_ocr+num_q+num_a
 
@@ -505,8 +511,8 @@ class QAImDocGPT3(BaseModel):
 
         q_pos = torch.FloatTensor(1,num_q,2).fill_(0).to(device)
 
-        q_pos_ex = q_pos.expand(new_batch_size,-1,-1)
-        q_pos_mask_ex = q_pos_mask.expand(new_batch_size,-1,-1)
+        q_pos = q_pos.expand(new_batch_size,-1,-1)
+        q_pos_mask = q_pos_mask.expand(new_batch_size,-1,-1)
         
         if RUN:
             num_hold_all = num_all+self.max_pred_len
@@ -515,8 +521,8 @@ class QAImDocGPT3(BaseModel):
             holder_a_pos_mask = torch.FloatTensor(1,num_hold_a,1).fill_(0).to(device)
             holder_a_pos_ex = holder_a_pos.expand(new_batch_size,-1,-1)
             holder_a_pos_mask_ex = holder_a_pos_mask.expand(new_batch_size,-1,-1)
-            a_pos_ex = holder_a_pos_ex[:,:num_a]
-            a_pos_mask_ex = holder_a_pos_mask_ex[:,:num_a]
+            a_pos = holder_a_pos_ex[:,:num_a]
+            a_pos_mask = holder_a_pos_mask_ex[:,:num_a]
             holder_a_padding_mask = torch.BoolTensor(new_batch_size,num_hold_a).fill_(0).to(device)
 
             holder_all_att_mask = torch.BoolTensor(1,num_hold_all,num_hold_all).fill_(1) #1/0
@@ -529,8 +535,8 @@ class QAImDocGPT3(BaseModel):
         else:
             a_pos = torch.FloatTensor(1,num_a,2).fill_(0).to(device)
             a_pos_mask = torch.FloatTensor(1,num_a,1).fill_(0).to(device)
-            a_pos_ex = a_pos.expand(new_batch_size,-1,-1)
-            a_pos_mask_ex = a_pos_mask.expand(new_batch_size,-1,-1)
+            a_pos = a_pos.expand(new_batch_size,-1,-1)
+            a_pos_mask = a_pos_mask.expand(new_batch_size,-1,-1)
 
             all_att_mask = torch.BoolTensor(1,num_all,num_all).fill_(1) #1/0
             all_att_mask[:,-num_a:,-num_a:] = torch.tril(all_att_mask[:,-num_a:,-num_a:])
@@ -542,12 +548,18 @@ class QAImDocGPT3(BaseModel):
         level=0
         qa_tokens = torch.cat( (q_tokens,a_tokens),dim=1)
         qa_padding_mask = torch.cat( (q_padding_mask,a_padding_mask), dim=1)
-        ocrq_padding_mask = torch.cat( (ocr_padding_mask,q_padding_mask,torch.ones_like(a_padding_mask)), dim=1)
+        ocrq_padding_mask = torch.cat( (ocr_padding_mask,q_padding_mask), dim=1)
         #convert to 0/-inf as that's what the Swin code expects
         ocrq_padding_mask_inf = torch.FloatTensor(*ocrq_padding_mask.size()).fill_(0).to(device)
         ocrq_padding_mask_inf[ocrq_padding_mask] = float('-inf')
-        qa_pos_mask = torch.cat( (q_pos_mask_ex,a_pos_mask_ex), dim=1)
-        qa_pos = torch.cat( (q_pos_ex,a_pos_ex), dim=1)
+        qa_pos_mask = torch.cat( (q_pos_mask,a_pos_mask), dim=1)
+        qa_pos = torch.cat( (q_pos,a_pos), dim=1)
+
+        im_pos_mask = torch.FloatTensor(1,num_im,1).fill_(1).expand(new_batch_size,-1,-1).to(device  )
+        all_pos_mask = torch.cat((im_pos_mask,ocr_pos_mask,q_pos_mask,a_pos_mask),dim=1)
+
+        im_padding_mask = torch.BoolTensor(1,num_im).fill_(0).expand(new_batch_size,-1).to(device)
+        all_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask,a_padding_mask),dim=1)
 
         for i,(swin_layer, proj_d2i, layout_layer, proj_i2d, im_downsample, ocr_downsample, q_downsample) in enumerate(self.swin_layers):
 
@@ -555,9 +567,9 @@ class QAImDocGPT3(BaseModel):
             if PRINT_ATT:
                 NUMS.append((num_ocr,num_q,num_a))
 
-            ocrqa_tokens = qa_tokens = torch.cat( (ocr_tokens,qa_tokens),dim=1)
-            im_tokens = swin_layer(im_tokens,proj_d2i(ocrqa_tokens),   #we pass it the answers
-                    docq_padding_mask=ocrq_padding_mask_inf) #but we'll mask them out
+            ocrq_tokens = torch.cat( (ocr_tokens,q_tokens),dim=1)
+            im_tokens = swin_layer(im_tokens,proj_d2i(ocrq_tokens),
+                    docq_padding_mask=ocrq_padding_mask_inf) 
             proj_im_tokens = proj_i2d(im_tokens)
 
             if RUN:
@@ -589,7 +601,7 @@ class QAImDocGPT3(BaseModel):
                     torch.cat((self.im_xs[level].expand(new_batch_size,-1),ocr_pos[:,:,0],qa_pos[:,:,0]),dim=1),
                     torch.cat((self.im_xs[level].expand(new_batch_size,-1),ocr_pos[:,:,1],qa_pos[:,:,1]),dim=1),
                     all_pos_mask,
-                    all_att_mask[:,:-num_q+num_a,:],
+                    all_att_mask[:,-(num_q+num_a):,:],
                     all_padding_mask)
                     
 
@@ -617,11 +629,9 @@ class QAImDocGPT3(BaseModel):
                 num_q = q_tokens.size(1)
                 q_pos = q_pos[:,:num_q]
                 q_pos_mask = q_pos_mask[:,:num_q]#torch.FloatTensor(new_batch_size,num_q,1).fill_(0).to(device)
-                q_pos_ex = q_pos.expand(new_batch_size,-1,-1)
-                q_pos_mask_ex = q_pos_mask.expand(new_batch_size,-1,-1)
-
-                qa_pos = torch.cat( (q_pos_ex,a_pos_ex), dim=1)
-                qa_pos_mask = torch.cat( (q_pos_mask_ex,a_pos_mask_ex), dim=1)
+                qa_tokens = torch.cat( (q_tokens,a_tokens),dim=1)
+                qa_pos = torch.cat( (q_pos,a_pos), dim=1)
+                qa_pos_mask = torch.cat( (q_pos_mask,a_pos_mask), dim=1)
 
             if did_downsample:
                 num_all = num_im+num_ocr+num_q+num_a
@@ -629,7 +639,7 @@ class QAImDocGPT3(BaseModel):
                 all_pos_mask = torch.cat((im_pos_mask,ocr_pos_mask,q_pos_mask,a_pos_mask),dim=1)
                 all_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask,a_padding_mask), dim=1)
             if ocr_downsample is not None or q_downsample is not None:
-                ocrq_padding_mask = torch.cat( (ocr_padding_mask,q_padding_mask,torch.ones_like(a_padding_mask)), dim=1)
+                ocrq_padding_mask = torch.cat( (ocr_padding_mask,q_padding_mask), dim=1)
                 ocrq_padding_mask_inf = torch.FloatTensor(*ocrq_padding_mask.size()).fill_(0).to(device)
                 ocrq_padding_mask_inf[ocrq_padding_mask] = float('-inf')
 
@@ -754,7 +764,8 @@ class QAImDocGPT3(BaseModel):
         ##############
         #Visual output
         H,W = self.final_resolution
-        im_feats = im_tokens.view(new_batch_size,H,W,im_feats.size(2))
+        #reshape and permute to convert to image
+        im_feats = im_tokens.view(new_batch_size,H,W,im_tokens.size(2)).permute(0,3,1,2)
         out = self.upsample_net(im_feats)
 
 

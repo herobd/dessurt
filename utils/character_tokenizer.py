@@ -11,7 +11,7 @@ class CharacterTokenizer():
 
     def convert_ids_to_tokens(self,id_tensor,skip_special_tokens):
         assert skip_special_tokens
-        return [self.idx_to_char[int(idt)] for idt in id_tensor if idt<131]
+        return [self.idx_to_char[int(idt)] for idt in id_tensor if idt<self.SEP_index]
 
     def convert_tokens_to_string(self,tokens):
         return ''.join(tokens)
