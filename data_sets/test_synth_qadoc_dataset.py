@@ -80,35 +80,38 @@ if __name__ == "__main__":
     else:
         repeat=1
     data=synth_qadoc_dataset.SynthQADocDataset(dirPath=dirPath,split='train',config={
-	"fontdir": "../data/fonts",
+        "data_set_name": "SynthQADocDataset",
+        "fontdir": "../data/fonts",
         "textdir": "../data/",
-        "word_questions": "simple",
-        "use_hw": False,
-        "tables": False,
-        "header_dir": "../data/english4line_fonts",
-        "hw_dir": "../data/IAM_lines/train",
-        "num_workers": 0,
+        "data_dir": "../data/english4line_fonts",
         "include_ocr": False,
-        "change_size": False,
+        "batch_size": 52,
+        "num_workers": 4,
         "rescale_range": [1.0,1.0],
-        "crop_params": None,
-        "augment_shade": False,
-        "additional_aug_params": {"better":True},
-        "wider": 1,
-        "batch_size": 4,
-        "questions": 10,
+        "crop_params": {
+                "crop_size":[192,384],
+                "pad":0,
+                "rot_degree_std_dev": 1
+            },
+	"questions": 1,
+	"max_qa_len": 26,
         "min_entries": None,
-        "max_entries": 3,
+        "max_entries": 2,
+	"use_read": 0.01,
+	"multiline": 0.000001,
+        "change_size": True,
+	"word_questions": "simple",
+	"do_masks": True,
         "text_height": 32,
-        #"image_size": [1152,768],
-        "image_size": 192,
+        "image_size": [192,384],
         "max_chars": 10,
         "min_chars": 1,
         "use_before_refresh": 99999999999999999999,
-        "set_size": 50000,
-        "num_processes": 3,
+        "set_size": 500000,
+        "num_processes": -1,
         "gen_type": "veryclean",
-        "char_file": "../data/english_char_set.json"
+        "char_file": "../data/english_char_set.json",
+        "shuffle": True
 
 
 })

@@ -52,7 +52,7 @@ def display(data):
 
         #widths.append(img.size(1))
         
-        draw=False
+        draw=q.startswith('mm')
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
