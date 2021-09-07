@@ -79,6 +79,8 @@ class ParaQADataset(QADataset):
 
     def makeQuestions(self,ocr,image_h,image_w,s,use_blocks=True):
         wordmap = makeWordmap(ocr)
+        if len(wordmap)==0:
+            return [],np.array([])
         linemap = makeLinemap(ocr)
         qa=[]
         for i in range(self.questions*10): #return extra in case the cropping/rotations clips some words
@@ -118,11 +120,13 @@ class ParaQADataset(QADataset):
                 elif blank:
                     prompt='ø'
                 else:
-                    vocab = self.vocab[len(response)] + self.vocab[len(response)-1] + self  .vocab[len(response)+1]
+                    vocab = self.vocab[len(response)] + self.vocab[len(response)-1] + self.vocab[len(response)+1]
                     if len(vocab)<=1:
-                        vocal += self.vocab[len(response)-2] + self.vocab[len(response)+2]
+                        vocab += self.vocab[len(response)-2] + self.vocab[len(response)+2]
                         if len(vocab)<=1:
-                            vocal += self.vocab[len(response)-3] + self.vocab[len(response)+3]
+                            vocab += self.vocab[len(response)-3] + self.vocab[len(response)+3]
+                            if len(vocab)<=1:
+                                vocab += self.vocab[len(response)-4] + self.vocab[len(response)+4]
                     prompt=random.choice(vocab)
                     no_punc_response = self.punc_regex.sub('',response)
                     while prompt==no_punc_response:
@@ -440,7 +444,7 @@ class ParaQADataset(QADataset):
                     words_in_prompt.append(next_word_idx)
                     next_word_idx = next_word_idx+(1 if forward else -1)
                     last_line_id=next_line_id
-                    if next_word_idx>=len(wordmap):
+                    if next_word_idx>=len(wordmap) or next_word_idx<0:
                         next_word=(None,None,None,None)
                     else:
                         next_word = wordmap[next_word_idx]
@@ -703,7 +707,7 @@ def getLineAboveBlock(ocr,linemap,line_idx,below=False):
             continue
         l2,t2,r2,b2 = block['box']
         covered_horz = max(min(r,r2) - max(l,l2),0)
-        covered_horz/=min(r2-l2,r-l)
+        covered_horz/=min(max(r2-l2,1),max(r-l,1))
         if below:
             dist = t2-b
         else:

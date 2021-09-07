@@ -302,6 +302,7 @@ class QATrainer(BaseTrainer):
 
     def run(self,instance,get=[],forward_only=False):#
         image = self._to_tensor(instance['img'])
+        device = image.device
         ocrBoxes = instance['bb_gt']
         questions = instance['questions']
         answers = instance['answers']
@@ -329,7 +330,7 @@ class QATrainer(BaseTrainer):
             #t##t#tic=timeit.default_timer()#t##t#
             if self.ocr_word_bbs: #useOnlyGTSpace and self.use_word_bbs_gt:
                 word_boxes = torch.stack([form_metadata['word_boxes'] for form_metadata in instance['form_metadata']],dim=0)
-                word_boxes = word_boxes.to(image.device) #I can change this as it isn't used later
+                word_boxes = word_boxes.to(device) #I can change this as it isn't used later
                 ocrBoxes=word_boxes
 
             if ocrBoxes is not None:
@@ -360,10 +361,8 @@ class QATrainer(BaseTrainer):
         losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
         #losses['answerLoss'] = pred_a.sum()
         if 'mask' in self.loss and gt_mask is not None: #we allow gt_mask to be none to not supervise
-            if isinstance(gt_mask,list):
-                NotImplementedError('do maskLoss for each b seperately')
-            else:
-                losses['maskLoss'] = self.loss['mask'](pred_mask,self._to_tensor(gt_mask))
+            mask_labels_batch_mask = instance['mask_labels_batch_mask'].to(device)
+            losses['maskLoss'] = self.loss['mask'](pred_mask*mask_labels_batch_mask[:,None,None,None],gt_mask.to(device))
 
 
         #t#tic=timeit.default_timer()#t#

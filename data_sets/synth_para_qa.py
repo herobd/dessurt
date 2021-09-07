@@ -204,9 +204,9 @@ class SynthParaQA(ParaQADataset):
                 img = img_f.resize(img,fx=scale,fy=scale)
                 x1 = start_x+x_off
                 y1 = start_y+y_off
-                x2 = x1+img.shape[1]
-                y2 = y1+img.shape[0]
-                image[y1:y2,x1:x2]=img
+                x2 = min(image.shape[1],x1+img.shape[1])
+                y2 = min(image.shape[0],y1+img.shape[0])
+                image[y1:y2,x1:x2]=img[:y2-y1,:x2-x1]
                 ocr_words.append({'text':text, 'box':[x1,y1,x2,y2]})
                 line_text.append(text)
                 para_min_x = min(para_min_x,x1)

@@ -11,7 +11,7 @@
         "data_dir": "../data/synth_lines_overfit",
         "include_ocr": false,
         "batch_size": 32,
-        "num_workers": 4,
+        "num_workers": 0,
         "rescale_range": [1.0,1.0],
         "crop_params": {
                 "crop_size":192,

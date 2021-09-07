@@ -16,6 +16,16 @@ import utils.img_f as img_f
 
 
 def collate(batch):
+    mask_labels = []
+    mask_labels_batch_mask = torch.FloatTensor(len(batch))
+    for bi,b in enumerate(batch):
+        if b['mask_label'] is None:
+            mask_labels_batch_mask[bi]=00
+            mask_labels.append( torch.FloatTensor(1,1,b['img'].shape[2],b['img'].shape[3]).fill_(0))
+        else:
+            mask_labels_batch_mask[bi]=1
+            mask_labels.append( b['mask_label'] )
+    mask_labels = torch.cat(mask_labels,dim=0)
     return {
             'img': torch.cat([b['img'] for b in batch],dim=0),
             'bb_gt': [b['bb_gt'] for b in batch], #torch.cat([b['bb_gt'] for b in batch],dim=0),
@@ -27,7 +37,9 @@ def collate(batch):
             'form_metadata': [b['form_metadata'] for b in batch],
             'questions': [b['questions'] for b in batch],
             'answers': [b['answers'] for b in batch],
-            'mask_label': torch.cat([b['mask_label'] for b in batch],dim=0) if batch[0]['mask_label'] is not None else [b['mask_label'] for b in batch],
+            'mask_label': mask_labels,
+            'mask_labels_batch_mask': mask_labels_batch_mask
+            #'mask_label': torch.cat([b['mask_label'] for b in batch],dim=0) if batch[0]['mask_label'] is not None else [b['mask_label'] for b in batch],
             }
 
 def getMask(shape,boxes):

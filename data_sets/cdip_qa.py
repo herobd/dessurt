@@ -121,7 +121,7 @@ class CDIPQA(ParaQADataset):
             total_score = area_score+squareness
             block_score_sum += total_score*num_lines
             line_count += num_lines
-        block_score = block_score_sum/line_count
+        block_score = block_score_sum/line_count if line_count>0 else 0
         use_blocks = block_score>self.block_score_thresh
         #print('block_score: {} {}'.format(block_score,'good!' if use_blocks else 'bad'))
         qa, qa_bbs = self.makeQuestions(ocr,image_h,image_w,s,use_blocks)

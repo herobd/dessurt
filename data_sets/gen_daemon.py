@@ -127,8 +127,11 @@ class GenDaemon:
             else:
                 #f.write(word+'\n'
                 out_words.append((word,img))
-            
-        return out_words
+        
+        if len(words)>0:
+            return out_words
+        else:
+            return self.generate()
 
     
     def getTextSample(self):
@@ -178,6 +181,8 @@ class GenDaemon:
         #else:
         #    start_w = random.randrange(len(words)-num_words)
         #    return words[start_w:start_w+num_words]
+        #Don't know why empty words happens, but remove them
+        words = [w for w in words if len(w)>0]
         return words
 
 
