@@ -158,8 +158,12 @@ def resize(img,dim=None,fx=None,fy=None): #remove ",interpolation = cv2.INTER_CU
     assert not hasColor
     if dim is None or dim[0]==0:
         downsize = fx<1 and fy<1
-        
-        return transform.rescale(img,(fy,fx),3,anti_aliasing=downsize,preserve_range=True)
+        try:
+            return transform.rescale(img,(fy,fx),3,anti_aliasing=downsize,preserve_range=True)
+        except OverflowError:
+            h = max(1,round(img.shape[0]*fy))
+            w = max(1,round(img.shape[1]*fx))
+            return transform.resize(img,[h,w],3,anti_aliasing=downsize,preserve_range=True)
         #return transform.rescale(img,(fy,fx),3,multichannel=hasColor,anti_aliasing=downsize,preserve_range=True)
     else:
         downsize = dim[0]<img.shape[0] and dim[1]<img.shape[1]

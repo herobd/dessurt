@@ -263,7 +263,7 @@ class SynthQADocDataset(QADataset):
         while total_entries>len(self.labels):
             labels_linec=labels_linec[:-1]
             values_linec=values_linec[:-1]
-            num_entries-=1
+            total_entries-=1
         selected = random.sample(list(enumerate(self.labels)),k=total_entries)
         selected = [a+(self.directory,True) for a in selected]
 
@@ -1021,11 +1021,11 @@ class SynthQADocDataset(QADataset):
                         chdr = col_headers[c][1]
                         if self.max_qa_len is not None and len(chdr)>self.max_qa_len//2:
                             chdr = chdr[-self.max_qa_len//2:]
-                        all_q_a.append(('t~{}~~{}'.format(rhdr,chdr),self.blank_token,None))
-                        all_q_a.append(('t~{}~~{}'.format(chdr,rhdr),self.blank_token,None))
+                        self.qaAdd(all_q_a,'t~{}~~{}'.format(rhdr,chdr),self.blank_token,None)
+                        self.qaAdd(all_q_a,'t~{}~~{}'.format(chdr,rhdr),self.blank_token,None)
                     else:
-                        all_q_a.append(('value of "{}" and "{}"?'.format(row_headers[r][1],col_headers[c][1]),'[np]',None))
-                        all_q_a.append(('value of "{}" and "{}"?'.format(col_headers[c][1],row_headers[r][1]),'[np]',None))
+                        self.qaAdd(all_q_a,'value of "{}" and "{}"?'.format(row_headers[r][1],col_headers[c][1]),'[np]',None)
+                        self.qaAdd(all_q_a,'value of "{}" and "{}"?'.format(col_headers[c][1],row_headers[r][1]),'[np]',None)
                 
                 cur_y += height_row[r]
             cur_x += width_col[c]
@@ -1129,15 +1129,15 @@ class SynthQADocDataset(QADataset):
                     if self.max_qa_len is not None and len(val)>self.max_qa_len:
                         val = val[:self.max_qa_len-2]+'>>'
 
-                    all_q_a.append(('t~{}~~{}'.format(rhdr,chdr),v,None))
-                    all_q_a.append(('t~{}~~{}'.format(chdr,rhdr),v,None))
+                    self.qaAdd(all_q_a,'t~{}~~{}'.format(rhdr,chdr),v,None)
+                    self.qaAdd(all_q_a,'t~{}~~{}'.format(chdr,rhdr),v,None)
                 else:
                     if random.random()<0.5:
-                        all_q_a.append(('value of "{}" and "{}"?'.format(row_h,col_h),v,None))
-                        all_q_a.append(('value of "{}" and "{}"?'.format(col_h,row_h),v,None))
+                        self.qaAdd(all_q_a,'value of "{}" and "{}"?'.format(row_h,col_h),v,None)
+                        self.qaAdd(all_q_a,'value of "{}" and "{}"?'.format(col_h,row_h),v,None)
                     else:
-                        all_q_a.append(('value in "{}" and "{}"?'.format(row_h,col_h),v,None))
-                        all_q_a.append(('value in "{}" and "{}"?'.format(col_h,row_h),v,None))
+                        self.qaAdd(all_q_a,'value in "{}" and "{}"?'.format(row_h,col_h),v,None)
+                        self.qaAdd(all_q_a,'value in "{}" and "{}"?'.format(col_h,row_h),v,None)
             if v not in ambiguous:
                 if self.word_questions=='simple':
                     if row_h is not None:
@@ -1147,7 +1147,7 @@ class SynthQADocDataset(QADataset):
                         val = v
                         if self.max_qa_len is not None and len(val)>self.max_qa_len:
                             val = val[:self.max_qa_len-2]+'>>'
-                        all_q_a.append(('ri~{}'.format(val),rhdr,None))
+                        self.qaAdd(all_q_a,'ri~{}'.format(val),rhdr,None)
                     if col_h is not None:
                         chdr = col_h
                         if self.max_qa_len is not None and len(chdr)>self.max_qa_len:
@@ -1155,12 +1155,12 @@ class SynthQADocDataset(QADataset):
                         val = v
                         if self.max_qa_len is not None and len(val)>self.max_qa_len:
                             val = val[:self.max_qa_len-2]+'>>'
-                        all_q_a.append(('ci~{}'.format(val),chdr,None))
+                        self.qaAdd(all_q_a,'ci~{}'.format(val),chdr,None)
                 else:
                     if row_h is not None:
-                        all_q_a.append(('row that "{}" is in?'.format(v),row_h,None))
+                        self.qaAdd(all_q_a,'row that "{}" is in?'.format(v),row_h,None)
                     if col_h is not None:
-                        all_q_a.append(('column that "{}" is in?'.format(v),col_h,None))
+                        self.qaAdd(all_q_a,'column that "{}" is in?'.format(v),col_h,None)
 
             if col_h is not None:
                 col_vs[col_h].append((v,y))
@@ -1180,9 +1180,9 @@ class SynthQADocDataset(QADataset):
                     self.breakLong(all_q_a,a,'ar~{}'.format(rhdr),'ar>')
                 else:
                     if random.random()<0.5:
-                        all_q_a.append(('all values in row "{}"?'.format(row_h),a,None))
+                        self.qaAdd(all_q_a,'all values in row "{}"?'.format(row_h),a,None)
                     else:
-                        all_q_a.append(('all values of row "{}"?'.format(row_h),a,None))
+                        self.qaAdd(all_q_a,'all values of row "{}"?'.format(row_h),a,None)
         for col_h, vs in col_vs.items():
             if col_h not in ambiguous:
                 vs.sort(key=lambda a:a[1])
@@ -1196,9 +1196,9 @@ class SynthQADocDataset(QADataset):
                     self.breakLong(all_q_a,a,'ac~{}'.format(chdr),'ac>')
                 else:
                     if random.random()<0.5:
-                        all_q_a.append(('all values in column "{}"?'.format(col_h),a,None))
+                        self.qaAdd(all_q_a,'all values in column "{}"?'.format(col_h),a,None)
                     else:
-                        all_q_a.append(('all values of column "{}"?'.format(col_h),a,None))
+                        self.qaAdd(all_q_a,'all values of column "{}"?'.format(col_h),a,None)
         return table_x-10, table_y-10, total_width+20, total_height+20, [r[1].strip() for r in row_headers], [c[1].strip() for c in col_headers]
 
     #Add reading q+a, handeling subsectioning

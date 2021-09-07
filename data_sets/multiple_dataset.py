@@ -14,7 +14,9 @@ import random
 
 from .qa import collate
 from .synth_qadoc_dataset import SynthQADocDataset
+from .synth_para_qa import SynthParaQA
 from .funsd_qa import FUNSDQA
+from .cdip_qa import CDIPQA
 
 
 
@@ -26,7 +28,7 @@ class MultipleDataset(Dataset):
         frequencies=[]
         self.data_sets=[]
         total_freq=0
-        for dataset in config['data_sets']:
+        for dataset in config['datasets']:
             frequencies.append(dataset['freq'])
             total_freq += dataset['freq']
             d_config = dataset['config']

@@ -228,12 +228,24 @@ class QAImDocGPT3(BaseModel):
                         nn.Dropout2d(p=0.125,inplace=True),
                         nn.ReLU(inplace=True)]
         d_im = d_im//4
+        #upsample for rest of Swin blocks
         for i in range(len(blocks_per_level)-1):
             upsample_net+=[ nn.ConvTranspose2d(d_im,d_im//2,4,2,1),
                             nn.InstanceNorm2d(d_im//2),
                             nn.Dropout2d(p=0.125,inplace=True),
                             nn.ReLU(inplace=True)]
             d_im = d_im//2
+        #upsample for original CNN encoding
+        for i in range(2):
+            if d_im>16:
+                d_im_out = d_im//2
+            else:
+                d_im_out = d_im
+            upsample_net+=[ nn.ConvTranspose2d(d_im,d_im_out,4,2,1),
+                            nn.InstanceNorm2d(d_im_out),
+                            nn.Dropout2d(p=0.125,inplace=True),
+                            nn.ReLU(inplace=True)]
+            d_im = d_im_out
         upsample_net.append(nn.Conv2d(d_im,1,1,1,0))
         self.upsample_net= nn.Sequential(*upsample_net)
         
