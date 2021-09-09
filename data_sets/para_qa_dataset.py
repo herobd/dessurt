@@ -100,9 +100,13 @@ class ParaQADataset(QADataset):
                 read_with_masked = question_type == 5
                 use_highlight = random.random()<0.5 or read_with_masked
                 blank = question_type == 0
-                blank_word_idx = random.randrange(len(wordmap))
-                outmask = [wordmap[blank_word_idx]]
-                blank_word_map = wordmap[blank_word_idx]
+                for i in range(10):
+                    blank_word_idx = random.randrange(len(wordmap))
+                    outmask = [wordmap[blank_word_idx]]
+                    blank_word_map = wordmap[blank_word_idx]
+                    response=ocr[blank_word_map[0]]['paragraphs'][blank_word_map[1]]['lines'][blank_word_map[2]]['words'][blank_word_map[3]]['text']
+                    if len(response)<15:
+                        break
                 start_word_idx = blank_word_idx
                 start_word_map = wordmap[start_word_idx]
                 last_start_block = start_word_map[0]
@@ -114,7 +118,6 @@ class ParaQADataset(QADataset):
                 at_front_end = start_word_idx==0
                 at_back_end = end_word_idx==len(wordmap)-1
 
-                response=ocr[blank_word_map[0]]['paragraphs'][blank_word_map[1]]['lines'][blank_word_map[2]]['words'][blank_word_map[3]]['text']
                 if read_with_masked:
                     prompt = response
                 elif blank:
@@ -127,6 +130,11 @@ class ParaQADataset(QADataset):
                             vocab += self.vocab[len(response)-3] + self.vocab[len(response)+3]
                             if len(vocab)<=1:
                                 vocab += self.vocab[len(response)-4] + self.vocab[len(response)+4]
+                                if len(vocab)<=1:
+                                    vocab += self.vocab[len(response)-5] + self.vocab[len(response)+5]
+                    if len(vocab)==0:
+                        print('no vocab for string of length {} ({})'.format(len(response),response))
+                        continue
                     prompt=random.choice(vocab)
                     no_punc_response = self.punc_regex.sub('',response)
                     while prompt==no_punc_response:
@@ -485,7 +493,7 @@ class ParaQADataset(QADataset):
                         words_in_response.append(next_word_idx)
                         next_word_idx = next_word_idx+(1 if forward else -1)
                         last_line_id=next_line_id
-                        if next_word_idx>=len(wordmap):
+                        if next_word_idx>=len(wordmap) or next_word_idx<0: 
                             next_word=(None,None,None,None)
                         else:
                             next_word = wordmap[next_word_idx]
