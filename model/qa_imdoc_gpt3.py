@@ -30,6 +30,34 @@ def normalize_bbox2(bbox, dwidth, dheight, twidth, theight, max_dist):
          max(min(int(max_dist * (bbox[3] / theight)),theight),0),
      ]
 
+#https://discuss.pytorch.org/t/differentiable-affine-transforms-with-grid-sample/79305
+def affineTransform(x,out_size,scalew=1, scaleh=1, rot=0):
+    #trans_scale = torch.FloatTensor([
+    #    [scalew, 0, -x.shape[1]//2],
+    #    [0, scaleh, -x.shape[0]//2],
+    #    [0,0,1]
+    #])
+    scale = torch.FloatTensor([
+        [scalew, 0, 0],
+        [0, scaleh, 0],
+        [0,0,1]
+    ])
+    rot = torch.FloatTensor([
+        [math.cos(rot), -math.sin(rot), 0],
+        [math.sin(rot), math.cos(rot), 0],
+        [0,0,1]
+    ])
+    #retrans = torch.FloatTensor([
+    #    [1,0, out_size[1]//2],
+    #    [0,1, out_size[0]//2],
+    #    [0,0,1]
+    #])
+    #theta = torch.matmul(retrans,torch.matmul(rot,trans_scale))[None,0:2]
+    #theta = rot[None,0:2]
+    theta = torch.matmul(scale,rot)[None,0:2]
+    grid = F.affine_grid(theta, out_size, align_corners=False)
+    return F.grid_sample(x, grid, align_corners=False,mode='nearest')
+
 class QAImDocGPT3(BaseModel):
     def __init__(self,config):
         super(QAImDocGPT3, self).__init__(config)
@@ -109,8 +137,9 @@ class QAImDocGPT3(BaseModel):
 
 
         self.text_embedding = nn.Embedding(self.tokenizer.vocab_size, d_model)
+        self.ocr_out_dim = 97
         self.ocr_emb = nn.Sequential(
-                nn.Conv1d(97,d_model,3,padding=1), #this will mix neighboring instances....
+                nn.Conv1d(self.ocr_out_dim,d_model,3,padding=1), #this will mix neighboring instances....
                 nn.ReLU(True),
                 nn.Conv1d(d_model,d_model,3,padding=1),
                 )
@@ -141,8 +170,7 @@ class QAImDocGPT3(BaseModel):
             self.patch_embed.load_state_dict(pe_state_dict)
 
         num_patches = self.patch_embed.num_patches
-        patches_resolution = self.patch_embed.patches_resolution
-
+        self.patches_resolution = self.patch_embed.patches_resolution
 
 
         self.absolute_2dpos_embed = nn.Parameter(torch.zeros(1, num_patches, im_embed_dim))
@@ -158,7 +186,7 @@ class QAImDocGPT3(BaseModel):
         self.swin_layers=nn.ModuleList()
         for level,blocks in enumerate(blocks_per_level):
             d_im = int(im_embed_dim * 2 ** level)
-            cur_resolution = (patches_resolution[0]//(2**level), patches_resolution[1]//(2**level))
+            cur_resolution = (self.patches_resolution[0]//(2**level), self.patches_resolution[1]//(2**level))
             patch_size = (self.image_size[0]/cur_resolution[0],self.image_size[1]/cur_resolution[1])
             im_xs = torch.arange(patch_size[1]/2,self.image_size[1],patch_size[1])[None,:].expand(cur_resolution[0],-1)
             im_ys = torch.arange(patch_size[0]/2,self.image_size[0],patch_size[0])[:,None].expand(-1,cur_resolution[1])
@@ -332,83 +360,123 @@ class QAImDocGPT3(BaseModel):
         all_ocr_bbs=[]
         all_ocr_1dpos=[]
         all_ocr_seqid=[]
-        max_len=0
-        if PRINT_ATT:
-            assert image.size(0)==1
-        for b,res_im in enumerate(ocrRes):
-            ocr_res = []#[torch.zeros_like(preds[0])]
-            ocr_bbs = []#[[0,0,0,0]]
-            ocr_1dpos = []#[0]
-            ocr_seqid = []#[0]
-            if PRINT_ATT:
-                full_ocr_string='$'
-            for i,(bb,(string,char_prob),score) in enumerate(res_im):
-                if len(string)==0 or (self.blank_ocr and self.train and random.random()<self.blank_ocr):
-                    continue
-                #spread x,y location along span
-                tlX,tlY = bb[0]
-                trX,trY = bb[1]
-                brX,brY = bb[2]
-                blX,blY = bb[3]
-                lX,lY,rX,rY,width,height = calcXYWH(tlX,tlY,trX,trY,brX,brY,blX,blY)
-                #cX = (lX+rX)/2
-                cY = (lY+rY)/2
-                #we'll use the entire height for each part
-                start_point = torch.FloatTensor([lX,cY])
-                end_point = torch.FloatTensor([rX,cY])
-                step = 1/(char_prob.size(0)-1)
-                forward = torch.arange(1,-(step-0.00001),-step)[:,None] #add xy dim
-                backward = torch.arange(0,1+(step-0.00001),step)[:,None]
-                assert forward.size(0)==char_prob.size(0) and backward.size(0)==char_prob.size(0)
-                all_xy = forward*start_point + backward*end_point
-
-
-
-                #rather than taking the whol sequence, we'll just take the probabilities at character predictions (nonblank)
-                char_pred = char_prob.argmax(dim=1)
-                char_loc = char_pred!=0
-                new_char_prob = char_prob[char_loc] #this will be on the GPU
-                new_xy = all_xy[char_loc]
-                wh = torch.FloatTensor([width,height])[None,:].expand(new_xy.size(0),-1)
-
-                bbs = torch.cat( (new_xy,wh), dim=1)
-
-                #We'll append additional entries at the begining and end. We'll first be sure there is one ad the front back, and then add however many needed to the back so that pooling always is self contained
-                start_bb = bbs[0:1]
-                end_bb = bbs[-1:]
-                empty_prob = -1*torch.ones_like(new_char_prob[0:1])
-                if self.downsample_ocr>0:
-                    missing = (2+new_char_prob.size(0))% (2**self.downsample_ocr)
-                    missing = ((2**self.downsample_ocr)-missing) % (2**self.downsample_ocr)
-                    add_front = 1
-                    add_back = 1+missing
-                    bbs = torch.cat( ([start_bb]*add_front) + [bbs] + ([end_bb]*add_back), dim=0)
-                    new_char_prob = torch.cat( ([empty_prob]*add_front) + [new_char_prob] + ([empty_prob]*add_back), dim=0)
-
-                ocr_res.append(new_char_prob)
-                ocr_bbs.append(bbs)
-                assert new_char_prob.size(0) == bbs.size(0)
-                ocr_1dpos.extend(range(0,new_char_prob.size(0)))
-                ocr_seqid.extend([len(ocr_bbs)]*new_char_prob.size(0))
-
+        if self.ocr_in_image:
+            ocr_image = torch.FloatTensor(batch_size,self.ocr_out_dim,self.patches_resolution).fill_(-1)
+            for b,res_im in enumerate(ocrRes):
+                ocr_res = []#[torch.zeros_like(preds[0])]
+                ocr_bbs = []#[[0,0,0,0]]
+                ocr_1dpos = []#[0]
+                ocr_seqid = []#[0]
                 if PRINT_ATT:
-                    full_ocr_string+='|'+string
-            
-            #ocr_bbs.append([0,0,0,0])
-            #ocr_pos.append(0)
-            max_len = max(max_len,len(ocr_1dpos))
-            if len(ocr_res)>0:
-                all_ocr_res.append(torch.cat(ocr_res,dim=0))
-                all_ocr_bbs.append(torch.cat(ocr_bbs,dim=0))
-                all_ocr_1dpos.append(ocr_1dpos)
-                all_ocr_seqid.append(ocr_seqid)
-            else:
-                all_ocr_res.append(torch.FloatTensor(0,97).to(device))
-                all_ocr_bbs.append(torch.FloatTensor(0,4))#.to(device))
-                all_ocr_1dpos.append([])
-                all_ocr_seqid.append([])
+                    full_ocr_string='$'
+                for i,(bb,(string,char_prob),score) in enumerate(res_im):
+                    #We will draw the character probabilities into the image using the 
+                    # bounding box
+                    tlX,tlY = bb[0]
+                    trX,trY = bb[1]
+                    brX,brY = bb[2]
+                    blX,blY = bb[3]
+                    lX,lY,rX,rY,width,height,rot = calcXYWH(tlX,tlY,trX,trY,brX,brY,blX,blY)
+                    
+                    left_x = min(tlX,trX,blX,brX)
+                    top_y = min(tlY,trY,blY,brY)
+                    h=max(tlY,trY,blY,brY) - min(tlY,trY,blY,brY)
+                    w=max(tlX,trX,blX,brX) - min(tlX,trX,blX,brX)
+                    patch_size = (1,self.ocr_out_dim,h,w)
+                    im_patch = affineTransform(
+                            char_prob.permute(1,0)[None,:,None],#make sequance an image,
+                            patch_size, #canvas to draw in
+                            w/width,
+                            h/height, #expand height of char prob to fill vert space
+                            rot)
+
+                    mask = im_patch[0].sum(dim=0)!=0
+                    ocr_img[b,:,top_y:top_y+h,left_x:left_x+w][:,mask] = im_patch[0][:,mask]
+
+                    #x_step = (rX-lX)/char_prob.size(0)
+                    #y_step = (rY-lY)/char_prob.size(0)
+                    #to_x = [round(lX+i*x_step) for i in range(char_prob.size(0))]
+                    #to_y = [round(lY+i*y_step) for i in range(char_prob.size(0))]
+                    #ocr_image[b,:,to_y,to_x] = char_prob
+
+        else:
+            max_len=0
             if PRINT_ATT:
-                full_ocr_string+='^'
+                assert image.size(0)==1
+            for b,res_im in enumerate(ocrRes):
+                ocr_res = []#[torch.zeros_like(preds[0])]
+                ocr_bbs = []#[[0,0,0,0]]
+                ocr_1dpos = []#[0]
+                ocr_seqid = []#[0]
+                if PRINT_ATT:
+                    full_ocr_string='$'
+                for i,(bb,(string,char_prob),score) in enumerate(res_im):
+                    if len(string)==0 or (self.blank_ocr and self.train and random.random()<self.blank_ocr):
+                        continue
+                    #spread x,y location along span
+                    tlX,tlY = bb[0]
+                    trX,trY = bb[1]
+                    brX,brY = bb[2]
+                    blX,blY = bb[3]
+                    lX,lY,rX,rY,width,height,rot = calcXYWH(tlX,tlY,trX,trY,brX,brY,blX,blY)
+                    #cX = (lX+rX)/2
+                    cY = (lY+rY)/2
+                    #we'll use the entire height for each part
+                    start_point = torch.FloatTensor([lX,cY])
+                    end_point = torch.FloatTensor([rX,cY])
+                    step = 1/(char_prob.size(0)-1)
+                    forward = torch.arange(1,-(step-0.00001),-step)[:,None] #add xy dim
+                    backward = torch.arange(0,1+(step-0.00001),step)[:,None]
+                    assert forward.size(0)==char_prob.size(0) and backward.size(0)==char_prob.size(0)
+                    all_xy = forward*start_point + backward*end_point
+
+
+
+                    #rather than taking the whol sequence, we'll just take the probabilities at character predictions (nonblank)
+                    char_pred = char_prob.argmax(dim=1)
+                    char_loc = char_pred!=0
+                    new_char_prob = char_prob[char_loc] #this will be on the GPU
+                    new_xy = all_xy[char_loc]
+                    wh = torch.FloatTensor([width,height])[None,:].expand(new_xy.size(0),-1)
+
+                    bbs = torch.cat( (new_xy,wh), dim=1)
+
+                    #We'll append additional entries at the begining and end. We'll first be sure there is one ad the front back, and then add however many needed to the back so that pooling always is self contained
+                    start_bb = bbs[0:1]
+                    end_bb = bbs[-1:]
+                    empty_prob = -1*torch.ones_like(new_char_prob[0:1])
+                    if self.downsample_ocr>0:
+                        missing = (2+new_char_prob.size(0))% (2**self.downsample_ocr)
+                        missing = ((2**self.downsample_ocr)-missing) % (2**self.downsample_ocr)
+                        add_front = 1
+                        add_back = 1+missing
+                        bbs = torch.cat( ([start_bb]*add_front) + [bbs] + ([end_bb]*add_back), dim=0)
+                        new_char_prob = torch.cat( ([empty_prob]*add_front) + [new_char_prob] + ([empty_prob]*add_back), dim=0)
+
+                    ocr_res.append(new_char_prob)
+                    ocr_bbs.append(bbs)
+                    assert new_char_prob.size(0) == bbs.size(0)
+                    ocr_1dpos.extend(range(0,new_char_prob.size(0)))
+                    ocr_seqid.extend([len(ocr_bbs)]*new_char_prob.size(0))
+
+                    if PRINT_ATT:
+                        full_ocr_string+='|'+string
+                
+                #ocr_bbs.append([0,0,0,0])
+                #ocr_pos.append(0)
+                max_len = max(max_len,len(ocr_1dpos))
+                if len(ocr_res)>0:
+                    all_ocr_res.append(torch.cat(ocr_res,dim=0))
+                    all_ocr_bbs.append(torch.cat(ocr_bbs,dim=0))
+                    all_ocr_1dpos.append(ocr_1dpos)
+                    all_ocr_seqid.append(ocr_seqid)
+                else:
+                    all_ocr_res.append(torch.FloatTensor(0,97).to(device))
+                    all_ocr_bbs.append(torch.FloatTensor(0,4))#.to(device))
+                    all_ocr_1dpos.append([])
+                    all_ocr_seqid.append([])
+                if PRINT_ATT:
+                    full_ocr_string+='^'
 
         #padding
         ocr_padding_mask = torch.BoolTensor(len(all_ocr_res),max_len).fill_(0) #0 / 1 on when a padded value
