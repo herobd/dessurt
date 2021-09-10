@@ -13,47 +13,6 @@ from data_sets.qa import QADataset,collate
 
 import utils.img_f as img_f
 
-def addRead(qa,text,min_start_read,np=False,max_qa_len=None,backwards=False):
-    if backwards:
-        text = text[::-1]
-        prompt = 'bk~{}'
-    else:
-        prompt = 're~{}'
-    if len(text)<=2 or random.random()<0.05:
-        start_point=len(text) #so we get [end]s with long texts
-    elif len(text)>min_start_read+1:
-        start_point = random.randrange(min_start_read,len(text)+1)
-    else:
-        start_point = random.randrange(len(text)//2,len(text)+1)
-    start_text = text[:start_point].strip()
-    finish_text = text[start_point:].strip()
-    if len(finish_text)==0:
-        finish_text='[ end ]'
-    if len(start_text)-min_start_read*2>0 and random.random()>0.33:
-        real_start = random.randrange(0,len(start_text)-min_start_read*2)
-        start_text = start_text[real_start:]
-
-    if max_qa_len is not None:
-        if len(start_text) > max_qa_len:
-            start_text = start_text[-max_qa_len:]
-        if len(finish_text) > max_qa_len:
-            finish_text = finish_text[:max_qa_len-2]+'>>'
-    if np:
-        qa.append((prompt.format(start_text),'[ np ]',None))
-    else:
-        qa.append((prompt.format(start_text),finish_text,None))
-
-def breakLong(qa,full,initial_prompt,continue_prompt,max_qa_len):
-    first_part = full[:max_qa_len-2] + '>>' #mark to indicate not complete
-    qa.append((initial_prompt,first_part,None))
-    prev_part = first_part[:-2] #remove mark
-    remainder = full[max_qa_len-2:]
-    while len(remainder)>max_qa_len:
-        next_part = remainder[:max_qa_len-2] + '>>'
-        qa.append((continue_prompt+prev_part,next_part,None))
-        prev_part = next_part[:-2] 
-        remainder = remainder[max_qa_len-2:]
-    qa.append((continue_prompt+prev_part,remainder,None))
 
 
 class FUNSDQA(QADataset):
@@ -332,7 +291,7 @@ class FUNSDQA(QADataset):
                 #    trans_bb.append((bbs[bbi,1],transcription[bbi]))
                 #else:
                 #    continue
-                if self.char_qs=='full':
+                if self.char_qs=='full' or self.char_qs=='sym':
                     #classify individual lines
                     text=transcription[bbi]
                     if self.max_qa_len is not None and len(text)>self.max_qa_len:
@@ -355,7 +314,7 @@ class FUNSDQA(QADataset):
             else:
                 others_gs.add(gi)
 
-            if self.char_qs=='full':
+            if self.char_qs=='full' or self.char_qs=='sym':
                 #classify all together
                 text=trans
                 if self.max_qa_len is not None and len(text)>self.max_qa_len:
@@ -365,8 +324,8 @@ class FUNSDQA(QADataset):
                 all_q_a.append(random.choice(class_qs))
 
                 #complete (read)
-                addRead(all_q_a,trans,self.min_start_read,max_qa_len=self.max_qa_len)
-                addRead(all_q_a,trans,self.min_start_read,max_qa_len=self.max_qa_len,backwards=True)
+                self.addRead(all_q_a,trans)
+                self.addRead(all_q_a,trans,backwards=True)
 
 
         relationships_h_q=defaultdict(list)
@@ -526,53 +485,92 @@ class FUNSDQA(QADataset):
 
         for qi,ai in q_a_pairs:
             trans_qi = all_trans[qi]
-            if self.max_qa_len is not None and len(trans_qi)>self.max_qa_len:
-                trans_qi_q = trans_qi[-self.max_qa_len:]
-                trans_qi_a = '<<'+trans_qi[-(self.max_qa_len-2):]
+            if self.char_qs=='sym':
+                if self.max_qa_len is not None and len(trans_qi)>self.max_qa_len:
+                    trans_qi_q = trans_qi[-self.max_qa_len:]
+                    trans_qi_a = trans_qi[-(self.max_qa_len):][::-1]
+                else:
+                    trans_qi_q = trans_qi
+                    trans_qi_a = trans_qi[::-1]
+                    if len(trans_qi_a)<=self.max_qa_len:
+                        trans_qi_a+='‡'
             else:
-                trans_qi_q = trans_qi_a = trans_qi
+                if self.max_qa_len is not None and len(trans_qi)>self.max_qa_len:
+                    trans_qi_q = trans_qi[-self.max_qa_len:]
+                    trans_qi_a = '<<'+trans_qi[-(self.max_qa_len-2):]
+                else:
+                    trans_qi_q = trans_qi_a = trans_qi
             #if 'Group' in trans_qi:
             #    import pdb;pdb.set_trace()
             if ai is not None:
                 trans_ai = all_trans[ai]
-                if self.max_qa_len is not None and len(trans_ai)>self.max_qa_len:
-                    trans_ai_q = trans_ai[:self.max_qa_len]
-                    trans_ai_a = trans_ai[:self.max_qa_len-2]+'>>'
-                else:
-                    trans_ai_q = trans_ai_a = trans_ai
-                if trans_qi not in ambiguous:
-                    if self.char_qs:
+                if self.char_qs=='sym':
+                    if self.max_qa_len is not None and len(trans_ai)>self.max_qa_len:
+                        trans_ai_q = trans_ai[:self.max_qa_len]
+                        trans_ai_a = trans_ai[:self.max_qa_len]
+                    else:
+                        trans_ai_q = trans_ai_a = trans_ai
+                        if len(trans_ai_a)+1 <= self.max_qa_len:
+                            trans_ai_a+='‡'
+                    if trans_qi not in ambiguous:
                         all_q_a.append(('l~{}'.format(trans_qi_q),trans_ai_a,[qi,ai]))
                         if random.random()<self.extra_np:
-                            all_q_a.append(('v~{}'.format(trans_qi_q),'[ np ]',[qi,ai]))
-
-                    else:
-                        all_q_a.append(('value for "{}"?'.format(trans_qi),trans_ai,[qi,ai]))
-                if trans_ai not in ambiguous:
-                    if self.char_qs:
+                            all_q_a.append(('v~{}'.format(trans_qi_q),'№',[qi,ai]))
+                    if trans_ai not in ambiguous:
                         all_q_a.append(('v~{}'.format(trans_ai_q),trans_qi_a,[qi,ai]))
                         if random.random()<self.extra_np:
-                            all_q_a.append(('l~{}'.format(trans_ai_q),'[ np ]',[qi,ai]))
-                    else:
-                        all_q_a.append(('label of "{}"?'.format(trans_ai),trans_qi,[qi,ai]))
-            elif trans_qi not in ambiguous:
-                if self.char_qs:
-                    all_q_a.append(('l~{}'.format(trans_qi_q),'[ blank ]',[qi]))
+                            all_q_a.append(('l~{}'.format(trans_ai_q),'№',[qi,ai]))
+                    elif trans_qi not in ambiguous:
+                        all_q_a.append(('l~{}'.format(trans_qi_q),'ø',[qi]))
                 else:
-                    all_q_a.append(('value for "{}"?'.format(trans_qi),'blank',[qi]))
+                    if self.max_qa_len is not None and len(trans_ai)>self.max_qa_len:
+                        trans_ai_q = trans_ai[:self.max_qa_len]
+                        trans_ai_a = trans_ai[:self.max_qa_len-2]+'>>'
+                    else:
+                        trans_ai_q = trans_ai_a = trans_ai
+                    if trans_qi not in ambiguous:
+                        if self.char_qs:
+                            all_q_a.append(('l~{}'.format(trans_qi_q),trans_ai_a,[qi,ai]))
+                            if random.random()<self.extra_np:
+                                all_q_a.append(('v~{}'.format(trans_qi_q),'[ np ]',[qi,ai]))
+
+                        else:
+                            all_q_a.append(('value for "{}"?'.format(trans_qi),trans_ai,[qi,ai]))
+                    if trans_ai not in ambiguous:
+                        if self.char_qs:
+                            all_q_a.append(('v~{}'.format(trans_ai_q),trans_qi_a,[qi,ai]))
+                            if random.random()<self.extra_np:
+                                all_q_a.append(('l~{}'.format(trans_ai_q),'[ np ]',[qi,ai]))
+                        else:
+                            all_q_a.append(('label of "{}"?'.format(trans_ai),trans_qi,[qi,ai]))
+                    elif trans_qi not in ambiguous:
+                        if self.char_qs:
+                            all_q_a.append(('l~{}'.format(trans_qi_q),'[ blank ]',[qi]))
+                        else:
+                            all_q_a.append(('value for "{}"?'.format(trans_qi),'blank',[qi]))
 
 
 
-        if self.char_qs=="full":
+        if self.char_qs=="full" or self.char_qs=='sym':
 
             #Do header and qestions
             for hi,qis in relationships_h_q.items():
                 trans_h = all_trans[hi]
-                if self.max_qa_len is not None and len(trans_h)>self.max_qa_len:
-                    trans_h_q = trans_h[-self.max_qa_len:]
-                    trans_h_a = '<<'+trans_h[-(self.max_qa_len-2):]
+                if self.char_qs=='sym':
+                    if self.max_qa_len is not None and len(trans_h)>self.max_qa_len:
+                        trans_h_q = trans_h[-self.max_qa_len:]
+                        trans_h_a = trans_h[-(self.max_qa_len):][::-1]
+                    else:
+                        trans_h_q=trans_h
+                        trans_h_a=trans_h[::-1]
+                        if len(trans_h_a)+1<=self.max_qa_len:
+                            trans_h_a+='‡'
                 else:
-                    trans_h_q=trans_h_a=trans_h
+                    if self.max_qa_len is not None and len(trans_h)>self.max_qa_len:
+                        trans_h_q = trans_h[-self.max_qa_len:]
+                        trans_h_a = '<<'+trans_h[-(self.max_qa_len-2):]
+                    else:
+                        trans_h_q=trans_h_a=trans_h
                 trans_qs=[]
                 for qi in qis:
                     trans_q = all_trans[qi]
@@ -625,7 +623,7 @@ class FUNSDQA(QADataset):
                     trans_qs = trans_qs[0][0]
 
                 if self.max_qa_len is not None and len(trans_qs)>self.max_qa_len:
-                    breakLong(all_q_a,trans_qs,'hd~{}'.format(trans_h_q),'hd>',self.max_qa_len)
+                    self.breakLong(all_q_a,trans_qs,'hd~{}'.format(trans_h_q),'hd>')
                 else:
                     all_q_a.append(('hd~{}'.format(trans_h_q),trans_qs,[hi]+qis))
 
@@ -727,8 +725,14 @@ class FUNSDQA(QADataset):
                     if self.max_qa_len is not None and len(chdr)>self.max_qa_len//2:
                         chdr = chdr[-self.max_qa_len//2:]
                     val = all_trans[v]
-                    if self.max_qa_len is not None and len(val)>self.max_qa_len:
-                        val = val[:self.max_qa_len-2]+'>>'
+                    if self.char_qs=='sym':
+                        if self.max_qa_len is not None and len(val)>self.max_qa_len:
+                            val = val[:self.max_qa_len]
+                        elif len(val)+1<=self.max_qa_len:
+                            val += '‡'
+                    else:
+                        if self.max_qa_len is not None and len(val)>self.max_qa_len:
+                            val = val[:self.max_qa_len-2]+'>>'
 
                     all_q_a.append(('t~{}~~{}'.format(rhdr,chdr),val,[col_h,row_h,v]))
                     all_q_a.append(('t~{}~~{}'.format(chdr,rhdr),val,[col_h,row_h,v]))
@@ -742,8 +746,14 @@ class FUNSDQA(QADataset):
                         if self.max_qa_len is not None and len(rhdr)>self.max_qa_len:
                             rhdr = rhdr[-self.max_qa_len:]
                         val = all_trans[v]
-                        if self.max_qa_len is not None and len(val)>self.max_qa_len:
-                            val = val[:self.max_qa_len-2]+'>>'
+                        if self.char_qs=='sym':
+                            if self.max_qa_len is not None and len(val)>self.max_qa_len:
+                                val = val[:self.max_qa_len]
+                            elif len(val)+1<=self.max_qa_len:
+                                val += '‡'
+                        else:
+                            if self.max_qa_len is not None and len(val)>self.max_qa_len:
+                                val = val[:self.max_qa_len-2]+'>>'
                         all_q_a.append(('ri~{}'.format(val),rhdr,[v,row_h]))
                     else:
                         all_q_a.append(('row that "{}" is in?'.format(all_trans[v]),all_trans[row_h],[v,row_h]))
@@ -753,8 +763,14 @@ class FUNSDQA(QADataset):
                         if self.max_qa_len is not None and len(chdr)>self.max_qa_len:
                             chdr = chdr[-self.max_qa_len:]
                         val = all_trans[v]
-                        if self.max_qa_len is not None and len(val)>self.max_qa_len:
-                            val = val[:self.max_qa_len-2]+'>>'
+                        if self.char_qs=='sym':
+                            if self.max_qa_len is not None and len(val)>self.max_qa_len:
+                                val = val[:self.max_qa_len]
+                            elif len(val)+1<=self.max_qa_len:
+                                val += '‡'
+                        else:
+                            if self.max_qa_len is not None and len(val)>self.max_qa_len:
+                                val = val[:self.max_qa_len-2]+'>>'
                         all_q_a.append(('ci~{}'.format(val),chdr,[v,col_h]))
                     else:
                         all_q_a.append(('column that "{}" is in?'.format(all_trans[v]),all_trans[col_h],[v,col_h]))
@@ -776,7 +792,7 @@ class FUNSDQA(QADataset):
                     if self.max_qa_len is not None and len(trans_row_h)>self.max_qa_len:
                         trans_row_h = trans_row_h[-self.max_qa_len:]
                     if self.max_qa_len is not None and len(a)>self.max_qa_len:
-                        breakLong(all_q_a,a,'ar~{}'.format(trans_row_h),'ar>',self.max_qa_len)
+                        self.breakLong(all_q_a,a,'ar~{}'.format(trans_row_h),'ar>')
                     else:
                         all_q_a.append(('ar~{}'.format(trans_row_h),a,[row_h,vs[0][0]]))
                 else:
@@ -792,7 +808,7 @@ class FUNSDQA(QADataset):
                     if self.max_qa_len is not None and len(trans_col_h)>self.max_qa_len:
                         trans_col_h = trans_col_h[-self.max_qa_len:]
                     if self.max_qa_len is not None and len(a)>self.max_qa_len:
-                        breakLong(all_q_a,a,'ac~{}'.format(trans_col_h),'ac>',self.max_qa_len)
+                        self.breakLong(all_q_a,a,'ac~{}'.format(trans_col_h),'ac>')
                     else:
                         all_q_a.append(('ac~{}'.format(trans_col_h),a,[col_h,vs[0][0]]))
                 else:
@@ -813,11 +829,11 @@ class FUNSDQA(QADataset):
                 col_h_strs='|'.join(col_h_strs)
                 row_h_strs='|'.join(row_h_strs)
                 if self.max_qa_len is not None and len(col_h_strs)>self.max_qa_len:
-                    breakLong(all_q_a,col_h_strs,'ch~{}'.format(i),'ch>',self.max_qa_len)
+                    self.breakLong(all_q_a,col_h_strs,'ch~{}'.format(i),'ch>')
                 else:
                     all_q_a.append(('ch~{}'.format(i),col_h_strs,col_hs))
                 if self.max_qa_len is not None and len(row_h_strs)>self.max_qa_len:
-                    breakLong(all_q_a,row_h_strs,'rh~{}'.format(i),'rh>',self.max_qa_len)
+                    self.breakLong(all_q_a,row_h_strs,'rh~{}'.format(i),'rh>')
                 else:
                     all_q_a.append(('rh~{}'.format(i),row_h_strs,row_hs))
 
@@ -857,7 +873,76 @@ class FUNSDQA(QADataset):
                 new_s+=c
         return new_s
 
+    def addRead(self,qa,text,np=False,backwards=False):
+        if backwards:
+            text = text[::-1]
+            prompt = 'bk~{}'
+        else:
+            prompt = 're~{}'
+        if len(text)<=2 or random.random()<0.05:
+            start_point=len(text) #so we get [end]s with long texts
+        elif len(text)>self.min_start_read+1:
+            start_point = random.randrange(self.min_start_read,len(text)+1)
+        else:
+            start_point = random.randrange(len(text)//2,len(text)+1)
+        start_text = text[:start_point].strip()
+        finish_text = text[start_point:].strip()
+        if len(finish_text)==0:
+            finish_text=self.end_token
+        if len(start_text)-self.min_start_read*2>0 and random.random()>0.33:
+            real_start = random.randrange(0,len(start_text)-self.min_start_read*2)
+            start_text = start_text[real_start:]
 
+        if self.max_qa_len is not None:
+            if len(start_text) > self.max_qa_len:
+                start_text = start_text[-self.max_qa_len:]
+            if len(finish_text) > self.max_qa_len:
+                if self.char_qs=='sym':
+                    finish_text = finish_text[:self.max_qa_len]
+                    if len(finish_text)+1 > self.max_qa_len:
+                        finish_text += self.end_token
+                else:
+                    finish_text = finish_text[:self.max_qa_len-2]+'>>'
+        if np:
+            qa.append((prompt.format(start_text),self.np_token,None))
+        else:
+            qa.append((prompt.format(start_text),finish_text,None))
+
+    #break a long answer THAT ISN'T lines on the page into multiple QAs
+    def breakLong(self,qa,full,initial_prompt,continue_prompt):
+        if self.max_qa_len is not None and len(full)>self.max_qa_len:
+              if self.do_masks:
+                  first_part = full[:self.max_qa_len]
+                  self.qaAdd(qa,initial_prompt,first_part)
+                  prev_part = first_part
+                  remainder = full[self.max_qa_len:]
+                  while len(remainder)>self.max_qa_len:
+                      next_part = remainder[:self.max_qa_len]
+                      self.qaAdd(qa,continue_prompt+prev_part,next_part)
+                      prev_part = next_part
+                      remainder = remainder[self.max_qa_len:]
+                  if len(remainder)+1 < self.max_qa_len:
+                      self.qaAdd(qa,continue_prompt+prev_part,remainder+self.end_token)
+                  else:
+                      self.qaAdd(qa,continue_prompt+prev_part,remainder)
+                      self.qaAdd(qa,continue_prompt+remainder,self.end_token)
+              else:
+                  first_part = full[:self.max_qa_len-2] + '>>' #mark to indicate not complete
+                  self.qaAdd(qa,initial_prompt,first_part)
+                  prev_part = first_part[:-2] #remove mark
+                  remainder = full[self.max_qa_len-2:]
+                  while len(remainder)>self.max_qa_len:
+                      next_part = remainder[:self.max_qa_len-2] + '>>'
+                      self.qaAdd(qa,continue_prompt+prev_part,next_part)
+>>                    prev_part = next_part[:-2]
+                      remainder = remainder[self.max_qa_len-2:]
+                  self.qaAdd(qa,continue_prompt+prev_part,remainder)
+          elif len(full)+1<self.max_qa_len and self.do_masks:
+              self.qaAdd(qa,initial_prompt,full+self.end_token)
+          else:
+              self.qaAdd(qa,initial_prompt,full)
+              if self.max_qa_len:
+                  self.qaAdd(qa,continue_prompt+full,self.end_token)
 
 
 
