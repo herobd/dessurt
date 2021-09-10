@@ -56,12 +56,13 @@ def affineTransform(x,out_size,scalew=1, scaleh=1, rot=0):
     #theta = rot[None,0:2]
     theta = torch.matmul(scale,rot)[None,0:2]
     grid = F.affine_grid(theta, out_size, align_corners=False)
-    return F.grid_sample(x, grid, align_corners=False,mode='nearest')
+    return F.grid_sample(x, grid.to(x.device), align_corners=False,mode='nearest')
 
 class QAImDocGPT3(BaseModel):
     def __init__(self,config):
         super(QAImDocGPT3, self).__init__(config)
         self.blank_ocr = config['blank_ocr'] if 'blank_ocr' in config else False
+        self.ocr_in_image = config['grid_ocr'] if 'grid_ocr' in config else False
         self.image_size = config['image_size'] #start at 512?
         dropout = 0 if 'no_dropout' in config and  config['no_dropout'] else 0.1
         lighter_conv_patch_emb = config['lighter_conv_patch_emb'] if 'lighter_conv_patch_emb' in config else False
@@ -138,20 +139,25 @@ class QAImDocGPT3(BaseModel):
 
         self.text_embedding = nn.Embedding(self.tokenizer.vocab_size, d_model)
         self.ocr_out_dim = 97
-        self.ocr_emb = nn.Sequential(
-                nn.Conv1d(self.ocr_out_dim,d_model,3,padding=1), #this will mix neighboring instances....
-                nn.ReLU(True),
-                nn.Conv1d(d_model,d_model,3,padding=1),
-                )
-                #nn.Linear(97,d_model,bias=False)
+        if not self.ocr_in_image:
+            self.ocr_emb = nn.Sequential(
+                    nn.Conv1d(self.ocr_out_dim,d_model,3,padding=1), #this will mix neighboring instances....
+                    nn.ReLU(True),
+                    nn.Conv1d(d_model,d_model,3,padding=1),
+                    )
+                    #nn.Linear(97,d_model,bias=False)
+            self.ocr_1dpos_enc = ReturnPositionalEncoding(d_model,dropout=dropout,max_len=1000)
+            self.ocr_seqid_enc = ReturnPositionalEncoding(d_model,dropout=dropout,max_len=1000,offset_start=2000)
+            self.ocr_pos_emb_x = UniformRealEmbedding(d_model,0,self.image_size[1],100)
+            self.ocr_pos_emb_y = UniformRealEmbedding(d_model,0,self.image_size[0],100)
+            self.ocr_pos_emb_w = PositiveRealEmbedding(d_model,0,int(0.5*self.image_size[1]),30)
+            self.ocr_pos_emb_h = PositiveRealEmbedding(d_model,0,int(0.3*self.image_size[0]),30)
+        else:
+            self.embed_ocr_grid = nn.Linear(self.ocr_out_dim,im_embed_dim)
+
         self.q_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000)
         self.a_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000,offset_start=1000)
-        self.ocr_1dpos_enc = ReturnPositionalEncoding(d_model,dropout=dropout,max_len=1000)
-        self.ocr_seqid_enc = ReturnPositionalEncoding(d_model,dropout=dropout,max_len=1000,offset_start=2000)
-        self.ocr_pos_emb_x = UniformRealEmbedding(d_model,0,self.image_size[1],100)
-        self.ocr_pos_emb_y = UniformRealEmbedding(d_model,0,self.image_size[0],100)
-        self.ocr_pos_emb_w = PositiveRealEmbedding(d_model,0,int(0.5*self.image_size[1]),30)
-        self.ocr_pos_emb_h = PositiveRealEmbedding(d_model,0,int(0.3*self.image_size[0]),30)
+
 
 
         self.patch_embed =  ConvPatchEmbed(
@@ -171,6 +177,8 @@ class QAImDocGPT3(BaseModel):
 
         num_patches = self.patch_embed.num_patches
         self.patches_resolution = self.patch_embed.patches_resolution
+        self.patch_scale_x = 1/self.patch_embed.patch_size[1]
+        self.patch_scale_y = 1/self.patch_embed.patch_size[0]
 
 
         self.absolute_2dpos_embed = nn.Parameter(torch.zeros(1, num_patches, im_embed_dim))
@@ -361,7 +369,8 @@ class QAImDocGPT3(BaseModel):
         all_ocr_1dpos=[]
         all_ocr_seqid=[]
         if self.ocr_in_image:
-            ocr_image = torch.FloatTensor(batch_size,self.ocr_out_dim,self.patches_resolution).fill_(-1)
+            batch_size = image.size(0)
+            ocr_grid = torch.FloatTensor(batch_size,self.ocr_out_dim,*self.patches_resolution).fill_(-1).to(device)
             for b,res_im in enumerate(ocrRes):
                 ocr_res = []#[torch.zeros_like(preds[0])]
                 ocr_bbs = []#[[0,0,0,0]]
@@ -376,13 +385,21 @@ class QAImDocGPT3(BaseModel):
                     trX,trY = bb[1]
                     brX,brY = bb[2]
                     blX,blY = bb[3]
+                    tlX *= self.patch_scale_x
+                    tlY *= self.patch_scale_y
+                    trX *= self.patch_scale_x
+                    trY *= self.patch_scale_y
+                    brX *= self.patch_scale_x
+                    brY *= self.patch_scale_y
+                    blX *= self.patch_scale_x
+                    blY *= self.patch_scale_y
                     lX,lY,rX,rY,width,height,rot = calcXYWH(tlX,tlY,trX,trY,brX,brY,blX,blY)
                     
                     left_x = min(tlX,trX,blX,brX)
                     top_y = min(tlY,trY,blY,brY)
                     h=max(tlY,trY,blY,brY) - min(tlY,trY,blY,brY)
                     w=max(tlX,trX,blX,brX) - min(tlX,trX,blX,brX)
-                    patch_size = (1,self.ocr_out_dim,h,w)
+                    patch_size = (1,self.ocr_out_dim,round(h),round(w))
                     im_patch = affineTransform(
                             char_prob.permute(1,0)[None,:,None],#make sequance an image,
                             patch_size, #canvas to draw in
@@ -390,15 +407,46 @@ class QAImDocGPT3(BaseModel):
                             h/height, #expand height of char prob to fill vert space
                             rot)
 
+                    #check boundaries in case patch is off image
+                    if round(top_y)<0:
+                        y_start = -round(top_y)
+                        top_y=0
+                    else:
+                        y_start=0
+                    if round(top_y)+im_patch.size(2)>=ocr_grid.size(2):
+                        y_end=ocr_grid.size(2)-(round(top_y)+im_patch.size(2)+1)
+                    else:
+                        y_end=im_patch.size(2)
+                    if round(left_x)<0:
+                        x_start = -round(left_x)
+                        left_x=0
+                    else:
+                        x_start=0
+                    if round(left_x)+im_patch.size(3)>=ocr_grid.size(3):
+                        x_end=ocr_grid.size(3)-(round(left_x)+im_patch.size(3)+1)
+                    else:
+                        x_end=im_patch.size(3)
+                    #correct if boundaries are bad
+                    im_patch = im_patch[:,:,y_start:y_end,x_start:x_end]
+
                     mask = im_patch[0].sum(dim=0)!=0
-                    ocr_img[b,:,top_y:top_y+h,left_x:left_x+w][:,mask] = im_patch[0][:,mask]
+                    ocr_grid[b,:,
+                            round(top_y):round(top_y)+mask.size(0),
+                            round(left_x):round(left_x)+mask.size(1)][:,mask] = im_patch[0][:,mask]
 
                     #x_step = (rX-lX)/char_prob.size(0)
                     #y_step = (rY-lY)/char_prob.size(0)
                     #to_x = [round(lX+i*x_step) for i in range(char_prob.size(0))]
                     #to_y = [round(lY+i*y_step) for i in range(char_prob.size(0))]
-                    #ocr_image[b,:,to_y,to_x] = char_prob
-
+                    #ocr_grid[b,:,to_y,to_x] = char_prob
+                all_ocr_res.append(torch.FloatTensor(0,97).to(device))
+                all_ocr_bbs.append(torch.FloatTensor(0,4))#.to(device))
+                all_ocr_1dpos.append([])
+                all_ocr_seqid.append([])
+            
+            ocr_grid = ocr_grid.permute(0,2,3,1).view(batch_size,-1,self.ocr_out_dim) #flatten
+            im_tokens += self.embed_ocr_grid(ocr_grid)
+            max_len=0
         else:
             max_len=0
             if PRINT_ATT:
@@ -581,7 +629,8 @@ class QAImDocGPT3(BaseModel):
         if num_ocr>0:
             ocr_tokens += self.ocr_pos_emb_x(xs) + self.ocr_pos_emb_y(ys) + self.ocr_pos_emb_w(ws) + self.ocr_pos_emb_h(hs) + self.ocr_1dpos_enc(ocr_1dpos) + self.ocr_seqid_enc(ocr_seqid)
         else:
-            ocr_tokens = self.ocr_pos_emb_x(xs) + self.ocr_pos_emb_y(ys) + self.ocr_pos_emb_w(ws) + self.ocr_pos_emb_h(hs) + self.ocr_1dpos_enc(ocr_1dpos) + self.ocr_seqid_enc(ocr_seqid)
+            #ocr_tokens = self.ocr_pos_emb_x(xs) + self.ocr_pos_emb_y(ys) + self.ocr_pos_emb_w(ws) + self.ocr_pos_emb_h(hs) + self.ocr_1dpos_enc(ocr_1dpos) + self.ocr_seqid_enc(ocr_seqid)
+            ocr_tokens = torch.FloatTensor(new_batch_size,0,q_tokens.size(2)).to(device)
 
         num_all = num_im+num_ocr+num_q+num_a
 

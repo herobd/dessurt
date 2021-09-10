@@ -261,7 +261,7 @@ class ParaQADataset(QADataset):
                     prompt = prompt[:self.max_qa_len-2] +'>>'
                 if len(response)>self.max_qa_len:
                     response = response[:self.max_qa_len]
-                elif len(response)+1 < self.max_qa_len:
+                elif len(response)+1 < self.max_qa_len and response!='№':
                     response = response+'‡'
 
 
