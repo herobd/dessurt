@@ -934,15 +934,15 @@ class FUNSDQA(QADataset):
                   while len(remainder)>self.max_qa_len:
                       next_part = remainder[:self.max_qa_len-2] + '>>'
                       self.qaAdd(qa,continue_prompt+prev_part,next_part)
->>                    prev_part = next_part[:-2]
+                      prev_part = next_part[:-2]
                       remainder = remainder[self.max_qa_len-2:]
                   self.qaAdd(qa,continue_prompt+prev_part,remainder)
-          elif len(full)+1<self.max_qa_len and self.do_masks:
-              self.qaAdd(qa,initial_prompt,full+self.end_token)
-          else:
-              self.qaAdd(qa,initial_prompt,full)
-              if self.max_qa_len:
-                  self.qaAdd(qa,continue_prompt+full,self.end_token)
+        elif len(full)+1<self.max_qa_len and self.do_masks:
+          self.qaAdd(qa,initial_prompt,full+self.end_token)
+        else:
+          self.qaAdd(qa,initial_prompt,full)
+          if self.max_qa_len:
+              self.qaAdd(qa,continue_prompt+full,self.end_token)
 
 
 

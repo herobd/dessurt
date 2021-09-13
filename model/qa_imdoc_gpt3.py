@@ -399,7 +399,7 @@ class QAImDocGPT3(BaseModel):
                     top_y = min(tlY,trY,blY,brY)
                     h=max(tlY,trY,blY,brY) - min(tlY,trY,blY,brY)
                     w=max(tlX,trX,blX,brX) - min(tlX,trX,blX,brX)
-                    patch_size = (1,self.ocr_out_dim,round(h),round(w))
+                    patch_size = (1,self.ocr_out_dim,max(1,round(h)),max(1,round(w)))
                     im_patch = affineTransform(
                             char_prob.permute(1,0)[None,:,None],#make sequance an image,
                             patch_size, #canvas to draw in
