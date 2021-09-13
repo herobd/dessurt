@@ -328,7 +328,7 @@ class QAImDocGPT2(BaseModel):
                 trX,trY = bb[1]
                 brX,brY = bb[2]
                 blX,blY = bb[3]
-                lX,lY,rX,rY,width,height = calcXYWH(tlX,tlY,trX,trY,brX,brY,blX,blY)
+                lX,lY,rX,rY,width,height,rot = calcXYWH(tlX,tlY,trX,trY,brX,brY,blX,blY)
                 cX = (lX+rX)/2
                 cY = (lY+rY)/2
                 #we'll use the entire height for each part
