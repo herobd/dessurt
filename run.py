@@ -175,10 +175,10 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False):
                     ocrBoxes=[[]]
                     ocr=[[]]
                     ocr=(ocrBoxes,ocr)
-                #answer = model(img,ocr,[[question]],RUN=run)
-                #print('Answer: '+answer)
-                answer = model(img,ocr,[[question]],[['number']])
-                print(answer[-1])
+                answer = model(img,ocr,[[question]],RUN=run)
+                print('Answer: '+answer)
+                #answer = model(img,ocr,[[question]],[['number']])
+                #print(answer[-1])
 
                 question = input('Question ("q" to stop): ')
             if loop:

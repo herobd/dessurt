@@ -40,7 +40,7 @@ def unrollLongText(model,img,ocr,answer):
         full_answer += answer #finish text
     return full_answer
 
-def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=True,max_qa_len=None):
+def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False,max_qa_len=None):
     np.random.seed(1234)
     torch.manual_seed(1234)
     
@@ -317,7 +317,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                                 matching.append((gi,score))
                         if len(matching)>0:
                             matching.sort(key=lambda a:a[1])
-                            matchings[i]=matching
+                            assert i == len(matchings)
+                            matchings.append(matching)
                             #it's possible there are several texts that are the same
                             #so we'll take distance into account
                             top_matching=matching[0:1]
@@ -563,6 +564,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     #qs=['l~']
                 elif pred_classes[pgi]==2: #answer
                     qs=[('v~',short_text_front)]
+
                 for q,t in qs:
                     question=q+t
                     answer = model(img,ocr,[[question]],RUN=True)
