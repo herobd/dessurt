@@ -53,7 +53,7 @@ class CDIPQA(ParaQADataset):
                             name = path[path.rindex('/')+1:]
                         except ValueError:
                             name = path
-                        imagesAndAnn.append( (name,os.path.join(dirPath,path+'.png'),os.path.join(dirPath,path+'.json')) )
+                        imagesAndAnn.append( (name,os.path.join(dirPath,path+'.png'),os.path.join(dirPath,path+'.layout.json')) )
                 else:
                     print("Error, unknown split {}".format(split))
                     exit(1)

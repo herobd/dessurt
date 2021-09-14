@@ -5,7 +5,7 @@ import json
 #from skimage import draw
 #import skimage.transform as sktransform
 import os
-import math, random, string
+import math, random, string, re
 from collections import defaultdict, OrderedDict
 from utils.funsd_annotations import createLines
 import timeit
@@ -37,6 +37,11 @@ class FormQA(QADataset):
     #tables = obj. col/row_headers = [entity_id], cells = [[entity_id]]
     #
     def makeQuestions(self,entities,entity_link,tables):
+        """
+        Generates N questions from given docuemnt information:
+         - entities: a list of Entity objects
+         - entity_link
+         """
         all_q_a=[] #question-answers go here
 
         questions_gs=set()
@@ -94,9 +99,8 @@ class FormQA(QADataset):
                             prompt_text = prompt_text[:self.max_qa_len]
                     else:
                         #random
-                        start = random.randrange(len(prompt_text)-self.max_qa_len)
-                        prompt_text = prompt_text[start:start+self.max_qa_len]
-                
+                        prompt_text = self.selectPartText(prompt_text)
+
                 #get end of response text
                 if response_id is not None:
                     response_text = entities[response_id]['text']
@@ -165,422 +169,311 @@ class FormQA(QADataset):
 
             elif q_type=='read':
                 TODO #line above, line below? ^^,^0,vv,v0
+                #finish reading entity
 
             elif q_type=='cell':
                 table = random.choice(tables)
-                r = random.randrange(len(table.row_headers))
+                r,r_header = random.randrange(enumerate(table.row_headers))
+                c,c_header = random.randrange(enumerate(table.col_headers))
+
+                r_h_text = r_header['text']
+                c_h_text = c_header['text']
+
+                r_h_text = self.selectPartText(r_h_text,-1+self.max_qa_len//2)
+                c_h_text = self.selectPartText(c_h_text,-1+self.max_qa_len//2)
+
+                cell = table.cells[r][c]
+                cell_text = cell['text']
+                if len(cell_text) > 0:
+                    cell_text = self.getFrontText(cell_text)
+                elif len(cell_text)+1<=self.max_qa_len:
+                    cell_text += self.end_token
+                outmask = [self.convertBB(line['box']) for line in cell['lines']]
+                
+                if randon.random()<0.5:
+                    question='t'
+                    inmask=[]
+                else:
+                    question='t0'
+                    inmask = [self.convertBB(line['box']) for line in r_header['lines']+c_header['lines']]
+
+                ids = [line['bbid'] for line in r_header['lines']+c_header['lines']+cell['lines']]
+
+                self.qaAdd(q_a_pairs,'{}~{}~~{}'.format(question,h2_text,h1_text),ids,cell_text,inmask,outmask)
+
 
             elif q_type=='row-header' or q_type=='col-header':
-                TODO
+                table_i = random.randrange(len(tables))
+                table = tables[table_i]
+
+                if q_type=='row-header':
+                    row=True
+                    r,header = random.choice(enumerate(table.row_headers))
+                    c = random.randrange(len(table.col_headers))
+                else:
+                    row=False
+                    c,header = random.choice(enumerate(table.col_headers))
+                    r = random.randrange(len(table.row_headers))
+                cell = table.cells[r][c]
+
+                cell_text = self.selectPartText(cell['text'])
+
+                header_text = header['text']
+                if len(header_text) > self.max_qa_len:
+                    header_text = header_text[:self.max_qa_len]
+                elif len(header_text)+1<=self.max_qa_len:
+                    header_text += self.end_token
+
+                ids=[]
+                inmask=[]
+                if random.random()<0.5:
+                    if row:
+                        question = 'ri~'
+                    else:
+                        question = 'ci~'
+                else:
+                    if row:
+                        question = 'r*~'
+                    else:
+                        question = 'c*~'
+                    inmask = [self.convertBB(line['box']) for line in cell['lines']]
+
+                ids = [line['bbid'] for line in cell['lines']]
+
+                outmask = []
+                for line in header['lines']:
+                    outmask.append(self.convertBB(line['box']))
+                    ids.append(line['bbid'])
+
+                self.qaAdd(q_a_pairs,question+cell_text,header_text,ids,inmask,outmask)
+
+
+            elif q_type=='all-row' or q_type=='all-col':
+                table_i = random.randrange(len(tables))
+                table = tables[table_i]
+
+                if q_type=='row-header':
+                    row=True
+                    r,header = random.choice(enumerate(table.row_headers))
+                    all_cells = table.cells[r]
+                else:
+                    row=False
+                    c,header = random.choice(enumerate(table.col_headers))
+                    all_cells = [table.cells[r][c] for r in range(len(table.row_headers))]
+
+                
+                outmask = []
+                if random.random()<0.5:
+                    #just highligh the row/col
+                    ids=[self.convertBB(line['bbid']) for line in header['lines']]
+                    header_text = self.selectPartText(header['text'])
+                    for cell in all_cells:
+                        ids += [line['bbid'] for line in cell['lines']]
+                        outmask += [self.convertBB(line['box']) for line in cell['lines']]
+
+                    if random.random()<0.5:
+                        inmask = [self.convertBB(line['box']) for line in header['lines']]
+                        question = '#r~' if row else '#c~'
+                    else:
+                        inmask = []
+                        question = '$r~' if row else '$c~'
+
+                    self.qaAdd(q_a_pairs,question+header_text,'',ids,inmask,outmask)
+                else:
+                    #step, text-wise, through each entry
+                    i = random.randrange(len(all_cells)+1)
+                    cell = all_cells[i] if i<len(all_cells) else None
+                    if i>0:
+                        header = all_cells[i-1]
+                        char = '}'
+                    else:
+                        char = '~'
+
+                    ids=[self.convertBB(line['bbid']) for line in header['lines']]
+                    header_text = self.selectPartText(header['text'])
+                    if random.random()<0.5:
+                        inmask = [self.convertBB(line['box']) for line in header['lines']]
+                        question = '%r{}' if row else '%c{}'
+                    else:
+                        inmask = []
+                        question = 'ar{}' if row else 'ac{}' 
+                    question = question.format(char)
+
+                    if cell is not None:
+                        outmask =  [self.convertBB(line['box']) for line in cell['lines']]
+                        ids += [line['bbid'] for line in cell['lines']]
+                        cell_text = self.getFrontText(cell['text'],term='|' if i<len(all_cells)-1 else self.end_token)
+                    else:
+                        outmask = []
+                        cell_text = self.end_token
+
+                    self.qaAdd(q_a_pairs,question+header_text,cell_text,ids,inmask,outmask)
+
+                        
+
+
 
             elif q_type=='list-row-headers' or q_type=='list-col-headers':
-                TODO
+                table_i = random.randrange(len(tables))
+                table = tables[table_i]
+
+                if q_type=='list-row-headers':
+                    row=True
+                    headers = table.row_headers
+                else:
+                    row=False
+                    headers = table.col_headers
+
+                
+                outmask = []
+                if random.random()<0.5:
+                    #just highligh the headers
+                    ids=[]
+                    outmask=[]
+                    for header in headers:
+                        ids+=[self.convertBB(line['bbid']) for line in header['lines']]
+                        outmask += [self.convertBB(line['box']) for line in header['lines']]
+                    question = 'r*~' if row else 'c*~'
+
+                    self.qaAdd(q_a_pairs,question+str(table_i),'',ids,[],outmask)
+                else:
+                    #step, text-wise, through each entry
+                    i = random.randrange(len(headers)+1)
+                    header = headers[i] if i<len(headers) else None
+                    if i>0:
+                        prev_header = headers[i-1]
+                        prev_text = self.selectPartText(prev_header['text'])
+                        ids=[self.convertBB(line['bbid']) for line in prev_header['lines']]
+                        char = '}'
+                    else:
+                        char = '~'
+                        prev_text = str(table_i)
+                        ids=[]
+
+                    if random.random()<0.5 and i>0:
+                        inmask = [self.convertBB(line['box']) for line in prev_header['lines']]
+                        question = 'r&{}' if row else 'c&{}'
+                    else:
+                        inmask = []
+                        question = 'rh{}' if row else 'ch{}' 
+                    question = question.format(char)
+
+                    if header is not None:
+                        outmask =  [self.convertBB(line['box']) for line in header['lines']]
+                        ids += [line['bbid'] for line in header['lines']]
+                        header_text = self.getFrontText(header['text'],term='|' if i<len(headers)-1 else self.end_token)
+                    else:
+                        outmask = []
+                        header_text = self.end_token
+
+                    self.qaAdd(q_a_pairs,question+prev_text,header_text,ids,inmask,outmask)
+
             elif q_type=='count-tables':
-                TODO
+                table_ids=[]
+                outmask=[]
+                for table in tables:
+                    for header in table.row_headers + table.col_headers:
+                        for line in entities[header]['lines']:
+                            outmask.append(self.convertBB(line['box']))
+                            table_ids.append(line['bbid'])
+
+                    for r in range(len(table.row_headers)):
+                        for c in range(len(table.col_headers)):
+                            cell = table.cells[r][c]
+                            for line in cell['lines']:
+                                outmask.append(self.convertBB(line['box']))
+                                table_ids.append(line['bbid'])
                 self.qaAdd(q_a_pairs,'t#>',str(len(tables)),tables_ids,[],outmask)
+
             elif q_type=='highlight-table':
                 table_i = random.randrange(len(tables))
                 table = tables[table_i]
                 table_ids=[]
                 outmask=[]
-                for header in table.row_headers:
+                for header in table.row_headers + table.col_headers:
                     for line in entities[header]['lines']:
+                        outmask.append(self.convertBB(line['box']))
+                        table_ids.append(line['bbid'])
+
+                for r in range(len(table.row_headers)):
+                    for c in range(len(table.col_headers)):
+                        cell = table.cells[r][c]
+                        for line in cell['lines']:
+                            outmask.append(self.convertBB(line['box']))
+                            table_ids.append(line['bbid'])
 
 
                 self.qaAdd(q_a_pairs,'0t~{}'.format(table_i),'',table_ids,[],outmask)
 
-            trans_bb.sort(key=lambda a:a[0] )
-            trans=trans_bb[0][1]V
-            for y,t in trans_bb[1:]:
-                trans+='\\'+t
-            all_trans[gi]=trans
-            #print('c:{} {},{} full group trans: {}'.format(cls,bbs[group[0],0],bbs[group[0],1],trans))
+        return q_a_pairs
 
-            if self.index_class_map[cls] == 'question':
-                questions_gs.add(gi)
-            elif self.index_class_map[cls] == 'answer':
-                answers_gs.add(gi)
-            elif self.index_class_map[cls] == 'header':
-                headers_gs.add(gi)
+    def selectPartText(self,text,length=None):
+        #Randomly select part of the text less than or equal to max_qa_len,
+        #breaking on spaces (and newlines)
+        if length is None: 
+            length = self.max_qa_len
+        if len(text)>length:
+            start = random.randrange(len(text)-length)
+            end=start+length
+            if start!=0 and text[start-1]!=' ' and text[start-1]!='\\':
+                #search for nearest space
+                before_start = start-1
+                while before_start>0 and text[before_start-1]!=' ' and text[before_start-1]!='\\':
+                    before_start -= 1
+                after_start = start+1
+                while after_start<end and text[after_start-1]!=' ' and text[after_start-1]!='\\':
+                    after_start += 1
+                if after_start==end:
+                    after_start=None
+            if end!=len(text) and text[end]!=' ' and text[end]!='\\':
+                #search for nearest space
+                before_end = end-1
+                while before_end>start and text[before_end]!=' ' and text[before_end]!='\\':
+                    before_end -= 1
+                if before_end==start:
+                    before_end=None
+                after_end = end+1
+                while after_end<len(text) and text[after_end]!=' ' and text[after_end]!='\\':
+                    after_end += 1
+            #get best combination
+            len_b_b = before_end-before_start if before_end is not None else -1
+            len_a_b = before_end-after_start if before_end is not None and after_start is not None else -1
+            len_a_a = after_end-after_start if after_start is not None else -1
+
+            best_len = max(len_b_b if len_b_b<=self.max_qa_len else -1, len_a_b if len_a_b<=self.max_qa_len else -1, len_a_a if len_a_a<=self.max_qa_len else -1)
+
+            if best_len==-1:
+                return text[start:start+length] #failed to break on words
             else:
-                others_gs.add(gi)
-
-            if self.char_qs=='full' or self.char_qs=='sym':
-                #classify all together
-                text=trans
-                if self.max_qa_len is not None and len(text)>self.max_qa_len:
-                    text = text[:self.max_qa_len]
-                class_qs.append(('cs~{}'.format(text),class_answer,[gi])) #This can be ambigous, although generally the same text has the same class
-
-                all_q_a.append(random.choice(class_qs))
-
-                #complete (read)
-                self.addRead(all_q_a,trans)
-                self.addRead(all_q_a,trans,backwards=True)
-
-
-                    if self.max_qa_len is not None and len(chdr)>self.max_qa_len//2:
-                        chdr = chdr[-self.max_qa_len//2:]
-                    val = all_trans[v]
-                    if self.char_qs=='sym':
-                        if self.max_qa_len is not None and len(val)>self.max_qa_len:
-                            val = val[:self.max_qa_len]
-                        elif len(val)+1<=self.max_qa_len:
-                            val += self.end_token
-                    else:
-                        if self.max_qa_len is not None and len(val)>self.max_qa_len:
-                            val = val[:self.max_qa_len-2]+'>>'
-
-                    all_q_a.append(('t~{}~~{}'.format(rhdr,chdr),val,[col_h,row_h,v]))
-                    all_q_a.append(('t~{}~~{}'.format(chdr,rhdr),val,[col_h,row_h,v]))
+                if best_len==len_b_b:
+                    return text[before_start:before_end]
+                elif best_len==len_a_b:
+                    return text[after_start:before_end]
                 else:
-                    all_q_a.append(('value of "{}" and "{}"?'.format(all_trans[row_h],all_trans[col_h]),all_trans[v],[col_h,row_h,v]))
-                    all_q_a.append(('value of "{}" and "{}"?'.format(all_trans[col_h],all_trans[row_h]),all_trans[v],[col_h,row_h,v]))
-            if all_trans[v] not in ambiguous:
-                if row_h is not None:
-                    if self.char_qs:
-                        rhdr = all_trans[row_h]
-                        if self.max_qa_len is not None and len(rhdr)>self.max_qa_len:
-                            rhdr = rhdr[-self.max_qa_len:]
-                        val = all_trans[v]
-                        if self.char_qs=='sym':
-                            if self.max_qa_len is not None and len(val)>self.max_qa_len:
-                                val = val[:self.max_qa_len]
-                            elif len(val)+1<=self.max_qa_len:
-                                val += self.end_token
-                        else:
-                            if self.max_qa_len is not None and len(val)>self.max_qa_len:
-                                val = val[:self.max_qa_len-2]+'>>'
-                        all_q_a.append(('ri~{}'.format(val),rhdr,[v,row_h]))
-                    else:
-                        all_q_a.append(('row that "{}" is in?'.format(all_trans[v]),all_trans[row_h],[v,row_h]))
-                if col_h is not None:
-                    if self.char_qs:
-                        chdr = all_trans[col_h]
-                        if self.max_qa_len is not None and len(chdr)>self.max_qa_len:
-                            chdr = chdr[-self.max_qa_len:]
-                        val = all_trans[v]
-                        if self.char_qs=='sym':
-                            if self.max_qa_len is not None and len(val)>self.max_qa_len:
-                                val = val[:self.max_qa_len]
-                            elif len(val)+1<=self.max_qa_len:
-                                val += self.end_token
-                        else:
-                            if self.max_qa_len is not None and len(val)>self.max_qa_len:
-                                val = val[:self.max_qa_len-2]+'>>'
-                        all_q_a.append(('ci~{}'.format(val),chdr,[v,col_h]))
-                    else:
-                        all_q_a.append(('column that "{}" is in?'.format(all_trans[v]),all_trans[col_h],[v,col_h]))
-
-            x,y = bbs[groups[v][0],0:2]
-            if col_h is not None:
-                col_vs[col_h].append((v,y))
-            if row_h is not None:
-                row_vs[row_h].append((v,x))
-
-        for row_h, vs in row_vs.items():
-            trans_row_h = all_trans[row_h]
-            if trans_row_h not in ambiguous:
-                vs.sort(key=lambda a:a[1])
-                a=all_trans[vs[0][0]]
-                for v,x in vs[1:]:
-                    a+='|'+all_trans[v]
-                if self.char_qs:
-                    if self.max_qa_len is not None and len(trans_row_h)>self.max_qa_len:
-                        trans_row_h = trans_row_h[-self.max_qa_len:]
-                    if self.max_qa_len is not None and len(a)>self.max_qa_len:
-                        self.breakLong(all_q_a,a,'ar~{}'.format(trans_row_h),'ar>')
-                    else:
-                        all_q_a.append(('ar~{}'.format(trans_row_h),a,[row_h,vs[0][0]]))
-                else:
-                    all_q_a.append(('all values in row "{}"?'.format(trans_row_h),a,[row_h,vs[0][0]]))
-        for col_h, vs in col_vs.items():
-            trans_col_h = all_trans[col_h]
-            if trans_col_h not in ambiguous:
-                vs.sort(key=lambda a:a[1])
-                a=all_trans[vs[0][0]]
-                for v,y in vs[1:]:
-                    a+='|'+all_trans[v]
-                if self.char_qs: 
-                    if self.max_qa_len is not None and len(trans_col_h)>self.max_qa_len:
-                        trans_col_h = trans_col_h[-self.max_qa_len:]
-                    if self.max_qa_len is not None and len(a)>self.max_qa_len:
-                        self.breakLong(all_q_a,a,'ac~{}'.format(trans_col_h),'ac>')
-                    else:
-                        all_q_a.append(('ac~{}'.format(trans_col_h),a,[col_h,vs[0][0]]))
-                else:
-                    all_q_a.append(('all values in column "{}"?'.format(trans_col_h),a,[col_h,vs[0][0]]))
-
-        if self.char_qs:
-            all_q_a.append(('t#>',str(len(tables)),list(col_vs.keys())+list(row_vs.keys())))
-            for i,(col_hs, row_hs) in enumerate(tables.values()):
-                col_hs = [(h,bbs[groups[h][0]][0]) for h in col_hs]
-                col_hs.sort(key=lambda a:a[1])
-                col_hs = [h[0] for h in col_hs]
-                col_h_strs = [all_trans[h] for h in col_hs]
-                row_hs = [(h,bbs[groups[h][0]][1]) for h in row_hs]
-                row_hs.sort(key=lambda a:a[1])
-                row_hs = [h[0] for h in row_hs]
-                row_h_strs = [all_trans[h] for h in row_hs]
-                
-                col_h_strs='|'.join(col_h_strs)
-                row_h_strs='|'.join(row_h_strs)
-                if self.max_qa_len is not None and len(col_h_strs)>self.max_qa_len:
-                    self.breakLong(all_q_a,col_h_strs,'ch~{}'.format(i),'ch>')
-                else:
-                    all_q_a.append(('ch~{}'.format(i),col_h_strs,col_hs))
-                if self.max_qa_len is not None and len(row_h_strs)>self.max_qa_len:
-                    self.breakLong(all_q_a,row_h_strs,'rh~{}'.format(i),'rh>')
-                else:
-                    all_q_a.append(('rh~{}'.format(i),row_h_strs,row_hs))
+                    return text[after_start:after_end]
 
 
+            #return text[start:start+length]
+            #words = re.split(r'[\\ ]',text)
+            #start = random.randrange(len(words))
+            #end=start
+            #ret = 
+            #while True:
+        else:
+            return text
 
-
-        #Convert the group IDs on each QA pair to be BB IDs.
-        #   This uses groups_id, which can be the word BB ids
-        new_all_q_a =[]
-        for q,a,group_ids in all_q_a:
-            if group_ids is not None:
-                bb_ids=[]
-                for gid in group_ids:
-                    bb_ids+=groups_id[gid]
+    def getFrontText(self,text,list_split=False,term=None):
+        #get the front part of the text, breaking on words
+        if len(text)>self.max_qa_len:
+            end = self.max_qa_len
+            while end>1 and text[end]!=' ' and text[end]!='\\' and (not list_split or (text[end]!='|' and text[end-1]!='|')):
+                end-=1
+            if end==1:
+                #couldn't break
+                return text[:self.max_qa_len]
             else:
-                bb_ids=None
-            self.qaAdd(new_all_q_a,q,a,bb_ids)
-            if self.max_qa_len is not None:
-                assert len(q)<self.max_qa_len+5
-        return new_all_q_a
-
-
-    def corrupt(self,s):
-        new_s=''
-        for c in s:
-            r = random.random()
-            if r<self.corruption_p/3:
-                pass
-            elif r<self.corruption_p*2/3:
-                new_s+=random.choice(string.ascii_letters)
-            elif r<self.corruption_p:
-                if random.random()<0.5:
-                    new_s+=c+random.choice(string.ascii_letters)
-                else:
-                    new_s+=random.choice(string.ascii_letters)+c
-            else:
-                new_s+=c
-        return new_s
-
-    def addRead(self,qa,text,np=False,backwards=False):
-        if backwards:
-            text = text[::-1]
-            prompt = 'bk~{}'
+                return text[:end]
         else:
-            prompt = 're~{}'
-        if len(text)<=2 or random.random()<0.05:
-            start_point=len(text) #so we get [end]s with long texts
-        elif len(text)>self.min_start_read+1:
-            start_point = random.randrange(self.min_start_read,len(text)+1)
-        else:
-            start_point = random.randrange(len(text)//2,len(text)+1)
-        start_text = text[:start_point].strip()
-        finish_text = text[start_point:].strip()
-        if len(finish_text)==0:
-            finish_text=self.end_token
-        if len(start_text)-self.min_start_read*2>0 and random.random()>0.33:
-            real_start = random.randrange(0,len(start_text)-self.min_start_read*2)
-            start_text = start_text[real_start:]
-
-        if self.max_qa_len is not None:
-            if len(start_text) > self.max_qa_len:
-                start_text = start_text[-self.max_qa_len:]
-            if len(finish_text) > self.max_qa_len:
-                if self.char_qs=='sym':
-                    finish_text = finish_text[:self.max_qa_len]
-                    if len(finish_text)+1 > self.max_qa_len:
-                        finish_text += self.end_token
-                else:
-                    finish_text = finish_text[:self.max_qa_len-2]+'>>'
-        if np:
-            qa.append((prompt.format(start_text),self.np_token,None))
-        else:
-            qa.append((prompt.format(start_text),finish_text,None))
-
-    #break a long answer THAT ISN'T lines on the page into multiple QAs
-    def breakLong(self,qa,full,initial_prompt,continue_prompt):
-        if self.max_qa_len is not None and len(full)>self.max_qa_len:
-            if self.do_masks:
-                first_part = full[:self.max_qa_len]
-                self.qaAdd(qa,initial_prompt,first_part)
-                prev_part = first_part
-                remainder = full[self.max_qa_len:]
-                while len(remainder)>self.max_qa_len:
-                    next_part = remainder[:self.max_qa_len]
-                    self.qaAdd(qa,continue_prompt+prev_part,next_part)
-                    prev_part = next_part
-                    remainder = remainder[self.max_qa_len:]
-                if len(remainder)+1 < self.max_qa_len:
-                    self.qaAdd(qa,continue_prompt+prev_part,remainder+self.end_token)
-                else:
-                    self.qaAdd(qa,continue_prompt+prev_part,remainder)
-                    self.qaAdd(qa,continue_prompt+remainder,self.end_token)
-            else:
-                first_part = full[:self.max_qa_len-2] + '>>' #mark to indicate not complete
-                self.qaAdd(qa,initial_prompt,first_part)
-                prev_part = first_part[:-2] #remove mark
-                remainder = full[self.max_qa_len-2:]
-                while len(remainder)>self.max_qa_len:
-                    next_part = remainder[:self.max_qa_len-2] + '>>'
-                    self.qaAdd(qa,continue_prompt+prev_part,next_part)
-                    prev_part = next_part[:-2]
-                    remainder = remainder[self.max_qa_len-2:]
-                self.qaAdd(qa,continue_prompt+prev_part,remainder)
-        elif len(full)+1<self.max_qa_len and self.do_masks:
-          self.qaAdd(qa,initial_prompt,full+self.end_token)
-        else:
-          self.qaAdd(qa,initial_prompt,full)
-          if self.max_qa_len:
-              self.qaAdd(qa,continue_prompt+full,self.end_token)
-
-
-
-def addTable(tables,table_map,groups,bbs,qi,ais,relationships_q_a,relationships_a_q):
-    other_qis=[]
-    for ai in ais:
-        if len(relationships_a_q[ai])==2:
-            q1,q2 = relationships_a_q[ai]
-            if q1==qi:
-                cls = bbs[groups[q2],13:].argmax()
-                assert cls == 1
-                x,y = bbs[groups[q2][0],0:2]
-                other_qis.append((q2,x,y))
-            else:
-                cls = bbs[groups[q1],13:].argmax()
-                assert cls == 1
-                x,y = bbs[groups[q1][0],0:2]
-                other_qis.append((q1,x,y))
-        else:
-            assert len(relationships_a_q[ai])==1 #blank row/column header. Skipping for now
-
-    other_set = set(q[0] for q in other_qis)
-    if len(other_set)<len(other_qis):
-        import pdb;pdb.set_trace()
-        return #label error
-    
-    my_qis=[]
-    debug_hit=False
-    for ai in relationships_q_a[other_qis[0][0]]:
-        if len(relationships_a_q[ai])==2:
-            q1,q2 = relationships_a_q[ai]
-            if q1==other_qis[0][0]:
-                if q2 in other_set:
-                    return
-                cls = bbs[groups[q2],13:].argmax()
-                assert cls == 1
-                x,y = bbs[groups[q2][0],0:2]
-                my_qis.append((q2,x,y))
-                if q2==qi:
-                    debug_hit=True
-            else:
-                if q1 in other_set:
-                    return
-                cls = bbs[groups[q1],13:].argmax()
-                assert cls == 1
-                x,y = bbs[groups[q1][0],0:2]
-                my_qis.append((q1,x,y))
-                if q1==qi:
-                    debug_hit=True
-        else:
-            assert len(relationships_a_q[ai])==1
-    assert debug_hit
-
-
-    #which are rows, which are cols?
-    other_mean_x = np.mean([q[1] for q in other_qis])
-    other_mean_y = np.mean([q[2] for q in other_qis])
-    my_mean_x = np.mean([q[1] for q in my_qis])
-    my_mean_y = np.mean([q[2] for q in my_qis])
-
-    if my_mean_x<other_mean_x and my_mean_y>other_mean_y:
-        #my is row headers
-        my_qis.sort(key=lambda a:a[2]) #sort by y
-        other_qis.sort(key=lambda a:a[1]) #sort by x
-        row_hs = [q[0] for q in my_qis]
-        col_hs = [q[0] for q in other_qis]
-        
-    elif my_mean_x>other_mean_x and my_mean_y<other_mean_y:
-        #my is col headers
-        my_qis.sort(key=lambda a:a[1]) #sort by x
-        other_qis.sort(key=lambda a:a[2]) #sort by y
-        col_hs = [q[0] for q in my_qis]
-        row_hs = [q[0] for q in other_qis]
-    else:
-        assert False, 'unknown case'
-
-
-    values={}
-    for row_h in row_hs:
-        vs = relationships_q_a[row_h]
-        for v in vs:
-            try:
-                q1,q2 = relationships_a_q[v]
-                if q1==row_h:
-                    col_h=q2
-                else:
-                    col_h=q1
-                values[(col_h,row_h)] = v
-            except ValueError:
-                pass
-
-    table = {
-            "row_headers": row_hs,
-            "col_headers": col_hs,
-            "values": values
-            }
-    for row_h in row_hs:
-        #assert row_h not in table_map
-        table_map[row_h]=len(tables)
-    for col_h in col_hs:
-        #assert col_h not in table_map
-        table_map[col_h]=len(tables)
-    for v in values.values():
-        #assert v not in table_map
-        table_map[v]=len(tables)
-    tables.append(table)
-
-def addTableElement(table_values,row_headers,col_headers,ai,qi1,qi2,groups,bbs,threshold=5):
-    ele_x,ele_y = bbs[groups[ai][0],0:2]
-    q1_x,q1_y = bbs[groups[qi1][0],0:2]
-    x_diff_1 = abs(ele_x-q1_x)
-    y_diff_1 = abs(ele_y-q1_y)
-    if qi2 is not None:
-        #which question is the row, which is the header?
-        q2_x,q2_y = bbs[groups[qi2][0],0:2]
-        x_diff_2 = abs(ele_x-q2_x)
-        y_diff_2 = abs(ele_y-q2_y)
-
-        if abs(q1_x-q2_x)<threshold or abs(q1_y-q2_y)<threshold:
-            return False
-
-        if (x_diff_1<y_diff_1 or y_diff_2<x_diff_2) and y_diff_1>threshold and x_diff_2>threshold:
-            row_h = qi2
-            col_h = qi1
-        elif (x_diff_2<y_diff_2 or y_diff_1<x_diff_1) and y_diff_2>threshold and x_diff_1>threshold:
-            row_h = qi1
-            col_h = qi2
-        else:
-            #IDK
-            #import pdb;pdb.set_trace()
-            return False
-        
-        table_values[(col_h,row_h)]=ai
-        row_headers.add(row_h)
-        col_headers.add(col_h)
-    else:
-        if x_diff_1>y_diff_1:
-            row_headers.add(qi1)
-            table_values[(None,qi1)]=ai
-        elif x_diff_1<y_diff_1:
-            col_headers.add(qi1)
-            table_values[(qi1,None)]=ai
-    return True
-
+            if term is not None and len(text)+len(term)<=self.max_qa_len:
+                text+=term
+            return text

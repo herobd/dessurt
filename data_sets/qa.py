@@ -74,12 +74,18 @@ class QADataset(torch.utils.data.Dataset):
         else:
             self.transform = None
         self.rescale_range = config['rescale_range']
+        self.rescale_to_crop_size_first = config['rescale_to_crop_size_first'] if 'rescale_to_crop_size_first' in config else False
+        if self.rescale_to_crop_size_first:
+            self.crop_size = config['crop_params']['crop_size']
         if type(self.rescale_range) is float:
             self.rescale_range = [self.rescale_range,self.rescale_range]
         if 'cache_resized_images' in config:
             self.cache_resized = config['cache_resized_images']
             if self.cache_resized:
-                self.cache_path = os.path.join(dirPath,'cache_'+str(self.rescale_range[1]))
+                if self.rescale_to_crop_size_first:
+                    self.cache_path = os.path.join(dirPath,'cache_match{}x{}'.format(*config['crop_params']['crop_size']))
+                else:
+                    self.cache_path = os.path.join(dirPath,'cache_'+str(self.rescale_range[1]))
                 if not os.path.exists(self.cache_path):
                     os.mkdir(self.cache_path)
         else:
@@ -140,7 +146,33 @@ class QADataset(torch.utils.data.Dataset):
             s = np.random.uniform(self.rescale_range[0], self.rescale_range[1])
         else:
             s = scaleP
-        partial_rescale = s/rescaled
+
+        if self.rescale_to_crop_size_first:
+            if rescaled!=1:
+                raise NotImplementedError('havent implemented caching with match resizing')
+        
+            scale_height = self.crop_size[0]/np_img.shape[0]
+            scale_width = self.crop_size[1]/np_img.shape[1]
+            #if np_img.shape[0] > np_img.shape[1]:
+            #    #portiat oriented document
+            #else:
+            #    #landscape oriented document
+            #    #We will switch between scaleing to fit and scaling to roughly 
+            #    #the size of a portiat document (will get cropped severly).
+            #    if random.random()<0.5:
+            #        #fit
+            #        scale_height = self.crop_size[0]/np_img.shape[0]
+            #        scale_width = self.crop_size[1]/np_img.shape[1]
+            #    else:
+            #        #match
+            #        scale_height = self.crop_size[0]/np_img.shape[1]
+            #        scale_width = self.crop_size[1]/np_img.shape[0]
+
+            scale = min(scale_height, scale_width)
+            partial_rescale = s*scale
+            s=partial_rescale
+        else:
+            partial_rescale = s/rescaled
         #if self.transform is None: #we're doing the whole image
         #    #this is a check to be sure we don't send too big images through
         #    pixel_count = partial_rescale*partial_rescale*np_img.shape[0]*np_img.shape[1]
@@ -225,7 +257,12 @@ class QADataset(torch.utils.data.Dataset):
                 crop_bbs = np.concatenate([bbs,prep_word_bbs],axis=1)
                 crop_ids=ids+['word{}'.format(i) for i in range(word_bbs.shape[0])]
             elif self.do_masks and len(mask_bbs.shape)==2:
-                crop_bbs = np.concatenate([bbs,mask_bbs])
+                if bbs.shape[0]>0 and mask_bbs.shape[0]>0:
+                    crop_bbs = np.concatenate([bbs,mask_bbs])
+                elif mask_bbs.shape[0]>0:
+                    crop_bbs = mask_bbs
+                else:
+                    crop_bbs = bbs
                 #print(crop_bbs)
                 crop_ids = ids+mask_ids
             else:
