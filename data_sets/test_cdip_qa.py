@@ -52,7 +52,7 @@ def display(data):
 
         #widths.append(img.size(1))
         
-        draw=q.startswith('mm')
+        draw=True#q.startswith('mm')
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -94,7 +94,8 @@ if __name__ == "__main__":
     else:
         repeat=1
     data=cdip_qa.CDIPQA(dirPath=dirPath,split='train',config={
-        'rescale_range':[0.42,0.5],
+        'rescale_range': [1.0,1.0],
+        'rescale_to_crop_size_first': True,
         'crop_params': {
             "crop_size":[1152,768],
             "pad":0,
