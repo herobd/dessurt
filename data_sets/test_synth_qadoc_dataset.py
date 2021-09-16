@@ -15,7 +15,13 @@ def display(data,write):
     #mask = makeMask(data['image'])
     for b in range(batchSize):
         #print (data['img'].size())
-        img = (1-data['img'][b].permute(1,2,0))/2.0
+        img = (1-data['img'][b,0:1].permute(1,2,0))/2.0
+        img = torch.cat((img,img,img),dim=2)
+        show = data['img'][b,1]>0
+        mask = data['img'][b,1]<0
+        img[:,:,0] *= ~mask
+        img[:,:,1] *= ~show
+        img[:,:,2] *= 1-data['mask_label'][b,0]
         #label = data['label']
         #gt = data['gt'][b]
         #print(label[:data['label_lengths'][b],b])
@@ -24,8 +30,8 @@ def display(data,write):
         #if data['spaced_label'] is not None:
         #    print('spaced label:')
         #    print(data['spaced_label'][:,b])
-        for bb,text in zip(data['bb_gt'][b],data['transcription'][b]):
-            print('ocr: {} {}'.format(text,bb))
+        #for bb,text in zip(data['bb_gt'][b],data['transcription'][b]):
+        #    print('ocr: {} {}'.format(text,bb))
         #print('questions: {}'.format(data['questions'][b]))
         #print('answers: {}'.format(data['answers'][b]))
         print('questions and answers')
@@ -34,7 +40,8 @@ def display(data,write):
 
         #widths.append(img.size(1))
         
-        draw=True
+        #draw='ar' in q or 'ac' in q or '%' in q or '#r' in q or '#c' in q or '$r' in q or '$c' in q
+        draw = q[0] in 'fp'
         if write:
             cv2.imwrite('test_single_512.png',(img.numpy()*255)[:,:,0].astype(np.uint8))
         if draw :
@@ -48,7 +55,8 @@ def display(data,write):
 
             #plt.imshow(img.numpy()[:,:,0], cmap='gray')
             #plt.show()
-            cv2.imshow('fd',img.numpy()[:,:,0])
+            #cv2.imshow('fd',img.numpy()[:,:,0])
+            cv2.imshow('x',(img*255).numpy().astype(np.uint8))
             cv2.show()
 
             #cv2.waitKey()
@@ -83,13 +91,13 @@ if __name__ == "__main__":
         "data_set_name": "SynthQADocDataset",
         "fontdir": "../data/fonts",
         "textdir": "../data/",
-        "data_dir": "../data/english4line_fonts",
+        "header_dir": "../data/english4line_fonts",
         "include_ocr": False,
         "batch_size": 52,
         "num_workers": 4,
         "rescale_range": [1.0,1.0],
         "crop_params": {
-                "crop_size":[192,384],
+                "crop_size":500,#[192,384],
                 "pad":0,
                 "rot_degree_std_dev": 1
             },
@@ -98,12 +106,13 @@ if __name__ == "__main__":
         "min_entries": None,
         "max_entries": 2,
 	"use_read": 0.01,
-	"multiline": 0.000001,
+	"multiline": 0.5,
+        "tables": 0.5,
         "change_size": True,
 	"word_questions": "simple",
 	"do_masks": True,
         "text_height": 32,
-        "image_size": [192,384],
+        "image_size": 500,#[192,384],
         "max_chars": 10,
         "min_chars": 1,
         "use_before_refresh": 99999999999999999999,

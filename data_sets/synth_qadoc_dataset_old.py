@@ -67,7 +67,7 @@ def create_image(x):
 
 
 
-class SynthQADocDataset(FormQA):
+class SynthQADocDataset(QADataset):
     def __init__(self, dirPath, split, config):
         super(SynthQADocDataset, self).__init__(dirPath,split,config)
         from synthetic_text_gen import SyntheticText
@@ -344,7 +344,7 @@ class SynthQADocDataset(FormQA):
                 rel_x = random.randrange(10)
             rel_y = random.randrange(-10,10)
             if not self.multiline or len(l)==1:
-                entries.append((label_img,[label_text],value_img,[value_text],rel_x,rel_y))
+                entries.append((label_img,label_text,value_img,value_text,rel_x,rel_y))
             else:
                 entries.append((label_imgs,label_texts,value_imgs,value_texts,rel_x,rel_y))
 
@@ -352,20 +352,18 @@ class SynthQADocDataset(FormQA):
 
         boxes=[]
         trans=[]
-        tables=[]
+        qa=[]
         #TABLE
         if self.tables and random.random()<self.tables:
-            table_x,table_y,table_width,table_height,table = self.addTable(image,boxes if self.ocr else None,trans if self.ocr else None)
+            table_x,table_y,table_width,table_height,row_hs,col_hs = self.addTable(image,qa,boxes if self.ocr else None,trans if self.ocr else None)
             if table_x is None:
                 did_table=False
+                row_hs=col_hs=[]
             else:
                 did_table=True
-                tables.append(table)
         else:
             did_table=False
-
-        all_entities += table.allEntities()
-        entity_link = []
+            row_hs=col_hs=[]
 
         #Assign random positions and collect bounding boxes
         full_bbs=torch.FloatTensor(len(entries)+(1 if did_table else 0),4)
@@ -505,16 +503,13 @@ class SynthQADocDataset(FormQA):
                     l_imgs = [label_img]
                     pad = 0
                 cur_y=label_y
-                label_lines = []
-                for img,text in zip(l_imgs,label_text):
+                for img in l_imgs:
                     l_vert = img.shape[0]-max(cur_y+img.shape[0]-self.image_size[0],0)
                     l_horz = img.shape[1]-max(label_x+img.shape[1]-self.image_size[1],0)
                     if l_horz<=0 or l_vert<=0:
                         continue
                     image[cur_y:cur_y+l_vert,label_x:label_x+l_horz] = img[:l_vert,:l_horz]
-                    label_lines.append(Line(text,[label_x,cur_y,label_x+l_horz,cur_y+l_vert))
                     cur_y += l_vert+pad
-
 
                 cur_y -= l_vert+pad - rel_y
                 if cur_y<0:
@@ -525,26 +520,77 @@ class SynthQADocDataset(FormQA):
                 else:
                     v_imgs = [value_img]
                     pad = 0
-                value_lines = []
-                for img,text in zip(v_imgs,value_text):
+                for img in v_imgs:
                     v_vert = img.shape[0]-max(cur_y+img.shape[0]-self.image_size[0],0)
                     v_horz = img.shape[1]-max(value_x+img.shape[1]-self.image_size[1],0)
                     if v_horz<=0 or v_vert<=0:
                         continue
                     image[cur_y:cur_y+v_vert,value_x:value_x+v_horz] = img[:v_vert,:v_horz]
-                    value_lines.append(Line(text,[value_x,cur_y,value_x+v_horz,cur_y+v_vert))
                     cur_y += v_vert+pad
                 
+                if type(label_text) is list:
+                    label_text = '\\'.join(label_text)
+                selected_labels_stripped.append(label_text.strip())
+                if type(value_text) is list:
+                    value_text = '\\'.join(value_text)
+                selected_values_stripped.append(label_text.strip())
+
                 if self.ocr:
                     self.addText(label_text,label_x,label_y,l_horz,l_vert,value_text,value_x,value_y,v_horz,v_vert,boxes,trans,s)
 
-                label_id = len(all_entities)
-                all_entities.append(Entity('question',label_lines))
-                value_id = len(all_entities)
-                all_entities.append(Entity('answer',value_lines))
+                if 'simple' in  self.word_questions:
+                    if self.use_read>random.random():
+                        self.addRead(qa,label_text)
+                        self.addRead(qa,value_text)
+                        self.addRead(qa,label_text,backwards=True)
+                        self.addRead(qa,value_text,backwards=True)
 
-                entity_link.append((label_id,value_id))
+                    #resize, truncate
+                    if self.do_masks:
+                        if self.max_qa_len is not None and len(label_text) > self.max_qa_len:
+                            label_text_q = label_text[-self.max_qa_len:]
+                            label_text_a = label_text[-self.max_qa_len:][::-1] #we'll read backwards
+                        else:
+                            label_text_q = label_text
+                            label_text_a = label_text[::-1]
+                            if len(label_text)+1 <= self.max_qa_len:
+                                label_text_a += '‡'
+                        if self.max_qa_len is not None and len(value_text) > self.max_qa_len:
+                            value_text_q = value_text[:self.max_qa_len]
+                            value_text_a = value_text[:self.max_qa_len]
+                        else:
+                            value_text_q = value_text
+                            value_text_a = value_text
+                            if len(value_text)+1 <= self.max_qa_len:
+                                value_text_a = value_text+'‡'
+                    else:
+                        if self.max_qa_len is not None and len(label_text) > self.max_qa_len:
+                            label_text_q = label_text[-self.max_qa_len:]
+                            label_text_a = '<<'+label_text[-(self.max_qa_len-2):] #you'll need to read backwards to recover
+                        else:
+                            label_text_q = label_text
+                            label_text_a = label_text
+                        if self.max_qa_len is not None and len(value_text) > self.max_qa_len:
+                            value_text_q = value_text[:self.max_qa_len]
+                            value_text_a = value_text[:self.max_qa_len-2]+'>>'
+                        else:
+                            value_text_q = value_text
+                            value_text_a = value_text
+                    self.qaAdd(qa,'l~{}'.format(label_text_q),value_text_a)
+                    self.qaAdd(qa,'v~{}'.format(value_text_q),label_text_a)
+                elif self.word_questions:
+                    question_to_value = random.choice(self.ask_for_value)
+                    question_to_label = random.choice(self.ask_for_label)
+                    self.qaAdd(qa,question_to_value.format(label_text),value_text)
+                    self.qaAdd(qa,question_to_label.format(value_text),label_text)
+                else:
+                    self.qaAdd(qa,label_text,value_text)
 
+            else:
+                if type(label_text) is list:
+                    label_text = '\\'.join(label_text)
+                if label_text.strip() not in selected_labels_stripped:
+                    not_present_qs.append(label_text)
 
 
 
@@ -553,13 +599,88 @@ class SynthQADocDataset(FormQA):
         
         ocr = trans
 
+        #Add possible not present questions
+        to_add_np = len(qa)*self.np_qs #?0.02
+        num_np = math.floor(to_add_np)
+        if random.random()<to_add_np-num_np: #handle non-whole number correctly
+            num_np+=1
+        for i in range(num_np):
+            if self.tables and random.random()<(self.tables*0.5) and self.word_questions=='simple':
+                if random.random()<0.3:
+                    while True:
+                        q_text = random.choice(self.labels)
+                        if q_text.strip() not in col_hs:
+                            break
+                    if self.max_qa_len is not None and len(q_text)>self.max_qa_len:
+                        q_text = q_text[-self.max_qa_len:]
+                    self.qaAdd(qa,'ac~{}'.format(q_text),self.np_token)
+                elif random.random()<0.6:
+                    while True:
+                        q_text = random.choice(self.labels)
+                        if q_text.strip() not in row_hs:
+                            break
+                    if self.max_qa_len is not None and len(q_text)>self.max_qa_len:
+                        q_text = q_text[-self.max_qa_len:]
+                    self.qaAdd(qa,'ar~{}'.format(q_text),self.np_token)
+                else:
+                    while True:
+                        c_text = random.choice(self.labels)
+                        if c_text.strip() not in col_hs+row_hs:
+                            break
+                    while True:
+                        r_text = random.choice(self.labels)
+                        if r_text.strip() not in row_hs+col_hs:
+                            break
+                    if self.max_qa_len is not None and len(c_text)>self.max_qa_len//2:
+                        c_text = c_text[-self.max_qa_len//2:]
+                    if self.max_qa_len is not None and len(r_text)>self.max_qa_len//2:
+                        r_text = r_text[-self.max_qa_len//2:]
+                    self.qaAdd(qa,'t~{}~~{}'.format(r_text,c_text),self.np_token)
+            else:
+                if len(not_present_qs)>0:
+                    q_text = not_present_qs.pop()
+                else:
+                    while True:
+                        q_text = random.choice(self.labels)
+                        if q_text.strip() not in selected_labels_stripped:
+                            break
+                if self.word_questions=='simple':
+                    if self.max_qa_len is not None and len(q_text)>self.max_qa_len:
+                        v_text = q_text[:self.max_qa_len]
+                        l_text = q_text[-self.max_qa_len:]
+                    else:
+                        v_text=l_text=q_text
+                    self.qaAdd(qa,'l~{}'.format(l_text),self.np_token)
+                    if q_text not in selected_values_stripped:
+                        if self.use_read>random.random():
+                            self.addRead(qa,q_text,np=True)
+                            self.addRead(qa,q_text[::-1],np=True,backwards=True)
+                        self.qaAdd(qa,'v~{}'.format(v_text),self.np_token)
+                elif self.word_questions:
+                    question = random.choice(self.ask_for_value)
+                    self.qaAdd(qa,question.format(q_text),self.np_token)
+                else:
+                    self.qaAdd(qa,q_text,self.np_token)
         
+        if self.tables and self.word_questions=='simple':
+            if did_table:
+                self.qaAdd(qa,'t#>','1')
+                rows = '|'.join(row_hs)
+                self.breakLong(qa,rows,'rh~0','rh>')
 
+                cols = '|'.join(col_hs)
+                self.breakLong(qa,cols,'ch~0','ch>')
+            else:
+                self.qaAdd(qa,'t#>','0')
+
+        #assert len(qa)>0
+        if len(qa)==0:
+            print('SynthQADocDataset had no QAs. entries: {}, removed: {}'.format(len(entries),len(removed)))
+
+        #This is handeled in the parent class
+        #if self.questions<len(qa):
+        #    qa = random.sample(qa,k=self.questions)
         
-        TODO
-        #run through all entites to build bbs, assign bbid, and find ambiguity
-
-        qa = self.makeQuestions(s,all_entities,entity_link,tables)
 
         return bbs, list(range(bbs.shape[0])), ocr, {'image':image}, {}, qa
 
@@ -835,9 +956,10 @@ class SynthQADocDataset(FormQA):
                 width_col=width_col[:num_cols]
                 break
     
+        #build table
+        table_values=[]
 
         #put row headers in image
-        row_headers_e=[]
         cur_y = height_col_heading+table_y
         for r in range(num_rows):
             if width_row_heading-padding==row_headers[r][0].shape[1]:
@@ -851,13 +973,10 @@ class SynthQADocDataset(FormQA):
             cur_y += height_row[r]
 
             image[y:y+row_headers[r][0].shape[0],x:x+row_headers[r][0].shape[1]] = row_headers[r][0]
-            box = [x,y,x+row_headers[r][0].shape[1],y+row_headers[r][0].shape[0]]
-            row_headers_e.append( Entity('answer',[Line(row_headers[r][1],box)]) )
             if boxes is not None:
                 self.addText(row_headers[r][1],x,y,row_headers[r][0].shape[1],row_headers[r][0].shape[0],boxes=boxes,trans=trans)
 
         #put col headers in image
-        col_headers_e=[]
         cur_x = width_row_heading+table_x
         for c in range(num_cols):
             if height_col_heading-padding==col_headers[c][0].shape[0]:
@@ -871,12 +990,8 @@ class SynthQADocDataset(FormQA):
             cur_x += width_col[c]
 
             image[y:y+col_headers[c][0].shape[0],x:x+col_headers[c][0].shape[1]] = col_headers[c][0]
-            box = [x,y,x+col_headers[c][0].shape[1],y+col_headers[c][0].shape[0]]
-            col_headers_e.append( Entity('answer',[Line(col_headers[c][1],box)]) )
             if boxes is not None:
                 self.addText(col_headers[c][1],x,y,col_headers[c][0].shape[1],col_headers[c][0].shape[0],boxes=boxes,trans=trans)
-
-        table = Table(row_headers_e,col_headers_e)
 
         #put in entries
         cur_x = width_row_heading+table_x
@@ -894,11 +1009,23 @@ class SynthQADocDataset(FormQA):
                         y=cur_y + random.randrange(0,height_row[r]-padding-table_entries[r][c][0].shape[0])
 
                     image[y:y+table_entries[r][c][0].shape[0],x:x+table_entries[r][c][0].shape[1]] = table_entries[r][c][0]
-                    #table_values.append((col_headers[c][1],row_headers[r][1],table_entries[r][c][1],x,y))
-                    box = [x,y,x+table_entries[r][c][0].shape[1],y+table_entries[r][c][0].shape[0]]
-                    table.cells[r][c]=Entity('answer',[Line(table_entries[r][c][1],box)])
+                    table_values.append((col_headers[c][1],row_headers[r][1],table_entries[r][c][1],x,y))
                     if boxes is not None:
                         self.addText(table_entries[r][c][1],x,y,table_entries[r][c][0].shape[1],table_entries[r][c][0].shape[0],boxes=boxes,trans=trans)
+                else:
+                    #table_values.append((col_headers[c][1],row_headers[r][1],'[np]',cur_x,cur_y))
+                    if self.word_questions=='simple':
+                        rhdr = row_headers[r][1]
+                        if self.max_qa_len is not None and len(rhdr)>self.max_qa_len//2:
+                            rhdr = rhdr[-self.max_qa_len//2:]
+                        chdr = col_headers[c][1]
+                        if self.max_qa_len is not None and len(chdr)>self.max_qa_len//2:
+                            chdr = chdr[-self.max_qa_len//2:]
+                        self.qaAdd(all_q_a,'t~{}~~{}'.format(rhdr,chdr),self.blank_token,None)
+                        self.qaAdd(all_q_a,'t~{}~~{}'.format(chdr,rhdr),self.blank_token,None)
+                    else:
+                        self.qaAdd(all_q_a,'value of "{}" and "{}"?'.format(row_headers[r][1],col_headers[c][1]),'[np]',None)
+                        self.qaAdd(all_q_a,'value of "{}" and "{}"?'.format(col_headers[c][1],row_headers[r][1]),'[np]',None)
                 
                 cur_y += height_row[r]
             cur_x += width_col[c]
@@ -982,9 +1109,97 @@ class SynthQADocDataset(FormQA):
 
         
         #now, optionally add the other lines
-        #TODO?
+
         
-        return table_x-10, table_y-10, total_width+20, total_height+20, table
+        #add all possible questions
+        col_vs=defaultdict(list)
+        row_vs=defaultdict(list)
+        ambiguous=set()
+        for (col_h,row_h,v,x,y) in table_values:
+            if col_h is not None and row_h is not None:
+                if self.word_questions=='simple':
+
+                    rhdr = row_h
+                    if self.max_qa_len is not None and len(rhdr)>self.max_qa_len//2:
+                        rhdr = rhdr[-self.max_qa_len//2:]
+                    chdr = col_h
+                    if self.max_qa_len is not None and len(chdr)>self.max_qa_len//2:
+                        chdr = chdr[-self.max_qa_len//2:]
+                    val = v
+                    if self.max_qa_len is not None and len(val)>self.max_qa_len:
+                        val = val[:self.max_qa_len-2]+'>>'
+
+                    self.qaAdd(all_q_a,'t~{}~~{}'.format(rhdr,chdr),v,None)
+                    self.qaAdd(all_q_a,'t~{}~~{}'.format(chdr,rhdr),v,None)
+                else:
+                    if random.random()<0.5:
+                        self.qaAdd(all_q_a,'value of "{}" and "{}"?'.format(row_h,col_h),v,None)
+                        self.qaAdd(all_q_a,'value of "{}" and "{}"?'.format(col_h,row_h),v,None)
+                    else:
+                        self.qaAdd(all_q_a,'value in "{}" and "{}"?'.format(row_h,col_h),v,None)
+                        self.qaAdd(all_q_a,'value in "{}" and "{}"?'.format(col_h,row_h),v,None)
+            if v not in ambiguous:
+                if self.word_questions=='simple':
+                    if row_h is not None:
+                        rhdr = row_h
+                        if self.max_qa_len is not None and len(rhdr)>self.max_qa_len:
+                            rhdr = rhdr[-self.max_qa_len:]
+                        val = v
+                        if self.max_qa_len is not None and len(val)>self.max_qa_len:
+                            val = val[:self.max_qa_len-2]+'>>'
+                        self.qaAdd(all_q_a,'ri~{}'.format(val),rhdr,None)
+                    if col_h is not None:
+                        chdr = col_h
+                        if self.max_qa_len is not None and len(chdr)>self.max_qa_len:
+                            chdr = chdr[-self.max_qa_len:]
+                        val = v
+                        if self.max_qa_len is not None and len(val)>self.max_qa_len:
+                            val = val[:self.max_qa_len-2]+'>>'
+                        self.qaAdd(all_q_a,'ci~{}'.format(val),chdr,None)
+                else:
+                    if row_h is not None:
+                        self.qaAdd(all_q_a,'row that "{}" is in?'.format(v),row_h,None)
+                    if col_h is not None:
+                        self.qaAdd(all_q_a,'column that "{}" is in?'.format(v),col_h,None)
+
+            if col_h is not None:
+                col_vs[col_h].append((v,y))
+            if row_h is not None:
+                row_vs[row_h].append((v,x))
+
+        for row_h, vs in row_vs.items():
+            if row_h not in ambiguous:
+                vs.sort(key=lambda a:a[1])
+                a=vs[0][0]
+                for v,x in vs[1:]:
+                    a+='|'+v
+                if self.word_questions=='simple':
+                    rhdr = row_h
+                    if self.max_qa_len is not None and len(rhdr)>self.max_qa_len:
+                        rhdr = rhdr[-self.max_qa_len:]
+                    self.breakLong(all_q_a,a,'ar~{}'.format(rhdr),'ar>')
+                else:
+                    if random.random()<0.5:
+                        self.qaAdd(all_q_a,'all values in row "{}"?'.format(row_h),a,None)
+                    else:
+                        self.qaAdd(all_q_a,'all values of row "{}"?'.format(row_h),a,None)
+        for col_h, vs in col_vs.items():
+            if col_h not in ambiguous:
+                vs.sort(key=lambda a:a[1])
+                a=vs[0][0]
+                for v,y in vs[1:]:
+                    a+='|'+v
+                if self.word_questions=='simple':
+                    chdr = col_h
+                    if self.max_qa_len is not None and len(chdr)>self.max_qa_len:
+                        chdr = chdr[-self.max_qa_len:]
+                    self.breakLong(all_q_a,a,'ac~{}'.format(chdr),'ac>')
+                else:
+                    if random.random()<0.5:
+                        self.qaAdd(all_q_a,'all values in column "{}"?'.format(col_h),a,None)
+                    else:
+                        self.qaAdd(all_q_a,'all values of column "{}"?'.format(col_h),a,None)
+        return table_x-10, table_y-10, total_width+20, total_height+20, [r[1].strip() for r in row_headers], [c[1].strip() for c in col_headers]
 
     #Add reading q+a, handeling subsectioning
     def addRead(self,qa,text,np=False,backwards=False):

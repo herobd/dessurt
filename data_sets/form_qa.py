@@ -19,11 +19,11 @@ class Table:
     def __init__(self,row_headers,col_headers):
         self.row_headers=row_headers
         self.col_headers=col_headers
-        self.cells=[[None]*len(col_headers)]*len(row_headers)
+        self.cells=[[None]*len(col_headers) for i in range(len(row_headers))]
     def allEntities(self):
         ae = self.row_headers + self.col_headers
         for row in self.cells:
-            ae += row
+            ae += [c for c in row if c is not None]
         return ae
 
 class Entity:
@@ -45,13 +45,14 @@ class Entity:
             bY = max(bY,line.box[3])
         self.text=self.text[:-1]#removing trailing '\'
         self.box=[lX,tY,rX,bY]
+        assert self.text != ''
 
 class Line:
     def __init__(self,text,box):
         self.box=box
         self.bbid=None
         self.text=text
-        self.ambiguous=None
+        self.ambiguous=False
         
 
 class FormQA(QADataset):
@@ -63,20 +64,22 @@ class FormQA(QADataset):
     def __init__(self, dirPath=None, split=None, config=None, images=None):
         super(FormQA, self).__init__(dirPath,split,config,images)
         self.punc_regex = re.compile('[%s]' % re.escape(string.punctuation))
+        self.do_masks=True
 
         self.only_types=None
 
-        self.split_to_lines = config['split_to_lines']
-        self.corruption_p = config['text_corruption'] if 'text_corruption' in config else 0.15
-        self.do_words = config['do_words']
-        self.char_qs = config['char_qs'] if 'char_qs' in config else False
+        #self.corruption_p = config['text_corruption'] if 'text_corruption' in config else 0.15
+        #self.do_words = config['do_words']
+        #self.char_qs = config['char_qs'] if 'char_qs' in config else False
 
-        self.q_types =         ['np','class','down-pair','up-pair','read','cell','row-header','col-header','all-row', 'list-row-header','list-col-header','count-tables','highlight-table']
-        self.q_type_weights = [0.2, 1.0,    1.0,        1.0,      1.0,   1.1,   1.1,         1.1,         1.1,       1.1,              1.1,              0.9,           1.1]
+        self.q_types =         ['np','class','down-pair','up-pair','read','cell','row-header','col-header','all-row','all-col', 'list-row-headers','list-col-headers','count-tables','highlight-table']
+        self.q_type_weights = [0.2, 0.7,    1.0,        1.0,      1.0,   1.1,   1.1,         1.1,         1.1,       1.1,       1.1,              1.1,              0.9,           1.1]
         self.q_types_no_table =         ['np','class','down-pair','up-pair','read','count-tables']
-        self.q_type_no_table_weights = [0.2, 1.0,    1.0,        1.0,      1.0,   0.05]
+        self.q_type_no_table_weights = [0.2, 0.7,    1.0,        1.0,      1.0,   0.05]
+        self.q_types_only_table =        ['np','class','read','cell','row-header','col-header','all-row','all-col', 'list-row-headers','list-col-headers','count-tables','highlight-table']
+        self.q_type_only_table_weights = [0.2, 0.7,    1.0,   1.1,   1.1,         1.1,         1.1,       1.1,       1.1,              1.1,              0.9,           1.1]
 
-        self.q_types_for_np = ['class','down-pair','up-pair','read','cell','row-header','col-header','all-row', 'list-row-header','list-col-header']
+        self.q_types_for_np = ['class','down-pair','up-pair','read','cell','row-header','col-header','all-row', 'list-row-headers','list-col-headers']
 
        
         self.np_token = '№'
@@ -97,9 +100,15 @@ class FormQA(QADataset):
 
         q_a_pairs = []
         if len(tables)>0:
-            q_types = random.choices(self.q_types,self.q_type_weights,k=self.questions*50)
+            if len(entity_link)>0:
+                q_types = random.choices(self.q_types,self.q_type_weights,k=self.questions*50)
+            else:
+                q_types = random.choices(self.q_types_only_table,self.q_type_only_table_weights,k=self.questions*50)
         else:
             q_types = random.choices(self.q_types_no_table,self.q_type_no_table_weights,k=self.questions*50)
+
+
+        #import pdb;pdb.set_trace()
 
         for q_type in q_types:
             if q_type=='class':
@@ -164,11 +173,16 @@ class FormQA(QADataset):
                 inmask = []
                 ambiguous = len(entities[prompt_id].lines)==1 and entities[prompt_id].lines[0].ambiguous
                 if random.random()<0.5 or ambiguous:#should we use query mask
-                    if entities[prompt_id].cls=='question':
-                        question = 'd0~' if down else 'v0~'
+                    if down and entities[prompt_id].cls=='question':
+                        question = 'd0~'
+                    elif not down and entities[prompt_id].cls=='answer':
+                        question = 'v0~'
+                    elif down and entities[prompt_id].cls=='header':
+                        question = 'h0~'
+                    elif not down and entities[prompt_id].cls=='question':
+                        question = 'q0~'
                     else:
-                        assert entities[prompt_id].cls=='header'
-                        question = 'h0~' if down else 'q0~'
+                        assert False
 
                     if random.random()<0.5: #should the mask be lines or whole entity
                         for line in entities[prompt_id].lines:
@@ -176,11 +190,17 @@ class FormQA(QADataset):
                     else:
                         inmask.append(self.convertBB(s,entities[prompt_id].box))
                 else:
-                    if entities[prompt_id].cls=='question':
-                        question = 'l~' if down else 'v~'
+                    if down and entities[prompt_id].cls=='question':
+                        question = 'l~'
+                    elif not down and entities[prompt_id].cls=='answer':
+                        question = 'v~'
+                    elif down and entities[prompt_id].cls=='header':
+                        question = 'hd~'
+                    elif not down and entities[prompt_id].cls=='question':
+                        question = 'qu~'
+                        import pdb;pdb.set_trace()
                     else:
-                        assert entities[prompt_id].cls=='header'
-                        question = 'hd~' if down else 'qu~'
+                        assert False
 
                 outmask = []
                 bbids = []
@@ -235,16 +255,18 @@ class FormQA(QADataset):
                 elif sub_type == 'col-header':
                     question = 'ci~{}'
                 elif sub_type == 'all-row':
-                    question = '$r~{}' if random.random()<0.5 else ('ar~{}' if random.random()<0.5 else 'ar{{}')
-                elif sub_type in ('list-row-header','list-col-header'):
-                    if sub_type == 'list-row-header':
+                    question = '$r~{}' if random.random()<0.5 else ('ar~{}' if random.random()<0.5 else 'ar>{}')
+                elif sub_type == 'all-col':
+                    question = '$c~{}' if random.random()<0.5 else ('ac~{}' if random.random()<0.5 else 'ac>{}')
+                elif sub_type in ('list-row-headers','list-col-headers'):
+                    if sub_type == 'list-row-headers':
                         char = 'r'
                     else:
                         char = 'c'
                     if random.random()<0.5:
                         question = '{}h~{}'.format(char,len(tables)+1)
                     else:
-                        question = char+'h}{}'
+                        question = char+'h>{}'
 
                 self.qaAdd(q_a_pairs,question.format(prompt_text),self.np_token,[],[],[])
 
@@ -252,13 +274,20 @@ class FormQA(QADataset):
                 #line above, line below? ^^,^0,vv,v0
 
                 #finish reading entity
-                #TODO add backwards
                 entity = random.choice(entities)
                 text = entity.text
+
+                if random.random()<0.5:
+                    forward=True
+                else:
+                    forward=False
+                    text = text[::-1]
 
                 last_space = max(text.rfind(' '),text.rfind('\\'))
                 query_part = text[:last_space] #so there's at least one word to predict
                 query,q_start = self.selectPartText(query_part,ret_start=True)
+                if len(query)==0:
+                    continue
                 q_end = q_start + len(query)
 
 
@@ -271,23 +300,35 @@ class FormQA(QADataset):
 
                 ids = [line.bbid for line in entity.lines]
 
+                if forward:
+                    r_end = r_start+len(response)
+                else:
+                    #translate from reverse indices
+                    r_end = -r_start-1
+                    r_start = -(r_start+len(response))-1
+                    q_t = -q_start-1
+                    q_start = -q_end-1
+                    q_end = q_t
+
+                out_line_ids = set(entity.text_map[r_start:r_end])
+                query_line_ids = set(entity.text_map[q_start:q_end])
+
                 outmask = []
-                out_line_ids = set(entity.text_map[r_start:r_start+len(response)])
                 for line_id in out_line_ids:
                     outmask.append(self.convertBB(s,entity.lines[line_id].box))
                 
-                query_line_ids = set(entity.text_map[q_start:q_end])
                 ambiguous = all([entity.lines[li].ambiguous for li in query_line_ids])
 
-                if random.random()<0.4 and not ambiguous:
-                    question='fi~' #for "finish"
+
+                if random.random()<0.4 and not ambiguous and len(query)>6:
+                    question='fi~' if forward else 'pr' #for "finish" or "previous"
                     inmask=[]
                 elif random.random()<0.5:
-                    question='f0~'
+                    question='f0~' if forward else 'p0~'
                     #This uses the mask of the whol entity, as that is what other things will produce
                     inmask = [self.convertBB(s,line.box) for line in entity.lines]
                 else:
-                    question='f1~'
+                    question='f1~' if forward else 'p1~'
                     #This uses the mask of only the query lines
                     inmask = [self.convertBB(s,entity.lines[li].box) for li in query_line_ids]
 
@@ -296,8 +337,8 @@ class FormQA(QADataset):
 
             elif q_type=='cell':
                 table = random.choice(tables)
-                r,r_header = random.randrange(enumerate(table.row_headers))
-                c,c_header = random.randrange(enumerate(table.col_headers))
+                r,r_header = random.choice(list(enumerate(table.row_headers)))
+                c,c_header = random.choice(list(enumerate(table.col_headers)))
 
                 r_h_text = r_header.text
                 c_h_text = c_header.text
@@ -317,6 +358,7 @@ class FormQA(QADataset):
                 else:
                     cell_text = self.blank_token
                     cell_lines=[]
+                    outmask = []
                 
                 ambiguous = all([line.ambiguous for line in r_header.lines+c_header.lines]) 
 
@@ -336,7 +378,7 @@ class FormQA(QADataset):
                     h1_text = c_h_text
                     h2_text = r_h_text
 
-                self.qaAdd(q_a_pairs,'{}~{}~~{}'.format(question,h2_text,h1_text),ids,cell_text,inmask,outmask)
+                self.qaAdd(q_a_pairs,'{}~{}~~{}'.format(question,h2_text,h1_text),cell_text,ids,inmask,outmask)
 
 
             elif q_type in ('row-header', 'col-header'):
@@ -345,11 +387,11 @@ class FormQA(QADataset):
 
                 if q_type=='row-header':
                     row=True
-                    r,header = random.choice(enumerate(table.row_headers))
+                    r,header = random.choice(list(enumerate(table.row_headers)))
                     non_none_cells = [table.cells[r][c] for c in range(len(table.col_headers)) if table.cells[r][c] is not None]
                 else:
                     row=False
-                    c,header = random.choice(enumerate(table.col_headers))
+                    c,header = random.choice(list(enumerate(table.col_headers)))
                     non_none_cells = [table.cells[r][c] for r in range(len(table.row_headers)) if table.cells[r][c] is not None]
 
                 if len(non_none_cells)==0:
@@ -396,11 +438,11 @@ class FormQA(QADataset):
 
                 if q_type=='all-row':
                     row=True
-                    r,header = random.choice(enumerate(table.row_headers))
+                    r,header = random.choice(list(enumerate(table.row_headers)))
                     all_cells = table.cells[r]
                 else:
                     row=False
-                    c,header = random.choice(enumerate(table.col_headers))
+                    c,header = random.choice(list(enumerate(table.col_headers)))
                     all_cells = [table.cells[r][c] for r in range(len(table.row_headers))]
 
                 ambiguous = all([line.ambiguous for line in header.lines])
@@ -408,7 +450,7 @@ class FormQA(QADataset):
                 outmask = []
                 if random.random()<0.5:
                     #just highligh the row/col
-                    ids=[self.convertBB(s,line.bbid) for line in header.lines]
+                    ids=[line.bbid for line in header.lines]
                     header_text = self.selectPartText(header.text)
                     for cell in all_cells:
                         if cell is not None:
@@ -428,22 +470,28 @@ class FormQA(QADataset):
                     #the text of a cell is the query for the next cell
                     #in the event of a blank cell, it just goes to the next cell, but adds 'ø|' to the front to show there is a blank cell before this
                     #when called with the final (filled) cell as the query, it produces the stop token '‡'
-                    i = random.randrange(len(all_cells)+1)
+                    init = i = random.randrange(len(all_cells)+1)
                     cell = all_cells[i] if i<len(all_cells) else None
 
                     prepend=''
+                    #go down the row/col till we reach a non-blank cell
                     while cell is None and i<len(all_cells):
                         prepend+=self.blank_token+'|'
                         i+=1
                         cell = all_cells[i] if i<len(all_cells) else None
 
-                    if i>0:
-                        header = all_cells[i-1]
-                        char = '}'
+                    #be sure we are including all cells before that are blank
+                    while init>0 and all_cells[init-1] is None:
+                        init-=1
+                        prepend = self.blank_token+'|'+prepend
+
+                    if init>0:
+                        header = all_cells[init-1]
+                        char = '>'
                     else:
                         char = '~'
+                    ids=[line.bbid for line in header.lines]
 
-                    ids=[self.convertBB(s,line.bbid) for line in header.lines]
                     header_text = self.selectPartText(header.text)
                     if random.random()<0.5 or ambiguous:
                         inmask = [self.convertBB(s,line.box) for line in header.lines]
@@ -484,9 +532,9 @@ class FormQA(QADataset):
                     ids=[]
                     outmask=[]
                     for header in headers:
-                        ids+=[self.convertBB(s,line.bbid) for line in header.lines]
+                        ids+=[line.bbid for line in header.lines]
                         outmask += [self.convertBB(s,line.box) for line in header.lines]
-                    question = 'r*~' if row else 'c*~'
+                    question = 'r@~' if row else 'c@~'
 
                     self.qaAdd(q_a_pairs,question+str(table_i),'',ids,[],outmask)
                 else:
@@ -496,8 +544,8 @@ class FormQA(QADataset):
                     if i>0:
                         prev_header = headers[i-1]
                         prev_text = self.selectPartText(prev_header.text)
-                        ids=[self.convertBB(s,line.bbid) for line in prev_header.lines]
-                        char = '}'
+                        ids=[line.bbid for line in prev_header.lines]
+                        char = '>'
                         ambiguous = all([line.ambiguous for line in prev_header.lines])
                     else:
                         char = '~'
@@ -528,16 +576,18 @@ class FormQA(QADataset):
                 outmask=[]
                 for table in tables:
                     for header in table.row_headers + table.col_headers:
-                        for line in entities[header].lines:
+                        for line in header.lines:
                             outmask.append(self.convertBB(s,line.box))
                             table_ids.append(line.bbid)
 
                     for r in range(len(table.row_headers)):
                         for c in range(len(table.col_headers)):
                             cell = table.cells[r][c]
-                            for line in cell.lines:
-                                outmask.append(self.convertBB(s,line.box))
-                                table_ids.append(line.bbid)
+                            #print('{},{}: {}'.format(r,c,cell.text if cell is not None else '-'))
+                            if cell is not None:
+                                for line in cell.lines:
+                                    outmask.append(self.convertBB(s,line.box))
+                                    table_ids.append(line.bbid)
                 self.qaAdd(q_a_pairs,'t#>',str(len(tables)),table_ids,[],outmask)
 
             elif q_type=='highlight-table':
@@ -546,19 +596,23 @@ class FormQA(QADataset):
                 table_ids=[]
                 outmask=[]
                 for header in table.row_headers + table.col_headers:
-                    for line in entities[header].lines:
+                    for line in header.lines:
                         outmask.append(self.convertBB(s,line.box))
                         table_ids.append(line.bbid)
 
                 for r in range(len(table.row_headers)):
                     for c in range(len(table.col_headers)):
                         cell = table.cells[r][c]
-                        for line in cell.lines:
-                            outmask.append(self.convertBB(s,line.box))
-                            table_ids.append(line.bbid)
+                        #print('{},{}: {}'.format(r,c,cell.text if cell is not None else '-'))
+                        if cell is not None:
+                            for line in cell.lines:
+                                outmask.append(self.convertBB(s,line.box))
+                                table_ids.append(line.bbid)
 
 
                 self.qaAdd(q_a_pairs,'0t~{}'.format(table_i),'',table_ids,[],outmask)
+            else:
+                assert False
             
             if len(q_a_pairs)>10*self.questions:
                 break #we have enough
@@ -583,6 +637,9 @@ class FormQA(QADataset):
                     after_start += 1
                 if after_start==end:
                     after_start=None
+            else:
+                before_start=after_start=start
+
             if end!=len(text) and text[end]!=' ' and text[end]!='\\':
                 #search for nearest space
                 before_end = end-1
@@ -593,6 +650,8 @@ class FormQA(QADataset):
                 after_end = end+1
                 while after_end<len(text) and text[after_end]!=' ' and text[after_end]!='\\':
                     after_end += 1
+            else:
+                after_end=before_end=end
             #get best combination
             len_b_b = before_end-before_start if before_end is not None else -1
             len_a_b = before_end-after_start if before_end is not None and after_start is not None else -1
@@ -666,6 +725,9 @@ class FormQA(QADataset):
         words = para.split(' ')
         words = [w for w in words if len(w)>0]
 
+        if len(words)==0:
+            return self.sampleText(length)
+
         #choose starting word and build from their
         start=idx = random.randrange(len(words))
         num_words = random.randrange(len(words)-idx)
@@ -677,7 +739,7 @@ class FormQA(QADataset):
             text += ' '+words[idx]
             idx+=1
             
-
+        assert text!=''
         if len(text)>self.max_qa_len and last_text is not None:
             text = last_text
         elif len(text)>self.max_qa_len:

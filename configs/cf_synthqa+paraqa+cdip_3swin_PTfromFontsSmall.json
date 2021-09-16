@@ -90,7 +90,7 @@
                 }
             },
             {
-                "freq": 0.1,
+                "freq": 0.0,
                 "config": {
                     "data_set_name": "CDIPQA",
                     "data_dir": "../data/CDIP_ready",
