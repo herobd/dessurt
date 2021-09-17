@@ -483,6 +483,8 @@ class SynthQADocDataset(FormQA):
                     l_horz = img.shape[1]-max(label_x+img.shape[1]-self.image_size[1],0)
                     if l_horz<=0 or l_vert<=0:
                         continue
+                    if text=='':
+                        text='-'
                     image[cur_y:cur_y+l_vert,label_x:label_x+l_horz] = img[:l_vert,:l_horz]
                     label_lines.append(Line(text,[label_x,cur_y,label_x+l_horz,cur_y+l_vert]))
                     cur_y += l_vert+pad
@@ -503,6 +505,8 @@ class SynthQADocDataset(FormQA):
                     v_horz = img.shape[1]-max(value_x+img.shape[1]-self.image_size[1],0)
                     if v_horz<=0 or v_vert<=0:
                         continue
+                    if text=='':
+                        text='-'
                     image[cur_y:cur_y+v_vert,value_x:value_x+v_horz] = img[:v_vert,:v_horz]
                     value_lines.append(Line(text,[value_x,cur_y,value_x+v_horz,cur_y+v_vert]))
                     cur_y += v_vert+pad
@@ -510,10 +514,17 @@ class SynthQADocDataset(FormQA):
                 if self.ocr:
                     self.addText(label_text,label_x,label_y,l_horz,l_vert,value_text,value_x,value_y,v_horz,v_vert,boxes,trans,s)
 
-                label_id = len(all_entities)
-                all_entities.append(Entity('question',label_lines))
-                value_id = len(all_entities)
-                all_entities.append(Entity('answer',value_lines))
+                if len(label_lines)>0:
+                    label_id = len(all_entities)
+                    all_entities.append(Entity('question',label_lines))
+                else:
+                    label_id=None
+
+                if len(value_lines)>0:
+                    value_id = len(all_entities)
+                    all_entities.append(Entity('answer',value_lines))
+                else:
+                    value_id=None
 
                 entity_link.append((label_id,value_id))
 
@@ -720,8 +731,10 @@ class SynthQADocDataset(FormQA):
             image[y:y+row_headers[r][0].shape[0],x:x+row_headers[r][0].shape[1]] = row_headers[r][0]
             box = [x,y,x+row_headers[r][0].shape[1],y+row_headers[r][0].shape[0]]
             if row_headers[r][1] == '':
-                row_headers[r][1]='-'
-            row_headers_e.append( Entity('answer',[Line(row_headers[r][1],box)]) )
+                string='-'
+            else:
+                string=row_headers[r][1]
+            row_headers_e.append( Entity('answer',[Line(string,box)]) )
             #if boxes is not None:
             #    self.addText(row_headers[r][1],x,y,row_headers[r][0].shape[1],row_headers[r][0].shape[0],boxes=boxes,trans=trans)
 
@@ -742,8 +755,10 @@ class SynthQADocDataset(FormQA):
             image[y:y+col_headers[c][0].shape[0],x:x+col_headers[c][0].shape[1]] = col_headers[c][0]
             box = [x,y,x+col_headers[c][0].shape[1],y+col_headers[c][0].shape[0]]
             if col_headers[c][1] == '':
-                col_headers[c][1]='-'
-            col_headers_e.append( Entity('answer',[Line(col_headers[c][1],box)]) )
+                string='-'
+            else:
+                string=col_headers[c][1]
+            col_headers_e.append( Entity('answer',[Line(string,box)]) )
             #if boxes is not None:
             #    self.addText(col_headers[c][1],x,y,col_headers[c][0].shape[1],col_headers[c][0].shape[0],boxes=boxes,trans=trans)
 

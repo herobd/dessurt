@@ -9,13 +9,13 @@ import math, random, string
 from collections import defaultdict, OrderedDict
 from utils.funsd_annotations import createLines
 import timeit
-from data_sets.qa import QADataset,collate
+from data_sets.form_qa import FormQA,collate, Line, Entity, Table
 
-import utils.img_f as img_f
+from utils import img_f
 
 
 
-class FUNSDQA(QADataset):
+class FUNSDQA(FormQA):
     """
     Class for reading forms dataset and creating starting and ending gt
     """
@@ -24,12 +24,6 @@ class FUNSDQA(QADataset):
     def __init__(self, dirPath=None, split=None, config=None, images=None):
         super(FUNSDQA, self).__init__(dirPath,split,config,images)
 
-        self.only_types=None
-
-        self.split_to_lines = config['split_to_lines']
-        self.corruption_p = config['text_corruption'] if 'text_corruption' in config else 0.15
-        self.do_words = config['do_words']
-        self.char_qs = config['char_qs'] if 'char_qs' in config else False
 
 
         self.min_start_read = 7
@@ -40,38 +34,41 @@ class FUNSDQA(QADataset):
             self.images=images
         else:
             if 'overfit' in config and config['overfit']:
-                splitFile = 'overfit_split.json'
+                split_file = 'overfit_split.json'
             else:
-                splitFile = 'train_valid_test_split.json'
-            with open(os.path.join(dirPath,splitFile)) as f:
+                split_file = 'train_valid_test_split.json'
+            with open(os.path.join(dirPath,split_file)) as f:
                 #if split=='valid' or split=='validation':
                 #    trainTest='train'
                 #else:
                 #    trainTest=split
-                readFile = json.loads(f.read())
+                read_file = json.loads(f.read())
                 if type(split) is str:
-                    toUse = readFile[split]
+                    to_use = read_file[split]
                     imagesAndAnn = []
-                    imageDir = os.path.join(dirPath,toUse['root'],'images')
-                    annDir = os.path.join(dirPath,toUse['root'],'annotations')
-                    for name in toUse['images']:
+                    imageDir = os.path.join(dirPath,to_use['root'],'images')
+                    annDir = os.path.join(dirPath,to_use['root'],'annotations')
+                    for name in to_use['images']:
                         imagesAndAnn.append( (name+'.png',os.path.join(imageDir,name+'.png'),os.path.join(annDir,name+'.json')) )
                 elif type(split) is list:
                     imagesAndAnn = []
                     for spstr in split:
-                        toUse = readFile[spstr]
-                        imageDir = os.path.join(dirPath,toUse['root'],'images')
-                        annDir = os.path.join(dirPath,toUse['root'],'annotations')
-                        for name in toUse['images']:
-                            imagesAndAnn.append( (name+'.png',os.path.join(imageDir,name+'.png'),os.path.join(annDir,name+'.json')) )
+                        to_use = read_file[spstr]
+                        imageDir = os.path.join(dirPath,to_use['root'],'images')
+                        annDir = os.path.join(dirPath,to_use['root'],'annotations')
+                        for name in to_use['images']:
+                            imagesAndAnn.append( 
+                                (name+'.png',os.path.join(imageDir,name+'.png'),
+                                os.path.join(annDir,name+'.json')) 
+                                )
                 else:
                     print("Error, unknown split {}".format(split))
                     exit()
             self.images=[]
-            for imageName,imagePath,jsonPath in imagesAndAnn:
+            for image_name,imagePath,jsonPath in imagesAndAnn:
                 org_path = imagePath
                 if self.cache_resized:
-                    path = os.path.join(self.cache_path,imageName)
+                    path = os.path.join(self.cache_path,image_name)
                 else:
                     path = org_path
                 if os.path.exists(jsonPath):
@@ -88,8 +85,7 @@ class FUNSDQA(QADataset):
                                     fy=self.rescale_range[1], 
                                     )
                             img_f.imwrite(path,resized)
-                    self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')]})
-        self.only_types=None
+                    self.images.append({'id':image_name, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':image_name[:image_name.rfind('.')]})
         self.errors=[]
 
         self.classMap={
@@ -113,71 +109,9 @@ class FUNSDQA(QADataset):
         #    numClasses+=1
 
         numClasses=len(self.classMap)
-        if self.split_to_lines:
-            bbs, numNeighbors, trans, groups = createLines(annotations,self.classMap,s)
-            bbs = bbs[0]
-        else:
-            boxes = annotations['form']
-            bbs = np.empty((len(boxes), 8+8+numClasses), dtype=np.float32) #2x4 corners, 2x4 cross-points, n classes
-            #pairs=set()
-            numNeighbors=[]
-            trans=[]
-            for j,boxinfo in enumerate(boxes):
-                lX,tY,rX,bY = boxinfo['box']
-                h=bY-tY
-                w=rX-lX
-                if h/w>5 and self.rotate: #flip labeling, since FUNSD doesn't label verticle text correctly
-                    #I don't know if it needs rotated clockwise or countercw, so I just say countercw
-                    bbs[j,0]=lX*s
-                    bbs[j,1]=bY*s
-                    bbs[j,2]=lX*s
-                    bbs[j,3]=tY*s
-                    bbs[j,4]=rX*s
-                    bbs[j,5]=tY*s
-                    bbs[j,6]=rX*s
-                    bbs[j,7]=bY*s
-                    #we add these for conveince to crop BBs within window
-                    bbs[j,8]=s*(lX+rX)/2.0
-                    bbs[j,9]=s*bY
-                    bbs[j,10]=s*(lX+rX)/2.0
-                    bbs[j,11]=s*tY
-                    bbs[j,12]=s*lX
-                    bbs[j,13]=s*(tY+bY)/2.0
-                    bbs[j,14]=s*rX
-                    bbs[j,15]=s*(tY+bY)/2.0
-                else:
-                    bbs[j,0]=lX*s
-                    bbs[j,1]=tY*s
-                    bbs[j,2]=rX*s
-                    bbs[j,3]=tY*s
-                    bbs[j,4]=rX*s
-                    bbs[j,5]=bY*s
-                    bbs[j,6]=lX*s
-                    bbs[j,7]=bY*s
-                    #we add these for conveince to crop BBs within window
-                    bbs[j,8]=s*lX
-                    bbs[j,9]=s*(tY+bY)/2.0
-                    bbs[j,10]=s*rX
-                    bbs[j,11]=s*(tY+bY)/2.0
-                    bbs[j,12]=s*(lX+rX)/2.0
-                    bbs[j,13]=s*tY
-                    bbs[j,14]=s*(rX+lX)/2.0
-                    bbs[j,15]=s*bY
-                
-                bbs[j,16:]=0
-                if boxinfo['label']=='header':
-                    bbs[j,16]=1
-                elif boxinfo['label']=='question':
-                    bbs[j,17]=1
-                elif boxinfo['label']=='answer':
-                    bbs[j,18]=1
-                elif boxinfo['label']=='other':
-                    bbs[j,19]=1
-                #for id1,id2 in boxinfo['linking']:
-                #    pairs.add((min(id1,id2),max(id1,id2)))
-                trans.append(boxinfo['text'])
-                numNeighbors.append(len(boxinfo['linking']))
-            groups = [[n] for n in range(len(boxes))]
+        #if self.split_to_lines:
+        bbs, numNeighbors, trans, groups = createLines(annotations,self.classMap,s)
+        bbs = bbs[0]
 
         word_boxes=[]
         word_trans=[]
@@ -187,145 +121,73 @@ class FUNSDQA(QADataset):
             for linkIds in entity['linking']:
                 groups_adj.add((min(linkIds),max(linkIds)))
                 
-            group=[]
-            for word in entity['words']:
-                lX,tY,rX,bY = word['box']
-                #cX = (lX+rX)/2
-                #cY = (tY+bY)/2
-                h = bY-tY +1
-                w = rX-lX +1
-                #word_boxes.append([cX,cY,0,h/2,w/2])
-                bb=[None]*16
-                if h/w>5 and self.rotate: #flip labeling, since FUNSD doesn't label verticle text correctly
-                    #I don't know if it needs rotated clockwise or countercw, so I just say countercw
-                    bb[0]=lX*s
-                    bb[1]=bY*s
-                    bb[2]=lX*s
-                    bb[3]=tY*s
-                    bb[4]=rX*s
-                    bb[5]=tY*s
-                    bb[6]=rX*s
-                    bb[7]=bY*s
-                    #w these for conveince to crop BBs within window
-                    bb[8]=s*(lX+rX)/2.0
-                    bb[9]=s*bY
-                    bb[10]=s*(lX+rX)/2.0
-                    bb[11]=s*tY
-                    bb[12]=s*lX
-                    bb[13]=s*(tY+bY)/2.0
-                    bb[14]=s*rX
-                    bb[15]=s*(tY+bY)/2.0
-                else:
-                    bb[0]=lX*s
-                    bb[1]=tY*s
-                    bb[2]=rX*s
-                    bb[3]=tY*s
-                    bb[4]=rX*s
-                    bb[5]=bY*s
-                    bb[6]=lX*s
-                    bb[7]=bY*s
-                    #w these for conveince to crop BBs within window
-                    bb[8]=s*lX
-                    bb[9]=s*(tY+bY)/2.0
-                    bb[10]=s*rX
-                    bb[11]=s*(tY+bY)/2.0
-                    bb[12]=s*(lX+rX)/2.0
-                    bb[13]=s*tY
-                    bb[14]=s*(rX+lX)/2.0
-                    bb[15]=s*bY
-                group.append(len(word_boxes))
-                word_boxes.append(bb)
-                word_trans.append(word['text'])
-            word_groups.append(word_groups)
-        #word_boxes = torch.FloatTensor(word_boxes)
-        word_boxes = np.array(word_boxes)
-        assert len(groups)==len(word_groups) #this should be identicle in alginment
-        #self.pairs=list(pairs)
 
-        if self.do_words:
-            ocr = word_trans
-            ocr_bbs = word_boxes
-            ocr_groups = word_groups
-        else:
-            ocr = trans
-            ocr_bbs = bbs[:,:16]
-            ocr_groups = groups
+        ocr = trans
 
-        qa = self.makeQuestions(bbs,trans,groups,groups_adj,ocr_groups)
+        entities,entity_link,tables = self.prepareForm(bbs,trans,groups,groups_adj)
 
-        ocr = [self.corrupt(text) for text in ocr]
-        return ocr_bbs, list(range(ocr_bbs.shape[0])), ocr, {}, {}, qa
+        #run through all entites to build bbs, assign bbid, and find ambiguity
+        boxes = []
+        text_line_counts = defaultdict(list)
+        for ei,entity in enumerate(entities):
+            for li,line in enumerate(entity.lines):
+                text = self.punc_regex.sub('',line.text.lower())
+                text_line_counts[text].append((ei,li))
+                bbid = len(boxes)
+                boxes.append(self.convertBB(1,line.box))
+                line.bbid = bbid
+
+        bbs = np.array(boxes)
+
+        #assign ambiguity
+        for line_ids in text_line_counts.values():
+            if len(line_ids)>1:
+                for ei,li in line_ids:
+                    entities[ei].lines[li].ambiguous = True
+        qa = self.makeQuestions(1.0,entities,entity_link,tables)
+
+        ocr=None
+        #ocr = [self.corrupt(text) for text in ocr]
+        return bbs, list(range(bbs.shape[0])), ocr, {}, {}, qa
 
 
-    def getResponseBBIdList(self,queryId,annotations):
-        if self.split_to_lines:
-            return annotations['linking'][queryId]
-        else:
-            boxes=annotations['form']
-            cto=[]
-            boxinfo = boxes[queryId]
-            for id1,id2 in boxinfo['linking']:
-                if id1==queryId:
-                    cto.append(id2)
-                else:
-                    cto.append(id1)
-            return cto
+    def convertBB(self,s,box):
+        assert s==1
+        return box
 
-    def makeQuestions(self,bbs,transcription,groups,groups_adj,groups_id):
-        all_q_a=[] #question-answers go here
+    def prepareForm(self,bbs,transcription,groups,groups_adj):
+        entities=[]
+
 
         questions_gs=set()
         answers_gs=set()
         headers_gs=set()
         others_gs=set()
-        all_trans={}
+        removed=set()
         group_count = len(groups)
         for gi,group in enumerate(groups):
             cls = bbs[group[0],16:].argmax()
-            trans_bb = []
-            class_qs=[]
-            class_answer = '[ '+self.index_class_map[cls]+' ]'
-            for bbi in group:
-                trans_bb.append((bbs[bbi,1],transcription[bbi]))
-                #if fullyKnown(transcription[bbi]): #need this for NAF
-                #    trans_bb.append((bbs[bbi,1],transcription[bbi]))
-                #else:
-                #    continue
-                if self.char_qs=='full' or self.char_qs=='sym':
-                    #classify individual lines
-                    text=transcription[bbi]
-                    if self.max_qa_len is not None and len(text)>self.max_qa_len:
-                        text = text[:self.max_qa_len]
-                    class_qs.append(('cs~{}'.format(text),class_answer,[gi])) #This can be ambigous, although generally the same text has the same class
-
-            trans_bb.sort(key=lambda a:a[0] )
-            trans=trans_bb[0][1]
-            for y,t in trans_bb[1:]:
-                trans+='\\'+t
-            all_trans[gi]=trans
-            #print('c:{} {},{} full group trans: {}'.format(cls,bbs[group[0],0],bbs[group[0],1],trans))
-
-            if self.index_class_map[cls] == 'question':
-                questions_gs.add(gi)
-            elif self.index_class_map[cls] == 'answer':
-                answers_gs.add(gi)
-            elif self.index_class_map[cls] == 'header':
-                headers_gs.add(gi)
+            cls_name = self.index_class_map[cls]
+            lines = []
+            for bbid in group:
+                #box = calcXYWH(bbs[bbid,:8])[:4]
+                if transcription[bbid]!='':
+                    lines.append(Line(transcription[bbid],bbs[bbid,:16]))
+            if len(lines)>0:
+                entities.append(Entity(cls_name,lines))
+                if cls_name == 'question':
+                    questions_gs.add(gi)
+                elif cls_name == 'answer':
+                    answers_gs.add(gi)
+                elif cls_name == 'header':
+                    headers_gs.add(gi)
+                else:
+                    others_gs.add(gi)
             else:
-                others_gs.add(gi)
+                entities.append(None)
+                removed.add(gi)
 
-            if self.char_qs=='full' or self.char_qs=='sym':
-                #classify all together
-                text=trans
-                if self.max_qa_len is not None and len(text)>self.max_qa_len:
-                    text = text[:self.max_qa_len]
-                class_qs.append(('cs~{}'.format(text),class_answer,[gi])) #This can be ambigous, although generally the same text has the same class
 
-                all_q_a.append(random.choice(class_qs))
-
-                #complete (read)
-                self.addRead(all_q_a,trans)
-                self.addRead(all_q_a,trans,backwards=True)
 
 
         relationships_h_q=defaultdict(list)
@@ -341,7 +203,6 @@ class FUNSDQA(QADataset):
 
         relationships_q_a=defaultdict(list)
         relationships_a_q=defaultdict(list)
-        qs_without_h=set()
         for q_gi in questions_gs:
             found=False
             for gi1,gi2 in groups_adj:
@@ -358,43 +219,14 @@ class FUNSDQA(QADataset):
             if not found:
                 #q_a_pairs.append((q_gi,None))
                 relationships_q_a[q_gi].append(None)
-            if q_gi not in relationships_q_h:
-                qs_without_h.add(q_gi)
+
+        for a_gi in answers_gs:
+            if a_gi not in relationships_a_q:
+                relationships_a_q[a_gi].append(None)
 
 
-        #find duplicate labels and differentiate using header
-        ambiguous=set()
-        trans_to_gi=defaultdict(list)
-        for gi,trans in all_trans.items():
-            trans_to_gi[trans].append(gi)
 
-        for trans,i_list in trans_to_gi.items():
-            if len(i_list)>1:
-                typ = bbs[groups[i_list[0]][0],16:].argmax()
-                amb=True
-                for i in i_list[1:]:
-                    bbi = groups[i][0]
-                    if bbs[bbi,16:].argmax() != typ:
-                        amb=False
-                        break
-                if not amb:
-                    break
-                #import pdb;pdb.set_trace()
-                #print('possible ambig: {}'.format(trans))
-                got=0
-                #for gi in i_list:
-                #    if gi in relationships_q_h:
-                #        got+=1
-                #        hi = relationships_q_h[gi]
-                #        all_trans[gi]= all_trans[hi]+' '+all_trans[gi]
-                #        #print('  ambig rename: {}'.format(all_trans[gi]))
-                if got<len(i_list)-1:
-                    ambiguous.add(trans)
-                #else:
-                    #print('  saved!')
-
-
-        q_a_pairs=[]
+        q_a_pairs=defaultdict(list)
         #table_map = {}
         #tables=[]
         table_values={}
@@ -402,15 +234,14 @@ class FUNSDQA(QADataset):
         col_headers=set()
         skip=set()
 
+        merged_groups = {}
         for qi,ais in relationships_q_a.items():
-            #if qi in table_map:
-            #    continue
             if qi in skip:
                 continue
             if len(ais)==1:
                 ai=ais[0]
                 if ai is None or len(relationships_a_q[ai])==1:
-                    q_a_pairs.append((qi,ai))
+                    q_a_pairs[qi].append(ai)
                 else:
                     #this is probably part of a table with single row/col
                     if len(relationships_a_q[ai])>2:
@@ -428,49 +259,41 @@ class FUNSDQA(QADataset):
                     if not success and len(relationships_q_a[other_qi])==1:
                         #broken label?
                         gi = group_count
-                        trans_bb = []
-                        for qqi in [qi,other_qi]:
-                            assert len(groups[qqi])==1
-                            bbi = groups[qqi][0]
-                            trans_bb.append((bbs[bbi,1],transcription[bbi]))
-                        trans_bb.sort(key=lambda a:a[0] )
-                        trans=trans_bb[0][1]
-                        for y,t in trans_bb[1:]:
-                            trans+='\\'+t
-                        all_trans[gi]=trans
                         group_count+=1
                         bb_ids = groups[qi]+groups[other_qi]
                         groups = groups+[bb_ids]
 
-                        groups_id.append(groups_id[qi]+groups_id[other_qi])
+                        entity = entities[qi]
+                        other_entity = entities[other_qi]
+                        #which is first?
+                        if entity.box[1]<other_entity.box[1]:
+                            first_entity = entity
+                            second_entity = other_entity
+                        else:
+                            first_entity = other_entity
+                            second_entity = entity
+                        new_entity = Entity(entities[qi].cls,first_entity.lines+second_entity.lines)
+                        entities.append(new_entity)
+                        entities[qi]=None
+                        entities[other_qi]=None
 
-                        q_a_pairs.append((gi,ai))
+                        q_a_pairs[gi].append(ai)
                         skip.add(other_qi)
+                        merged_groups[qi]=gi
+                        merged_groups[other_qi]=gi
             else:
                 #is this a misslabled multiline answer or a table?
                 if all(len(relationships_a_q[ai])==1 for ai in ais):
-                    #if must be a multiline answer
-                    gi = group_count
-                    trans_bb = []
-                    bb_ids = []
-                    real_ids = []
+                    #just put as multiple answers
+                    #may be incorrectly labeled multiline answer...
+                    answers = []
                     for ai in ais:
                         #assert len(groups[ai])==1 this can be a list, in which  case we lose new lines
                         bbi = groups[ai][0]
-                        trans_bb.append((bbs[bbi,1],transcription[bbi]))
-                        bb_ids += groups[ai]
-                        real_ids += groups_id[ai]
-                    trans_bb.sort(key=lambda a:a[0] )
-                    trans=trans_bb[0][1]
-                    for y,t in trans_bb[1:]:
-                        trans+='\\'+t
-                    all_trans[gi]=trans
-                    group_count+=1
-                    groups = groups+[bb_ids]
-
-                    groups_id.append(real_ids)
-
-                    q_a_pairs.append((qi,gi))
+                        answers.append((bbs[bbi,1],ai))
+                    answers.sort(key=lambda a:a[0])
+                    answers = [a[1] for a in answers]
+                    q_a_pairs[qi]+=answers
                 else:
                     #assert qi not in table_map
                     #addTable(tables,table_map,groups,bbs,qi,ais,relationships_q_a,relationships_a_q)
@@ -482,573 +305,195 @@ class FUNSDQA(QADataset):
                             q2 = None
                         addTableElement(table_values,row_headers,col_headers,ai,q1,q2,groups,bbs)
 
+        entity_link=[]
+        new_entities=[]
+        old_to_new_e_map={}
+        for oi,entity in enumerate(entities):
+            if entity is not None:
+                old_to_new_e_map[oi]=len(new_entities)
+                new_entities.append(entity)
+        
+        for oi,gi in merged_groups.items():
+            old_to_new_e_map[oi]=old_to_new_e_map[gi]
 
-        for qi,ai in q_a_pairs:
-            trans_qi = all_trans[qi]
-            if self.char_qs=='sym':
-                if self.max_qa_len is not None and len(trans_qi)>self.max_qa_len:
-                    trans_qi_q = trans_qi[-self.max_qa_len:]
-                    trans_qi_a = trans_qi[-(self.max_qa_len):][::-1]
-                else:
-                    trans_qi_q = trans_qi
-                    trans_qi_a = trans_qi[::-1]
-                    if len(trans_qi_a)<=self.max_qa_len:
-                        trans_qi_a+=self.end_token
+
+        for qi,ais in q_a_pairs.items():
+            head = old_to_new_e_map[qi]
+            tail = [old_to_new_e_map[ai] for ai in ais if ai is not None and ai not in removed]
+            if len(tail) == 0:
+                tail = None
             else:
-                if self.max_qa_len is not None and len(trans_qi)>self.max_qa_len:
-                    trans_qi_q = trans_qi[-self.max_qa_len:]
-                    trans_qi_a = '<<'+trans_qi[-(self.max_qa_len-2):]
+                assert head not in tail
+                assert all(new_entities[t]!='header' for t in tail)
+            assert new_entities[head].cls!='answer'
+            entity_link.append((head,tail))
+
+
+
+
+
+        #Do header and qestions
+        for hi,qis in relationships_h_q.items():
+            hi = old_to_new_e_map[hi]
+            qis = [old_to_new_e_map[qi] for qi in qis]
+
+            pos_qs=[]
+            for qi in qis:
+                if len(qis)>1:
+                    x=y=h=0
+                    for bbi in groups[qi]:
+                        x += bbs[bbi,0]
+                        x += bbs[bbi,4]
+                        y += bbs[bbi,1]
+                        y += bbs[bbi,5]
+                        h += bbs[bbi,5]-bbs[bbi,1]+1
+                    xc = x/(2*len(groups[qi]))
+                    yc = y/(2*len(groups[qi]))
+                    h = h/len(groups[qi])
                 else:
-                    trans_qi_q = trans_qi_a = trans_qi
-            #if 'Group' in trans_qi:
-            #    import pdb;pdb.set_trace()
-            if ai is not None:
-                trans_ai = all_trans[ai]
-                if self.char_qs=='sym':
-                    if self.max_qa_len is not None and len(trans_ai)>self.max_qa_len:
-                        trans_ai_q = trans_ai[:self.max_qa_len]
-                        trans_ai_a = trans_ai[:self.max_qa_len]
+                    xc=yc=h=-1
+                pos_qs.append((qi,xc,yc,h))
+
+            #Now we need to put all the questions into read order
+            if len(pos_qs)>1:
+                rows=[]
+                rows_mean_y=[]
+                for qi,x,y,h in pos_qs:
+                    row_i=None
+                    for r,mean_y in enumerate(rows_mean_y):
+                        if abs(mean_y-y)<h*0.6:
+                            row_i=r
+                            break
+                    if row_i is None:
+                        rows.append([(qi,x,y)])
+                        rows_mean_y.append(y)
                     else:
-                        trans_ai_q = trans_ai_a = trans_ai
-                        if len(trans_ai_a)+1 <= self.max_qa_len:
-                            trans_ai_a+=self.end_token
-                    if trans_qi not in ambiguous:
-                        all_q_a.append(('l~{}'.format(trans_qi_q),trans_ai_a,[qi,ai]))
-                        if random.random()<self.extra_np:
-                            all_q_a.append(('v~{}'.format(trans_qi_q),self.np_token,[qi,ai]))
-                    if trans_ai not in ambiguous:
-                        all_q_a.append(('v~{}'.format(trans_ai_q),trans_qi_a,[qi,ai]))
-                        if random.random()<self.extra_np:
-                            all_q_a.append(('l~{}'.format(trans_ai_q),self.np_token,[qi,ai]))
-                    elif trans_qi not in ambiguous:
-                        all_q_a.append(('l~{}'.format(trans_qi_q),self.blank_token,[qi]))
-                else:
-                    if self.max_qa_len is not None and len(trans_ai)>self.max_qa_len:
-                        trans_ai_q = trans_ai[:self.max_qa_len]
-                        trans_ai_a = trans_ai[:self.max_qa_len-2]+'>>'
-                    else:
-                        trans_ai_q = trans_ai_a = trans_ai
-                    if trans_qi not in ambiguous:
-                        if self.char_qs:
-                            all_q_a.append(('l~{}'.format(trans_qi_q),trans_ai_a,[qi,ai]))
-                            if random.random()<self.extra_np:
-                                all_q_a.append(('v~{}'.format(trans_qi_q),self.np_token,[qi,ai]))
+                        rows[row_i].append((qi,x,y))
+                        mean_y=0
+                        for (qi2,x2,y2) in rows[r]:
+                            mean_y+=y2
+                        rows_mean_y[row_i] = mean_y/len(rows[row_i])
+                ordered_qs = []
+                rows = list(zip(rows,rows_mean_y))
+                rows.sort(key=lambda a:a[1])
+                for row,mean_y in rows:
+                    row.sort(key=lambda a:a[1])
+                    for qi,x,y in row:
+                        ordered_qs.append(qi)
+            else:
+                ordered_qs = pos_qs[0][0]
+            
+            entity_link.append((hi,ordered_qs))
 
-                        else:
-                            all_q_a.append(('value for "{}"?'.format(trans_qi),trans_ai,[qi,ai]))
-                    if trans_ai not in ambiguous:
-                        if self.char_qs:
-                            all_q_a.append(('v~{}'.format(trans_ai_q),trans_qi_a,[qi,ai]))
-                            if random.random()<self.extra_np:
-                                all_q_a.append(('l~{}'.format(trans_ai_q),self.np_token,[qi,ai]))
-                        else:
-                            all_q_a.append(('label of "{}"?'.format(trans_ai),trans_qi,[qi,ai]))
-                    elif trans_qi not in ambiguous:
-                        if self.char_qs:
-                            all_q_a.append(('l~{}'.format(trans_qi_q),self.blank_token,[qi]))
-                        else:
-                            all_q_a.append(('value for "{}"?'.format(trans_qi),'blank',[qi]))
-
-
-
-        if self.char_qs=="full" or self.char_qs=='sym':
-
-            #Do header and qestions
-            for hi,qis in relationships_h_q.items():
-                trans_h = all_trans[hi]
-                if self.char_qs=='sym':
-                    if self.max_qa_len is not None and len(trans_h)>self.max_qa_len:
-                        trans_h_q = trans_h[-self.max_qa_len:]
-                        trans_h_a = trans_h[-(self.max_qa_len):][::-1]
-                    else:
-                        trans_h_q=trans_h
-                        trans_h_a=trans_h[::-1]
-                        if len(trans_h_a)+1<=self.max_qa_len:
-                            trans_h_a+=self.end_token
-                else:
-                    if self.max_qa_len is not None and len(trans_h)>self.max_qa_len:
-                        trans_h_q = trans_h[-self.max_qa_len:]
-                        trans_h_a = '<<'+trans_h[-(self.max_qa_len-2):]
-                    else:
-                        trans_h_q=trans_h_a=trans_h
-                trans_qs=[]
-                for qi in qis:
-                    trans_q = all_trans[qi]
-                    if len(qis)>1:
-                        x=y=h=0
-                        for bbi in groups[qi]:
-                            x += bbs[bbi,0]
-                            x += bbs[bbi,4]
-                            y += bbs[bbi,1]
-                            y += bbs[bbi,5]
-                            h += bbs[bbi,5]-bbs[bbi,1]+1
-                        xc = x/(2*len(groups[qi]))
-                        yc = y/(2*len(groups[qi]))
-                        h = h/len(groups[qi])
-                    else:
-                        xc=yc=h=-1
-                    trans_qs.append((trans_q,xc,yc,h))
-                    if self.max_qa_len is not None and len(trans_q)>self.max_qa_len:
-                        trans_q = trans_q[:self.max_qa_len]
-                    all_q_a.append(('qu~{}'.format(trans_q),trans_h_a,[hi,qi]))
-
-                #Now we need to put all the questions into read order
-                if len(trans_qs)>1:
-                    rows=[]
-                    rows_mean_y=[]
-                    for trans_q,x,y,h in trans_qs:
-                        row_i=None
-                        for r,mean_y in enumerate(rows_mean_y):
-                            if abs(mean_y-y)<h*0.6:
-                                row_i=r
-                                break
-                        if row_i is None:
-                            rows.append([(trans_q,x,y)])
-                            rows_mean_y.append(y)
-                        else:
-                            rows[row_i].append((trans_q,x,y))
-                            mean_y=0
-                            for (trans_q2,x2,y2) in rows[r]:
-                                mean_y+=y2
-                            rows_mean_y[row_i] = mean_y/len(rows[row_i])
-                    trans_qs = []
-                    rows = list(zip(rows,rows_mean_y))
-                    rows.sort(key=lambda a:a[1])
-                    for row,mean_y in rows:
-                        row.sort(key=lambda a:a[1])
-                        for trans_q,x,y in row:
-                            trans_qs.append(trans_q)
-                    trans_qs = '|'.join(trans_qs)
-                else:
-                    trans_qs = trans_qs[0][0]
-
-                if self.max_qa_len is not None and len(trans_qs)>self.max_qa_len:
-                    self.breakLong(all_q_a,trans_qs,'hd~{}'.format(trans_h_q),'hd>')
-                else:
-                    all_q_a.append(('hd~{}'.format(trans_h_q),trans_qs,[hi]+qis))
-
-            for gi in others_gs:
-                trans_gi = all_trans[gi]
-                #if random.random()<0.1 and ':' not in trans_gi: 
-                if trans_gi not in ambiguous:
-                    if self.max_qa_len is not None and len(trans_gi)>self.max_qa_len:
-                        trans_gi_end = trans_gi[-self.max_qa_len:]
-                        trans_gi_start = trans_gi[:self.max_qa_len]
-                    else:
-                        trans_gi_start=trans_gi_end=trans_gi
-                    all_q_a.append(('l~{}'.format(trans_gi_end),self.np_token,None))
-                    all_q_a.append(('v~{}'.format(trans_gi_start),self.np_token,None))
-                    all_q_a.append(('hd~{}'.format(trans_gi_end),self.np_token,None))
-                    all_q_a.append(('qu~{}'.format(trans_gi_start),self.np_token,None))
-            for gi in qs_without_h:
-                trans_gi = all_trans[gi]
-                if trans_gi not in ambiguous:
-                    if self.max_qa_len is not None and len(trans_gi)>self.max_qa_len:
-                        trans_gi = trans_gi[:self.max_qa_len]
-                    all_q_a.append(('qu~{}'.format(trans_gi),self.np_token,None))
-
-        #addTable can cause two tables to be made in odd cases (uneven rows, etc), so we'll simply combine all the table information and generate questions from it.
-        #print(tables)
-        #for table in tables:
-        #    for row_h in table['row_headers']:
-        #        if row_h in ambiguous:
-        #            continue
-        #        q='row for "{}"?'.format(all_trans[row_h])
-        #        a=''
-        #        for col_h in table['col_headers']:
-        #            v = table['values'][(col_h,row_h)]
-        #            a+='{}: {}, '.format(all_trans[col_h],all_trans[v])
-        #            if v not in ambiguous:
-        #                all_q_a.append(('row that "{}" is in?'.format(all_trans[v]),all_trans[row_h]))
-        #        a=a[:-2]#remove last ", "
-        #        all_q_a.append((q,a))
-        #    for col_h in table['col_headers']:
-        #        if col_h in ambiguous:
-        #            continue
-        #        q='column for "{}"?'.format(all_trans[col_h])
-        #        a=''
-        #        for row_h in table['row_headers']:
-        #            v = table['values'][(col_h,row_h)]
-        #            a+='{}: {}, '.format(all_trans[row_h],all_trans[v])
-        #            if v not in ambiguous:
-        #                all_q_a.append(('column that "{}" is in?'.format(all_trans[v]),all_trans[col_h]))
-        #        a=a[:-2]#remove last ", "
-        #        all_q_a.append((q,a))
-
-        #    for (col_h,row_h),v in table['values'].items():
-        #        all_q_a.append(('value of "{}" and "{}"'.format(all_trans[row_h],all_trans[col_h]),all_trans[v]))
-        #        all_q_a.append(('value of "{}" and "{}"'.format(all_trans[col_h],all_trans[row_h]),all_trans[v]))
-
-        #we we'll aggregate the information and just make the questions
+        #Aggregate the table information
         col_vs=defaultdict(list)
         row_vs=defaultdict(list)
         tables={}
         header_to_table_id={}
         cur_table_id=0
+        new_table_values=[]
         for (col_h,row_h),v in table_values.items():
-            if col_h is not None and row_h is not None:
-                if col_h in header_to_table_id:
-                    col_tab = header_to_table_id[col_h]
-                else:
-                    col_tab = None
-                if row_h in header_to_table_id:
-                    row_tab = header_to_table_id[row_h]
-                else:
-                    row_tab = None
+            col_h = old_to_new_e_map[col_h]
+            row_h = old_to_new_e_map[row_h]
+            v = old_to_new_e_map[v]
 
-                if col_tab is None and row_tab is None:
+            if col_h is not None and col_h in header_to_table_id:
+                col_tab = header_to_table_id[col_h]
+            else:
+                col_tab = None
+            if row_h is not None and row_h in header_to_table_id:
+                row_tab = header_to_table_id[row_h]
+            else:
+                row_tab = None
+
+            if col_tab is None and row_tab is None:
+                if col_h is not None and row_h is not None:
                     tables[cur_table_id] = [[col_h],[row_h]]
-                    header_to_table_id[col_h]=cur_table_id
-                    header_to_table_id[row_h]=cur_table_id
-                    cur_table_id+=1
-                elif col_tab is None:
-                    tables[row_tab][0].append(col_h)
-                    header_to_table_id[col_h]=row_tab
-                elif row_tab is None:
-                    tables[col_tab][1].append(row_h)
-                    header_to_table_id[row_h]=col_tab
+                elif col_h is not None:
+                    tables[cur_table_id] = [[col_h],[]]
+                elif row_h is not None:
+                    tables[cur_table_id] = [[],[row_h]]
                 else:
-                    if col_tab!=row_tab:
-                        #merge tables
-                        tables[col_tab][0]+=tables[row_tab][0]
-                        tables[col_tab][1]+=tables[row_tab][1]
-                        for h in tables[row_tab][0]+tables[row_tab][1]:
-                            header_to_table_id[h]=col_tab
-                        del tables[row_tab]
-
-            if col_h is not None and row_h is not None:
-                if self.char_qs:
-                    rhdr = all_trans[row_h]
-                    if self.max_qa_len is not None and len(rhdr)>self.max_qa_len//2:
-                        rhdr = rhdr[-self.max_qa_len//2:]
-                    chdr = all_trans[col_h]
-                    if self.max_qa_len is not None and len(chdr)>self.max_qa_len//2:
-                        chdr = chdr[-self.max_qa_len//2:]
-                    val = all_trans[v]
-                    if self.char_qs=='sym':
-                        if self.max_qa_len is not None and len(val)>self.max_qa_len:
-                            val = val[:self.max_qa_len]
-                        elif len(val)+1<=self.max_qa_len:
-                            val += self.end_token
-                    else:
-                        if self.max_qa_len is not None and len(val)>self.max_qa_len:
-                            val = val[:self.max_qa_len-2]+'>>'
-
-                    all_q_a.append(('t~{}~~{}'.format(rhdr,chdr),val,[col_h,row_h,v]))
-                    all_q_a.append(('t~{}~~{}'.format(chdr,rhdr),val,[col_h,row_h,v]))
-                else:
-                    all_q_a.append(('value of "{}" and "{}"?'.format(all_trans[row_h],all_trans[col_h]),all_trans[v],[col_h,row_h,v]))
-                    all_q_a.append(('value of "{}" and "{}"?'.format(all_trans[col_h],all_trans[row_h]),all_trans[v],[col_h,row_h,v]))
-            if all_trans[v] not in ambiguous:
-                if row_h is not None:
-                    if self.char_qs:
-                        rhdr = all_trans[row_h]
-                        if self.max_qa_len is not None and len(rhdr)>self.max_qa_len:
-                            rhdr = rhdr[-self.max_qa_len:]
-                        val = all_trans[v]
-                        if self.char_qs=='sym':
-                            if self.max_qa_len is not None and len(val)>self.max_qa_len:
-                                val = val[:self.max_qa_len]
-                            elif len(val)+1<=self.max_qa_len:
-                                val += self.end_token
-                        else:
-                            if self.max_qa_len is not None and len(val)>self.max_qa_len:
-                                val = val[:self.max_qa_len-2]+'>>'
-                        all_q_a.append(('ri~{}'.format(val),rhdr,[v,row_h]))
-                    else:
-                        all_q_a.append(('row that "{}" is in?'.format(all_trans[v]),all_trans[row_h],[v,row_h]))
+                    assert False
+                    #tables[cur_table_id] = [[],[]]
                 if col_h is not None:
-                    if self.char_qs:
-                        chdr = all_trans[col_h]
-                        if self.max_qa_len is not None and len(chdr)>self.max_qa_len:
-                            chdr = chdr[-self.max_qa_len:]
-                        val = all_trans[v]
-                        if self.char_qs=='sym':
-                            if self.max_qa_len is not None and len(val)>self.max_qa_len:
-                                val = val[:self.max_qa_len]
-                            elif len(val)+1<=self.max_qa_len:
-                                val += self.end_token
-                        else:
-                            if self.max_qa_len is not None and len(val)>self.max_qa_len:
-                                val = val[:self.max_qa_len-2]+'>>'
-                        all_q_a.append(('ci~{}'.format(val),chdr,[v,col_h]))
-                    else:
-                        all_q_a.append(('column that "{}" is in?'.format(all_trans[v]),all_trans[col_h],[v,col_h]))
+                    header_to_table_id[col_h]=cur_table_id
+                if row_h is not None:
+                    header_to_table_id[row_h]=cur_table_id
+                tab_id = cur_table_id
+                cur_table_id+=1
+            elif col_tab is None:
+                tables[row_tab][0].append(col_h)
+                tab_id = row_tab
+                if col_h is not None:
+                    header_to_table_id[col_h]=row_tab
+            elif row_tab is None:
+                tables[col_tab][1].append(row_h)
+                tab_id = col_tab
+                if row_h is not None:
+                    header_to_table_id[row_h]=col_tab
+            else:
+                if col_tab!=row_tab:
+                    #merge tables
+                    tables[col_tab][0]+=tables[row_tab][0]
+                    tables[col_tab][1]+=tables[row_tab][1]
+                    for h in tables[row_tab][0]+tables[row_tab][1]:
+                        header_to_table_id[h]=col_tab
+                    del tables[row_tab]
+                    tab_id = col_tab
 
-            x,y = bbs[groups[v][0],0:2]
+        #Rebuild table_values with table ids
+        for (col_h,row_h),v in table_values.items():
+            col_h = old_to_new_e_map[col_h]
+            row_h = old_to_new_e_map[row_h]
+            v = old_to_new_e_map[v]
+            
             if col_h is not None:
-                col_vs[col_h].append((v,y))
-            if row_h is not None:
-                row_vs[row_h].append((v,x))
-
-        for row_h, vs in row_vs.items():
-            trans_row_h = all_trans[row_h]
-            if trans_row_h not in ambiguous:
-                vs.sort(key=lambda a:a[1])
-                a=all_trans[vs[0][0]]
-                for v,x in vs[1:]:
-                    a+='|'+all_trans[v]
-                if self.char_qs:
-                    if self.max_qa_len is not None and len(trans_row_h)>self.max_qa_len:
-                        trans_row_h = trans_row_h[-self.max_qa_len:]
-                    if self.max_qa_len is not None and len(a)>self.max_qa_len:
-                        self.breakLong(all_q_a,a,'ar~{}'.format(trans_row_h),'ar>')
-                    else:
-                        all_q_a.append(('ar~{}'.format(trans_row_h),a,[row_h,vs[0][0]]))
-                else:
-                    all_q_a.append(('all values in row "{}"?'.format(trans_row_h),a,[row_h,vs[0][0]]))
-        for col_h, vs in col_vs.items():
-            trans_col_h = all_trans[col_h]
-            if trans_col_h not in ambiguous:
-                vs.sort(key=lambda a:a[1])
-                a=all_trans[vs[0][0]]
-                for v,y in vs[1:]:
-                    a+='|'+all_trans[v]
-                if self.char_qs: 
-                    if self.max_qa_len is not None and len(trans_col_h)>self.max_qa_len:
-                        trans_col_h = trans_col_h[-self.max_qa_len:]
-                    if self.max_qa_len is not None and len(a)>self.max_qa_len:
-                        self.breakLong(all_q_a,a,'ac~{}'.format(trans_col_h),'ac>')
-                    else:
-                        all_q_a.append(('ac~{}'.format(trans_col_h),a,[col_h,vs[0][0]]))
-                else:
-                    all_q_a.append(('all values in column "{}"?'.format(trans_col_h),a,[col_h,vs[0][0]]))
-
-        if self.char_qs:
-            all_q_a.append(('t#>',str(len(tables)),list(col_vs.keys())+list(row_vs.keys())))
-            for i,(col_hs, row_hs) in enumerate(tables.values()):
-                col_hs = [(h,bbs[groups[h][0]][0]) for h in col_hs]
-                col_hs.sort(key=lambda a:a[1])
-                col_hs = [h[0] for h in col_hs]
-                col_h_strs = [all_trans[h] for h in col_hs]
-                row_hs = [(h,bbs[groups[h][0]][1]) for h in row_hs]
-                row_hs.sort(key=lambda a:a[1])
-                row_hs = [h[0] for h in row_hs]
-                row_h_strs = [all_trans[h] for h in row_hs]
-                
-                col_h_strs='|'.join(col_h_strs)
-                row_h_strs='|'.join(row_h_strs)
-                if self.max_qa_len is not None and len(col_h_strs)>self.max_qa_len:
-                    self.breakLong(all_q_a,col_h_strs,'ch~{}'.format(i),'ch>')
-                else:
-                    all_q_a.append(('ch~{}'.format(i),col_h_strs,col_hs))
-                if self.max_qa_len is not None and len(row_h_strs)>self.max_qa_len:
-                    self.breakLong(all_q_a,row_h_strs,'rh~{}'.format(i),'rh>')
-                else:
-                    all_q_a.append(('rh~{}'.format(i),row_h_strs,row_hs))
-
-
-
-
-        #Convert the group IDs on each QA pair to be BB IDs.
-        #   This uses groups_id, which can be the word BB ids
-        new_all_q_a =[]
-        for q,a,group_ids in all_q_a:
-            if group_ids is not None:
-                bb_ids=[]
-                for gid in group_ids:
-                    bb_ids+=groups_id[gid]
+                tab_id = header_to_table_id[col_h]
+                if row_h is not None:
+                    assert tab_id == header_to_table_id[row_h]
             else:
-                bb_ids=None
-            self.qaAdd(new_all_q_a,q,a,bb_ids)
-            if self.max_qa_len is not None:
-                assert len(q)<self.max_qa_len+5
-        return new_all_q_a
+                tab_id = header_to_table_id[row_h]
 
+            new_table_values.append((tab_id,col_h,row_h,v))
+            #x,y = bbs[groups[v][0],0:2]
+            #if col_h is not None:
+            #    col_vs[col_h].append((v,y))
+            #if row_h is not None:
+            #    row_vs[row_h].append((v,x))
 
-    def corrupt(self,s):
-        new_s=''
-        for c in s:
-            r = random.random()
-            if r<self.corruption_p/3:
-                pass
-            elif r<self.corruption_p*2/3:
-                new_s+=random.choice(string.ascii_letters)
-            elif r<self.corruption_p:
-                if random.random()<0.5:
-                    new_s+=c+random.choice(string.ascii_letters)
-                else:
-                    new_s+=random.choice(string.ascii_letters)+c
-            else:
-                new_s+=c
-        return new_s
+        real_tables=[]
+        all_col_entities=[]
+        all_row_entities=[]
+        tab_id_to_pos={}
+        for tab_id,(col_hs,row_hs) in tables.items():
+            pos_col_hs = [(new_entities[ch].box[0],ch) for ch in col_hs]
+            pos_col_hs.sort(key=lambda x:x[0])
+            col_entities = [new_entities[ch[1]] for ch in pos_col_hs]
+            all_col_entities.append( [ch[1] for ch in pos_col_hs] )
 
-    def addRead(self,qa,text,np=False,backwards=False):
-        if backwards:
-            text = text[::-1]
-            prompt = 'bk~{}'
-        else:
-            prompt = 're~{}'
-        if len(text)<=2 or random.random()<0.05:
-            start_point=len(text) #so we get [end]s with long texts
-        elif len(text)>self.min_start_read+1:
-            start_point = random.randrange(self.min_start_read,len(text)+1)
-        else:
-            start_point = random.randrange(len(text)//2,len(text)+1)
-        start_text = text[:start_point].strip()
-        finish_text = text[start_point:].strip()
-        if len(finish_text)==0:
-            finish_text=self.end_token
-        if len(start_text)-self.min_start_read*2>0 and random.random()>0.33:
-            real_start = random.randrange(0,len(start_text)-self.min_start_read*2)
-            start_text = start_text[real_start:]
+            pos_row_hs = [(new_entities[rh].box[1],ch) for rh in row_hs]
+            pos_row_hs.sort(key=lambda y:y[0])
+            row_entities = [new_entities[rh[1]] for rh in pos_row_hs]
+            all_row_entities.append( [rh[1] for rh in pos_row_hs] )
 
-        if self.max_qa_len is not None:
-            if len(start_text) > self.max_qa_len:
-                start_text = start_text[-self.max_qa_len:]
-            if len(finish_text) > self.max_qa_len:
-                if self.char_qs=='sym':
-                    finish_text = finish_text[:self.max_qa_len]
-                    if len(finish_text)+1 > self.max_qa_len:
-                        finish_text += self.end_token
-                else:
-                    finish_text = finish_text[:self.max_qa_len-2]+'>>'
-        if np:
-            qa.append((prompt.format(start_text),self.np_token,None))
-        else:
-            qa.append((prompt.format(start_text),finish_text,None))
+            tab_id_to_pos[tab_id] = len(real_tables)
+            real_tables.append(Table(row_entities,col_entities))
 
-    #break a long answer THAT ISN'T lines on the page into multiple QAs
-    def breakLong(self,qa,full,initial_prompt,continue_prompt):
-        if self.max_qa_len is not None and len(full)>self.max_qa_len:
-            if self.do_masks:
-                first_part = full[:self.max_qa_len]
-                self.qaAdd(qa,initial_prompt,first_part)
-                prev_part = first_part
-                remainder = full[self.max_qa_len:]
-                while len(remainder)>self.max_qa_len:
-                    next_part = remainder[:self.max_qa_len]
-                    self.qaAdd(qa,continue_prompt+prev_part,next_part)
-                    prev_part = next_part
-                    remainder = remainder[self.max_qa_len:]
-                if len(remainder)+1 < self.max_qa_len:
-                    self.qaAdd(qa,continue_prompt+prev_part,remainder+self.end_token)
-                else:
-                    self.qaAdd(qa,continue_prompt+prev_part,remainder)
-                    self.qaAdd(qa,continue_prompt+remainder,self.end_token)
-            else:
-                first_part = full[:self.max_qa_len-2] + '>>' #mark to indicate not complete
-                self.qaAdd(qa,initial_prompt,first_part)
-                prev_part = first_part[:-2] #remove mark
-                remainder = full[self.max_qa_len-2:]
-                while len(remainder)>self.max_qa_len:
-                    next_part = remainder[:self.max_qa_len-2] + '>>'
-                    self.qaAdd(qa,continue_prompt+prev_part,next_part)
-                    prev_part = next_part[:-2]
-                    remainder = remainder[self.max_qa_len-2:]
-                self.qaAdd(qa,continue_prompt+prev_part,remainder)
-        elif len(full)+1<self.max_qa_len and self.do_masks:
-          self.qaAdd(qa,initial_prompt,full+self.end_token)
-        else:
-          self.qaAdd(qa,initial_prompt,full)
-          if self.max_qa_len:
-              self.qaAdd(qa,continue_prompt+full,self.end_token)
+        for tab_id, col_h, row_h, v in new_table_values:
+            r = all_row_entities[tab_id].index(row_h)
+            c = all_col_entities[tab_id].index(col_h)
+            tab_pos = tab_id_to_pos[tab_id]
+            real_tables[tab_pos].cells[r][c]=new_entities[v]
 
+        ##DEBUG
+        for head,tail in entity_link:
+            assert new_entities[head].cls!='answer'
+            if tail is not None:
+                for t in tail:
+                    assert new_entities[head].text != new_entities[t].text
 
-
-def addTable(tables,table_map,groups,bbs,qi,ais,relationships_q_a,relationships_a_q):
-    other_qis=[]
-    for ai in ais:
-        if len(relationships_a_q[ai])==2:
-            q1,q2 = relationships_a_q[ai]
-            if q1==qi:
-                cls = bbs[groups[q2],13:].argmax()
-                assert cls == 1
-                x,y = bbs[groups[q2][0],0:2]
-                other_qis.append((q2,x,y))
-            else:
-                cls = bbs[groups[q1],13:].argmax()
-                assert cls == 1
-                x,y = bbs[groups[q1][0],0:2]
-                other_qis.append((q1,x,y))
-        else:
-            assert len(relationships_a_q[ai])==1 #blank row/column header. Skipping for now
-
-    other_set = set(q[0] for q in other_qis)
-    if len(other_set)<len(other_qis):
-        import pdb;pdb.set_trace()
-        return #label error
-    
-    my_qis=[]
-    debug_hit=False
-    for ai in relationships_q_a[other_qis[0][0]]:
-        if len(relationships_a_q[ai])==2:
-            q1,q2 = relationships_a_q[ai]
-            if q1==other_qis[0][0]:
-                if q2 in other_set:
-                    return
-                cls = bbs[groups[q2],13:].argmax()
-                assert cls == 1
-                x,y = bbs[groups[q2][0],0:2]
-                my_qis.append((q2,x,y))
-                if q2==qi:
-                    debug_hit=True
-            else:
-                if q1 in other_set:
-                    return
-                cls = bbs[groups[q1],13:].argmax()
-                assert cls == 1
-                x,y = bbs[groups[q1][0],0:2]
-                my_qis.append((q1,x,y))
-                if q1==qi:
-                    debug_hit=True
-        else:
-            assert len(relationships_a_q[ai])==1
-    assert debug_hit
-
-
-    #which are rows, which are cols?
-    other_mean_x = np.mean([q[1] for q in other_qis])
-    other_mean_y = np.mean([q[2] for q in other_qis])
-    my_mean_x = np.mean([q[1] for q in my_qis])
-    my_mean_y = np.mean([q[2] for q in my_qis])
-
-    if my_mean_x<other_mean_x and my_mean_y>other_mean_y:
-        #my is row headers
-        my_qis.sort(key=lambda a:a[2]) #sort by y
-        other_qis.sort(key=lambda a:a[1]) #sort by x
-        row_hs = [q[0] for q in my_qis]
-        col_hs = [q[0] for q in other_qis]
-        
-    elif my_mean_x>other_mean_x and my_mean_y<other_mean_y:
-        #my is col headers
-        my_qis.sort(key=lambda a:a[1]) #sort by x
-        other_qis.sort(key=lambda a:a[2]) #sort by y
-        col_hs = [q[0] for q in my_qis]
-        row_hs = [q[0] for q in other_qis]
-    else:
-        assert False, 'unknown case'
-
-
-    values={}
-    for row_h in row_hs:
-        vs = relationships_q_a[row_h]
-        for v in vs:
-            try:
-                q1,q2 = relationships_a_q[v]
-                if q1==row_h:
-                    col_h=q2
-                else:
-                    col_h=q1
-                values[(col_h,row_h)] = v
-            except ValueError:
-                pass
-
-    table = {
-            "row_headers": row_hs,
-            "col_headers": col_hs,
-            "values": values
-            }
-    for row_h in row_hs:
-        #assert row_h not in table_map
-        table_map[row_h]=len(tables)
-    for col_h in col_hs:
-        #assert col_h not in table_map
-        table_map[col_h]=len(tables)
-    for v in values.values():
-        #assert v not in table_map
-        table_map[v]=len(tables)
-    tables.append(table)
+        return new_entities,entity_link,real_tables
 
 def addTableElement(table_values,row_headers,col_headers,ai,qi1,qi2,groups,bbs,threshold=5):
     ele_x,ele_y = bbs[groups[ai][0],0:2]

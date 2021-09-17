@@ -15,7 +15,13 @@ def display(data):
     #mask = makeMask(data['image'])
     for b in range(batchSize):
         #print (data['img'].size())
-        img = (1-data['img'][b].permute(1,2,0))/2.0
+        img = (1-data['img'][b,0:1].permute(1,2,0))/2.0
+        img = torch.cat((img,img,img),dim=2)
+        show = data['img'][b,1]>0
+        mask = data['img'][b,1]<0
+        img[:,:,0] *= ~mask
+        img[:,:,1] *= ~show
+        img[:,:,2] *= 1-data['mask_label'][b,0]
         #label = data['label']
         #gt = data['gt'][b]
         #print(label[:data['label_lengths'][b],b])
@@ -23,8 +29,8 @@ def display(data):
         #if data['spaced_label'] is not None:
         #    print('spaced label:')
         #    print(data['spaced_label'][:,b])
-        for bb,text in zip(data['bb_gt'][b],data['transcription'][b]):
-            print('ocr: {} {}'.format(text,bb))
+        #for bb,text in zip(data['bb_gt'][b],data['transcription'][b]):
+        #    print('ocr: {} {}'.format(text,bb))
         #print('questions: {}'.format(data['questions'][b]))
         #print('answers: {}'.format(data['answers'][b]))
         print('questions and answers')
@@ -82,10 +88,10 @@ if __name__ == "__main__":
             "rot_degree_std_dev": 1
             },
         'split_to_lines': True,
-        'questions':50,
+        'questions':1,
         'do_words': False,
         'char_qs': "full",
-        'max_qa_len': 20
+        'max_qa_len': 26
 
 })
 

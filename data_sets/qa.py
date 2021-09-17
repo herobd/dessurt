@@ -392,6 +392,7 @@ class QADataset(torch.utils.data.Dataset):
                 mask_label = getMask(img.shape,new_q_outboxes[0])
             else:
                 mask_label = None
+            import pdb;pdb.set_trace()
         else:
             mask_label = None
         #if pixel_gt is not None:

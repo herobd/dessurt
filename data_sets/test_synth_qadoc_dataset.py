@@ -40,8 +40,9 @@ def display(data,write):
 
         #widths.append(img.size(1))
         
-        #draw='ar' in q or 'ac' in q or '%' in q or '#r' in q or '#c' in q or '$r' in q or '$c' in q
-        draw = q[0] in 'fp'
+        #draw='ar~' in q or 'ac~' in q or '%' in q or '&' in q or 'rh~' in q or 'ch~' in q
+        draw = 'l~' in q or 'v~' in q or 'd0~' in q or 'v0~' in q
+        #draw = True
         if write:
             cv2.imwrite('test_single_512.png',(img.numpy()*255)[:,:,0].astype(np.uint8))
         if draw :
@@ -78,7 +79,7 @@ if __name__ == "__main__":
     if len(sys.argv)>1:
         dirPath = sys.argv[1]
     else:
-        dirPath = '../data/english4line_fontslong'
+        dirPath = '../data/english4line_fontslonger2'
     if len(sys.argv)>2:
         write = int(sys.argv[2])
     else:
