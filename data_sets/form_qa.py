@@ -46,15 +46,27 @@ class Entity:
         self.text_map = []
         lX=tY=99999999999
         rX=bY=-1
+        full=False
         for li,line in enumerate(self.lines):
             self.text+=line.text+'\\'
             self.text_map+=[li]*(len(line.text)+1)
-            lX = min(lX,line.box[0])
-            tY = min(tY,line.box[1])
-            rX = max(rX,line.box[2])
-            bY = max(bY,line.box[3])
+            if len(line.box)==4:
+                lX = min(lX,line.box[0])
+                tY = min(tY,line.box[1])
+                rX = max(rX,line.box[2])
+                bY = max(bY,line.box[3])
+            else:
+                full=True
+                lX = min(lX,*line.box[::2])
+                tY = min(tY,*line.box[1::2])
+                rX = max(rX,*line.box[::2])
+                bY = max(bY,*line.box[1::2])
         self.text=self.text[:-1]#removing trailing '\'
-        self.box=[lX,tY,rX,bY]
+        if not full:
+            self.box=[lX,tY,rX,bY]
+        else:
+            self.box=[lX,tY,rX,tY,rX,bY,lX,bY,
+                    lX,(tY+bY)/2,rX,(tY+bY)/2,(lX+rX)/2,tY,(lX+rX)/2,bY]
         assert self.text != ''
 
     def __str__(self):
@@ -228,35 +240,24 @@ class FormQA(QADataset):
 
                 inmask = []
                 ambiguous = len(entities[prompt_id].lines)==1 and entities[prompt_id].lines[0].ambiguous
-                if random.random()<0.5 or ambiguous:#should we use query mask
-                    if down and entities[prompt_id].cls=='question':
-                        question = 'd0'+char
-                    elif not down and entities[prompt_id].cls=='answer':
-                        question = 'v0~'
-                    elif down and entities[prompt_id].cls=='header':
-                        question = 'h0'+char
-                    elif not down and entities[prompt_id].cls=='question':
-                        question = 'q0~'
-                    else:
-                        assert False
-
+                mask =  random.random()<0.5 or ambiguous#should we use query mask
+                if down and (entities[response_id].cls=='answer' if response_id is not None else entities[prompt_id].cls=='question'):
+                    question = 'd0'+char if mask else 'l'+char
+                elif not down and entities[prompt_id].cls=='answer':
+                    question = 'v0~' if mask else 'v~'
+                elif down and (entities[response_id].cls=='question' if response_id is not None else entities[prompt_id].cls=='header'):
+                    question = 'h0'+char if mask else 'hd'+char
+                elif not down and entities[prompt_id].cls=='question':
+                    question = 'q0~' if mask else 'qu~'
+                else:
+                    assert False
+                
+                if mask:
                     if random.random()<0.5: #should the mask be lines or whole entity
                         for line in entities[prompt_id].lines:
                             inmask.append(self.convertBB(s,line.box))
                     else:
                         inmask.append(self.convertBB(s,entities[prompt_id].box))
-                else:
-                    if down and entities[prompt_id].cls=='question':
-                        question = 'l'+char
-                    elif not down and entities[prompt_id].cls=='answer':
-                        question = 'v~'
-                    elif down and entities[prompt_id].cls=='header':
-                        question = 'hd'+char
-                    elif not down and entities[prompt_id].cls=='question':
-                        question = 'qu~'
-                        #import pdb;pdb.set_trace()
-                    else:
-                        assert False
 
                 outmask = []
                 bbids = []
@@ -328,11 +329,13 @@ class FormQA(QADataset):
                 self.qaAdd(q_a_pairs,question.format(prompt_text),self.np_token,[],[],[])
 
             elif q_type=='read':
-                #line above, line below? ^^,^0,vv,v0
 
                 #finish reading entity
-                entity = random.choice(entities)
-                text = entity.text
+                for i in range(10):
+                    entity = random.choice(entities)
+                    text = entity.text
+                    if len(text)>2:
+                        break
 
                 if random.random()<0.5:
                     forward=True
@@ -341,6 +344,8 @@ class FormQA(QADataset):
                     text = text[::-1]
 
                 last_space = max(text.rfind(' '),text.rfind('\\'))
+                if last_space==-1: #no space
+                    last_space = random.randrange(1,len(text)-1)
                 query_part = text[:last_space] #so there's at least one word to predict
                 query,q_start = self.selectPartText(query_part,ret_start=True)
                 if len(query)==0:
@@ -378,7 +383,7 @@ class FormQA(QADataset):
 
 
                 if random.random()<0.4 and not ambiguous and len(query)>6:
-                    question='fi~' if forward else 'pr' #for "finish" or "previous"
+                    question='fi~' if forward else 'pr~' #for "finish" or "previous"
                     inmask=[]
                 elif random.random()<0.5:
                     question='f0~' if forward else 'p0~'
@@ -397,8 +402,8 @@ class FormQA(QADataset):
                 r,r_header = random.choice(list(enumerate(table.row_headers)))
                 c,c_header = random.choice(list(enumerate(table.col_headers)))
 
-                r_h_text = r_header.text
-                c_h_text = c_header.text
+                r_h_text = r_header.text if r_header is not None else self.blank_token
+                c_h_text = c_header.text if c_header is not None else self.blank_token
 
                 r_h_text = self.selectPartText(r_h_text,-1+self.max_qa_len//2)
                 c_h_text = self.selectPartText(c_h_text,-1+self.max_qa_len//2)
@@ -417,7 +422,9 @@ class FormQA(QADataset):
                     cell_lines=[]
                     outmask = []
                 
-                ambiguous = all([line.ambiguous for line in r_header.lines+c_header.lines]) 
+                ambiguous = all([line.ambiguous for line in \
+                        (r_header.lines if r_header is not None else [])+\
+                        (c_header.lines if c_header is not None else [])]) 
 
                 if random.random()<0.5 and not ambiguous:
                     question='t'
@@ -426,7 +433,9 @@ class FormQA(QADataset):
                     question='t0'
                     inmask = [self.convertBB(s,line.box) for line in r_header.lines+c_header.lines]
 
-                ids = [line.bbid for line in r_header.lines+c_header.lines+cell_lines]
+                ids = [line.bbid for line in \
+                        (r_header.lines if r_header is not None else [])+\
+                        (c_header.lines if c_header is not None else [])] 
 
                 if random.random()<0.5:
                     h1_text = r_h_text
@@ -457,11 +466,15 @@ class FormQA(QADataset):
 
                 cell_text = self.selectPartText(cell.text)
 
-                header_text = header.text
-                if len(header_text) > self.max_qa_len:
-                    header_text = header_text[:self.max_qa_len]
-                elif len(header_text)+1<=self.max_qa_len:
-                    header_text += self.end_token
+                if header is not None:
+                    header_text = header.text
+                    header_text = self.getFrontText(header_text,term=self.end_token)
+                else:
+                    header_text = self.blank_token
+                #if len(header_text) > self.max_qa_len:
+                #    header_text = header_text[:self.max_qa_len]
+                #elif len(header_text)+1<=self.max_qa_len and header_text!=self.blank_token:
+                #    header_text += self.end_token
 
                 ambiguous = all([line.ambiguous for line in cell.lines])
 
@@ -482,9 +495,10 @@ class FormQA(QADataset):
                 ids = [line.bbid for line in cell.lines]
 
                 outmask = []
-                for line in header.lines:
-                    outmask.append(self.convertBB(s,line.box))
-                    ids.append(line.bbid)
+                if header is not None:
+                    for line in header.lines:
+                        outmask.append(self.convertBB(s,line.box))
+                        ids.append(line.bbid)
 
                 self.qaAdd(q_a_pairs,question+cell_text,header_text,ids,inmask,outmask)
 
@@ -496,10 +510,14 @@ class FormQA(QADataset):
                 if q_type=='all-row':
                     row=True
                     r,header = random.choice(list(enumerate(table.row_headers)))
+                    if header is None:
+                        continue
                     all_cells = table.cells[r]
                 else:
                     row=False
                     c,header = random.choice(list(enumerate(table.col_headers)))
+                    if header is None:
+                        continue
                     all_cells = [table.cells[r][c] for r in range(len(table.row_headers))]
 
                 ambiguous = all([line.ambiguous for line in header.lines])
@@ -598,10 +616,22 @@ class FormQA(QADataset):
                     self.qaAdd(q_a_pairs,question+str(table_i),'',ids,[],outmask)
                 else:
                     #step, text-wise, through each entry
-                    i = random.randrange(len(headers)+1)
+                    i = init = random.randrange(len(headers)+1)
                     header = headers[i] if i<len(headers) else None
-                    if i>0:
-                        prev_header = headers[i-1]
+                    prepend=''
+                    #go down the row/col till we reach a non-blank header (FUNSD can have blank headers)
+                    while header is None and i<len(headers):
+                        prepend+=self.blank_token+'|'
+                        i+=1
+                        header = headers[i] if i<len(headers) else None
+
+                    #be sure we are including all headers before that are blank
+                    while init>0 and headers[init-1] is None:
+                        init-=1
+                        prepend = self.blank_token+'|'+prepend
+
+                    if init>0:
+                        prev_header = headers[init-1]
                         prev_text = self.selectPartText(prev_header.text)
                         ids=[line.bbid for line in prev_header.lines]
                         char = '>'
@@ -625,7 +655,7 @@ class FormQA(QADataset):
                     if header is not None:
                         outmask =  [self.convertBB(s,line.box) for line in header.lines]
                         ids += [line.bbid for line in header.lines]
-                        header_text = self.getFrontText(header.text,term='|' if i<len(headers)-1 else self.end_token)
+                        header_text = self.getFrontText(prepend+header.text,term='|' if i<len(headers)-1 else self.end_token)
                     else:
                         outmask = []
                         header_text = self.end_token
@@ -805,5 +835,7 @@ class FormQA(QADataset):
             text = last_text
         elif len(text)>self.max_qa_len:
             text = self.selectPartText(text)
+        if len(text)==0:
+            return self.sampleText()
         return text
     

@@ -43,8 +43,15 @@ class CDIPQA(ParaQADataset):
                 readFile = json.loads(f.read())
                 if split in readFile:
                     subdirs = readFile[split]
+                    new_subdirs=[]
+                    for sub in subdirs:
+                        if '.' in sub:
+                            new_subdirs.append(sub)
+                        else:
+                            for a in 'abcdefghijklmnopqrstuvwxyz':
+                                new_subdirs.append(sub+'.'+a)
                     toUse=[]
-                    for subdir in subdirs:
+                    for subdir in new_subdirs:
                         with open(os.path.join(dirPath,subdir+'.list')) as lst:
                             toUse += [path.strip() for path in lst.readlines()]
                     imagesAndAnn = []
