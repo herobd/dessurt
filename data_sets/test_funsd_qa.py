@@ -38,8 +38,12 @@ def display(data):
             print(q+' : '+a)
 
         #widths.append(img.size(1))
-        
-        draw=True
+        draw = False
+        for x in ['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
+            if x in q:
+                draw = True
+                break
+        #draw=True
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -47,7 +51,7 @@ def display(data):
             #cv2.imwrite('out/fg_mask{}.png'.format(b),fg_mask.numpy()*255)
             #cv2.imwrite('out/img{}.png'.format(b),img.numpy()*255)
             #cv2.imwrite('out/changed_img{}.png'.format(b),changed_img.numpy()*255)
-            plt.imshow(img.numpy()[:,:,0], cmap='gray')
+            plt.imshow((img*255).numpy().astype(np.uint8))
             plt.show()
 
             #cv2.waitKey()

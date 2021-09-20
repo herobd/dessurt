@@ -90,10 +90,10 @@
                 }
             },
             {
-                "freq": 0.0,
+                "freq": 0.1,
                 "config": {
                     "data_set_name": "CDIPQA",
-                    "data_dir": "../data/CDIP_ready",
+                    "data_dir": "../data/CDIP_ready2",
                     "batch_size": 1,
                     "num_workers": 4,
                     "rescale_range": [
@@ -141,7 +141,7 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 1000000,
+        "iterations": 1500000,
         "accum_grad_steps": 30,
         "#swa": true,
         "#swa_start": 200000,
