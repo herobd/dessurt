@@ -158,6 +158,8 @@ class FUNSDQA(FormQA):
         return box.tolist()
 
     def prepareForm(self,bbs,transcription,groups,groups_adj):
+
+
         entities=[]
 
 
@@ -190,18 +192,21 @@ class FUNSDQA(FormQA):
                 removed.add(gi)
 
 
+        groups_adj = cleanUpAdj(entities,groups_adj)
 
 
         relationships_h_q=defaultdict(list)
-        relationships_q_h={}
+        relationships_h_h=defaultdict(list)
         for h_gi in headers_gs:
             for gi1,gi2 in groups_adj:
                 if gi1 == h_gi and gi2 in questions_gs:
                     relationships_h_q[h_gi].append(gi2)
-                    relationships_q_h[gi2]=h_gi
                 elif gi2 == h_gi and gi1 in questions_gs:
                     relationships_h_q[h_gi].append(gi1)
-                    relationships_q_h[gi1]=h_gi
+                elif gi1 == h_gi and  gi2 in headers_gs:
+                    relationships_h_h[h_gi].append(gi2)
+                elif gi2 == h_gi and  gi1 in headers_gs:
+                    relationships_h_h[h_gi].append(gi1)
 
         relationships_q_a=defaultdict(list)
         relationships_a_q=defaultdict(list)
@@ -334,7 +339,21 @@ class FUNSDQA(FormQA):
 
 
 
-        #Do header and qestions
+        #Do headers
+
+        #first sort out header->subheader relationships
+        possible_sub_rel={}
+        for h1,h2s in relationships_h_h.items():
+            if len(h2s)>1:
+                #should be main header
+                assert h1 not in relationships_h_q
+                relationships_h_q[h1]=h2s
+            else:
+                possible_sub_rel[h1]=h2s
+        for h1,h2s in possible_sub_rel.items():
+            if h2s[0] not in relationships_h_q:
+                relationships_h_q[h1]=h2s
+
         for hi,qis in relationships_h_q.items():
             hi = old_to_new_e_map[hi]
             qis = [old_to_new_e_map[qi] for qi in qis]
@@ -408,15 +427,16 @@ class FUNSDQA(FormQA):
             else:
                 row_tab = None
 
+
             if col_tab is None and row_tab is None:
-                if col_h is not None and row_h is not None:
-                    tables[cur_table_id] = [[col_h],[row_h]]
-                elif col_h is not None:
-                    tables[cur_table_id] = [[col_h],[]]
-                elif row_h is not None:
-                    tables[cur_table_id] = [[],[row_h]]
-                else:
-                    assert False
+                #if col_h is not None and row_h is not None:
+                tables[cur_table_id] = [[col_h],[row_h]]
+                #elif col_h is not None:
+                #    tables[cur_table_id] = [[col_h],[]]
+                #elif row_h is not None:
+                #    tables[cur_table_id] = [[],[row_h]]
+                #else:
+                #    assert False
                     #tables[cur_table_id] = [[],[]]
                 if col_h is not None:
                     header_to_table_id[col_h]=cur_table_id
@@ -477,115 +497,116 @@ class FUNSDQA(FormQA):
         blank_col_pos={}
         blank_row_pos={}
         for tab_id,(col_hs,row_hs) in tables.items():
-            pos_col_hs = []
 
+            #find possible conflict (header of row and column)
+            bad = set(col_hs).intersection(set(row_hs))
+            if len(bad)>0:
+                print('Found overlapped headers {}'.format(bad))
+            for bad_header in bad:
+                if bad_header is not None:
+                    #determin if col or row has most votes
+                    votes_col=0
+                    votes_row=0
+                    for tab_id,col_h,row_h,v in new_table_values:
+                        if bad_header==col_h:
+                            votes_col+=1
+                        if bad_header==row_h:
+                            votes_row+=1
+                    if votes_col>votes_row:
+                        row_hs.remove(bad_header)
+                    elif votes_row>votes_col:
+                        col_hs.remove(bad_header)
+                    else:
+                        assert False #what?
 
+            ##Get columns sorted
+
+            #first make a list with the headers and their x m=position
             pos_col_hs = [(new_entities[ch].box[0],ch) for ch in col_hs if ch is not None]
             if None in col_hs:
+                #We also need to find where the columns without headers go
                 #how many blank columns are there?
-                all_x_center=[]
+                #We will seperate cells with no header by their x position
+                #first compute the average width
                 sum_len=0
                 count=0
                 for row_h,values in blank_col[tab_id].items():
                     for value in values:
                         cell = new_entities[value]
-                        x_center = (cell.box[0]+call.box[4])/2
-                        all_x_center.append(x_center)
-                        sum_len += call.box[4]-cell.box[0]
+                        sum_len += cell.box[4]-cell.box[0]
                         count+=1
 
                 avg_len = sum_len/count
-                columns=[]
-                for x_center in all_x_center:
-                    matched_col=None
-                    for col in columns:
-                        if abs(x_center-np.mean(col))<avg_len:
-                            matched_col=col
-                            break
-                    if matched_col is not None:
-                        matched_col.append(x_center)
-                    else:
-                        columns.append([x_center])
 
+                #Now seperate them into columns, assuming if they are more than the
+                #average width, they are a different column
                 columns_xs=[]
                 blank_cols_items=[]
                 for row_h,values in blank_col[tab_id].items():
                     for value in values:
                         cell = new_entities[value]
-                        x_center = (cell.box[0]+call.box[4])/2
+                        x_center = (cell.box[0]+cell.box[4])/2
                         matched_col_id=None
+                        #for each no-header column
                         for col_id,col in enumerate(columns_xs):
                             if abs(x_center-np.mean(col))<avg_len:
+                                #I belong in this column
                                 col.append(x_center)
                                 blank_cols_items[col_id].append(value)
                                 matched_col_id=col_id
                                 break
                         if matched_col_id is None:
+                            #I belong in a new column
                             blank_cols_items.append([value])
                             columns_xs.append([x_center])
 
 
                 for blank_col_items,positions in zip(blank_cols_items,columns_xs):
+                    #Now add these columns to list with positions, we use the column cell ids instead of the header id
                     x_center = np.mean(positions)
                     pos_col_hs.append((x_center,blank_col_items))
 
             pos_col_hs.sort(key=lambda x:x[0])
-            col_entities = []
-            all_col_entity_ids = []
-            these_col_entity_ids = []
+            col_entities = []#ordered list used to create Table object
+            these_col_entity_ids = []#for looking up position of cells
             for pos,(x,ch) in enumerate(pos_col_hs):
                 if isinstance(ch,int):
+                    #normal header
                     col_entities.append(new_entities[ch])
                     these_col_entity_ids.append(ch)
                 else:
+                    #empty header
                     col_entities.append(None)
                     these_col_entity_ids.append(None)
                     for v in ch:
-                        blank_col_pos[v]=pos
+                        blank_col_pos[v]=pos #as these can't use the col_entity_ids to lookup position
             all_col_entity_ids.append(these_col_entity_ids)
 
 
-            #col_entities = [new_entities[ch[1]] for ch in pos_col_hs]
-            #all_col_entity_ids.append( [ch[1] for ch in pos_col_hs] )
-
-
-
+            ##Get rows sorted
+            #same as col
             pos_row_hs = [(new_entities[rh].box[1],rh) for rh in row_hs if rh is not None]
             if None in row_hs:
                 #how many blank rows are there?
-                all_y_center=[]
                 sum_height=0
                 count=0
                 for row_h,values in blank_row[tab_id].items():
                     for value in values:
                         cell = new_entities[value]
-                        y_center = (cell.box[1]+cell.box[5])/2
-                        all_y_center.append(y_center)
                         sum_height += cell.box[5]-cell.box[1]
                         count+=1
 
                 avg_height = sum_height/count
-                rows=[]
-                for y_center in all_y_center:
-                    matched_row=None
-                    for row in rows:
-                        if abs(y_center-np.mean(row))<avg_height:
-                            matched_row=row
-                            break
-                    if matched_row is not None:
-                        matched_row.append(y_center)
-                    else:
-                        rows.append([y_center])
 
                 rows_ys=[]
                 blank_rows_items=[]
                 for row_h,values in blank_row[tab_id].items():
                     for value in values:
                         cell = new_entities[value]
-                        y_center = (cell.box[0]+call.box[4])/2
+                        y_center = (cell.box[0]+cell.box[4])/2
                         matched_row_id=None
                         for row_id,row in enumerate(rows_ys):
-                            if abs(y_center-np.mean(row))<avg_len:
+                            if abs(y_center-np.mean(row))<avg_height:
                                 row.append(y_center)
                                 blank_rows_items[row_id].append(value)
                                 matched_row_id=row_id
@@ -599,14 +620,6 @@ class FUNSDQA(FormQA):
                     y_center = np.mean(positions)
                     pos_row_hs.append((y_center,blank_row_items))
 
-            pos_col_hs.sort(key=lambda x:x[0])
-            for pos,(x,ch) in enumerate(pos_col_hs):
-                if isinstance(ch,int):
-                    col_entities.append(new_entities[ch])
-                else:
-                    col_entities.append(None)
-                    for v in ch:
-                        blank_col_pos[tab_id][v]=pos
             pos_row_hs.sort(key=lambda y:y[0])
             row_entities = []
             these_row_entity_ids = []
@@ -628,6 +641,7 @@ class FUNSDQA(FormQA):
 
         for tab_id, col_h, row_h, v in new_table_values:
             tab_pos = tab_id_to_pos[tab_id]
+            #Lookup poition of v in Table
             r = all_row_entity_ids[tab_pos].index(row_h) if row_h is not None else blank_row_pos[v]
             c = all_col_entity_ids[tab_pos].index(col_h) if col_h is not None else blank_col_pos[v]
             real_tables[tab_pos].cells[r][c]=new_entities[v]
@@ -681,3 +695,101 @@ def addTableElement(table_values,row_headers,col_headers,ai,qi1,qi2,groups,bbs,t
             table_values[(qi1,None)]=ai
     return True
 
+
+def cleanUpAdj(entities,entity_adj):
+    if entity_adj is None:
+        return entity_adj
+    #This is to check answers with two questions. These should be tables, but there are many
+    #errors in the dataset labeling.
+
+    for i,entity in enumerate(entities):
+        if entity is None:
+            continue
+        links_to_answers=[]
+        links_to_questions=[]
+        links_to_headers=[]
+        for a,b in entity_adj:
+            if a==i:
+                other_i=b
+            elif b==i:
+                other_i=a
+            else:
+                other_i=None
+            if other_i is not None and entities[other_i] is not None:
+                cls = entities[other_i].cls
+                if cls=='answer':
+                    links_to_answers.append(other_i)
+                elif cls=='question':
+                    links_to_questions.append(other_i)
+                elif cls=='header':
+                    links_to_headers.append(other_i)
+
+        if entity.cls=='answer':
+            if len(links_to_answers)>0:
+                for other_i in links_to_answers:
+                    print('Error: {} linked to {}'.format(entity,entities[other_i]))
+                import pdb;pdb.set_trace()
+            if len(links_to_headers)>0:
+                for other_i in links_to_headers:
+                    print('{} linked to {}'.format(entity,entities[other_i]))
+                import pdb;pdb.set_trace()
+            if len(links_to_questions)>2:
+                for other_i in links_to_questions:
+                    print('{} linked to {}'.format(entity,entities[other_i]))
+                import pdb;pdb.set_trace()
+            elif len(links_to_questions)==2:
+                #check we have a row and col header
+                first = entities[links_to_questions[0]].box
+                second= entities[links_to_questions[1]].box
+                row=False
+                col=False
+                #x_diff1 = entity.box[12]-entities[links_to_questions[0]].box[12]#center x
+                #y_diff1 = entity.box[9]-entities[links_to_questions[0]].box[9]#center y
+                #x_diff2 = entity.box[12]-entities[links_to_questions[1]].box[12]#center x
+                #y_diff2 = entity.box[9]-entities[links_to_questions[1]].box[9]#center y
+
+                first_left_of = max(first[::2])<min(entity.box[::2])
+                first_right_of = min(first[::2])>max(entity.box[::2])
+                first_top_of = max(first[1::2])<min(entity.box[1::2])
+                first_bottom_of = min(first[1::2])>max(entity.box[1::2])
+
+                first_is_row_header = first_left_of or first_right_of
+                first_is_col_header = first_top_of or first_bottom_of
+
+                second_left_of = max(second[::2])<min(entity.box[::2])
+                second_right_of = min(second[::2])>max(entity.box[::2])
+                second_top_of = max(second[1::2])<min(entity.box[1::2])
+                second_bottom_of = min(second[1::2])>max(entity.box[1::2])
+
+                second_is_row_header = second_left_of or second_right_of
+                second_is_col_header = second_top_of or second_bottom_of
+
+                bad=False
+                if first_is_row_header==first_is_col_header:
+                    bad=True
+                    print('{} has ambiguous header {}'.format(entity,entities[links_to_questions[0]]))
+                if second_is_row_header==second_is_col_header:
+                    bad=True
+                    print('{} has ambiguous header {}'.format(entity,entities[links_to_questions[1]]))
+
+                if first_is_row_header==second_is_row_header:
+                    bad=True
+                    print('{} has conflicting headers 0:{}, 1:{}'.format(
+                            entity,
+                            entities[links_to_questions[0]],
+                            entities[links_to_questions[1]]))
+
+                if bad:
+                    import pdb;pdb.set_trace()
+        elif entity.cls=='question':
+            if len(links_to_headers)>1:
+                for other_i in links_to_headers:
+                    print('{} linked to {}'.format(entity,entities[other_i]))
+                import pdb;pdb.set_trace()
+        #elif entity.cls=='header':
+        #    if len(links_to_headers)>0:
+        #        for other_i in links_to_headers:
+        #            print('{} linked to {}'.format(entity,entities[other_i]))
+        #            #subheaders
+        #        import pdb;pdb.set_trace()
+    return entity_adj
