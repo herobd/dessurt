@@ -69,8 +69,8 @@ class Entity:
                     lX,(tY+bY)/2,rX,(tY+bY)/2,(lX+rX)/2,tY,(lX+rX)/2,bY]
         assert self.text != ''
 
-    def __str__(self):
-        return '{} : {}'.format(self.cls,self.text)
+    def __repr__(self):
+        return 'Entity({} ({},{}) : {})'.format(self.cls,self.box[0],self.box[1],self.text)
 
 class Line:
     def __init__(self,text,box):
@@ -78,8 +78,8 @@ class Line:
         self.bbid=None
         self.text=text
         self.ambiguous=False
-    def __str__(self):
-        return '{} {}'.format(self.text,self.box)
+    def __repr__(self):
+        return 'Line({} {})'.format(self.text,self.box)
         
 
 class FormQA(QADataset):
@@ -431,7 +431,9 @@ class FormQA(QADataset):
                     inmask=[]
                 else:
                     question='t0'
-                    inmask = [self.convertBB(s,line.box) for line in r_header.lines+c_header.lines]
+                    inmask = [self.convertBB(s,line.box) for line in \
+                            (r_header.lines if r_header is not None else [])+\
+                            (c_header.lines if c_header is not None else [])]
 
                 ids = [line.bbid for line in \
                         (r_header.lines if r_header is not None else [])+\
@@ -601,6 +603,7 @@ class FormQA(QADataset):
                 else:
                     row=False
                     headers = table.col_headers
+                print('{} headers: {}'.format('row' if row else 'col',headers))
 
                 
                 outmask = []
@@ -609,8 +612,9 @@ class FormQA(QADataset):
                     ids=[]
                     outmask=[]
                     for header in headers:
-                        ids+=[line.bbid for line in header.lines]
-                        outmask += [self.convertBB(s,line.box) for line in header.lines]
+                        if header is not None:
+                            ids+=[line.bbid for line in header.lines]
+                            outmask += [self.convertBB(s,line.box) for line in header.lines]
                     question = 'r@~' if row else 'c@~'
 
                     self.qaAdd(q_a_pairs,question+str(table_i),'',ids,[],outmask)
@@ -644,7 +648,7 @@ class FormQA(QADataset):
                         ambiguous=False
                         response_start = '{}>'.format(len(headers))
 
-                    if (random.random()<0.5 or ambiguous) and i>0:
+                    if (random.random()<0.5 or ambiguous) and init>0:
                         inmask = [self.convertBB(s,line.box) for line in prev_header.lines]
                         question = 'r&{}' if row else 'c&{}'
                     else:
@@ -667,9 +671,10 @@ class FormQA(QADataset):
                 outmask=[]
                 for table in tables:
                     for header in table.row_headers + table.col_headers:
-                        for line in header.lines:
-                            outmask.append(self.convertBB(s,line.box))
-                            table_ids.append(line.bbid)
+                        if header is not None:
+                            for line in header.lines:
+                                outmask.append(self.convertBB(s,line.box))
+                                table_ids.append(line.bbid)
 
                     for r in range(len(table.row_headers)):
                         for c in range(len(table.col_headers)):
@@ -687,9 +692,10 @@ class FormQA(QADataset):
                 table_ids=[]
                 outmask=[]
                 for header in table.row_headers + table.col_headers:
-                    for line in header.lines:
-                        outmask.append(self.convertBB(s,line.box))
-                        table_ids.append(line.bbid)
+                    if header is not None:
+                        for line in header.lines:
+                            outmask.append(self.convertBB(s,line.box))
+                            table_ids.append(line.bbid)
 
                 for r in range(len(table.row_headers)):
                     for c in range(len(table.col_headers)):

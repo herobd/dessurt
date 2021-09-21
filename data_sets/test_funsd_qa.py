@@ -39,10 +39,10 @@ def display(data):
 
         #widths.append(img.size(1))
         draw = False
-        for x in ['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
-            if x in q:
-                draw = True
-                break
+        #for x in ['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
+        #    if x in q:
+        #        draw = True
+        #        break
         #draw=True
         if draw :
             #cv2.imshow('line',img.numpy())

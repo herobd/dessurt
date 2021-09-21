@@ -176,9 +176,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False):
                     ocr=[[]]
                     ocr=(ocrBoxes,ocr)
                 #answer = model(img,ocr,[[question]],RUN=run)
-                #print('Answer: '+answer)
-                answer = model(img,ocr,[[question]],[['number']])
-                print(answer[-1])
+                pred_a, target_a, answer, pred_mask = model(img,ocr,[[question]],[['number']])
+                print('Answer: '+answer)
 
                 question = input('Question ("q" to stop): ')
             if loop:
