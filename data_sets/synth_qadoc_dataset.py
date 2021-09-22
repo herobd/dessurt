@@ -558,8 +558,19 @@ class SynthQADocDataset(FormQA):
                 for ei,li in line_ids:
                     all_entities[ei].lines[li].ambiguous = True
 
-
-        qa = self.makeQuestions(s,all_entities,entity_link,tables)
+        link_dict=defaultdict(list)
+        for e1,e2s in entity_link:
+            link_dict[e1]=e2s
+        for table in tables:
+            for r,r_header in enumerate(table.row_headers):
+                r_index = all_entities.index(r_header)
+                for c,c_header in enumerate(table.col_headers):
+                    c_index = all_entities.index(c_header)
+                    v=table.cells[r][c]
+                    v_index = all_entities.index(v)
+                    link_dict[r_index].append(v_index)
+        link_dict = self.sortLinkDict(all_entities,link_dict)
+        qa = self.makeQuestions(s,all_entities,entity_link,tables,all_entities,link_dict)
 
         return bbs, list(range(bbs.shape[0])), None, {'image':image}, {}, qa
 

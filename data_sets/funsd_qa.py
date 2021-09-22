@@ -125,6 +125,7 @@ class FUNSDQA(FormQA):
         ocr = trans
 
         entities,entity_link,tables = self.prepareForm(bbs,trans,groups,groups_adj)
+        full_entities,full_entity_link_dict = self.prepareFormRaw(bbs,trans,groups,groups_adj)
 
         #run through all entites to build bbs, assign bbid, and find ambiguity
         boxes = []
@@ -137,6 +138,14 @@ class FUNSDQA(FormQA):
                 boxes.append(self.convertBB(1,line.box))
                 line.bbid = bbid
 
+        for ei,entity in enumerate(full_entities):
+            for li,line in enumerate(entity.lines):
+                #text = self.punc_regex.sub('',line.text.lower())
+                #text_line_counts[text].append((ei,li))
+                bbid = len(boxes)
+                boxes.append(self.convertBB(1,line.box))
+                line.bbid = bbid
+
         bbs = np.array(boxes)
 
         #assign ambiguity
@@ -144,7 +153,7 @@ class FUNSDQA(FormQA):
             if len(line_ids)>1:
                 for ei,li in line_ids:
                     entities[ei].lines[li].ambiguous = True
-        qa = self.makeQuestions(1.0,entities,entity_link,tables)
+        qa = self.makeQuestions(1.0,entities,entity_link,tables,full_entities,full_entity_link_dict)
 
         ocr=None
         #ocr = [self.corrupt(text) for text in ocr]
@@ -163,12 +172,6 @@ class FUNSDQA(FormQA):
         entities=[]
 
 
-        questions_gs=set()
-        answers_gs=set()
-        headers_gs=set()
-        others_gs=set()
-        removed=set()
-        group_count = len(groups)
         for gi,group in enumerate(groups):
             cls = bbs[group[0],16:].argmax()
             cls_name = self.index_class_map[cls]
@@ -179,20 +182,29 @@ class FUNSDQA(FormQA):
                     lines.append(Line(transcription[bbid],bbs[bbid,:16]))
             if len(lines)>0:
                 entities.append(Entity(cls_name,lines))
-                if cls_name == 'question':
-                    questions_gs.add(gi)
-                elif cls_name == 'answer':
-                    answers_gs.add(gi)
-                elif cls_name == 'header':
-                    headers_gs.add(gi)
-                else:
-                    others_gs.add(gi)
             else:
                 entities.append(None)
-                removed.add(gi)
+                #removed.add(gi)
 
 
-        groups_adj = cleanUpAdj(entities,groups_adj)
+        entities,groups_adj = cleanUp(entities,groups_adj)
+        group_count = len(entities)
+
+        questions_gs=set()
+        answers_gs=set()
+        headers_gs=set()
+        others_gs=set()
+        #removed=set()
+        for gi,entity in enumerate(entities):
+            cls_name = entity.cls
+            if cls_name == 'question':
+                questions_gs.add(gi)
+            elif cls_name == 'answer':
+                answers_gs.add(gi)
+            elif cls_name == 'header':
+                headers_gs.add(gi)
+            else:
+                others_gs.add(gi)
 
 
         relationships_h_q=defaultdict(list)
@@ -215,16 +227,19 @@ class FUNSDQA(FormQA):
             for gi1,gi2 in groups_adj:
                 if gi1 == q_gi and gi2 in answers_gs:
                     #q_a_pairs.append((gi1,gi2))
+                    assert entities[q_gi].cls=='question'
                     relationships_q_a[q_gi].append(gi2)
                     relationships_a_q[gi2].append(q_gi)
                     found=True
                 elif gi2 == q_gi and gi1 in answers_gs:
                     #q_a_pairs.append((gi2,gi1))
+                    assert entities[q_gi].cls=='question'
                     relationships_q_a[q_gi].append(gi1)
                     relationships_a_q[gi1].append(q_gi)
                     found=True
             if not found:
                 #q_a_pairs.append((q_gi,None))
+                assert entities[q_gi].cls=='question'
                 relationships_q_a[q_gi].append(None)
 
         for a_gi in answers_gs:
@@ -248,6 +263,7 @@ class FUNSDQA(FormQA):
             if len(ais)==1:
                 ai=ais[0]
                 if ai is None or len(relationships_a_q[ai])==1:
+                    assert entities[qi].cls=='question'
                     q_a_pairs[qi].append(ai)
                 else:
                     #this is probably part of a table with single row/col
@@ -258,7 +274,7 @@ class FUNSDQA(FormQA):
                         other_qi = q2
                     else:
                         other_qi = q1
-                    success = addTableElement(table_values,row_headers,col_headers,ai,q1,q2,groups,bbs)
+                    success = addTableElement(table_values,row_headers,col_headers,ai,q1,q2,entities)
                     #if len(relationships_q_a[other_qi])>1: #be sure this is the non-single index
                     #    #assert ai not in table_map
                     #    #addTable(tables,table_map,goups,bbs,qi,ais,relationships_q_a,relationships_a_q)
@@ -284,6 +300,7 @@ class FUNSDQA(FormQA):
                         entities[qi]=None
                         entities[other_qi]=None
 
+                        assert entities[gi].cls=='question'
                         q_a_pairs[gi].append(ai)
                         skip.add(other_qi)
                         merged_groups[qi]=gi
@@ -296,10 +313,12 @@ class FUNSDQA(FormQA):
                     answers = []
                     for ai in ais:
                         #assert len(groups[ai])==1 this can be a list, in which  case we lose new lines
-                        bbi = groups[ai][0]
-                        answers.append((bbs[bbi,1],ai))
+                        #bbi = groups[ai][0]
+                        #answers.append((bbs[bbi,1],ai))
+                        answers.append((entities[ai].box[9],ai))
                     answers.sort(key=lambda a:a[0])
                     answers = [a[1] for a in answers]
+                    assert entities[qi].cls=='question'
                     q_a_pairs[qi]+=answers
                 else:
                     #assert qi not in table_map
@@ -310,7 +329,7 @@ class FUNSDQA(FormQA):
                         elif len(relationships_a_q[ai])==1:
                             q1 = relationships_a_q[ai][0]
                             q2 = None
-                        addTableElement(table_values,row_headers,col_headers,ai,q1,q2,groups,bbs)
+                        addTableElement(table_values,row_headers,col_headers,ai,q1,q2,entities)
 
         entity_link=[]
         new_entities=[]
@@ -326,7 +345,7 @@ class FUNSDQA(FormQA):
 
         for qi,ais in q_a_pairs.items():
             head = old_to_new_e_map[qi]
-            tail = [old_to_new_e_map[ai] for ai in ais if ai is not None and ai not in removed]
+            tail = [old_to_new_e_map[ai] for ai in ais if ai is not None]
             if len(tail) == 0:
                 tail = None
             else:
@@ -362,15 +381,21 @@ class FUNSDQA(FormQA):
             for qi in qis:
                 if len(qis)>1:
                     x=y=h=0
-                    for bbi in groups[qi]:
-                        x += bbs[bbi,0]
-                        x += bbs[bbi,4]
-                        y += bbs[bbi,1]
-                        y += bbs[bbi,5]
-                        h += bbs[bbi,5]-bbs[bbi,1]+1
-                    xc = x/(2*len(groups[qi]))
-                    yc = y/(2*len(groups[qi]))
-                    h = h/len(groups[qi])
+                    #for bbi in groups[qi]:
+                    #    x += bbs[bbi,0]
+                    #    x += bbs[bbi,4]
+                    #    y += bbs[bbi,1]
+                    #    y += bbs[bbi,5]
+                    #    h += bbs[bbi,5]-bbs[bbi,1]+1
+                    #xc = x/(2*len(groups[qi]))
+                    #yc = y/(2*len(groups[qi]))
+                    #h = h/len(groups[qi])
+                    xc = new_entities[qi].box[15]
+                    yc = new_entities[qi].box[9]
+                    h = 0
+                    for line in new_entities[qi].lines:
+                        h += line.box[5]-line.box[1]
+                    h /= len(new_entities[qi].lines)
                 else:
                     xc=yc=h=-1
                 pos_qs.append((qi,xc,yc,h))
@@ -642,9 +667,12 @@ class FUNSDQA(FormQA):
         for tab_id, col_h, row_h, v in new_table_values:
             tab_pos = tab_id_to_pos[tab_id]
             #Lookup poition of v in Table
-            r = all_row_entity_ids[tab_pos].index(row_h) if row_h is not None else blank_row_pos[v]
-            c = all_col_entity_ids[tab_pos].index(col_h) if col_h is not None else blank_col_pos[v]
-            real_tables[tab_pos].cells[r][c]=new_entities[v]
+            try:
+                r = all_row_entity_ids[tab_pos].index(row_h) if row_h is not None else blank_row_pos[v]
+                c = all_col_entity_ids[tab_pos].index(col_h) if col_h is not None else blank_col_pos[v]
+                real_tables[tab_pos].cells[r][c]=new_entities[v]
+            except ValueError:
+                pass
 
         ##DEBUG
         for head,tail in entity_link:
@@ -658,14 +686,51 @@ class FUNSDQA(FormQA):
 
         return new_entities,entity_link,real_tables
 
-def addTableElement(table_values,row_headers,col_headers,ai,qi1,qi2,groups,bbs,threshold=5):
-    ele_x,ele_y = bbs[groups[ai][0],0:2]
-    q1_x,q1_y = bbs[groups[qi1][0],0:2]
+    def prepareFormRaw(self,bbs,transcription,groups,groups_adj):
+
+
+        entities=[]
+
+        old_to_new={}
+        for gi,group in enumerate(groups):
+            cls = bbs[group[0],16:].argmax()
+            cls_name = self.index_class_map[cls]
+            lines = []
+            for bbid in group:
+                #box = calcXYWH(bbs[bbid,:8])[:4]
+                if transcription[bbid]!='':
+                    lines.append(Line(transcription[bbid],bbs[bbid,:16]))
+            if len(lines)>0:
+                entity = Entity(cls_name,lines)
+                if len(entity.text)>0:
+                    old_to_new[gi]=len(entities)
+                    entities.append(entity)
+
+        link_dict = defaultdict(list)
+        for e1,e2 in groups_adj:
+            if e1 in old_to_new and e2 in old_to_new:
+                e1 = old_to_new[e1]
+                e2 = old_to_new[e2]
+                link_dict[e1].append(e2)
+                link_dict[e2].append(e1)
+
+
+        link_dict=self.sortLinkDict(entities,link_dict)
+        return entities,link_dict
+
+
+def addTableElement(table_values,row_headers,col_headers,ai,qi1,qi2,entities,threshold=5):
+    ele_x = entities[ai].box[12]#bbs[groups[ai][0],0:2]
+    ele_y = entities[ai].box[9]
+    q1_x = entities[qi1].box[12]#bbs[groups[qi1][0],0:2]
+    q1_y = entities[qi1].box[9]
     x_diff_1 = abs(ele_x-q1_x)
     y_diff_1 = abs(ele_y-q1_y)
     if qi2 is not None:
         #which question is the row, which is the header?
-        q2_x,q2_y = bbs[groups[qi2][0],0:2]
+        #q2_x,q2_y = bbs[groups[qi2][0],0:2]
+        q2_x = entities[qi2].box[12]
+        q2_y = entities[qi2].box[9]
         x_diff_2 = abs(ele_x-q2_x)
         y_diff_2 = abs(ele_y-q2_y)
 
@@ -696,14 +761,41 @@ def addTableElement(table_values,row_headers,col_headers,ai,qi1,qi2,groups,bbs,t
     return True
 
 
-def cleanUpAdj(entities,entity_adj):
+def cleanUp(entities,entity_adj):
     if entity_adj is None:
-        return entity_adj
+        return entities,entity_adj
     #This is to check answers with two questions. These should be tables, but there are many
     #errors in the dataset labeling.
 
+    #First change questions that should be headers to correct class
     for i,entity in enumerate(entities):
-        if entity is None:
+        if entity is None or len(entity.text.replace(' ',''))==0 or entity.cls!='question':
+            continue
+        links_to_answers=[]
+        links_to_questions=[]
+        for a,b in entity_adj:
+            if a==i:
+                other_i=b
+            elif b==i:
+                other_i=a
+            else:
+                other_i=None
+            if other_i is not None and entities[other_i] is not None:
+                cls = entities[other_i].cls
+                if cls=='answer':
+                    links_to_answers.append(other_i)
+                elif cls=='question':
+                    links_to_questions.append(other_i)
+        if len(links_to_questions)>1 and len(links_to_answers)==0:
+            entity.cls='header'
+
+    entity_i_to_remove=set()
+    adj_to_remove=set()
+    for i,entity in enumerate(entities):
+        if i in entity_i_to_remove:
+            continue
+        elif entity is None or len(entity.text.replace(' ',''))==0:
+            entity_i_to_remove.add(i)
             continue
         links_to_answers=[]
         links_to_questions=[]
@@ -727,16 +819,23 @@ def cleanUpAdj(entities,entity_adj):
         if entity.cls=='answer':
             if len(links_to_answers)>0:
                 for other_i in links_to_answers:
-                    print('Error: {} linked to {}'.format(entity,entities[other_i]))
-                import pdb;pdb.set_trace()
+                    #print('Error: {} linked to {}'.format(entity,entities[other_i]))
+                    adj_to_remove.add((i,other_i))
+                    adj_to_remove.add((other_i,i))
+                #import pdb;pdb.set_trace()
             if len(links_to_headers)>0:
                 for other_i in links_to_headers:
-                    print('{} linked to {}'.format(entity,entities[other_i]))
-                import pdb;pdb.set_trace()
+                    #print('{} linked to {}'.format(entity,entities[other_i]))
+                    adj_to_remove.add((i,other_i))
+                    adj_to_remove.add((other_i,i))
+                #import pdb;pdb.set_trace()
             if len(links_to_questions)>2:
                 for other_i in links_to_questions:
-                    print('{} linked to {}'.format(entity,entities[other_i]))
-                import pdb;pdb.set_trace()
+                    #print('{} linked to {}'.format(entity,entities[other_i]))
+                    adj_to_remove.add((i,other_i))
+                    adj_to_remove.add((other_i,i))
+                #bad and weird table thing
+                #import pdb;pdb.set_trace()
             elif len(links_to_questions)==2:
                 #check we have a row and col header
                 first = entities[links_to_questions[0]].box
@@ -764,32 +863,86 @@ def cleanUpAdj(entities,entity_adj):
                 second_is_row_header = second_left_of or second_right_of
                 second_is_col_header = second_top_of or second_bottom_of
 
+                if first_is_row_header==second_is_row_header and first_is_col_header==second_is_col_header:
+                    #This is probably an oversegmented line
+                    y_diffs = abs(first[1]-second[1])+abs(first[5]-second[5])
+                    if y_diffs<15:
+                        if first[12]<second[12]:
+                            first_i = links_to_questions[0]
+                            second_i = links_to_questions[1]
+                        else:
+                            first_i = links_to_questions[1]
+                            second_i = links_to_questions[0]
+
+                        first = entities[first_i]
+                        second = entities[second_i]
+                        #confirm x position
+                        x_diff = second.box[0]-first.box[4]
+                        if x_diff>-4 and len(first.lines)==1 and len(second.lines)==1:
+                            #indeed, these need merged
+                            first.append(second)
+                            entity_i_to_remove.add(second_i)
+
+
+
                 bad=False
                 if first_is_row_header==first_is_col_header:
-                    bad=True
-                    print('{} has ambiguous header {}'.format(entity,entities[links_to_questions[0]]))
-                if second_is_row_header==second_is_col_header:
-                    bad=True
-                    print('{} has ambiguous header {}'.format(entity,entities[links_to_questions[1]]))
+                    #bad=True
+                    #print('{} has ambiguous header {}'.format(entity,entities[links_to_questions[0]]))
+                    adj_to_remove.add((i,links_to_questions[0]))
+                    adj_to_remove.add((links_to_questions[0],i))
+                elif second_is_row_header==second_is_col_header:
+                    #bad=True
+                    #print('{} has ambiguous header {}'.format(entity,entities[links_to_questions[1]]))
+                    adj_to_remove.add((i,links_to_questions[1]))
+                    adj_to_remove.add((links_to_questions[1],i))
 
-                if first_is_row_header==second_is_row_header:
-                    bad=True
-                    print('{} has conflicting headers 0:{}, 1:{}'.format(
-                            entity,
-                            entities[links_to_questions[0]],
-                            entities[links_to_questions[1]]))
+                elif first_is_row_header==second_is_row_header:
+                    #bad=True
+                    #print('{} has conflicting headers \n0:{}, \n1:{}'.format(
+                    #        entity,
+                    #        entities[links_to_questions[0]],
+                    #        entities[links_to_questions[1]]))
+                    r = int(random.random()<0.5)
+                    adj_to_remove.add((i,links_to_questions[r]))
+                    adj_to_remove.add((links_to_questions[r],i))
 
-                if bad:
-                    import pdb;pdb.set_trace()
+                #if bad:
+                #    import pdb;pdb.set_trace()
         elif entity.cls=='question':
+            if len(links_to_questions)>0:
+                for other_i in links_to_questions:
+                    #print('{} linked to {}'.format(entity,entities[other_i]))
+                    adj_to_remove.add((i,other_i))
+                    adj_to_remove.add((other_i,i))
+                #bad, should be header
+                #should be header, but some questions are labeled as answers
+                #import pdb;pdb.set_trace()
             if len(links_to_headers)>1:
                 for other_i in links_to_headers:
-                    print('{} linked to {}'.format(entity,entities[other_i]))
-                import pdb;pdb.set_trace()
+                    #print('{} linked to {}'.format(entity,entities[other_i]))
+                    adj_to_remove.add((i,other_i))
+                    adj_to_remove.add((other_i,i))
+                #import pdb;pdb.set_trace()
         #elif entity.cls=='header':
         #    if len(links_to_headers)>0:
         #        for other_i in links_to_headers:
         #            print('{} linked to {}'.format(entity,entities[other_i]))
         #            #subheaders
         #        import pdb;pdb.set_trace()
-    return entity_adj
+    debug = len(entity_adj)
+    entity_adj -= adj_to_remove
+    assert len(adj_to_remove)==0 or len(entity_adj)<debug
+    if len(entity_i_to_remove)==0:
+        new_entities=entities
+        new_entity_adj=entity_adj
+    else:
+        new_entities=[]
+        old_to_new={}
+        for i,entity in enumerate(entities):
+            if i not in entity_i_to_remove:
+                old_to_new[i]=len(new_entities)
+                new_entities.append(entity)
+        new_entity_adj=[(old_to_new[e1],old_to_new[e2]) for e1,e2 in entity_adj if \
+                e1 in old_to_new and e2 in new_entities] 
+    return new_entities,new_entity_adj

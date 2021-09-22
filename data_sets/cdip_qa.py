@@ -52,8 +52,11 @@ class CDIPQA(ParaQADataset):
                                 new_subdirs.append(sub+'.'+a)
                     toUse=[]
                     for subdir in new_subdirs:
-                        with open(os.path.join(dirPath,subdir+'.list')) as lst:
-                            toUse += [path.strip() for path in lst.readlines()]
+                        try:
+                            with open(os.path.join(dirPath,subdir+'.list')) as lst:
+                                toUse += [path.strip() for path in lst.readlines()]
+                        except FileNotFoundError:
+                            print('{} not found'.format(os.path.join(dirPath,subdir+'.list')))
                     imagesAndAnn = []
                     for path in toUse:#['images']:
                         try:

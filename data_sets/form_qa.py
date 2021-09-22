@@ -72,6 +72,19 @@ class Entity:
     def __repr__(self):
         return 'Entity({} ({},{}) : {})'.format(self.cls,self.box[0],self.box[1],self.text)
 
+    def append(self,entity):
+        assert len(self.lines)==1 and len(entity.lines)==1
+        self.text+=' '+entity.text
+        if len(self.box)==4:
+            raise NotImplementedError('assumed to only be needed in FUNSD')
+        lX = self.box[0]
+        tY = min(self.box[1],entity.box[1])
+        rX = entity.box[2]
+        bY = max(self.box[7],entity.box[7])
+        self.box=[lX,tY,rX,tY,rX,bY,lX,bY,
+                    lX,(tY+bY)/2,rX,(tY+bY)/2,(lX+rX)/2,tY,(lX+rX)/2,bY]
+        self.lines=[Line(self.text,self.box)]
+
 class Line:
     def __init__(self,text,box):
         self.box=box
@@ -97,14 +110,14 @@ class FormQA(QADataset):
         #self.do_words = config['do_words']
         #self.char_qs = config['char_qs'] if 'char_qs' in config else False
 
-        self.q_types =         ['np','class','down-pair','up-pair','read','cell','row-header','col-header','all-row','all-col', 'list-row-headers','list-col-headers','count-tables','highlight-table']
-        self.q_type_weights = [0.2, 0.7,    1.0,        1.0,      1.0,   1.1,   1.1,         1.1,         1.1,       1.1,       1.1,              1.1,              0.9,           1.1]
-        self.q_types_no_table =         ['np','class','down-pair','up-pair','read','count-tables']
-        self.q_type_no_table_weights = [0.2, 0.7,    1.0,        1.0,      1.0,   0.05]
-        self.q_types_only_table =        ['np','class','read','cell','row-header','col-header','all-row','all-col', 'list-row-headers','list-col-headers','count-tables','highlight-table']
-        self.q_type_only_table_weights = [0.2, 0.7,    1.0,   1.1,   1.1,         1.1,         1.1,       1.1,       1.1,              1.1,              0.9,           1.1]
+        self.q_types =         ['np','class-link','class','down-pair','up-pair','read','cell','row-header','col-header','all-row','all-col', 'list-row-headers','list-col-headers','count-tables','highlight-table']
+        self.q_type_weights = [0.2,  1.3, 0.7,    1.0,        1.0,      1.0,   1.1,   1.1,         1.1,         1.1,       1.1,       1.1,              1.1,              0.9,           1.1]
+        self.q_types_no_table =         ['np','class-link','class','down-pair','up-pair','read','count-tables']
+        self.q_type_no_table_weights = [0.2,  1.3, 0.7,    1.0,        1.0,      1.0,   0.05]
+        self.q_types_only_table =        ['np','class-link','class','read','cell','row-header','col-header','all-row','all-col', 'list-row-headers','list-col-headers','count-tables','highlight-table']
+        self.q_type_only_table_weights = [0.2, 1.3, 0.7,    1.0,   1.1,   1.1,         1.1,         1.1,       1.1,       1.1,              1.1,              0.9,           1.1]
 
-        self.q_types_for_np = ['class','down-pair','up-pair','read','cell','row-header','col-header','all-row', 'list-row-headers','list-col-headers']
+        self.q_types_for_np = ['class-link','class','down-pair','up-pair','read','cell','row-header','col-header','all-row', 'list-row-headers','list-col-headers']
 
        
         self.np_token = '№'
@@ -115,13 +128,14 @@ class FormQA(QADataset):
     #entity_adj =[(upper,lower)] either can be None
     #tables = obj. col/row_headers = [entity_id], cells = [[entity_id]]
     #
-    def makeQuestions(self,s,entities,entity_link,tables):
+    def makeQuestions(self,s,entities,entity_link,tables,full_entities,full_entity_dict):
         """
         Generates N questions from given docuemnt information:
          - entities: a list of Entity objects
          - entity_link: a list of (entity_id, entity_id) tuples where its (header,question)/(question,answer)
          - tables: a list of Table objects
          """
+
 
         q_a_pairs = []
         if len(tables)>0:
@@ -145,7 +159,102 @@ class FormQA(QADataset):
         #import pdb;pdb.set_trace()
 
         for q_type in q_types:
-            if q_type=='class':
+            q_type = 'class-link'
+            if q_type == 'class-link':
+                ei = random.randrange(len(full_entities))
+                entity = full_entities[ei]
+                cls = entity.cls[0] #first character for compression
+
+                #g0 get with str+mask
+                #gs get with str
+                #gm get with mask
+                #z0 hl with str+mask
+                #zs hl with str
+                #zm highlight with mask
+
+                if random.random()<0.5:
+                    highlight=True
+                    question='z'
+                else:
+                    highlight=False
+                    question='g'
+
+                if random.random()<0.333:
+                    question+='0'
+                    prompt_text = self.selectPartText(entity.text)
+                    inmask = [self.convertBB(s,line.box) for line in entity.lines]
+                    mask=True
+                elif random.random()<0.5:
+                    question+='s'
+                    prompt_text = self.selectPartText(entity.text)
+                    inmask = []
+                    mask=False
+                else:
+                    question+='m'
+                    prompt_text=''
+                    inmask = [self.convertBB(s,line.box) for line in entity.lines]
+                    mask=True
+
+                if ei not in full_entity_dict:
+                    question+='~'
+                    response_text=self.blank_token
+                    outmask=[]
+                    ids = [line.bbid for line in entity.lines]
+                else:
+                    
+                    if highlight:
+                        question+='~'
+                        response_text=str(len( full_entity_dict[ei]))
+                        outmask = []
+                        ids = [line.bbid for line in entity.lines]
+                        for other_ei in full_entity_dict[ei]:
+                            outmask += [self.convertBB(s,line.box) for line in full_entities[other_ei].lines]
+                            ids += [line.bbid for line in full_entities[other_ei].lines]
+                    else:
+                        #step through
+                        num = len( full_entity_dict[ei])
+                        if num>1:
+                            i = random.randrange(num+1)
+                        elif random.random()<0.01:
+                            i = 1
+                        else:
+                            i = 0
+                        next_entity = full_entities[full_entity_dict[ei][i]] if i<num else None
+
+                        if next_entity is not None:
+                            response_text = self.getFrontText(next_entity.text,term='|' if i<num-1 else self.end_token)
+                            outmask = [self.convertBB(s,line.box) for line in next_entity.lines]
+                            ids= [line.bbid for line in next_entity.lines]
+                        else:
+                            response_text = self.blank_token
+                            outmask = []
+                            ids = []
+
+                        if i==0:
+                            question+='~'
+                            response_text = '{}>'.format(num)+response_text
+                            if len(response_text)<self.max_qa_len:
+                                response_text = response_text[:self.max_qa_len]
+                            ids = [line.bbid for line in entity.lines+next_entity.lines]
+                        else:
+                            prev_entity = full_entities[full_entity_dict[ei][i-1]]
+                            if len(prompt_text)>-1+self.max_qa_len//2:
+                                prompt_text = self.selectPartText(prompt_text,length=-1+self.max_qa_len//2)
+                            next_part_len = self.max_qa_len-(1+len(prompt_text))
+                            prompt_text = prompt_text+'>'+self.selectPartText(prev_entity.text,next_part_len)
+                            question+='>'
+                            ids = [line.bbid for line in prev_entity.lines]
+                            if next_entity is not None:
+                                ids += [line.bbid for line in next_entity.lines]
+                            if mask:
+                                inmask += [self.convertBB(s,line.box) for line in prev_entity.lines]
+
+                response_text = '['+cls+']'+response_text
+                self.qaAdd(q_a_pairs,question+prompt_text,response_text,ids,inmask,outmask)
+
+                        
+
+            elif q_type=='class':
                 #e_i = random.randrange(len(entities))
                 entity = random.choice(entities)
                 cls = entity.cls
@@ -153,7 +262,10 @@ class FormQA(QADataset):
                 line = random.choice(entity.lines)
                 text=line.text
                 if self.max_qa_len is not None and len(text)>self.max_qa_len:
-                    text = text[:self.max_qa_len]
+                    if random.random()<0.1:
+                        text = text[:self.max_qa_len]
+                    else:
+                        text = self.selectPartText(text)
 
                 inmask=[]
                 if random.random() <0.5 or line.ambiguous:
@@ -184,6 +296,8 @@ class FormQA(QADataset):
                         break
                 if prompt_id is None:
                     continue
+
+                prompt_cls = entities[prompt_id].cls
 
 
                 #get end of response text
@@ -243,11 +357,13 @@ class FormQA(QADataset):
                 mask =  random.random()<0.5 or ambiguous#should we use query mask
                 if down and (entities[response_id].cls=='answer' if response_id is not None else entities[prompt_id].cls=='question'):
                     question = 'd0'+char if mask else 'l'+char
-                elif not down and entities[prompt_id].cls=='answer':
+                elif not down and prompt_cls=='answer':
                     question = 'v0~' if mask else 'v~'
-                elif down and (entities[response_id].cls=='question' if response_id is not None else entities[prompt_id].cls=='header'):
+                elif down and prompt_cls=='header':
                     question = 'h0'+char if mask else 'hd'+char
-                elif not down and entities[prompt_id].cls=='question':
+                elif not down and entities[response_id].cls=='header' and prompt_cls=='header':
+                    question = 'u1'+char if mask else 'uh'+char
+                elif not down and prompt_cls=='question':
                     question = 'q0~' if mask else 'qu~'
                 else:
                     assert False
@@ -325,6 +441,11 @@ class FormQA(QADataset):
                         question = '{}h~{}'.format(char,len(tables)+1)
                     else:
                         question = char+'h>{}'
+                elif sub_type == 'class-link':
+                    if random.random()<0.5:
+                        question='zs~{}'
+                    else:
+                        question='gs~{}'
 
                 self.qaAdd(q_a_pairs,question.format(prompt_text),self.np_token,[],[],[])
 
@@ -422,9 +543,9 @@ class FormQA(QADataset):
                     cell_lines=[]
                     outmask = []
                 
-                ambiguous = all([line.ambiguous for line in \
+                ambiguous = all(line.ambiguous for line in \
                         (r_header.lines if r_header is not None else [])+\
-                        (c_header.lines if c_header is not None else [])]) 
+                        (c_header.lines if c_header is not None else [])) 
 
                 if random.random()<0.5 and not ambiguous:
                     question='t'
@@ -603,7 +724,7 @@ class FormQA(QADataset):
                 else:
                     row=False
                     headers = table.col_headers
-                print('{} headers: {}'.format('row' if row else 'col',headers))
+                #print('{} headers: {}'.format('row' if row else 'col',headers))
 
                 
                 outmask = []
@@ -844,4 +965,36 @@ class FormQA(QADataset):
         if len(text)==0:
             return self.sampleText()
         return text
-    
+ 
+    def sortLinkDict(self,entities,link_dict):
+        new_link_dict={}
+        #def readpos(a):
+            #entity = entities[a]
+        for e1,e2s in link_dict.items():
+            #e2s.sort(key=readpos)
+            #arrange into rows
+            rows = []
+            row_ys = []
+            for e2 in e2s:
+                top_y = entities[e2].box[1]
+                hit=False
+                for r,row in enumerate(rows):
+                    mean_y = np.mean(row_ys[r])
+                    if abs(top_y - mean_y)<30:
+                        row.append(e2)
+                        row_ys[r].append(top_y)
+                        hit=True
+                if not hit:
+                    rows.append([e2])
+                    row_ys.append([top_y])
+
+            rows = [(row,np.mean(ys)) for row,ys in zip(rows,row_ys)]
+            rows.sort(key=lambda a: a[1])
+            sorted_e2s=[]
+            for row,y in rows:
+                row = [(e2,entities[e2].box[0]) for e2 in row]
+                row.sort(key=lambda a:a[1])
+                sorted_e2s += [a[0] for a in row]
+            
+            new_link_dict[e1]=e2s
+        return new_link_dict
