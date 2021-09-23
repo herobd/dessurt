@@ -41,7 +41,12 @@ def display(data,write):
         #widths.append(img.size(1))
         
         #draw='ar~' in q or 'ac~' in q or '%' in q or '&' in q or 'rh~' in q or 'ch~' in q
-        draw = 'l~' in q or 'v~' in q or 'd0~' in q or 'v0~' in q
+        #draw = 'l~' in q or 'v~' in q or 'd0~' in q or 'v0~' in q
+        draw = False
+        for x in ['al~']:#['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
+            if x in q:
+                draw = True
+                break
         #draw = True
         if write:
             cv2.imwrite('test_single_512.png',(img.numpy()*255)[:,:,0].astype(np.uint8))
