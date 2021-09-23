@@ -2,7 +2,7 @@ from utils.filelock import FileLock, FileLockException
 from utils.util import ensure_dir
 import threading
 from synthetic_text_gen import SyntheticWord
-from datasets import load_dataset
+from data_sets.wiki_text import getWikiArticle
 import os, random, re, time
 import unicodedata
 import numpy as np
@@ -38,11 +38,6 @@ class GenDaemon:
         self.used_thresh=-1
         self.multi_para = 0.1
         self.num_held = num_held
-        self.text_data = load_dataset('wikipedia', '20200501.en', cache_dir='/Data6/davis/data_cache')['train']
-        
-        self.prune_headers = ["See also", "Gallery", "External media", "History", "Notes"]
-        self.wiki_end_keywords = ['References','Sources','External links']
-        self.wiki_end_keywords = ['\n'+k+'\n' for k in self.wiki_end_keywords] + ['\n'+k+' \n' for k in self.wiki_end_keywords] + ['\nCategory:']
 
         self.locks = []
         self.dir_paths = []
@@ -135,23 +130,7 @@ class GenDaemon:
 
     
     def getTextSample(self):
-        instance_i = random.randrange(self.text_data.num_rows)
-        text = self.text_data[instance_i]['text']
-        #text = unicodedata.normalize(text,'NFC')#.decode('utf')
-
-
-        #We first want to cut off the end of the wikipedia article, which has the references and stuff 
-        for keyword in self.wiki_end_keywords:
-            cut_i = text.find(keyword)
-            if cut_i>-1:
-                break
-        if cut_i>-1:
-            text = text[:cut_i]
-
-        #break by paragraph (double newline)
-        paras = text.split('\n\n')
-
-        paras = [para for para in paras if para.strip() not in self.prune_headers]
+        paras = getWikiArticle()
 
         #select para or paras
         if self.multi_para<random.random():

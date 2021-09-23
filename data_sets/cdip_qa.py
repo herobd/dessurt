@@ -43,17 +43,27 @@ class CDIPQA(ParaQADataset):
                 readFile = json.loads(f.read())
                 if split in readFile:
                     subdirs = readFile[split]
+                    new_subdirs=[]
+                    for sub in subdirs:
+                        if '.' in sub:
+                            new_subdirs.append(sub)
+                        else:
+                            for a in 'abcdefghijklmnopqrstuvwxyz':
+                                new_subdirs.append(sub+'.'+a)
                     toUse=[]
-                    for subdir in subdirs:
-                        with open(os.path.join(dirPath,subdir+'.list')) as lst:
-                            toUse += [path.strip() for path in lst.readlines()]
+                    for subdir in new_subdirs:
+                        try:
+                            with open(os.path.join(dirPath,subdir+'.list')) as lst:
+                                toUse += [path.strip() for path in lst.readlines()]
+                        except FileNotFoundError:
+                            print('{} not found'.format(os.path.join(dirPath,subdir+'.list')))
                     imagesAndAnn = []
                     for path in toUse:#['images']:
                         try:
                             name = path[path.rindex('/')+1:]
                         except ValueError:
                             name = path
-                        imagesAndAnn.append( (name,os.path.join(dirPath,path+'.png'),os.path.join(dirPath,path+'.json')) )
+                        imagesAndAnn.append( (name,os.path.join(dirPath,path+'.png'),os.path.join(dirPath,path+'.layout.json')) )
                 else:
                     print("Error, unknown split {}".format(split))
                     exit(1)

@@ -57,9 +57,10 @@ class ParaQADataset(QADataset):
         # . (if using blocks) Read line above (with highlight) and draw where it is. based on para/block [^0]
         # . (if using blocks) Read line below (no highlight)and draw where it is. based on  para/block [vv]
         # . (if using blocks) Read line below (with highlight) and draw where it is. based on  para/block [v0]
-        #3a. draw the line this is in  TODO, same task as below (4) [0l]
+        #3a. draw the line this is in  same task as below (4) [0l]
         # b. draw where this text is [0w]
         #4. Read highlighted section [w0]
+        # . Read highlighted line [l0]
         #5. Read highlighted section filling in masked word [rm>]
         #6. guess masked word (HARD!) [mk]
         #7. given a word a several masked spots, hightlight which masked spot this belongs in [mm]
@@ -322,51 +323,73 @@ class ParaQADataset(QADataset):
                 #3b. draw where this text is 
                 #4. Read highlighted section
                 do_draw = question_type == 3
+                if not do_draw:
+                    whole_line = random.random()<0.5
+                else:
+                    whole_line = False
                 line_idx = random.randrange(len(linemap))
                 line_map = linemap[line_idx]
                 line = ocr[line_map[0]]['paragraphs'][line_map[1]]['lines'][line_map[2]]
                 num_words = len(line['words'])
-                
-                if num_words>self.min_read_start_no_mask:
-                    use_words = random.randrange(self.min_read_start_no_mask,num_words+1)
-                    start_word_idx = random.randrange(num_words-use_words+1)
-                else:
-                    use_words = num_words
-                    start_word_idx = 0
-                end_word_idx = start_word_idx+use_words-1
-                if random.random() < 0.5:
-                    #build prompt forwards
-                    prompt = line['words'][start_word_idx]['text']
-                    word_idxs=[start_word_idx]
 
-                    word_idx =start_word_idx+1
-                    while word_idx<=end_word_idx and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len:
-                        prompt+= ' '+line['words'][word_idx]['text']
-                        word_idxs.append(word_idx)
-                        word_idx+=1
-                else:
-                    #build prompt backwards
-                    prompt = line['words'][end_word_idx]['text']
-                    word_idxs = [end_word_idx]
-
-                    word_idx =end_word_idx-1
-                    while word_idx>=0 and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len:
-                        prompt= line['words'][word_idx]['text']+' '+prompt
-                        word_idxs.append(word_idx)
-                        word_idx-=1
-
-                if do_draw: 
-                    response = ''
-                    
-                    outmask = [line_map+(i,) for i in word_idxs]
-                    inmask=[]
-                    question = '0w~'
-                else: #read
-                    response = prompt
+                if whole_line:
+                    assert not do_draw
+                    response = line['text']
+                    if len(response)>self.max_qa_len:
+                        response = response[:self.max_qa_len]
+                    elif len(response)+1 <= self.max_qa_len:
+                        response += '‡'
                     prompt = ''
+                    question = 'l0>'
+                    inmask = [line_map+(None,)]
                     outmask = []
-                    inmask = [line_map+(i,) for i in word_idxs]
-                    question = 'w0>'
+                else:
+                    if num_words>self.min_read_start_no_mask:
+                        use_words = random.randrange(self.min_read_start_no_mask,num_words+1)
+                        build_forwards = random.random() < 0.5
+                        if build_forwards:
+                            start_word_idx = random.randrange(num_words-use_words+1)
+                        else:
+                            start_word_idx = random.randrange(use_words-1,num_words)
+                    else:
+                        build_forwards = True
+                        use_words = num_words
+                        start_word_idx = 0
+                    if build_forwards:
+                        #build prompt forwards
+                        end_word_idx = start_word_idx+use_words-1
+                        prompt = line['words'][start_word_idx]['text']
+                        word_idxs=[start_word_idx]
+
+                        word_idx =start_word_idx+1
+                        while word_idx<=end_word_idx and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len:
+                            prompt+= ' '+line['words'][word_idx]['text']
+                            word_idxs.append(word_idx)
+                            word_idx+=1
+                    else:
+                        #build prompt backwards
+                        end_word_idx = start_word_idx-use_words
+                        prompt = line['words'][end_word_idx]['text']
+                        word_idxs = [end_word_idx]
+
+                        word_idx =end_word_idx-1
+                        while word_idx>=0 and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len:
+                            prompt= line['words'][word_idx]['text']+' '+prompt
+                            word_idxs.append(word_idx)
+                            word_idx-=1
+
+                    if do_draw: 
+                        response = ''
+                        
+                        outmask = [line_map+(i,) for i in word_idxs]
+                        inmask=[]
+                        question = '0w~'
+                    else: #read
+                        response = prompt
+                        prompt = ''
+                        outmask = []
+                        inmask = [line_map+(i,) for i in word_idxs]
+                        question = 'w0>'
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
             #question_type 5 is under the first
             elif question_type == 6:
@@ -505,7 +528,7 @@ class ParaQADataset(QADataset):
                         if len(response)>=goal_response_len:
                             break
                     if len(response)>self.max_qa_len:
-                        response = response[-self.max_qa_len:]
+                        response = response[:self.max_qa_len]
                     if next_word[0]!=start_block and len(response)<self.max_qa_len:
                         response+='‡'#if we can, add an end-of-block sign
                 if use_highlight:
