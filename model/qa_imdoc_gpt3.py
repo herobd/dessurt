@@ -571,21 +571,6 @@ class QAImDocGPT3(BaseModel):
             answers=[a for ba in answers for a in ba]
         else:
             answers=['']*new_batch_size
-            saved_proj_im_tokens = []
-            saved_im_tokens = []
-            saved_ocr_tokens = []
-            saved_q_tokens = []
-            saved_a_tokens = []
-            saved_im_pos = []
-            saved_ocr_pos = []
-            saved_q_pos = []
-            saved_im_pos_mask = []
-            saved_ocr_pos_mask = []
-            saved_q_pos_mask = []
-            saved_im_padding_mask = []
-            saved_ocr_padding_mask = []
-            saved_q_padding_mask = []
-            output_tokens=[]
 
         #run question+answer through decoder
         q_t = self.tokenizer(questions,return_tensors="pt",padding=True)
@@ -636,41 +621,21 @@ class QAImDocGPT3(BaseModel):
 
         #make position (2d) masks. Controls whether relative position attention bias is applied
         ocr_pos_mask = (~ocr_padding_mask[:,:,None]).float()
-        q_pos_mask = torch.FloatTensor(1,num_q,1).fill_(0).to(device)
 
         q_pos = torch.FloatTensor(1,num_q,2).fill_(0).to(device)
 
         q_pos = q_pos.expand(new_batch_size,-1,-1)
-        q_pos_mask = q_pos_mask.expand(new_batch_size,-1,-1)
+        q_pos_mask = torch.FloatTensor(1,1,1).fill_(0).expand(new_batch_size,num_q,-1).to(device)
         
-        if RUN:
-            num_hold_all = num_all+self.max_pred_len
-            num_hold_a = num_a+self.max_pred_len
-            holder_a_pos = torch.FloatTensor(1,num_hold_a,2).fill_(0).to(device)
-            holder_a_pos_mask = torch.FloatTensor(1,num_hold_a,1).fill_(0).to(device)
-            holder_a_pos_ex = holder_a_pos.expand(new_batch_size,-1,-1)
-            holder_a_pos_mask_ex = holder_a_pos_mask.expand(new_batch_size,-1,-1)
-            a_pos = holder_a_pos_ex[:,:num_a]
-            a_pos_mask = holder_a_pos_mask_ex[:,:num_a]
-            holder_a_padding_mask = torch.BoolTensor(new_batch_size,num_hold_a).fill_(0).to(device)
+        a_pos = torch.FloatTensor(1,num_a,2).fill_(0).to(device)
+        a_pos_mask = torch.FloatTensor(1,num_a,1).fill_(0).to(device)
+        a_pos = a_pos.expand(new_batch_size,-1,-1)
+        a_pos_mask = a_pos_mask.expand(new_batch_size,-1,-1)
 
-            holder_all_att_mask = torch.BoolTensor(1,num_hold_all,num_hold_all).fill_(1) #1/0
-            holder_all_att_mask[:,-num_hold_a:,-num_hold_a:] = torch.tril(holder_all_att_mask[:,-num_hold_a:,-num_hold_a:])
-            holder_all_att_mask[:,:-num_hold_a,-num_hold_a:] = 0 #nothing else attends to a
-            holder_all_att_mask = holder_all_att_mask.to(device)
-            all_att_mask = holder_all_att_mask[:,:num_all,:num_all]
-
-            ##
-        else:
-            a_pos = torch.FloatTensor(1,num_a,2).fill_(0).to(device)
-            a_pos_mask = torch.FloatTensor(1,num_a,1).fill_(0).to(device)
-            a_pos = a_pos.expand(new_batch_size,-1,-1)
-            a_pos_mask = a_pos_mask.expand(new_batch_size,-1,-1)
-
-            all_att_mask = torch.BoolTensor(1,num_all,num_all).fill_(1) #1/0
-            all_att_mask[:,-num_a:,-num_a:] = torch.tril(all_att_mask[:,-num_a:,-num_a:])
-            all_att_mask[:,:-num_a,-num_a:] = 0 #nothing else attends to a
-            all_att_mask = all_att_mask.to(device)
+        all_att_mask = torch.BoolTensor(1,num_all,num_all).fill_(1) #1/0
+        all_att_mask[:,-num_a:,-num_a:] = torch.tril(all_att_mask[:,-num_a:,-num_a:])
+        all_att_mask[:,:-num_a,-num_a:] = 0 #nothing else attends to a
+        all_att_mask = all_att_mask.to(device)
 
 
         #Run the Swin and accompanying layers
@@ -684,11 +649,23 @@ class QAImDocGPT3(BaseModel):
         qa_pos_mask = torch.cat( (q_pos_mask,a_pos_mask), dim=1)
         qa_pos = torch.cat( (q_pos,a_pos), dim=1)
 
-        im_pos_mask = torch.FloatTensor(1,num_im,1).fill_(1).expand(new_batch_size,-1,-1).to(device  )
+        im_pos_mask = torch.FloatTensor(1,1,1).fill_(1).expand(new_batch_size,num_im,-1).to(device  )
         all_pos_mask = torch.cat((im_pos_mask,ocr_pos_mask,q_pos_mask,a_pos_mask),dim=1)
 
-        im_padding_mask = torch.BoolTensor(1,num_im).fill_(0).expand(new_batch_size,-1).to(device)
+        im_padding_mask = torch.BoolTensor(1,1).fill_(0).expand(new_batch_size,num_im).to(device)
         all_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask,a_padding_mask),dim=1)
+
+        if RUN:
+            #store results at each layer to reuse
+            saved_proj_im_tokens = []
+            saved_ocr_tokens = []
+            saved_ocr_pos = []
+            saved_ocr_padding_mask = []
+            saved_q_tokens = []
+            saved_q_pos = []
+            saved_q_padding_mask = []
+            saved_a_tokens = []
+            ##
 
         for i,(swin_layer, proj_d2i, layout_layer, proj_i2d, im_downsample, ocr_downsample, q_downsample) in enumerate(self.swin_layers):
 
@@ -702,23 +679,14 @@ class QAImDocGPT3(BaseModel):
             proj_im_tokens = proj_i2d(im_tokens)
 
             if RUN:
-                ocr_tokens = ocrqa_tokens[:,:num_ocr]
-                q_tokens = ocrqa_tokens[:,num_ocr:num_ocr+num_q]
-                a_tokens = ocrqa_tokens[:,-num_a:]
                 saved_proj_im_tokens.append(proj_im_tokens)
-                saved_im_tokens.append(None)
                 saved_ocr_tokens.append(ocr_tokens)
-                saved_q_tokens.append(q_tokens)
-                saved_a_tokens.append(a_tokens)
-                saved_im_pos.append(None)
                 saved_ocr_pos.append(ocr_pos)
-                saved_q_pos.append(q_pos)
-                saved_im_pos_mask.append(None)
-                saved_ocr_pos_mask.append(ocr_pos_mask)
-                saved_q_pos_mask.append(q_pos_mask)
-                saved_im_padding_mask.append(None)
                 saved_ocr_padding_mask.append(ocr_padding_mask)
+                saved_q_tokens.append(q_tokens)
+                saved_q_pos.append(q_pos)
                 saved_q_padding_mask.append(q_padding_mask)
+                saved_a_tokens.append(a_tokens)
             
             qa_tokens = layout_layer(
                     qa_tokens,
@@ -750,7 +718,7 @@ class QAImDocGPT3(BaseModel):
                 did_downsample=True
                 ocr_tokens,ocr_pos,ocr_padding_mask = ocr_downsample(ocr_tokens,ocr_pos,ocr_padding_mask)
                 num_ocr = ocr_tokens.size(1)
-                ocr_pos_mask = ocr_padding_mask[:,:,None]#torch.FloatTensor(new_batch_size,ocr_tokens.size(1),1).fill_(1).to(device)
+                ocr_pos_mask = (~ocr_padding_mask[:,:,None]).float()
             #num_q_old=num_q
             if q_downsample is not None:
                 did_downsample=True
@@ -775,13 +743,21 @@ class QAImDocGPT3(BaseModel):
 
         response = a_tokens
 
+        ##############
+        #Visual output
+        H,W = self.final_resolution
+        #reshape and permute to convert to image
+        im_feats = im_tokens.view(new_batch_size,H,W,im_tokens.size(2)).permute(0,3,1,2)
+        out_mask = self.upsample_net(im_feats)
+
                     
 
         if RUN: #assuming batchsize of 1
             #TODO
-            raise NotImplementedError()
             assert new_batch_size==1 #just to make stopping easier
             assert num_a==1 #just checking...
+            zero = torch.BoolTensor(1,1).fill_(0).to(device) #for creating masks from
+            one = torch.BoolTensor(1,1).fill_(1).to(device)
 
             #response = all_tokens[:,-(num_a):]
             response_decoded = self.answer_decode(response)
@@ -808,27 +784,44 @@ class QAImDocGPT3(BaseModel):
 
                     #could be run in parallel
                     num_im = saved_proj_im_tokens[li].size(1)
-                    num_ocr = saved_ocr_tokens[li].size(1)
+                    #num_ocr = saved_ocr_tokens[li].size(1)
                     num_q = saved_q_tokens[li].size(1)
 
                     proj_im_tokens = saved_proj_im_tokens[li]
-                    saved_a_tokens[li] = torch.cat((saved_a_tokens[li],ans),dim=1)
-                    ocrqa_tokens =  torch.cat((saved_ocr_tokens[li],saved_q_tokens[li],saved_a_tokens[li]),dim=1)
-                    ocrqa_pos = torch.cat((saved_ocr_pos[li],saved_q_pos[li],holder_a_pos_ex[:,:num_a]),dim=1)
-                    ocrqa_pos_mask = torch.cat((saved_ocr_pos_mask[li],saved_q_pos_mask[li],holder_a_pos_mask_ex[:,:num_a]),dim=1)
-                    ocrqa_padding_mask = torch.cat((saved_ocr_padding_mask[li],saved_q_padding_mask[li],holder_a_padding_mask[:,:num_a]),dim=1)
+                    im_padding_mask = zero.expand(new_batch_size,num_im)#holder_im_padding_mask[:,:num_im]
+                    im_pos_mask = one.expand(new_batch_size,num_im)#holder_im_pos[:,:num_im]
+
+                    ocr_tokens = saved_ocr_tokens[li]
+                    ocr_pos = saved_ocr_pos[li]
+                    ocr_padding_mask = saved_ocr_padding_mask[li]
+                    ocr_pos_mask = (~ocr_padding_mask[:,:,None]).float()
+
+                    q_tokens = saved_q_tokens[li]
+                    q_pos = saved_q_pos[li]
+                    q_padding_mask = saved_q_padding_mask[li]
+                    q_pos_mask = zero.expand(new_batch_size,num_q)[:,:,None] #holder_q_pos_mask[:,:num_q]
+
+                    a_tokens = saved_a_tokens[li] = torch.cat((saved_a_tokens[li],ans),dim=1)
+                    a_pos = holder_a_pos[:,:num_a]
+                    a_padding_mask = zero.expand(new_batch_size,num_a)#holder_a_padding_mask[:,:num_a]
+                    a_pos_mask = a_padding_mask[:,:,None]#holder_a_pos_mask[:,:num_a]
+
+                    all_pos_mask = torch.cat((im_pos_mask,ocr_pos_mask,q_pos_mask,a_pos_mask),dim=1)
+                    all_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask,a_padding_mask), dim=1)
+
 
                     ans = layout_layer(
-                            ocrqa_tokens,
-                            ocrqa_pos[:,:,0], #x
-                            ocrqa_pos[:,:,1], #y
-                            proj_im_tokens,
-                            self.im_xs[level].expand(new_batch_size,-1),
-                            self.im_ys[level].expand(new_batch_size,-1),
-                            docqa_mask=ocrqa_att_mask.expand(new_batch_size,-1,-1),
-                            docqa_padding_mask=ocrqa_padding_mask,
-                            pos_mask = ocrqa_pos_mask,
-                            auto_regressive=ans)
+                            a_tokens[-1:], #only last token
+                            a_pos[:,-1:,0], #x
+                            a_pos[:,-1:,1], #y
+                            a_pos_mask[:,-1:],
+                            #all_tokens,
+                            torch.cat((proj_im_tokens,ocr_tokens,q_tokens,a_tokens),dim=1),
+                            torch.cat((self.im_xs[level].expand(new_batch_size,-1),ocr_pos[:,:,0],q_pos[:,:,0],a_pos[:,:,0]),dim=1),
+                            torch.cat((self.im_xs[level].expand(new_batch_size,-1),ocr_pos[:,:,1],q_pos[:,:,1],a_pos[:,:,1]),dim=1),
+                            all_pos_mask,
+                            all_att_mask[:,-(num_q+num_a):,:],
+                            all_padding_mask)
                     if im_downsample is not None:
                         level+=1
                 #Done Swin (RUN)
@@ -847,7 +840,7 @@ class QAImDocGPT3(BaseModel):
             
             if PRINT_ATT:
                 attDisplay(image[0],full_ocr_string,'|'+questions[0],'|'+final_str[0]+'^',final_str)
-            return final_str
+            return final_str, out_mask
             ############
 
 
@@ -890,16 +883,10 @@ class QAImDocGPT3(BaseModel):
         if PRINT_ATT:
             attDisplay(image[0],full_ocr_string,'|'+questions[0],'|'+answers[0]+'^',batch_string_response[0])
 
-        ##############
-        #Visual output
-        H,W = self.final_resolution
-        #reshape and permute to convert to image
-        im_feats = im_tokens.view(new_batch_size,H,W,im_tokens.size(2)).permute(0,3,1,2)
-        out = self.upsample_net(im_feats)
 
 
 
-        return response_decoded, target_decoded.to(device), batch_string_response, out
+        return response_decoded, target_decoded.to(device), batch_string_response, out_mask
 
     #t#def print_opt_times(self):#t#
         #t#for name,times in self.opt_history.items():#t#
