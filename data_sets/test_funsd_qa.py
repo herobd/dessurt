@@ -39,7 +39,7 @@ def display(data):
 
         #widths.append(img.size(1))
         draw = False
-        for x in ['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
+        for x in ['al~']:#['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
             if x in q:
                 draw = True
                 break

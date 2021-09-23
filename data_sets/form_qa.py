@@ -110,12 +110,12 @@ class FormQA(QADataset):
         #self.do_words = config['do_words']
         #self.char_qs = config['char_qs'] if 'char_qs' in config else False
 
-        self.q_types =         ['np','class-link','class','down-pair','up-pair','read','cell','row-header','col-header','all-row','all-col', 'list-row-headers','list-col-headers','count-tables','highlight-table']
-        self.q_type_weights = [0.2,  1.3, 0.7,    1.0,        1.0,      1.0,   1.1,   1.1,         1.1,         1.1,       1.1,       1.1,              1.1,              0.9,           1.1]
-        self.q_types_no_table =         ['np','class-link','class','down-pair','up-pair','read','count-tables']
-        self.q_type_no_table_weights = [0.2,  1.3, 0.7,    1.0,        1.0,      1.0,   0.05]
-        self.q_types_only_table =        ['np','class-link','class','read','cell','row-header','col-header','all-row','all-col', 'list-row-headers','list-col-headers','count-tables','highlight-table']
-        self.q_type_only_table_weights = [0.2, 1.3, 0.7,    1.0,   1.1,   1.1,         1.1,         1.1,       1.1,       1.1,              1.1,              0.9,           1.1]
+        self.q_types =         ['np','all','class-link','class','down-pair','up-pair','read','cell','row-header','col-header','all-row','all-col', 'list-row-headers','list-col-headers','count-tables','highlight-table']
+        self.q_type_weights = [0.2,  1.0,  1.3, 0.7,    1.0,        1.0,      1.0,   1.1,   1.1,         1.1,         1.1,       1.1,       1.1,              1.1,              0.9,           1.1]
+        self.q_types_no_table =         ['np','all','class-link','class','down-pair','up-pair','read','count-tables']
+        self.q_type_no_table_weights = [0.2,  1.0,  1.3, 0.7,    1.0,        1.0,      1.0,   0.05]
+        self.q_types_only_table =        ['np','all','class-link','class','read','cell','row-header','col-header','all-row','all-col', 'list-row-headers','list-col-headers','count-tables','highlight-table']
+        self.q_type_only_table_weights = [0.2, 1.0,  1.3, 0.7,    1.0,   1.1,   1.1,         1.1,         1.1,       1.1,       1.1,              1.1,              0.9,           1.1]
 
         self.q_types_for_np = ['class-link','class','down-pair','up-pair','read','cell','row-header','col-header','all-row', 'list-row-headers','list-col-headers']
 
@@ -136,6 +136,9 @@ class FormQA(QADataset):
          - tables: a list of Table objects
          """
 
+        all_of_cls=defaultdict(list)
+        for entity in entities:
+            all_of_cls[entity.cls].append(entity)
 
         q_a_pairs = []
         if len(tables)>0:
@@ -150,7 +153,7 @@ class FormQA(QADataset):
         #this is created to sample the up links from
         unrolled_entity_link=[]
         for head,tail in entity_link:
-            if isinstance(tail,list) or isinstance(tail,tuple):
+            if isinstance(tail,(list,tuple)):
                 for t in tail:
                     unrolled_entity_link.append((head,t))
             else:
@@ -159,8 +162,20 @@ class FormQA(QADataset):
         #import pdb;pdb.set_trace()
 
         for q_type in q_types:
-            q_type = 'class-link'
-            if q_type == 'class-link':
+            if q_type == 'all':
+                if random.random()<0.2:
+                    cls = random.choice(list(all_of_cls.keys()))
+                else:
+                    cls = random.choice(entities).cls #pick class based on distrubition
+                question = 'al~'+cls
+                ids=[]
+                outmask=[]
+                response_text = str(len(all_of_cls[cls]))
+                for entitiy in all_of_cls[cls]:
+                    ids += [line.bbid for line in entitiy.lines]
+                    outmask += [self.convertBB(s,line.box) for line in entitiy.lines]
+                self.qaAdd(q_a_pairs,question,response_text,ids,[],outmask)
+            elif q_type == 'class-link':
                 ei = random.randrange(len(full_entities))
                 entity = full_entities[ei]
                 cls = entity.cls[0] #first character for compression
