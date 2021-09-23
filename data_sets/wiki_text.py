@@ -1,9 +1,19 @@
 from datasets import load_dataset
 import random
+import os
+from utils.util import ensure_dir
 #import unicodedata
 
 
-_text_data = load_dataset('wikipedia', '20200501.en', cache_dir='/Data6/davis/data_cache')['train']
+if os.path.exists('DIR'):
+    with open('DIR') as f:
+        cache_path = f.readline().strip()
+else:
+    cache_path = '../data/wiki_cache' #/Data6/davis/data_cache
+    ensure_dir(cache_path)
+
+
+_text_data = load_dataset('wikipedia', '20200501.en', cache_dir=cache_path)['train']
 
 _prune_headers = ["See also", "Gallery", "External media", "History", "Notes"]
 _wiki_end_keywords = ['References','Sources','External links']

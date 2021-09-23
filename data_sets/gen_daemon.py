@@ -2,7 +2,7 @@ from utils.filelock import FileLock, FileLockException
 from utils.util import ensure_dir
 import threading
 from synthetic_text_gen import SyntheticWord
-from data_sets.wiki_text import getWikiArticle
+from data_sets import getWikiArticle
 import os, random, re, time
 import unicodedata
 import numpy as np
