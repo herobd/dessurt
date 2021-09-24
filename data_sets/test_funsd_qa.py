@@ -38,13 +38,12 @@ def display(data):
             print(q+' : '+a)
 
         #widths.append(img.size(1))
-        #draw = False
-        #for x in ['al~']:#['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
-        #    if x in q:
-        #        draw = True
-        #        break
+        draw = False
+        for x in ['f1~','p1~']:#['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
+            if x in q:
+                draw = True
+                break
         #draw=True
-        draw = 'packing' in q
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())

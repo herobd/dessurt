@@ -165,8 +165,8 @@ class FormQA(QADataset):
             for ei in range(len(full_entities)):
                 q_types.append(('class-link', ei,True))
                 q_types.append(('class-link', ei,False))
-            for entitiy in entities:
-                if len(entity.text)>5 or len(entities.lines)>1:
+            for entity in entities:
+                if len(entity.text)>=self.max_qa_len or len(entity.lines)>1:
                     q_types.append(('read',entity,True))
                     q_types.append(('read',entity,False))
 
@@ -510,7 +510,6 @@ class FormQA(QADataset):
                     continue
 
             elif q_type=='read':
-
                 #finish reading entity
                 if self.train:
                     for i in range(10):
@@ -530,21 +529,29 @@ class FormQA(QADataset):
                     forward=False
                     text = text[::-1]
 
-                last_space = max(text.rfind(' '),text.rfind('\\'))
-                if last_space==-1: #no space
-                    last_space = random.randrange(1,len(text)-1)
-                query_part = text[:last_space] #so there's at least one word to predict
                 if self.train:
+                    last_space = max(text.rfind(' '),text.rfind('\\'))
+                    if last_space==-1: #no space
+                        last_space = random.randrange(1,len(text)-1)
+                    query_part = text[:last_space] #so there's at least one word to predict
                     query,q_start = self.selectPartText(query_part,ret_start=True)
                 else:
-                    query = self.getFrontText(query_part)
+                    first_newline = text.find('\\')
+                    if first_newline>-1:
+                        query,q_start = self.selectPartText(text[:first_newline],ret_start=True)
+                    else:
+                        last_space = text.rfind(' ')
+                        if last_space==-1: #no space
+                            last_space = random.randrange(1,len(text)-1)
+                        query_part = text[:last_space] #so there's at least one word to predict
+                        query = self.getFrontText(query_part)
                     q_start = 0
                 if len(query)==0:
                     continue
                 q_end = q_start + len(query)
 
 
-                if text[q_end]==' ' or text[q_end]=='\\':
+                if text[q_end]==' ':
                     r_start = q_end+1
                 else:
                     r_start = q_end
@@ -904,7 +911,7 @@ class FormQA(QADataset):
             
             if len(q_a_pairs)>10*self.questions and self.train:
                 break #we have enough
-
+        
         return q_a_pairs
 
     def selectPartText(self,text,length=None,ret_start=False):
