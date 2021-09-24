@@ -256,8 +256,8 @@ class QATrainer(BaseTrainer):
         """
         self.model.eval()
 
-        val_metrics = {}#defaultdict(lambda: 0.0)
-        val_count = defaultdict(lambda: 1)
+        val_metrics = {}#not a default dict since it can have different kinds of data in it
+        val_count = defaultdict(int)
 
         prefix = 'val_'
 
@@ -271,20 +271,28 @@ class QATrainer(BaseTrainer):
                 for name,value in log_run.items():
                     if value is not None:
                         val_name = prefix+name
-                        if val_name in val_metrics:
-                            val_metrics[val_name]+=value
+                        if isinstance(value,(list,tuple)):
+                            if val_name in val_metrics:
+                                val_metrics[val_name]+=sum(value)
+                            else:
+                                val_metrics[val_name]=sum(value)
+                            val_count[val_name]+=len(value)
+                        else:   
+                            if val_name in val_metrics:
+                                val_metrics[val_name]+=value
+                            else:
+                                val_metrics[val_name]=value
                             val_count[val_name]+=1
-                        else:
-                            val_metrics[val_name]=value
+
                 for name,value in losses.items():
                     if value is not None:
                         value = value.item()
                         val_name = prefix+name
                         if val_name in val_metrics:
                             val_metrics[val_name]+=value
-                            val_count[val_name]+=1
                         else:
                             val_metrics[val_name]=value
+                        val_count[val_name]+=1
 
 
 
@@ -307,6 +315,8 @@ class QATrainer(BaseTrainer):
         questions = instance['questions']
         answers = instance['answers']
         gt_mask = instance['mask_label']
+        if gt_mask is not None:
+            gt_mask = gt_mask.to(device)
 
         #OCR possibilities
         #-All correct
@@ -356,41 +366,93 @@ class QATrainer(BaseTrainer):
         #t##t#self.opt_history['run model'].append(timeit.default_timer()-tic)#t#
         #t##t#tic=timeit.default_timer()#t##t#
         losses=defaultdict(lambda:0)
-        log={}
+        log=defaultdict(list)
         
         losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
         #losses['answerLoss'] = pred_a.sum()
         if 'mask' in self.loss and gt_mask is not None: #we allow gt_mask to be none to not supervise
             mask_labels_batch_mask = instance['mask_labels_batch_mask'].to(device)
-            losses['maskLoss'] = self.loss['mask'](pred_mask*mask_labels_batch_mask[:,None,None,None],gt_mask.to(device))
+            losses['maskLoss'] = self.loss['mask'](pred_mask*mask_labels_batch_mask[:,None,None,None],gt_mask)
 
 
         #t#tic=timeit.default_timer()#t#
-        cor_present=0
-        total_present=0
-        cor_pair=0
-        total_pair=0
-        score_ed = 0
-        total_score = 0
+        score_ed = []
         for b_answers,b_pred in zip(answers,string_a):
             for answer,pred in zip(b_answers,b_pred):
-                if len(pred)>0 and len(answer)>0 and answer[0]==pred[0]:
-                    cor_present+=1
-                total_present+=1
-                if len(answer)>2:
-                    if answer[2:]==pred[2:]:
-                        cor_pair+=1
-                    total_pair+=1
                 if len(answer)>0 or len(pred)>0:
-                    score_ed += editdistance.eval(answer,pred)/((len(answer)+len(pred))/2)
+                    score_ed.append( editdistance.eval(answer,pred)/((len(answer)+len(pred))/2) )
                 else:
-                    score_ed += 0
-                total_score +=1
+                    score_ed.append( 0 )
                 
-        log['present_acc']=cor_present/total_present
-        if total_pair>0:
-            log['pair_acc']=cor_pair/total_pair
-        log['score_ed'] = score_ed/total_score
+        log['score_ed'] = np.mean(score_ed)
+
+        if True#:get_scores:
+            if gt_mask.sum()>0:
+                #compute pixel IoU
+                pred_binary_mask = pred_mask>0
+                intersection = (pred_mask*gt_mask).sum(dim=3).sum(dim=2)
+                union = (pred_mask+gt_mask).sum(dim=3).sum(dim=2)
+                iou = intersection/union
+            else:
+                iou = None
+            for b,(b_answers,b_pred,b_questions) in enumerate(zip(answers,string_a,questions)):
+                assert len(b_questions)==1
+                answer = b_answers[0]
+                pred = b_pred[0]
+                question = b_questions[0]
+                if question.startswith('al~'):
+                    cls = question[3:]
+                    try:
+                        count_pred = int(pred)
+                    except ValueError:
+                        count_pred = 0
+                    gt_pred = int(answer)
+                    log['E_all_{}_IoU'.format(cls)].append(iou[b])
+                    log['E_all_{}_count_err'.format(cls)]=abs(count_pred-count_gt)
+                elif question.startswith('z0') or question.startswith('g0'):
+                    cls_pred = pred[:3]
+                    cls_gt = answer[:3]
+                    log['E_class_acc'].append(cls_pred==cls_gt)
+                    
+                    if question.startswith('z0'):
+                        try:
+                            count_pred = int(pred[3:])
+                        except ValueError:
+                            count_pred = 0
+                        count_gt = int(answer[3:])
+                        log['E_link_count_err']=abs(count_pred-count_gt)
+                        log['E_link_all_IoU'].append(iou[b])
+                    else:
+                        if 'g0~' in question:
+                            start_gt = pred.find('>')
+                            count_gt = int(answer[3:start_gt])
+                            start_pred = pred.find('>')
+                            try:
+                                count_pred = int(pred[3:start_pred])
+                            except ValueError:
+                                count_pred = 0
+                            log['E_link_count_err']=abs(count_pred-count_gt)
+                            pred_s = pred[start_pred+1:]
+                            answer_s = answer[start_gt+1:]
+                        else:
+                            pred_s = pred[3:]
+                            answer_s = answer[3:]
+
+                        log['E_link_step_IoU'].append(iou[b])
+                        ed = editdistance.eval(answer_s,pred_s)
+                        hit = ed/((len(answer_s)+len(pred_s))/2) < 0.1
+                        log['E_link_step_acc'].append(int(hit))
+                        log['E_link_step_ed'].append(ed)
+                elif question.startswith('f1~') or question.startswith('p1~'):
+                    ed = editdistance.eval(answer,pred)
+                    hit = ed/((len(answer)+len(pred))/2) < 0.1
+                    log['E_read_acc'].append(int(hit))
+                    log['E_read_ed'].append(ed)
+                    if answer[0]=='\\':
+                        log['E_read_1stNewline_acc'].append(1 if pred[0]=='\\' else 0)
+
+
+
         #t#self.opt_history['score'].append(timeit.default_timer()-tic)#t#
 
         if self.print_pred_every>0 and self.iteration%self.print_pred_every==0:
