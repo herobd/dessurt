@@ -429,9 +429,15 @@ class FormQA(QADataset):
                     if len(tables)>0:
                         table = random.choice(tables)
                         if random.random()>0.5:
-                            header = random.choice(table.row_headers)
+                            headers = table.row_headers
                         else:
-                            header = random.choice(table.col_headers)
+                            headers = table.col_headers
+                        for i in range(10):
+                            header = random.choice(headers)
+                            if header is not None:
+                                break
+                        if header is None:
+                            continue
                         header_text = self.selectPartText(header.text,length=-1+self.max_qa_len//2)
                     else:
                         header_text = self.sampleText(-1+self.max_qa_len//2)
@@ -476,6 +482,8 @@ class FormQA(QADataset):
                     text = entity.text
                     if len(text)>2:
                         break
+                if len(text)<3:
+                    continue
 
                 if random.random()<0.5:
                     forward=True
