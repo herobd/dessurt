@@ -461,8 +461,12 @@ class FormQA(QADataset):
                         question='zs~{}'
                     else:
                         question='gs~{}'
-
-                self.qaAdd(q_a_pairs,question.format(prompt_text),self.np_token,[],[],[])
+                try:
+                    self.qaAdd(q_a_pairs,question.format(prompt_text),self.np_token,[],[],[])
+                except ValueError as er:
+                    print(er)
+                    print('question is {}'.format(question))
+                    continue
 
             elif q_type=='read':
 
