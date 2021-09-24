@@ -38,12 +38,13 @@ def display(data):
             print(q+' : '+a)
 
         #widths.append(img.size(1))
-        draw = False
-        for x in ['al~']:#['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
-            if x in q:
-                draw = True
-                break
+        #draw = False
+        #for x in ['al~']:#['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
+        #    if x in q:
+        #        draw = True
+        #        break
         #draw=True
+        draw = 'packing' in q
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -84,8 +85,9 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=funsd_qa.FUNSDQA(dirPath=dirPath,split='train',config={
-        'rescale_range':[0.8,1.2],
+    data=funsd_qa.FUNSDQA(dirPath=dirPath,split='valid',config={
+        '#rescale_range':[0.8,1.2],
+        'rescale_range':[1,1],
         'crop_params': {
             "crop_size":[1152,768],
             "pad":0,
@@ -99,7 +101,7 @@ if __name__ == "__main__":
 
 })
 
-    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=funsd_qa.collate)
+    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False, num_workers=0, collate_fn=funsd_qa.collate)
     dataLoaderIter = iter(dataLoader)
 
         #if start==0:

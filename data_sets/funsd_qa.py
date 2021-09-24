@@ -25,6 +25,18 @@ class FUNSDQA(FormQA):
         super(FUNSDQA, self).__init__(dirPath,split,config,images)
 
 
+        self.classMap={
+                'header':16,
+                'question':17,
+                'answer': 18,
+                'other': 19
+                }
+        self.index_class_map=[
+                'header',
+                'question',
+                'answer',
+                'other'
+                ]
 
         self.min_start_read = 7
 
@@ -85,21 +97,32 @@ class FUNSDQA(FormQA):
                                     fy=self.rescale_range[1], 
                                     )
                             img_f.imwrite(path,resized)
-                    self.images.append({'id':image_name, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':image_name[:image_name.rfind('.')]})
+                    if self.train:
+                        self.images.append({'id':image_name, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':image_name[:image_name.rfind('.')]})
+                    else:
+                        assert self.rescale_range[1]==self.rescale_range[0]
+                        assert self.questions==1
+                        #create questions for each image
+                        with open(jsonPath) as f:
+                            annotations = json.load(f)
+                        s=1
+                        bbs, numNeighbors, trans, groups = createLines(annotations,self.classMap,s)
+                        bbs = bbs[0]
+
+                        groups_adj=set()
+                        for group_id,entity in enumerate(annotations['form']):
+                            for linkIds in entity['linking']:
+                                groups_adj.add((min(linkIds),max(linkIds)))
+                                
+                        entities,entity_link,tables = self.prepareForm(bbs,trans,groups,groups_adj)
+                        full_entities,full_entity_link_dict = self.prepareFormRaw(bbs,trans,groups,groups_adj)
+                        qa = self.makeQuestions(self.rescale_range[1],entities,entity_link,tables,full_entities,full_entity_link_dict)
+                        #import pdb;pdb.set_trace()
+                        for _qa in qa:
+                            _qa['bb_ids']=None
+                            self.images.append({'id':image_name, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':image_name[:image_name.rfind('.')], 'qa':[_qa]})
         self.errors=[]
 
-        self.classMap={
-                'header':16,
-                'question':17,
-                'answer': 18,
-                'other': 19
-                }
-        self.index_class_map=[
-                'header',
-                'question',
-                'answer',
-                'other'
-                ]
 
 
     def parseAnn(self,annotations,s):
@@ -153,7 +176,10 @@ class FUNSDQA(FormQA):
             if len(line_ids)>1:
                 for ei,li in line_ids:
                     entities[ei].lines[li].ambiguous = True
-        qa = self.makeQuestions(1.0,entities,entity_link,tables,full_entities,full_entity_link_dict)
+        if self.train:
+            qa = self.makeQuestions(1.0,entities,entity_link,tables,full_entities,full_entity_link_dict)
+        else:
+            qa = None #This is pre-computed
 
         ocr=None
         #ocr = [self.corrupt(text) for text in ocr]

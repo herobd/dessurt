@@ -109,13 +109,22 @@ class FormQA(QADataset):
         #self.corruption_p = config['text_corruption'] if 'text_corruption' in config else 0.15
         #self.do_words = config['do_words']
         #self.char_qs = config['char_qs'] if 'char_qs' in config else False
-
-        self.q_types =         ['np','all','class-link','class','down-pair','up-pair','read','cell','row-header','col-header','all-row','all-col', 'list-row-headers','list-col-headers','count-tables','highlight-table']
-        self.q_type_weights = [0.2,  1.0,  1.3, 0.7,    1.0,        1.0,      1.0,   1.1,   1.1,         1.1,         1.1,       1.1,       1.1,              1.1,              0.9,           1.1]
-        self.q_types_no_table =         ['np','all','class-link','class','down-pair','up-pair','read','count-tables']
-        self.q_type_no_table_weights = [0.2,  1.0,  1.3, 0.7,    1.0,        1.0,      1.0,   0.05]
-        self.q_types_only_table =        ['np','all','class-link','class','read','cell','row-header','col-header','all-row','all-col', 'list-row-headers','list-col-headers','count-tables','highlight-table']
-        self.q_type_only_table_weights = [0.2, 1.0,  1.3, 0.7,    1.0,   1.1,   1.1,         1.1,         1.1,       1.1,       1.1,              1.1,              0.9,           1.1]
+        if self.train:
+            self.q_types =         ['np','all','class-link','class','down-pair','up-pair','read','cell','row-header','col-header','all-row','all-col', 'list-row-headers','list-col-headers','count-tables','highlight-table']
+            self.q_type_weights = [0.2,  1.0,  1.3, 0.7,    1.0,        1.0,      1.0,   1.1,   1.1,         1.1,         1.1,       1.1,       1.1,              1.1,              0.9,           1.1]
+            self.q_types_no_table =         ['np','all','class-link','class','down-pair','up-pair','read','count-tables']
+            self.q_type_no_table_weights = [0.2,  1.0,  1.3, 0.7,    1.0,        1.0,      1.0,   0.05]
+            self.q_types_only_table =        ['np','all','class-link','class','read','cell','row-header','col-header','all-row','all-col', 'list-row-headers','list-col-headers','count-tables','highlight-table']
+            self.q_type_only_table_weights = [0.2, 1.0,  1.3, 0.7,    1.0,   1.1,   1.1,         1.1,         1.1,       1.1,       1.1,              1.1,              0.9,           1.1]
+        else:
+            #these are what we'll use to actually score
+            #(not actually looked at as it isn't sampling)
+            self.q_types =         ['all','class-link','read']
+            self.q_type_weights = [1,1,1]
+            self.q_types_no_table =        ['all','class-link','read']
+            self.q_type_no_table_weights = [1,1,1]
+            self.q_types_only_table =        ['all','class-link','read']
+            self.q_type_only_table_weights = [1,1,1]
 
         self.q_types_for_np = ['class-link','class','down-pair','up-pair','read','cell','row-header','col-header','all-row', 'list-row-headers','list-col-headers']
 
@@ -141,13 +150,26 @@ class FormQA(QADataset):
             all_of_cls[entity.cls].append(entity)
 
         q_a_pairs = []
-        if len(tables)>0:
-            if len(entity_link)>0:
-                q_types = random.choices(self.q_types,self.q_type_weights,k=self.questions*50)
+        if self.train:
+            if len(tables)>0:
+                if len(entity_link)>0:
+                    q_types = random.choices(self.q_types,self.q_type_weights,k=self.questions*50)
+                else:
+                    q_types = random.choices(self.q_types_only_table,self.q_type_only_table_weights,k=self.questions*50)
             else:
-                q_types = random.choices(self.q_types_only_table,self.q_type_only_table_weights,k=self.questions*50)
+                q_types = random.choices(self.q_types_no_table,self.q_type_no_table_weights,k=self.questions*50)
         else:
-            q_types = random.choices(self.q_types_no_table,self.q_type_no_table_weights,k=self.questions*50)
+            q_types = []
+            for cls in all_of_cls:
+                q_types.append(('all',cls,None))
+            for ei in range(len(full_entities)):
+                q_types.append(('class-link', ei,True))
+                q_types.append(('class-link', ei,False))
+            for entitiy in entities:
+                if len(entity.text)>5 or len(entities.lines)>1:
+                    q_types.append(('read',entity,True))
+                    q_types.append(('read',entity,False))
+
         
         #becuase a one-to-many is a single QA going down, but multiple QAs going up
         #this is created to sample the up links from
@@ -162,11 +184,16 @@ class FormQA(QADataset):
         #import pdb;pdb.set_trace()
 
         for q_type in q_types:
+            if not self.train:
+                q_type,instance,switch = q_type
             if q_type == 'all':
-                if random.random()<0.2:
-                    cls = random.choice(list(all_of_cls.keys()))
+                if self.train:
+                    if random.random()<0.2:
+                        cls = random.choice(list(all_of_cls.keys()))
+                    else:
+                        cls = random.choice(entities).cls #pick class based on distrubition
                 else:
-                    cls = random.choice(entities).cls #pick class based on distrubition
+                    cls=instance
                 question = 'al~'+cls
                 ids=[]
                 outmask=[]
@@ -175,8 +202,13 @@ class FormQA(QADataset):
                     ids += [line.bbid for line in entitiy.lines]
                     outmask += [self.convertBB(s,line.box) for line in entitiy.lines]
                 self.qaAdd(q_a_pairs,question,response_text,ids,[],outmask)
+
+
             elif q_type == 'class-link':
-                ei = random.randrange(len(full_entities))
+                if self.train:
+                    ei = random.randrange(len(full_entities))
+                else:
+                    ei = instance
                 entity = full_entities[ei]
                 cls = entity.cls[0] #first character for compression
 
@@ -186,15 +218,16 @@ class FormQA(QADataset):
                 #z0 hl with str+mask
                 #zs hl with str
                 #zm highlight with mask
+                
 
-                if random.random()<0.5:
+                if (self.train and random.random()<0.5) or switch: 
                     highlight=True
                     question='z'
                 else:
                     highlight=False
                     question='g'
 
-                if random.random()<0.333:
+                if random.random()<0.333 or not self.train: #full info for eval
                     question+='0'
                     prompt_text = self.selectPartText(entity.text)
                     inmask = [self.convertBB(s,line.box) for line in entity.lines]
@@ -477,15 +510,19 @@ class FormQA(QADataset):
             elif q_type=='read':
 
                 #finish reading entity
-                for i in range(10):
-                    entity = random.choice(entities)
+                if self.train:
+                    for i in range(10):
+                        entity = random.choice(entities)
+                        text = entity.text
+                        if len(text)>2:
+                            break
+                else:
+                    entity = instance
                     text = entity.text
-                    if len(text)>2:
-                        break
                 if len(text)<3:
                     continue
 
-                if random.random()<0.5:
+                if (self.train and random.random()<0.5) or switch:
                     forward=True
                 else:
                     forward=False
@@ -495,7 +532,11 @@ class FormQA(QADataset):
                 if last_space==-1: #no space
                     last_space = random.randrange(1,len(text)-1)
                 query_part = text[:last_space] #so there's at least one word to predict
-                query,q_start = self.selectPartText(query_part,ret_start=True)
+                if self.train:
+                    query,q_start = self.selectPartText(query_part,ret_start=True)
+                else:
+                    query = self.getFrontText(query_part)
+                    q_start = 0
                 if len(query)==0:
                     continue
                 q_end = q_start + len(query)
@@ -530,10 +571,10 @@ class FormQA(QADataset):
                 ambiguous = all([entity.lines[li].ambiguous for li in query_line_ids])
 
 
-                if random.random()<0.4 and not ambiguous and len(query)>6:
+                if random.random()<0.4 and not ambiguous and len(query)>6 and self.train:
                     question='fi~' if forward else 'pr~' #for "finish" or "previous"
                     inmask=[]
-                elif random.random()<0.5:
+                elif random.random()<0.5 and self.train:
                     question='f0~' if forward else 'p0~'
                     #This uses the mask of the whol entity, as that is what other things will produce
                     inmask = [self.convertBB(s,line.box) for line in entity.lines]
@@ -859,7 +900,7 @@ class FormQA(QADataset):
             else:
                 assert False
             
-            if len(q_a_pairs)>10*self.questions:
+            if len(q_a_pairs)>10*self.questions and self.train:
                 break #we have enough
 
         return q_a_pairs
@@ -1023,5 +1064,5 @@ class FormQA(QADataset):
                 row.sort(key=lambda a:a[1])
                 sorted_e2s += [a[0] for a in row]
             
-            new_link_dict[e1]=e2s
+            new_link_dict[e1]=sorted_e2s
         return new_link_dict
