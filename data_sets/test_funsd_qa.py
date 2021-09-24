@@ -43,6 +43,8 @@ def display(data):
             if x in q:
                 draw = True
                 break
+        draw = draw and '\\' in a
+
         #draw=True
         if draw :
             #cv2.imshow('line',img.numpy())
