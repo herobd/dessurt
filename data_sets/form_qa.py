@@ -186,6 +186,8 @@ class FormQA(QADataset):
         for q_type in q_types:
             if not self.train:
                 q_type,instance,switch = q_type
+            else:
+                switch=False
             if q_type == 'all':
                 if self.train:
                     if random.random()<0.2:
