@@ -64,6 +64,7 @@ class QADataset(torch.utils.data.Dataset):
         #    self.augmentation_params=config['augmentation_params']
         #else:
         #    self.augmentation_params=None
+        self.train = split=='train'
         self.questions = config['questions']
         self.max_qa_len = config['max_qa_len'] if 'max_qa_len' in config else None
         self.color = config['color'] if 'color' in config else False
@@ -200,6 +201,8 @@ class QADataset(torch.utils.data.Dataset):
 
         
         bbs,ids,trans, metadata, form_metadata, questions_and_answers = self.parseAnn(annotations,s)
+        if not self.train:
+            questions_and_answers = self.images[index]['qa']
 
         if np_img is None:
             np_img=metadata['image']
