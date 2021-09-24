@@ -266,7 +266,7 @@ class QATrainer(BaseTrainer):
             for batch_idx, instance in enumerate(self.valid_data_loader):
                 if not self.logged:
                     print('iter:{} valid batch: {}/{}'.format(self.iteration,batch_idx,len(self.valid_data_loader)), end='\r')
-                losses,log_run, out = self.run(instance)
+                losses,log_run, out = self.run(instance,valid=True)
 
                 for name,value in log_run.items():
                     if value is not None:
@@ -308,7 +308,7 @@ class QATrainer(BaseTrainer):
 
 
 
-    def run(self,instance,get=[],forward_only=False):#
+    def run(self,instance,get=[],forward_only=False,valid=False):#
         image = self._to_tensor(instance['img'])
         device = image.device
         ocrBoxes = instance['bb_gt']
@@ -386,13 +386,13 @@ class QATrainer(BaseTrainer):
                 
         log['score_ed'] = np.mean(score_ed)
 
-        if True#:get_scores:
-            if gt_mask.sum()>0:
+        if valid:
+            if gt_mask is not None:
                 #compute pixel IoU
                 pred_binary_mask = pred_mask>0
-                intersection = (pred_mask*gt_mask).sum(dim=3).sum(dim=2)
-                union = (pred_mask+gt_mask).sum(dim=3).sum(dim=2)
-                iou = intersection/union
+                intersection = (pred_binary_mask*gt_mask).sum(dim=3).sum(dim=2)
+                union = (pred_binary_mask+gt_mask).sum(dim=3).sum(dim=2)
+                iou = (intersection/union).cpu()
             else:
                 iou = None
             for b,(b_answers,b_pred,b_questions) in enumerate(zip(answers,string_a,questions)):
@@ -400,15 +400,19 @@ class QATrainer(BaseTrainer):
                 answer = b_answers[0]
                 pred = b_pred[0]
                 question = b_questions[0]
+            
+                #print(question)
+                #print(' answ:'+answer)
+                #print(' pred:'+pred)
                 if question.startswith('al~'):
                     cls = question[3:]
                     try:
                         count_pred = int(pred)
                     except ValueError:
                         count_pred = 0
-                    gt_pred = int(answer)
-                    log['E_all_{}_IoU'.format(cls)].append(iou[b])
-                    log['E_all_{}_count_err'.format(cls)]=abs(count_pred-count_gt)
+                    count_gt = int(answer)
+                    log['E_all_{}_IoU'.format(cls)].append(iou[b].item())
+                    log['E_all_{}_count_err'.format(cls)].append(abs(count_pred-count_gt))
                 elif question.startswith('z0') or question.startswith('g0'):
                     cls_pred = pred[:3]
                     cls_gt = answer[:3]
@@ -416,29 +420,42 @@ class QATrainer(BaseTrainer):
                     
                     if question.startswith('z0'):
                         try:
-                            count_pred = int(pred[3:])
+                            count_pred = int(pred[3:]) if pred[3:]!='ø' else 0
                         except ValueError:
                             count_pred = 0
-                        count_gt = int(answer[3:])
-                        log['E_link_count_err']=abs(count_pred-count_gt)
-                        log['E_link_all_IoU'].append(iou[b])
+                        count_gt = int(answer[3:]) if answer[3:]!='ø' else 0
+                        log['E_link_count_err'].append(abs(count_pred-count_gt))
+                        log['E_link_all_IoU'].append(iou[b].item())
                     else:
                         if 'g0~' in question:
-                            start_gt = pred.find('>')
-                            count_gt = int(answer[3:start_gt])
-                            start_pred = pred.find('>')
-                            try:
-                                count_pred = int(pred[3:start_pred])
-                            except ValueError:
-                                count_pred = 0
-                            log['E_link_count_err']=abs(count_pred-count_gt)
+                            if answer[3:] != 'ø':
+                                start_gt = answer.find('>')
+                                count_gt = int(answer[3:start_gt])
+                            else:
+                                start_gt = 2
+                                count_gt = 0
+                            if pred[3:] != 'ø':
+                                start_pred = pred.find('>')
+                                if start_pred>-1:
+                                    try:
+                                        count_pred = int(pred[3:start_pred])
+                                    except ValueError:
+                                        count_pred = 0
+                                else:
+                                    start_pred=2
+                                    count_pred=0
+                            else:
+                                start_pred=2
+                                count_pred=0
+
+                            log['E_link_count_err'].append(abs(count_pred-count_gt))
                             pred_s = pred[start_pred+1:]
                             answer_s = answer[start_gt+1:]
                         else:
                             pred_s = pred[3:]
                             answer_s = answer[3:]
 
-                        log['E_link_step_IoU'].append(iou[b])
+                        log['E_link_step_IoU'].append(iou[b].item())
                         ed = editdistance.eval(answer_s,pred_s)
                         hit = ed/((len(answer_s)+len(pred_s))/2) < 0.1
                         log['E_link_step_acc'].append(int(hit))
@@ -450,6 +467,12 @@ class QATrainer(BaseTrainer):
                     log['E_read_ed'].append(ed)
                     if answer[0]=='\\':
                         log['E_read_1stNewline_acc'].append(1 if pred[0]=='\\' else 0)
+                else:
+                    print('ERROR: missed question -- {}'.format(question))
+                
+                #for name,values in log.items():
+                #    if name.startswith('E_'):
+                #        print('{}: {}'.format(name,values[-1]))
 
 
 
@@ -483,6 +506,10 @@ class QATrainer(BaseTrainer):
                     got[name]=ret
                 else:
                     raise NotImplementedError('Cannot get [{}], unknown'.format(name))
+        if not valid:
+            for name in log:
+                if isinstance(log[name],list):
+                    log[name] = np.mean(log[name])
         return losses, log, got
 
     def bn_update(self):
