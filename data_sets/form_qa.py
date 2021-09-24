@@ -536,14 +536,14 @@ class FormQA(QADataset):
                 else:
                     first_newline = text.find('\\')
                     if first_newline>-1:
-                        query,q_start = self.selectPartText(text[:first_newline],ret_start=True)
+                        query,q_start = self.getBackText(text[:first_newline],ret_start=True)
                     else:
                         last_space = text.rfind(' ')
                         if last_space==-1: #no space
                             last_space = random.randrange(1,len(text)-1)
                         query_part = text[:last_space] #so there's at least one word to predict
                         query = self.getFrontText(query_part)
-                    q_start = 0
+                        q_start = 0
                 if len(query)==0:
                     continue
                 q_end = q_start + len(query)
@@ -997,6 +997,27 @@ class FormQA(QADataset):
             if term is not None and len(text)+len(term)<=self.max_qa_len:
                 text+=term
             return text
+    def getBackText(self,text,ret_start):
+        #get the back part of the text, breaking on words
+        if len(text)>self.max_qa_len:
+            start = -self.max_qa_len
+            while start<-1 and text[start-1]!=' ' and text[start-1]!='\\':
+                start+=1
+            if start==-1:
+                #couldn't break
+                ret = text[-self.max_qa_len:]
+                start = len(text)-self.max_qa_len
+            else:
+                ret = text[start:]
+                start = len(text)+start
+
+        else:
+            ret = text
+            start=0
+        if ret_start:
+            return ret,start
+        else:
+            return ret
 
     def convertBB(self,s,box):
         lX,tY,rX,bY = box
