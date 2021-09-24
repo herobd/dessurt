@@ -472,6 +472,8 @@ class FormQA(QADataset):
                     text = entity.text
                     if len(text)>2:
                         break
+                if len(text)<3:
+                    continue
 
                 if random.random()<0.5:
                     forward=True
