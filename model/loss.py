@@ -15,6 +15,14 @@ def my_loss(y_input, y_target):
 
 def sigmoid_BCE_loss(y_input, y_target):
     return F.binary_cross_entropy_with_logits(y_input, y_target)
+def sigmoid_BCE_mask_loss(y_input, y_target):
+    loss= F.binary_cross_entropy_with_logits(y_input, y_target,reduction='none')
+    if y_target.sum()==0:
+        return loss.mean()
+    positive_loss = (loss*y_target).sum()/y_target.sum()
+    anti_target = 1-y_target
+    negative_loss = (loss*anti_target).sum()/anti_target.sum()
+    return (positive_loss+ negative_loss)/2
 def padded_seq_cross_entropy(x,target):
     batchsize = x.size(0)
     lenn = x.size(1)
