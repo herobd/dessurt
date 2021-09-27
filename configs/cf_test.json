@@ -6,22 +6,29 @@
     "override": true,
     "data_loader": {
         "data_set_name": "SynthQADocDataset",
-        "fontdir": "../data/fonts/single_font",
-        "textdir": "../data/randomletters",
-        "data_dir": "../data/randomletters4line",
-        "batch_size": 5,
+        "fontdir": "../data/fonts",
+        "textdir": "../data/",
+        "data_dir": "../data/english4line",
+        "include_ocr": false,
+        "batch_size": 1,
         "num_workers": 4,
         "rescale_range": [1.0,1.0],
-        "crop_params": null,
-	"questions": 3,
-        "min_entries": 4,
-        "max_entries": 4,
+        "crop_params": {
+                "crop_size":192,
+                "pad":0,
+                "rot_degree_std_dev": 1
+            },
+	"questions": 2,
+        "min_entries": null,
+        "max_entries": 3,
+	"multiline": 0.000001,
+	"word_questions": "simple",
         "text_height": 32,
-        "image_size": 512,
-        "max_chars": 8,
+        "image_size": 192,
+        "max_chars": 10,
         "min_chars": 1,
         "use_before_refresh": 99999999999999999999,
-        "set_size": 50000,
+        "set_size": 68000,
         "num_processes": -1,
         "gen_type": "veryclean",
         "char_file": "../data/english_char_set.json",
@@ -60,6 +67,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 300000,
+        "accum_grad_steps": 10,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
@@ -73,6 +81,8 @@
         "monitor_mode": "none",
         "retry_count":0,
 
+	"do_ocr": true,
+
 
         "#use_learning_schedule": "multi_rise then ramp_to_swa",
         "use_learning_schedule": "multi_rise",
@@ -81,16 +91,23 @@
         "#swa_lr_mul": 0.01
 
     },
-    "arch": "QAImDocGPT", 
+    "arch": "QAImDocGPT2", 
     "model": {
-            "image_size": 512,
-            "window_size": 8,
+	    "blank_ocr": 0.2,
+	    "char_output": true,
+	    "char_tokens": true,
+            "image_size": 192,
+	    "no_dropout": false,
+            "window_size": 12,
 	    "decode_dim": 64,
-	    "dim_ff": 128,
-	    "decode_num_heads": 4,
-	    "no_dropout": true,
-            "blocks_per_level": [2,2,2,2],
-            "swin_nheads": [2,4,4,8],
-            "im_embed_dim": 32
+	    "dim_ff": 64,
+	    "decode_num_heads": 8,
+	    "no_dropout": false,
+            "swin_blocks_per_level": [2,1,1],
+	    "swin_text_downsample": [true,true],
+            "swin_nheads": [4,8,8],
+            "im_embed_dim": 16,
+	    "full_layers": null
+	    
     }
 }

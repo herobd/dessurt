@@ -8,7 +8,7 @@ from evaluators.draw_graph import draw_graph
 import matplotlib.pyplot as plt
 from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist, AP_textLines, getTargIndexForPreds_iou, newGetTargIndexForPreds_iou, getTargIndexForPreds_dist, newGetTargIndexForPreds_textLines, computeAP, non_max_sup_overseg
 from utils.group_pairing import getGTGroup, pure, purity
-from datasets.testforms_graph_pair import display
+from data_sets.testforms_graph_pair import display
 import random, os, math
 
 from model.oversegment_loss import build_oversegmented_targets_multiscale
@@ -627,8 +627,58 @@ class GraphPairTrainer(BaseTrainer):
 
 
 
-    def simplerAlignEdgePred(self,targetBoxes,targetIndexToGroup,gtGroupAdj,outputBoxes,edgePred,edgePredIndexes,predGroups,rel_prop_pred,thresh_edge,thresh_rel,thresh_overSeg,thresh_group,thresh_error,merge_only=False):
+    def simplerAlignEdgePred(self,targetBoxes,targetIndexToGroup,gtGroupAdj,outputBoxes,edgePred,edgePredIndexes,predGroups,rel_prop_pred,thresh_edge,thresh_rel,thresh_overSeg,thresh_group,thresh_error,merge_only=False,only_groups=None):
         assert(self.useBadBBPredForRelLoss=='full' or self.useBadBBPredForRelLoss==1)
+        if edgePred is not None:
+            numClasses = self.model_ref.numBBTypes
+
+            #t#tic=timeit.default_timer()#t##t#
+            
+            if targetBoxes is not None:
+                targetBoxes = targetBoxes.cpu()
+                #what I want:
+                # alignment from pred to target (-1 if none), each GT has only one pred
+                # targIndex = alginment from pred to target (-1 if none) based on IO_clippedU thresh, not class
+                if self.model_ref.useCurvedBBs:
+                    targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,self.gt_bb_align_IOcU_thresh,numClasses,True,self.picky_merging and not merge_only)
+                elif self.model_ref.rotation:
+                    assert(False and 'untested and should be changed to reflect new newGetTargIndexForPreds_s')
+                    targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
+                else:
+                    targIndex = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,True)
+                targIndex = targIndex.numpy()
+            else:
+                #targIndex=torch.LongTensor(len(outputBoxes)).fill_(-1)
+                targIndex = [-1]*len(outputBoxes)
+         
+            predGroupsT={}
+            for node in range(len(predGroups)):
+                predGroupsT[node] = [targIndex[bb] for bb in predGroups[node] if targIndex[bb]>=0]
+
+            #SEMI_SUPERVISED training
+            if only_groups is not None:
+                predTargGroups = [getGTGroup(predGroupsT[n0],targetIndexToGroup) for n0 in predGroupsT]
+                new_edgePred=[]
+                new_predGroupsT={}
+                new_edgePredIndexes=[]
+                for ei,(n1,n2) in enumerate(edgePredIndexes):
+                    tg1 = predTargGroups[n1]
+                    tg2 = predTargGroups[n2]
+                    if (tg1 in only_groups and tg2 in only_groups) or tg1==tg2:
+                        new_edgePred.append(edgePred[ei])
+                        new_predGroupsT[n1] = predGroupsT[n1]
+                        new_predGroupsT[n2] = predGroupsT[n2]
+                        new_edgePredIndexes.append((n1,n2))
+
+                if len(new_edgePred)>0:
+                    edgePred = torch.stack(new_edgePred,dim=0)
+                    predGroupsT=new_predGroupsT
+                    edgePredIndexes = new_edgePredIndexes
+                else:
+                    edgePred=edgePredIndexes=None
+
+
+
         if edgePred is None:
             if targetBoxes is None:
                 prec=1
@@ -668,27 +718,50 @@ class GraphPairTrainer(BaseTrainer):
 
             #decide which predicted boxes belong to which target boxes
             #should this be the same as AP_?
-            numClasses = self.model_ref.numBBTypes
+            #numClasses = self.model_ref.numBBTypes
 
-            #t#tic=timeit.default_timer()#t##t#
-            
-            if targetBoxes is not None:
-                targetBoxes = targetBoxes.cpu()
-                #what I want:
-                # alignment from pred to target (-1 if none), each GT has only one pred
-                # targIndex = alginment from pred to target (-1 if none) based on IO_clippedU thresh, not class
-                if self.model_ref.useCurvedBBs:
-                    targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,self.gt_bb_align_IOcU_thresh,numClasses,True,self.picky_merging and not merge_only)
-                elif self.model_ref.rotation:
-                    assert(False and 'untested and should be changed to reflect new newGetTargIndexForPreds_s')
-                    targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
-                else:
-                    targIndex = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,True)
-                targIndex = targIndex.numpy()
-            else:
-                #targIndex=torch.LongTensor(len(outputBoxes)).fill_(-1)
-                targIndex = [-1]*len(outputBoxes)
-            
+            ##t#tic=timeit.default_timer()#t##t#
+            #
+            #if targetBoxes is not None:
+            #    targetBoxes = targetBoxes.cpu()
+            #    #what I want:
+            #    # alignment from pred to target (-1 if none), each GT has only one pred
+            #    # targIndex = alginment from pred to target (-1 if none) based on IO_clippedU thresh, not class
+            #    if self.model_ref.useCurvedBBs:
+            #        targIndex = newGetTargIndexForPreds_textLines(targetBoxes[0],outputBoxes,self.gt_bb_align_IOcU_thresh,numClasses,True,self.picky_merging and not merge_only)
+            #    elif self.model_ref.rotation:
+            #        assert(False and 'untested and should be changed to reflect new newGetTargIndexForPreds_s')
+            #        targIndex, fullHit, overSegmented = newGetTargIndexForPreds_dist(targetBoxes[0],outputBoxes,1.1,numClasses,hard_thresh=False)
+            #    else:
+            #        targIndex = newGetTargIndexForPreds_iou(targetBoxes[0],outputBoxes,0.4,numClasses,True)
+            #    targIndex = targIndex.numpy()
+            #else:
+            #    #targIndex=torch.LongTensor(len(outputBoxes)).fill_(-1)
+            #    targIndex = [-1]*len(outputBoxes)
+         
+            #predGroupsT={}
+            #for node in range(len(predGroups)):
+            #    predGroupsT[node] = [targIndex[bb] for bb in predGroups[node] if targIndex[bb]>=0]
+
+            ##SEMI_SUPERVISED training
+            #if only_groups is not None:
+            #    predTargGroups = [getGTGroup(predGroupsT[n0],targetIndexToGroup) for n0 in predGroupsT]
+            #    new_edgePred=[]
+            #    new_predGroupsT={}
+            #    new_edgePredIndexes=[]
+            #    for ei,(n1,n2) in enumerate(edgePredIndexes):
+            #        tg1 = predTargGroups[n1]
+            #        tg2 = predTargGroups[n2]
+            #        if tg1 in only_groups and tg2 in only_groups:
+            #            new_edgePred.append(edgePred[ei])
+            #            new_predGroupsT[n1] = predGroupsT[n1]
+            #            new_predGroupsT[n2] = predGroupsT[n2]
+            #            new_edgePredIndexes.append((n1,n2))
+
+            #    edgePred = torch.stack(new_edgePred,dim=0)
+            #    predGroupsT=new_predGroupsT
+            #    edgePredIndexes = new_edgePredIndexes
+
             #t#self.opt_history['simplerAlign newGetTargIndexForPreds'].append(timeit.default_timer()-tic)#t#
             #t#tic=timeit.default_timer()#t##t#
 
@@ -732,13 +805,11 @@ class GraphPairTrainer(BaseTrainer):
                 saveGroupPred={}
                 saveErrorPred={}
 
-            predGroupsT={}
-            predGroupsTNear={}
-            for node in range(len(predGroups)):
-                predGroupsT[node] = [targIndex[bb] for bb in predGroups[node] if targIndex[bb]>=0]
+            #predGroupsT={}
+            #for node in range(len(predGroups)):
+            #    predGroupsT[node] = [targIndex[bb] for bb in predGroups[node] if targIndex[bb]>=0]
             shouldBeEdge={}
 
-            #gtGroupToPred = 
 
             #t#self.opt_history['simplerAlign edge setup'].append(timeit.default_timer()-tic)#t#
             #t#tic=timeit.default_timer()#t#
@@ -1105,7 +1176,7 @@ class GraphPairTrainer(BaseTrainer):
             #t#self.opt_history['simplerAlign edge resolution'].append(timeit.default_timer()-tic)#t#
 
 
-        if rel_prop_pred is not None:
+        if rel_prop_pred is not None and targIndex is not None:
 
             relPropScores,relPropIds, threshPropRel = rel_prop_pred
 
@@ -1141,6 +1212,9 @@ class GraphPairTrainer(BaseTrainer):
                             if gtGroup0==gtGroup1:
                                 isEdge=True
                             else:
+                                if only_groups is not None:
+                                    if gtGroup0 not in only_groups or gtGroup1 not in only_groups:
+                                        continue
                                 if (min(gtGroup0,gtGroup1),max(gtGroup0,gtGroup1)) in gtGroupAdj:
                                     isEdge=True
                     if isEdge:
@@ -1648,6 +1722,9 @@ class GraphPairTrainer(BaseTrainer):
         gtGroupAdj = instance['gt_groups_adj']
         targetIndexToGroup = instance['targetIndexToGroup']
         targetIndexToGroup = instance['targetIndexToGroup']
+
+        if 'only_groups' in instance:
+            only_gt_groups = instance['only_groups'] #Semi-supervised
         
         if self.use_gt_trans:
             if useGT and 'word_bbs' in useGT:
@@ -1851,7 +1928,8 @@ class GraphPairTrainer(BaseTrainer):
                         self.thresh_overSeg[graphIteration],
                         self.thresh_group[graphIteration],
                         self.thresh_error[graphIteration],
-                        merge_only= graphIteration==0 and merged_first
+                        merge_only= graphIteration==0 and merged_first,
+                        only_groups=only_gt_groups
                         )
                 #t#self.opt_history['newAlignEdgePred gI{}'.format(graphIteration)].append(timeit.default_timer()-tic2)#t#
 
@@ -1863,7 +1941,7 @@ class GraphPairTrainer(BaseTrainer):
                 elif (graphIteration==0 and not merged_first) or (graphIteration==1 and merged_first):
                     proposedInfo=proposedInfoI
 
-                if self.model_ref.predClass and nodePred is not None:
+                if self.model_ref.predClass and nodePred is not None and bbAlignment is not None:
                     node_pred_use_index=[]
                     node_gt_use_class_indexes=[]
                     node_pred_use_index_sp=[]
@@ -1874,6 +1952,11 @@ class GraphPairTrainer(BaseTrainer):
 
                     for i,predGroup in enumerate(predGroups):
                         ts=[bbAlignment[pId] for pId in predGroup]
+                        if only_gt_groups is not None:
+                            if all(t>=0 for t in ts):
+                                gtGroup = getGTGroup(ts,targetIndexToGroup)
+                                if gtGroup not in only_gt_groups:
+                                    continue
                         classes=defaultdict(lambda:0)
                         classesIndexes={-2:-2}
                         hits=misses=0
@@ -1934,6 +2017,9 @@ class GraphPairTrainer(BaseTrainer):
                     if len(node_conf_use_index)>0:
                         nodePredConf_use = nodePred[node_conf_use_index][:,:,self.model_ref.nodeIdxConf]
                         nodeGTConf_use = torch.FloatTensor(node_conf_gt).to(nodePred.device)
+                    else:
+                        nodePredConf_use = None
+                        nodeGTConf_use = None
                 else:
                     nodePredClass_use = None
                     alignedClass_use = None
@@ -2591,24 +2677,37 @@ class GraphPairTrainer(BaseTrainer):
         gtRelHit=set()
         gtRelHit_BROS=set()
         gtRelHit_strict=set()
+        gtRelHit_XLMstrict=set()
         relPrec=0
         relPrec_BROS=0
         relPrec_strict=0
+        relPrec_XLMstrict=0
         if predPairs is None:
             predPairs=[]
         if 'blank' in self.classMap and predGroups is not None:
             rel_types=['UP']*num_pred_pairs_with_blanks
         else:
             rel_types=[]
+        
+        XLM_predCount=0
+        relPrec_XLM=0
         for pi,(n0,n1) in enumerate(predPairs):
+            bb0 = predGroups[n0][0]
+            bb1 = predGroups[n0][0]
+            if outputBoxes[bb0][6:6+numClasses].argmax()!=0 and outputBoxes[bb1][6:6+numClasses].argmax()!=0:
+                XLM_predCount+=1
             BROS_gtG0 = predToGTGroup_BROS[n0]
             BROS_gtG1 = predToGTGroup_BROS[n1]
             hit=False
+            hit_XLM=False
             if BROS_gtG0>=0 and BROS_gtG1>=0:
                 pair_id = (min(BROS_gtG0,BROS_gtG1),max(BROS_gtG0,BROS_gtG1))
                 if pair_id in gt_groups_adj:
                     hit=True
                     relPrec_BROS+=1
+                    if outputBoxes[bb0][6:6+numClasses].argmax()!=0 and outputBoxes[bb1][6:6+numClasses].argmax()!=0:
+                        relPrec_XLM+=1
+                        hit_XML=True
                     gtRelHit_BROS.add((min(BROS_gtG0,BROS_gtG1),max(BROS_gtG0,BROS_gtG1)))
                     if 'blank' in self.classMap:
                         old_pi = newToOldPredPairs[pi]
@@ -2636,6 +2735,14 @@ class GraphPairTrainer(BaseTrainer):
                     if groupPurity[gtG0]==1 and groupPurity[gtG1]==1 and n0 in groupCompleteness and groupCompleteness[n0]==1 and n1 in groupCompleteness and groupCompleteness[n1]==1:
                         relPrec_strict+=1
                         gtRelHit_strict.add((min(gtG0,gtG1),max(gtG0,gtG1)))
+
+                        bb0 = predGroups[n0][0]
+                        bb1 = predGroups[n1][0]
+                        if outputBoxes[bb0][6:6+numClasses].argmax()!=0 and outputBoxes[bb1][6:6+numClasses].argmax()!=0:
+                            relPrec_XLMstrict+=1
+                            gtRelHit_XLMstrict.add((min(gtG0,gtG1),max(gtG0,gtG1)))
+                            if not hit_XML:
+                                import pdb;pdb.set_trace()
                         #TODO failed in training
                         #assert BROS_gtG0==gtG0
                         #assert BROS_gtG1==gtG1
@@ -2664,6 +2771,18 @@ class GraphPairTrainer(BaseTrainer):
         log['final_rel_XX_BROS_TP']=relPrec_BROS
         log['final_rel_XX_predCount']=len(predPairs)
         log['final_rel_XX_gtCount']=len(gt_groups_adj)
+        
+        XLM_gtCount=0
+        for g0,g1 in gt_groups_adj:
+            bb0 = gtGroups[g0][0]
+            bb1 = gtGroups[g1][0]
+            
+            if target_for_b[bb0][-numClasses:].argmax()!=0 and target_for_b[bb1][-numClasses:].argmax()!=0:
+                XLM_gtCount+=1
+        log['final_rel_XX_XLM_TP']=relPrec_XLM
+        log['final_rel_XX_XLM_predCount']=XLM_predCount
+        log['final_rel_XX_XLM_gtCount']=XLM_gtCount
+        log['final_rel_XX_XLMstrict_TP']=relPrec_XLMstrict
         if len(predPairs)>0:
             relPrec /= len(predPairs)
             relPrec_strict /= len(predPairs)

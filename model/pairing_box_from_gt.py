@@ -4,7 +4,7 @@ from .pairing_box_net import PairingBoxNet #, YoloBoxDetector
 from model import *
 from model.yolo_loss import inv_tanh, get_closest_anchor_iou, get_closest_anchor_dist
 import json
-from datasets.forms_box_detect import FormsBoxDetect
+from data_sets.forms_box_detect import FormsBoxDetect
 import math
 
 

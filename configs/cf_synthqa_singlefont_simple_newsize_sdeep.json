@@ -1,0 +1,109 @@
+{
+    "name": "synthqa_singlefont_simple_newsize_sdeep",
+    "cuda": true,
+    "gpu": 0,
+    "save_mode": "state_dict",
+    "override": true,
+    "data_loader": {
+        "data_set_name": "SynthQADocDataset",
+        "fontdir": "../data/fonts/",
+        "textdir": "../data/",
+        "data_dir": "../data/english4line",
+        "batch_size": 1,
+        "num_workers": 4,
+        "rescale_range": [1.0,1.0],
+        "crop_params": {
+                "crop_size":[1152,768],
+                "pad":0,
+                "rot_degree_std_dev": 1
+            },
+	"questions": 8,
+        "min_entries": null,
+        "max_entries": 160,
+        "text_height": 32,
+        "image_size": [1152,768],
+        "change_size": false,
+        "word_questions": "simple",
+        "tables": false,
+        "header_dir": "../data/english4line_fonts",
+        "max_chars": 10,
+        "min_chars": 1,
+        "use_before_refresh": 99999999999999999999,
+        "set_size": 68000,
+        "num_processes": -1,
+        "gen_type": "veryclean",
+        "char_file": "../data/english_char_set.json",
+        "shuffle": true
+
+
+    },
+    "validation": {
+        "shuffle": false,
+        "rescale_range": [1,1],
+        "crop_params": null,
+        "batch_size": 1
+    },
+
+    
+    "lr_scheduler_type": "none",
+ 
+    "optimizer_type": "AdamW",
+    "optimizer": {
+        "lr": 0.0001,
+        "weight_decay": 0.01
+    },
+    "loss": {
+	"xanswer": "padded_seq_cross_entropy",
+	"answer": "label_smoothing"
+    },
+    "loss_weights": {
+        "answer": 1
+    },
+    "loss_params": 
+        {
+            "xanswer": {},
+	    "answer": {"smoothing":0.1}
+        },
+    "metrics": [],
+    "trainer": {
+        "class": "QATrainer",
+        "iterations": 600000,
+        "accum_grad_steps": 3,
+        "#swa": true,
+        "#swa_start": 200000,
+        "save_dir": "saved/",
+        "val_step": 999999999999999,
+        "save_step": 25000,
+        "save_step_minor": 200,
+        "log_step": 100,
+        "print_pred_every": 100,
+        "verbosity": 1,
+        "monitor": "loss",
+        "monitor_mode": "none",
+        "retry_count":0,
+
+
+        "#use_learning_schedule": "multi_rise then ramp_to_swa",
+        "use_learning_schedule": "multi_rise",
+        "warmup_steps": [1000],
+	"#ramp_down_steps": 10000,
+        "#swa_lr_mul": 0.01
+
+    },
+    "arch": "QAImDocGPT", 
+    "model": {
+            "blank_ocr": true,
+            "image_size": [1152,768],
+            "window_size": 6,
+	    "decode_dim": 128,
+	    "dim_ff": 256,
+	    "decode_num_heads": 4,
+	    "no_dropout": true,
+            "blocks_per_level": [2,2,4],
+            "swin_nheads": [2,4,8],
+            "im_embed_dim": 64,
+            "pre_trained": {
+                "patch_emb": "saved/synth_ocr_crnnskipforswin_new/checkpoint-iteration400000.pth"
+                        }
+    }
+}

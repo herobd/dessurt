@@ -1,4 +1,4 @@
-# Pairing project
+# Pairing project (although now I'm doing QA...)
 
 This code is free to use for non-commericial purposes. Contact me if commericialization is desired.
 
@@ -22,7 +22,7 @@ No `opencv` any more
 `pytorch-geometric`: https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html
 
 
-`pip install gensim bpemb editdistance knockknock`
+`pip install gensim bpemb editdistance timm knockknock`
 
 
 for cvxpy (optimization, not used now), you must have python 3.7 or later:

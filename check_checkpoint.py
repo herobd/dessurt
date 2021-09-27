@@ -12,6 +12,8 @@ if __name__ == '__main__':
     assert args.checkpoint is not None
     saved = torch.load(args.checkpoint,map_location=lambda storage, loc: storage)
 
+    print('arch: {}'.format(saved['arch']))
+    print('arch: {}'.format(saved['config']['arch']))
     print(saved.keys())
     #print(type(saved['logger'].entries))
     if 'swa_state_dict' in saved:

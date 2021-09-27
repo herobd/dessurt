@@ -11,6 +11,8 @@ import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from .net_builder import getGroupSize
+from utils import img_f
+from testtest import PRINT_ATT,ATT_VIS,ATT_VIS_TEXT
 
 
 class Mlp(nn.Module):
@@ -162,12 +164,17 @@ class WindowAttention(nn.Module):
 
 
         attn = self.softmax(attn)
+        if PRINT_ATT:
+            att = attn.sum(dim=1)/4 #sum along heads
 
         attn = self.attn_drop(attn)
 
         x = (attn @ v).transpose(1, 2).reshape(B_, N, C)
         x = self.proj(x)
         x = self.proj_drop(x)
+
+        if PRINT_ATT:
+            return x, att
         return  x
 
     def extra_repr(self) -> str:
@@ -292,7 +299,29 @@ class SwinTransformerBlock(nn.Module):
         else:
             key_padding_mask = None
 
-        attn_windows = self.attn(x_windows, docq=docq, mask=self.attn_mask, key_padding_mask=key_padding_mask)  # nW*B, window_size*window_size, C
+        if PRINT_ATT:
+            attn_windows, w_attn = self.attn(x_windows, docq=docq, mask=self.attn_mask, key_padding_mask=key_padding_mask)  # nW*B, window_size*window_size, C
+            from_attn = w_attn.sum(1)/w_attn.size(1)
+            img_attn = from_attn[:,:w_attn.size(1)]
+            text_attn = from_attn[:,w_attn.size(1):]
+
+            img_attn = img_attn.view(-1, self.window_size, self.window_size)
+            shifted_a = window_reverse(img_attn, self.window_size, H, W)  # B H' W' C
+
+            # reverse cyclic shift
+            if self.shift_size > 0:
+                a = torch.roll(shifted_a, shifts=(self.shift_size, self.shift_size), dims=(1, 2))
+            else:
+                a = shifted_a
+            #img_name = 'att/swin_{}x{}.png'.format(a.size(1),a.size(2))
+            #img_f.imwrite(img_name,a[0].cpu().numpy())
+            ATT_VIS.append(a[0,:,:,0].detach().cpu())
+
+            text_att = text_attn.sum(dim=0)/nW
+            ATT_VIS_TEXT.append(text_att)
+            #import pdb;pdb.set_trace()
+        else:
+            attn_windows = self.attn(x_windows, docq=docq, mask=self.attn_mask, key_padding_mask=key_padding_mask)  # nW*B, window_size*window_size, C
 
         # merge windows
         attn_windows = attn_windows.view(-1, self.window_size, self.window_size, C)
@@ -356,6 +385,7 @@ class PatchMerging(nn.Module):
 
         x = x.view(B, H, W, C)
 
+        #WHAT? Isn't this just doing a 2x2 stride 2 conv?
         x0 = x[:, 0::2, 0::2, :]  # B H/2 W/2 C
         x1 = x[:, 1::2, 0::2, :]  # B H/2 W/2 C
         x2 = x[:, 0::2, 1::2, :]  # B H/2 W/2 C
@@ -503,8 +533,16 @@ class ConvPatchEmbed(nn.Module):
         norm_layer (nn.Module, optional): Normalization layer. Default: None
     """
 
-    def __init__(self, img_size, patch_size=8, in_chans=1, embed_dim=256, norm_layer=None,cnn_model_small=True):
+    def __init__(self, img_size, patch_size=8, in_chans=1, embed_dim=256, norm_layer=None,cnn_model_small=True,lighter=False):
         super().__init__()
+        #From cnn_lstm_skip_forSwin.py
+        ks = [7, 3, 3, 3, 3, 3, 3]
+        ps = [3, 1, 1, 1, 1, 1, 1]
+        ss = [2, 1, 1, 1, 1, 1, 1]
+        if lighter:
+            nm = [64, 128, 128, 256, 256, 256, 256]
+        else:
+            nm = [64, 128, 128, 256, 512, 512, 512]
         img_size = to_2tuple(img_size)
         patch_size = to_2tuple(patch_size)
         patches_resolution = [img_size[0] // patch_size[0], img_size[1] // patch_size[1]]
@@ -516,22 +554,17 @@ class ConvPatchEmbed(nn.Module):
         self.in_chans = in_chans
         self.embed_dim = embed_dim
 
-        self.proj = nn.Conv2d(512, embed_dim, kernel_size=1, stride=1)
+        self.proj = nn.Conv2d(nm[-1], embed_dim, kernel_size=1, stride=1)
         if norm_layer is not None:
             self.norm = norm_layer(embed_dim)
         else:
             self.norm = None
 
 
-        #From cnn_lstm_skip_forSwin.py
-        ks = [7, 3, 3, 3, 3, 3, 3]
-        ps = [3, 1, 1, 1, 1, 1, 1]
-        ss = [2, 1, 1, 1, 1, 1, 1]
-        nm = [64, 128, 128, 256, 512, 512, 512]
 
         cnn = nn.Sequential()
         norm = 'group'
-        nc = 1 #gray
+        nc = in_chans
 
         def convRelu(i, norm=None):
             nIn = nc if i == 0 else nm[i - 1]
