@@ -387,7 +387,7 @@ class ParaQADataset(QADataset):
                     else: #read
                         response = prompt
                         prompt = ''
-                        outmask = []
+                        outmask = None
                         inmask = [line_map+(i,) for i in word_idxs]
                         question = 'w0>'
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
