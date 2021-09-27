@@ -753,7 +753,7 @@ class QAImDocGPT3(BaseModel):
                     
 
         if RUN: #assuming batchsize of 1
-            #TODO
+            #Forward inference (answer not known)
             assert new_batch_size==1 #just to make stopping easier
             assert num_a==1 #just checking...
             zero = torch.BoolTensor(1,1).fill_(0).to(device) #for creating masks from
@@ -763,7 +763,7 @@ class QAImDocGPT3(BaseModel):
             response_decoded = self.answer_decode(response)
             response_greedy_token = response_decoded.argmax(dim=2)
 
-            output_tokens.append(response_greedy_token[0,0].item())
+            output_tokens = [response_greedy_token[0,0].item()]
             print('first token: {}'.format(output_tokens[0]))
 
             offset = 1
@@ -802,7 +802,7 @@ class QAImDocGPT3(BaseModel):
                     q_pos_mask = zero.expand(new_batch_size,num_q)[:,:,None] #holder_q_pos_mask[:,:num_q]
 
                     a_tokens = saved_a_tokens[li] = torch.cat((saved_a_tokens[li],ans),dim=1)
-                    a_pos = holder_a_pos[:,:num_a]
+                    a_pos = zero.expand(new_batch_size,num_a)#holder_a_pos[:,:num_a]
                     a_padding_mask = zero.expand(new_batch_size,num_a)#holder_a_padding_mask[:,:num_a]
                     a_pos_mask = a_padding_mask[:,:,None]#holder_a_pos_mask[:,:num_a]
 
@@ -840,7 +840,7 @@ class QAImDocGPT3(BaseModel):
             
             if PRINT_ATT:
                 attDisplay(image[0],full_ocr_string,'|'+questions[0],'|'+final_str[0]+'^',final_str)
-            return final_str, out_mask
+            return final_str, torch.sigmoid(out_mask)
             ############
 
 
