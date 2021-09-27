@@ -18,9 +18,14 @@ import warnings
 from utils.saliency import SimpleFullGradMod
 from utils.debug_graph import GraphChecker
 from utils import img_f
+from skimage import future
+try:
+    import easyocr
+except:
+    pass
 
 
-def main(resume,config,img_path,addToConfig,gpu=False):
+def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None):
     np.random.seed(1234)
     torch.manual_seed(1234)
     if resume is not None:
@@ -39,11 +44,15 @@ def main(resume,config,img_path,addToConfig,gpu=False):
     config['optimizer_type']="none"
     config['trainer']['use_learning_schedule']=False
     config['trainer']['swa']=False
-    if gpu is None:
+    if not gpu:
         config['cuda']=False
     else:
         config['cuda']=True
         config['gpu']=gpu
+
+    do_ocr=config['trainer']['do_ocr'] if 'do_ocr' in config['trainer'] else False
+    if do_ocr and do_ocr!='no':
+        ocr_reader = easyocr.Reader(['en'],gpu=config['cuda'])
     addDATASET=False
     if addToConfig is not None:
         for add in addToConfig:
@@ -98,6 +107,19 @@ def main(resume,config,img_path,addToConfig,gpu=False):
         model = eval(config['arch'])(config['model'])
 
     model.eval()
+    model.max_pred_len=40
+    if gpu:
+        model = model.cuda()
+
+    if do_pad is not None:
+        do_pad = do_pad.split(',')
+        if len(do_pad)==1:
+            do_pad+=do_pad
+        do_pad = [int(p) for p in do_pad]
+    else:
+        do_pad = config['model']['image_size']
+        if type(do_pad) is int:
+            do_pad = (do_pad,do_pad)
 
     with torch.no_grad():
         if img_path is None:
@@ -109,8 +131,34 @@ def main(resume,config,img_path,addToConfig,gpu=False):
             img = img_f.imread(img_path,False)
             if img.max()<=1:
                 img*=255
+
+            if scale:
+                img = img_f.resize(img,fx=scale,fy=scale)
+            
+            if do_pad and (img.shape[0]!=do_pad[0] or img.shape[1]!=do_pad[1]):
+                diff_x = do_pad[1]-img.shape[1]
+                diff_y = do_pad[0]-img.shape[0]
+                p_img = np.zeros(do_pad,dtype=img.dtype)
+                if diff_x>=0 and diff_y>=0:
+                    p_img[diff_y//2:-(diff_y//2 + diff_y%2),diff_x//2:-(diff_x//2 + diff_x%2)] = img
+                elif diff_x<0 and diff_y>=0:
+                    p_img[diff_y//2:-(diff_y//2 + diff_y%2),:] = img[:,(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
+                elif diff_x>=0 and diff_y<0:
+                    p_img[:,diff_x//2:-(diff_x//2 + diff_x%2)] = img[(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),:]
+                else:
+                    p_img = img[(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
+                img=p_img
+
+            if do_ocr=='no':
+                ocr_res=[]
+            elif do_ocr:
+                ocr_res = ocr_reader.readtext(img,decoder='greedy+softmax')
+                print('OCR:')
+                for res in ocr_res:
+                    print(res[1][0])
             if len(img.shape)==2:
                 img=img[...,None] #add color channel
+            np_img=img
             img = img.transpose([2,0,1])[None,...]
             img = img.astype(np.float32)
             img = torch.from_numpy(img)
@@ -121,10 +169,39 @@ def main(resume,config,img_path,addToConfig,gpu=False):
 
             question = input('Question: ')
             while question!='q':
-                ocrBoxes=[[]]
-                ocr=[[]]
-                answer = model(img,ocrBoxes,ocr,[[question]],RUN=True)
-                print('Answer: '+answer)
+                if question.startswith('[nr]'):
+                    run=False
+                    question=question[4:]
+                else:
+                    run=True
+                if do_ocr:
+                    ocr = [ocr_res]
+                else:
+                    ocrBoxes=[[]]
+                    ocr=[[]]
+                    ocr=(ocrBoxes,ocr)
+
+                # get input mask
+                mask = future.manual_lasso_segmentation(np_img)
+                if mask.sum()==0:
+                    mask = np.zeros_like(mask)
+                mask = torch.from_numpy(mask)[None,None,...] #add batch and color channel
+                in_img = torch.cat((img,mask.to(img.device)),dim=1)
+
+                answer,pred_mask = model(in_img,ocr,[[question]],RUN=run)
+                #pred_a, target_a, answer, pred_mask = model(img,ocr,[[question]],[['number']])
+                print('Answer: '+answer+'      max mask={}'.format(pred_mask.max()))
+                #show_mask = torch.cat((pred_mask,pred_mask>0.5).float()
+                draw_img = 0.5*(1-img)
+                threshed = torch.where(pred_mask>0.5,1-draw_img,draw_img)
+                high_score = 2*(pred_mask-0.5)/pred_mask.max()
+                #import pdb;pdb.set_trace()
+                high = torch.where(pred_mask>0.5,high_score,draw_img)
+                show_im = torch.cat((draw_img,draw_img-pred_mask,threshed),dim=1)
+                #show_im = torch.cat((high,draw_img,draw_img),dim=1)
+                show_im = (show_im[0]*255).cpu().permute(1,2,0).numpy().astype(np.uint8)
+                img_f.imshow('x',show_im)
+                img_f.show()
 
                 question = input('Question ("q" to stop): ')
             if loop:
@@ -143,6 +220,10 @@ if __name__ == '__main__':
             help='path to image (default: prompt)')
     parser.add_argument('-g', '--gpu', default=None, type=int,
                         help='gpu number (default: cpu only)')
+    parser.add_argument('-p', '--pad', default=None, type=str,
+                        help='pad image to this size (square)')
+    parser.add_argument('-s', '--scale', default=None, type=float,
+                        help='scale image by this amount')
     parser.add_argument('-f', '--config', default=None, type=str,
                         help='config override')
     parser.add_argument('-a', '--addtoconfig', default=None, type=str,
@@ -163,6 +244,6 @@ if __name__ == '__main__':
         exit()
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint,args.config,args.image,addtoconfig,True)
+            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,scale=args.scale)
     else:
-        main(args.checkpoint,args.config, args.image,addtoconfig)
+        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,scale=args.scale)

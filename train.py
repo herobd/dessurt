@@ -16,8 +16,8 @@ import requests, socket
 import warnings
 
 import torch.distributed as dist
+import datetime
 import torch.multiprocessing as mp
-from torch.nn.parallel import DistributedDataParallel
 
 
 try: 
@@ -57,23 +57,25 @@ def notify_main(rank,config, resume,world_size=None):
     main(rank,config, resume,world_size)
 
 def main(rank,config, resume,world_size=None):
+    train_logger = Logger()
     if rank is not None: #multiprocessing
         #print('Process {} can see these GPUs:'.format(rank,os.environ['CUDA_VISIBLE_DEVICES']))
         if 'distributed' in config:
             print('env NCCL_SOCKET_IFNAME: {}'.format(os.environ['NCCL_SOCKET_IFNAME']))
-            print('{} calling dist.init_process_group()'.format(rank))
+            logger.info('{} calling dist.init_process_group() <<<<'.format(rank))
             os.environ['CUDA_VISIBLE_DEVICES']='0'
+            os.environ['NCCL_ASYNC_ERROR_HANDLING']='1'
             dist.init_process_group(
                             "nccl",
                             init_method='file:///fslhome/brianld/job_comm/{}'.format(config['name']),
                             rank=rank,
-                            world_size=world_size)
-            print('{} finished dist.init_process_group()'.format(rank))
+                            world_size=world_size,
+                            timeout=datetime.timedelta(0, 180))
+            logger.info('{} finished dist.init_process_group() <<<<'.format(rank))
         else:
             dist.init_process_group("gloo", rank=rank, world_size=world_size)
 
     #np.random.seed(1234) I don't have a way of restarting the DataLoader at the same place, so this makes it totaly random
-    train_logger = Logger()
 
     split = config['split'] if 'split' in config else 'train'
     data_loader, valid_data_loader = getDataLoader(config,split,rank,world_size)
@@ -148,7 +150,8 @@ if __name__ == '__main__':
 
     config = None
     if args.config is not None:
-        config = json.load(open(args.config))
+        with open(args.config) as f:
+            config = json.load(f)
     if  args.resume is None and  args.soft_resume is not None:
         if not os.path.exists(args.soft_resume):
             print('WARNING: resume path ({}) was not found, starting from scratch'.format(args.soft_resume))

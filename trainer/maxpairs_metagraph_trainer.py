@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from base import BaseTrainer
 import timeit
-#from datasets.test_random_walk import display
+#from data_sets.test_random_walk import display
 import random
 #from torchviz import make_dot
 
