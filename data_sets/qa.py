@@ -108,15 +108,15 @@ class QADataset(torch.utils.data.Dataset):
         return len(self.images)
 
 
-    def qaAdd(self,qa,question,answer,bb_ids=None,in_bb_ids=[],out_bb_ids=None,mask_bb_ids=[]):
+    def qaAdd(self,qa,question,answer,bb_ids=None,in_bbs=[],out_bbs=None,mask_bbs=[]):
         if all([pair['question']!=question for pair in qa]): #prevent duplicate q
             qa.append({
                 'question':question,
                 'answer':answer,
                 'bb_ids':bb_ids,
-                'in_bb_ids':in_bb_ids,
-                'out_bb_ids':out_bb_ids,
-                'mask_bb_ids':mask_bb_ids
+                'in_bbs':in_bbs,
+                'out_bbs':out_bbs,
+                'mask_bbs':mask_bbs
                 })
 
     def __getitem__(self,index):
@@ -232,9 +232,9 @@ class QADataset(torch.utils.data.Dataset):
             for i,qa in enumerate(questions_and_answers):
                 #if len(qa)==5:
                 #q,a,bb_ids,inmask_bbs,outmask_bbs,blank_bbs = qa
-                inmask_bbs = qa['in_bb_ids']
-                outmask_bbs = qa['out_bb_ids']
-                blank_bbs = qa['mask_bb_ids']
+                inmask_bbs = qa['in_bbs']
+                outmask_bbs = qa['out_bbs']
+                blank_bbs = qa['mask_bbs']
                 if outmask_bbs is not None:
                     outmasks=True
                     mask_bbs+=inmask_bbs+outmask_bbs+blank_bbs
@@ -333,10 +333,10 @@ class QADataset(torch.utils.data.Dataset):
 
                 #Put boxes back in questions_and_answers
                 for i in range(len(questions_and_answers)):
-                    questions_and_answers[i]['in_bb_ids'] = new_q_inboxes[i]
+                    questions_and_answers[i]['in_bbs'] = new_q_inboxes[i]
                     if outmasks:
-                        questions_and_answers[i]['out_bb_ids'] = new_q_outboxes[i]
-                    questions_and_answers[i]['mask_bb_ids'] = new_q_blankboxes[i]
+                        questions_and_answers[i]['out_bbs'] = new_q_outboxes[i]
+                    questions_and_answers[i]['mask_bbs'] = new_q_blankboxes[i]
             else:
                 bbs = out['bb_gt'][0]
                 ids= out['bb_auxs']
@@ -353,9 +353,9 @@ class QADataset(torch.utils.data.Dataset):
             if len(questions_and_answers)==0:
                 print('Had no questions...')
                 return self.getitem((index+1)%len(self))
-            new_q_inboxes= [qa['in_bb_ids'] for qa in questions_and_answers]
-            new_q_outboxes= [qa['out_bb_ids'] for qa in questions_and_answers]
-            new_q_blankboxes= [qa['mask_bb_ids'] for qa in questions_and_answers]
+            new_q_inboxes= [qa['in_bbs'] for qa in questions_and_answers]
+            new_q_outboxes= [qa['out_bbs'] for qa in questions_and_answers]
+            new_q_blankboxes= [qa['mask_bbs'] for qa in questions_and_answers]
             questions = [qa['question'].lower() for qa in questions_and_answers]
             answers = [qa['answer'].lower() for qa in questions_and_answers]
         else:
