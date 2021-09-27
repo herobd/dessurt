@@ -789,7 +789,7 @@ class QAImDocGPT3(BaseModel):
 
                     proj_im_tokens = saved_proj_im_tokens[li]
                     im_padding_mask = zero.expand(new_batch_size,num_im)#holder_im_padding_mask[:,:num_im]
-                    im_pos_mask = one.expand(new_batch_size,num_im)#holder_im_pos[:,:num_im]
+                    im_pos_mask = one.expand(new_batch_size,num_im,1)#holder_im_pos[:,:num_im]
 
                     ocr_tokens = saved_ocr_tokens[li]
                     ocr_pos = saved_ocr_pos[li]
@@ -802,16 +802,17 @@ class QAImDocGPT3(BaseModel):
                     q_pos_mask = zero.expand(new_batch_size,num_q)[:,:,None] #holder_q_pos_mask[:,:num_q]
 
                     a_tokens = saved_a_tokens[li] = torch.cat((saved_a_tokens[li],ans),dim=1)
-                    a_pos = zero.expand(new_batch_size,num_a)#holder_a_pos[:,:num_a]
+                    a_pos = zero.expand(new_batch_size,num_a,2).float()#holder_a_pos[:,:num_a]
                     a_padding_mask = zero.expand(new_batch_size,num_a)#holder_a_padding_mask[:,:num_a]
                     a_pos_mask = a_padding_mask[:,:,None]#holder_a_pos_mask[:,:num_a]
 
                     all_pos_mask = torch.cat((im_pos_mask,ocr_pos_mask,q_pos_mask,a_pos_mask),dim=1)
                     all_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask,a_padding_mask), dim=1)
+                    all_att_mask = one.expand(new_batch_size,1,num_im+num_ocr+num_q+num_a)
 
 
                     ans = layout_layer(
-                            a_tokens[-1:], #only last token
+                            a_tokens[:,-1:], #only last token
                             a_pos[:,-1:,0], #x
                             a_pos[:,-1:,1], #y
                             a_pos_mask[:,-1:],
@@ -820,7 +821,7 @@ class QAImDocGPT3(BaseModel):
                             torch.cat((self.im_xs[level].expand(new_batch_size,-1),ocr_pos[:,:,0],q_pos[:,:,0],a_pos[:,:,0]),dim=1),
                             torch.cat((self.im_xs[level].expand(new_batch_size,-1),ocr_pos[:,:,1],q_pos[:,:,1],a_pos[:,:,1]),dim=1),
                             all_pos_mask,
-                            all_att_mask[:,-(num_q+num_a):,:],
+                            all_att_mask,#all_att_mask[:,-(num_q+num_a):,:],
                             all_padding_mask)
                     if im_downsample is not None:
                         level+=1
