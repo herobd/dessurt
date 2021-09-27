@@ -113,7 +113,7 @@ if __name__ == "__main__":
         'Xrescale_range':[0.8,1.2],
         'rescale_range':[0.4,0.65],
         'crop_params':{
-            "crop_size":[600,800],
+            "crop_size":[600,700],
             "pad":70,
             "rot_degree_std_dev": 0.7}, 
 })
