@@ -202,7 +202,7 @@ class ParaQADataset(QADataset):
                     response=prompt
                     prompt=''
                     maskmask = [blank_word_map]
-                    outmask = []
+                    outmask = [wordmap[i] for i in words_in_prompt]
                 elif use_highlight:
                     question = 'k0~' if blank else 's0~'
                     inmask =  [wordmap[i] for i in words_in_prompt]
@@ -342,7 +342,7 @@ class ParaQADataset(QADataset):
                     prompt = ''
                     question = 'l0>'
                     inmask = [line_map+(None,)]
-                    outmask = []
+                    outmask = [line_map+(i,) for i in range(num_words)]
                 else:
                     if num_words>self.min_read_start_no_mask:
                         use_words = random.randrange(self.min_read_start_no_mask,num_words+1)
@@ -387,7 +387,7 @@ class ParaQADataset(QADataset):
                     else: #read
                         response = prompt
                         prompt = ''
-                        outmask = []
+                        outmask = [line_map+(i,) for i in word_idxs] #want it in habit of outputing where it reads
                         inmask = [line_map+(i,) for i in word_idxs]
                         question = 'w0>'
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
