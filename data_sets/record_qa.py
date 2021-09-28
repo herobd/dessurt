@@ -49,9 +49,10 @@ class RecordQA(QADataset):
          - tables: a list of Table objects
          """
 
-        all_of_cls=defaultdict(list)
-        for entity in entities:
-            all_of_cls[entity.cls].append(entity)
+        all_ids=set()
+        for entry in entries:
+            for id_n in self.self.id_fields:
+                all_ids.add(self.punc_regex.sub('',entry[id_n].lower()))
 
         q_a_pairs = []
         if self.train:
@@ -120,8 +121,8 @@ class RecordQA(QADataset):
                     prompt_text = self.sampleText()
                     match = False
                     prompt_text_no_punc = self.punc_regex.sub('',prompt_text.lower())
-                    for entity in all_ids:
-                        if prompt_text_no_punc in  self.punc_regex.sub('',entity.text.lower()):
+                    for text in all_ids:
+                        if prompt_text_no_punc in text:
                             match=True
                             break
 
