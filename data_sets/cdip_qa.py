@@ -69,31 +69,33 @@ class CDIPQA(ParaQADataset):
                     exit(1)
             self.images=[]
             for imageName,imagePath,jsonPath in imagesAndAnn:
-                if os.path.exists(jsonPath):
-                    org_path = imagePath
-                    if self.cache_resized:
-                        path = os.path.join(self.cache_path,imageName+'.png')
-                    else:
-                        path = org_path
+                #if os.path.exists(jsonPath):
+                #    org_path = imagePath
+                #    if self.cache_resized:
+                #        path = os.path.join(self.cache_path,imageName+'.png')
+                #    else:
+                #        path = org_path
 
-                    rescale=1.0
-                    if self.cache_resized:
-                        rescale = self.rescale_range[1]
-                        if not os.path.exists(path):
-                            org_img = img_f.imread(org_path)
-                            if org_img is None:
-                                print('WARNING, could not read {}'.format(org_img))
-                                continue
-                            resized = img_f.resize(org_img,(0,0),
-                                    fx=self.rescale_range[1], 
-                                    fy=self.rescale_range[1], 
-                                    )
-                            img_f.imwrite(path,resized)
-                    self.images.append({'id':imageName, 'imageName':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale })
-                else:
-                    print('{} does not exist'.format(jsonPath))
-                    print('No json found for {}'.format(imagePath))
-                    #exit(1)
+                #    rescale=1.0
+                #    if self.cache_resized:
+                #        rescale = self.rescale_range[1]
+                #        if not os.path.exists(path):
+                #            org_img = img_f.imread(org_path)
+                #            if org_img is None:
+                #                print('WARNING, could not read {}'.format(org_img))
+                #                continue
+                #            resized = img_f.resize(org_img,(0,0),
+                #                    fx=self.rescale_range[1], 
+                #                    fy=self.rescale_range[1], 
+                #                    )
+                #            img_f.imwrite(path,resized)
+                rescale=1.0
+                path = imagePath
+                self.images.append({'id':imageName, 'imageName':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale })
+                #else:
+                #    print('{} does not exist'.format(jsonPath))
+                #    print('No json found for {}'.format(imagePath))
+                #    #exit(1)
         self.errors=[]
 
 

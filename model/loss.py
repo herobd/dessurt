@@ -114,3 +114,14 @@ def label_smoothing(x, target, padding_idx=0, smoothing=0.0): #huggingface padds
         mask10.index_fill_(0, mask.squeeze(), 0.0)
         x=x*mask10
     return F.kl_div(x.view(batchsize,lenn,size), true_dist.view(batchsize,lenn,size),reduction='batchmean')
+
+
+def IoULoss(pred,target):
+    if len(pred.size())==4:
+        assert pred.size(1)==1
+        pred = pred[:,0]
+    eps=0.001
+    intersection = (pred*target).sum(dim=2).sum(dim=1)
+    comb = (pred+target).sum(dim=2).sum(dim=1)
+    iou = (intersection+eps)/(comb-intersection+eps)
+    return -iou.mean()
