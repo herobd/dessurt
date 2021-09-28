@@ -126,7 +126,8 @@
     "loss": {
         "#answer": "padded_seq_cross_entropy",
         "answer": "label_smoothing",
-	"mask": "sigmoid_BCE_mask_loss"
+	"mask": "sigmoid_BCE_mask_loss",
+	"#mask": "IoULoss"
     },
     "loss_weights": {
         "answer": 1,
