@@ -1,5 +1,7 @@
 Data in FS jsons
 
+probably filter this char out of recog results: ' ̟'
+
 #For training on just Census
 HOUSEHOLD_ID = household id
 LINE_NBR = line no.
@@ -16,11 +18,11 @@ PR_PREV_RESIDENCE_PLACE = previous residence place#'Same House' should be carefu
 PR_RACE_OR_COLOR / PR_RACE_OR_COLOR_CSS
 PR_RELATIONSHIP_TO_HEAD / PR_RELATIONSHIP_TO_HEAD_CSS / RELATIONSHIP_CODE
 PR_SEX_CODE
+
+~global to document~
 EVENT_PLACE_LEVEL_1
 EVENT_PLACE_LEVEL_2
 EVENT_PLACE_LEVEL_3
-
-
 EVENT_DISTRICT
 SHEET_NUMBER_LETTER
 
