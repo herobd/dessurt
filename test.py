@@ -13,6 +13,9 @@ def sigmoid_BCE_mask_loss(y_input, y_target):
     negative_loss = (loss*anti_target).sum()/anti_target.sum()
     return (positive_loss+ negative_loss)/2
 def focalLoss(x, target,alpha=1,gamma=2):
+    if len(x.size())==3:
+        x = torch.stack((x,1-x),dim=1)
+        target = torch.stack((target,1-target),dim=1)
     eps = np.finfo(float).eps
     p_t = torch.where(target == 1, x, 1-x)
     fl = - 1 * (1 - p_t) ** gamma * torch.log(p_t + eps)
@@ -35,6 +38,7 @@ bad1 = img_f.imread('/home/brian/Downloads/bad1.png')[:,:,0]
 good1 = img_f.imread('/home/brian/Downloads/good1.png')[:,:,0]
 good2 = img_f.imread('/home/brian/Downloads/good2.png')[:,:,0]
 
+
 gt = torch.from_numpy(gt).float()/255
 bad1 = torch.from_numpy(bad1).float()/255
 good1 = torch.from_numpy(good1).float()/255
@@ -45,11 +49,16 @@ bad1 = bad1[None,...]
 good1 = good1[None,...]
 good2 = good2[None,...]
 
+gt2 = torch.zeros_like(gt)
+gt3 = (bad1>0.4).float()
+print(gt3.sum())
+
 print('IoU')
 print('bad1 {}'.format(IoULoss(bad1,gt)))
 print('good1 {}'.format(IoULoss(good1,gt)))
 print('good2 {}'.format(IoULoss(good2,gt)))
 print('1-good2 {}'.format(IoULoss(1-good2,gt)))
+print('bad3 {}'.format(IoULoss(good2,gt3)))
 
 
 print('focal')
@@ -57,6 +66,8 @@ print('bad1 {}'.format(focalLoss(bad1,gt)))
 print('good1 {}'.format(focalLoss(good1,gt)))
 print('good2 {}'.format(focalLoss(good2,gt)))
 print('1-good2 {}'.format(focalLoss(1-good2,gt)))
+print('b good2 {}'.format(focalLoss(good2,gt2)))
+print('bad3 {}'.format(focalLoss(good2,gt3)))
 
 print('BCE')
 print('bad1 {}'.format(sigmoid_BCE_mask_loss(bad1,gt)))

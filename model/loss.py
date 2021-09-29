@@ -129,6 +129,9 @@ def IoULoss(pred,target):
 #from https://github.com/mathiaszinnen/focal_loss_torch/blob/main/focal_loss/focal_loss.py
 #MIT license
 def focalLoss(x, target,alpha=1,gamma=2):
+    if len(x.size())==3:
+        x = torch.stack((x,1-x),dim=1)
+        target = torch.stack((target,1-target),dim=1)
     eps = np.finfo(float).eps
     p_t = torch.where(target == 1, x, 1-x)
     fl = - 1 * (1 - p_t) ** gamma * torch.log(p_t + eps)
