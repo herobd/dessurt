@@ -14,6 +14,7 @@ from data_sets import synth_qadoc_dataset
 from data_sets import synth_para_qa
 from data_sets import funsd_qa
 from data_sets import cdip_qa
+from data_sets import cesus_qa
 from data_sets import nobrain_qa
 from data_sets import nobrain_graph_pair
 from data_sets import forms_graph_pair
@@ -140,6 +141,8 @@ def getDataLoader(config,split,rank=None,world_size=None):
             return withCollate(funsd_qa.FUNSDQA,funsd_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='CDIPQA':
             return withCollate(cdip_qa.CDIPQA,cdip_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='CensusQA':
+            return withCollate(census_qa.CensusQA,census_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='AdobeBoxDetect':
             return withCollate(adobe_box_detect.AdobeBoxDetect,adobe_box_detect.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='AdobeGraphPair':

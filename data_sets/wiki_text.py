@@ -13,7 +13,7 @@ else:
     ensure_dir(cache_path)
 
 
-_text_data = load_dataset('wikipedia', '20200501.en', cache_dir=cache_path)['train']
+_text_data = []#load_dataset('wikipedia', '20200501.en', cache_dir=cache_path)['train']
 
 _prune_headers = ["See also", "Gallery", "External media", "History", "Notes"]
 _wiki_end_keywords = ['References','Sources','External links']
@@ -22,9 +22,11 @@ _wiki_end_keywords = ['\n'+k+'\n' for k in _wiki_end_keywords] + ['\n'+k+' \n' f
 
 def getWikiArticle():
     #Returns a list of text paragraphs from a randome wikipedia article
+    if len(_text_data)==0:
+        _text_data.append( load_dataset('wikipedia', '20200501.en', cache_dir=cache_path)['train'] )
 
-    instance_i = random.randrange(_text_data.num_rows)
-    text = _text_data[instance_i]['text']
+    instance_i = random.randrange(_text_data[0].num_rows)
+    text = _text_data[0][instance_i]['text']
     #text = unicodedata.normalize(text,'NFC')#.decode('utf')
 
 
