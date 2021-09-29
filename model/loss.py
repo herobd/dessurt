@@ -125,3 +125,12 @@ def IoULoss(pred,target):
     comb = (pred+target).sum(dim=2).sum(dim=1)
     iou = (intersection+eps)/(comb-intersection+eps)
     return -iou.mean()
+
+#from https://github.com/mathiaszinnen/focal_loss_torch/blob/main/focal_loss/focal_loss.py
+#MIT license
+def focalLoss(x, target,alpha=1,gamma=2):
+    eps = np.finfo(float).eps
+    p_t = torch.where(target == 1, x, 1-x)
+    fl = - 1 * (1 - p_t) ** gamma * torch.log(p_t + eps)
+    fl = torch.where(target == 1, fl * alpha, fl * (1 - alpha))
+    return fl.mean()
