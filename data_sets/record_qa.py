@@ -41,6 +41,8 @@ class RecordQA(QADataset):
         self.blank_token = 'ø'
         self.end_token='‡' 
 
+        self.punc_regex = re.compile('[%s]' % re.escape(string.punctuation))
+
     def makeQuestions(self,s,entries,households=None):
         """
         Generates N questions from given docuemnt information:
@@ -51,7 +53,7 @@ class RecordQA(QADataset):
 
         all_ids=set()
         for entry in entries:
-            for id_n in self.self.id_fields:
+            for id_n in self.id_fields:
                 all_ids.add(self.punc_regex.sub('',entry[id_n].lower()))
 
         q_a_pairs = []
@@ -60,8 +62,8 @@ class RecordQA(QADataset):
         else:
             q_types = []
             for entry in entries:
-                for field_name in self.all_fields-set([self.main_id_field])
-                    q_types.append(('get-field',entry,field_name)
+                for field_name in self.all_fields-set([self.main_id_field]):
+                    q_types.append(('get-field',entry,field_name))
 
         
 
@@ -72,43 +74,47 @@ class RecordQA(QADataset):
                 switch=False
             if q_type == 'next-name':
                 down = random.random()<0.5
+                name_id = random.choice(self.next_name_ids)
                 for i in range(20):
                     start = random.randrange(len(entries)-1)
                     if down:
-                        question='dn~'
-                        step=1
+                        question='d:{}~'.format(name_id)
+                        step=start+1
                     else:
-                        question='up~'
-                        start+=1
-                        step=-1
-                    prompt = entries[start]['name']
+                        question='u:{}~'.format(name_id)
+                        step=start
+                        start=start+1
+                    prompt = entries[start][name_id]
                     if len(prompt)>0:
                         break
 
-                response = entries[start+step]['name']
+                response = entries[step][name_id]
                 prompt = self.getFrontText(prompt)
-                response = self.getFrontText(reponse)
+                response = self.getFrontText(response)
                 
-                self.qaAdd(q_a_pairs,question+prompt,response_text)
+                self.qaAdd(q_a_pairs,question+prompt,response)
 
 
             elif q_type == 'get-field':
                 if self.train:
                     entry = random.choice(entries)
-                    id_field = self.main_id_field
-                    target_field = switch
+                    id_field = random.choice(tuple(self.id_fields))
+                    target_field = random.choice(tuple(self.all_fields-set([id_field])))
                 else:
                     entry = instance
-                    id_field = random.choice(self.id_fields)
-                    target_field = random.choice(self.all_fields-set([id_field]))
+                    id_field = self.main_id_field
+                    target_field = switch
 
 
                 id_prompt = entry[id_field]
-                value = entry[target_fied]
+                value = entry[target_field]
 
                 question = 'f:{}~{}'.format(target_field,id_prompt)
                 question = self.getFrontText(question)
-                value = self.getFrontText(value)
+                if value is not None:
+                    value = self.getFrontText(value)
+                else:
+                    value = self.blank_token
                 self.qaAdd(q_a_pairs,question,value)
 
 
@@ -133,8 +139,8 @@ class RecordQA(QADataset):
                     else:
                         question='up~'
                 elif sub_type == 'get-field':
-                    id_field = random.choice(self.id_fields)
-                    target_field = random.choice(self.all_fields-set([id_field]))
+                    id_field = random.choice(tuple(self.id_fields))
+                    target_field = random.choice(tuple(self.all_fields-set([id_field])))
 
                     question = 'f:{}~{}'.format(target_field,prompt_text)
                     question = self.getFrontText(question)
