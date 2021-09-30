@@ -1,7 +1,7 @@
 template= """#!/bin/bash
 
 #SBATCH --time=72:00:00   # walltime
-#SBATCH --ntasks=4
+#SBATCH --ntasks={}
 #SBATCH --gpus-per-task=1
 #SBATCH  --cpus-per-task=4
 #SBATCH -J "{}"
@@ -28,22 +28,29 @@ source activate /fslhome/brianld/miniconda3/envs/new
 
 export NCCL_DEBUG=INFO
 export NCCL_SOCKET_IFNAME=eth,ib
-for rank in [[0..3]]
+
+set -eu
+pids=()
+
+for rank in [[0..{}]]
 do
     srun -N 1 -n 1 --gpus 1 --exclusive  python  train.py --supercomputer -c configs/cf_{}.json -s saved/{}/checkpoint-latest.pth --rank $rank --worldsize 4 &
+    pids+=($!)
     if [ $rank==0 ]; then
         sleep 2.5
     fi
 done
 
-wait
+for pid in "${pids[@]}"; do
+    wait "$pid"
+done
 
 """
 
 import sys
-
+N=4
 def create(job_name):
-    script = template.format(job_name,job_name,job_name,job_name,job_name)
+    script = template.format(N,job_name,N-1,job_name,job_name,job_name,job_name)
     script=script.replace('[[','{')
     script=script.replace(']]','}')
 
