@@ -316,7 +316,7 @@ class ParaQADataset(QADataset):
                 #outmask = [line_map+(i,) for i in range(num_words)]
                 outmask = [line_map+(None,)]
                 inmask=[]
-                question = '0l~'
+                question = '0;~'
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
 
             elif question_type == 3 or question_type == 4:
@@ -340,7 +340,7 @@ class ParaQADataset(QADataset):
                     elif len(response)+1 <= self.max_qa_len:
                         response += '‡'
                     prompt = ''
-                    question = 'l0>'
+                    question = ';0>'
                     inmask = [line_map+(None,)]
                     outmask = [line_map+(i,) for i in range(num_words)]
                 else:

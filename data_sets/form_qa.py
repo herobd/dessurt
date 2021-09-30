@@ -406,7 +406,7 @@ class FormQA(QADataset):
                 ambiguous = len(entities[prompt_id].lines)==1 and entities[prompt_id].lines[0].ambiguous
                 mask =  random.random()<0.5 or ambiguous#should we use query mask
                 if down and (entities[response_id].cls=='answer' if response_id is not None else entities[prompt_id].cls=='question'):
-                    question = 'd0'+char if mask else 'l'+char
+                    question = 'l0'+char if mask else 'l'+char
                 elif not down and prompt_cls=='answer':
                     question = 'v0~' if mask else 'v~'
                 elif down and prompt_cls=='header':
