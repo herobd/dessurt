@@ -29,6 +29,8 @@ class RecordQA(QADataset):
         if self.train:
             self.q_types =         ['next-name','get-field','np']
             self.q_type_weights =  [1,          1,          0.05]
+            self.q_types_single =         ['get-field','np']
+            self.q_type_single_weights =  [1,          0.02]
         else:
             #these are what we'll use to actually score
             #(not actually looked at as it isn't sampling)
@@ -59,8 +61,10 @@ class RecordQA(QADataset):
 
         q_a_pairs = []
         if self.train:
-            if len(entries)>0:
+            if len(entries)>1:
                 q_types = random.choices(self.q_types,self.q_type_weights,k=self.questions*50)
+            elif len(entries)>0:
+                q_types = random.choices(self.q_types_single,self.q_type_single_weights_single,k=self.questions*50)
             else:
                 q_types = ['np']*(self.questions*20)
         else:
