@@ -94,7 +94,7 @@ if __name__ == "__main__":
     else:
         repeat=1
     data=census_qa.CensusQA(dirPath=dirPath,split='valid',config={
-        'rescale_range': [1.1,1.1],
+        'rescale_range': [1.05,1.05],
         'rescale_to_crop_size_first': True,
         'crop_params': {
             "crop_size":[1056,1408],#5953x4504  6164x4631  6234x4769
