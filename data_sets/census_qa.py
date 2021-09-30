@@ -26,6 +26,24 @@ class CensusQA(RecordQA):
         self.cache_resized = False
         self.do_masks=True
 
+        self.all_fields=set(['line no.','household','name','previous','race','relationship','sex', 'given name', 'age', 'birthplace'])
+        self.id_fields=set(['line no.','name'])
+        self.next_name_ids = ['given name','name']
+        self.main_id_field = 'line no.'
+        self.name_to_id = {
+                    'line no.': 'LINE_NBR',
+                    'household': 'HOUSEHOLD_ID',
+                    'name': 'PR_NAME',
+                    'previous': 'PR_PREV_RESIDENCE_PLACE',
+                    'race': 'PR_RACE_OR_COLOR',
+                    'relationship': 'PR_RELATIONSHIP_TO_HEAD',
+                    'sex': 'PR_SEX_CODE',
+                    'given name': 'PR_NAME_GN',
+                    'age': 'PR_AGE',
+                    'birthplace': 'PR_BIRTH_PLACE'
+                    } 
+
+
 
         if images is not None:
             self.images=images
@@ -76,16 +94,22 @@ class CensusQA(RecordQA):
                 #            img_f.imwrite(path,resized)
                 path=imagePath
                 rescale=1
-                self.images.append({'id':imageName, 'imageName':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale })
+                if self.train:
+                    self.images.append({'id':imageName, 'imageName':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale })
+                else:
+                    with open(jsonPath) as f:
+                        data = json.load(f)
+                    _,_,_,_,_,qa = self.parseAnn(data,rescale)
+                    #qa = self.makeQuestions(rescale,entries))
+                    for _qa in qa:
+                        _qa['bb_ids']=None
+                        self.images.append({'id':imageName, 'imageName':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'qa':[_qa]})
+
+
                 #else:
                 #    print('{} does not exist'.format(jsonPath))
                 #    print('No json found for {}'.format(imagePath))
                 #    #exit(1)
-
-        self.all_fields=set(['line no.','household','name','previous','race','relationship','sex', 'given name', 'age', 'birthplace'])
-        self.id_fields=set(['line no.','name'])
-        self.next_name_ids = ['given name','name']
-        self.main_id_field = 'line no.'
 
 
     def parseAnn(self,data,s):
@@ -108,19 +132,7 @@ class CensusQA(RecordQA):
         #            'age': entry['PR_AGE'],
         #            'birthplace': entry['PR_BIRTH_PLACE']
         #            } for entry in data]
-        name_to_id = {
-                    'line no.': 'LINE_NBR',
-                    'household': 'HOUSEHOLD_ID',
-                    'name': 'PR_NAME',
-                    'previous': 'PR_PREV_RESIDENCE_PLACE',
-                    'race': 'PR_RACE_OR_COLOR',
-                    'relationship': 'PR_RELATIONSHIP_TO_HEAD',
-                    'sex': 'PR_SEX_CODE',
-                    'given name': 'PR_NAME_GN',
-                    'age': 'PR_AGE',
-                    'birthplace': 'PR_BIRTH_PLACE'
-                    } 
-        entries = [ {key:entry[name_to_id[key]] if name_to_id[key] in entry else None for key in self.all_fields} for entry in data]
+        entries = [ {key:entry[self.name_to_id[key]] if self.name_to_id[key] in entry else None for key in self.all_fields} for entry in data]
         qa = self.makeQuestions(s,entries)
 
 

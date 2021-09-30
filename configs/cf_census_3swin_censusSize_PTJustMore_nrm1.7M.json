@@ -24,7 +24,7 @@
     },
     "validation": {
         "shuffle": false,
-        "rescale_range": [1.1,1.1],
+        "rescale_range": [1.05,1.05],
         "rescale_to_crop_size_first": true,
         "crop_params": {
             "crop_size":[1056,1408],
