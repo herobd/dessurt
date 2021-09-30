@@ -59,7 +59,10 @@ class RecordQA(QADataset):
 
         q_a_pairs = []
         if self.train:
-            q_types = random.choices(self.q_types,self.q_type_weights,k=self.questions*50)
+            if len(entries)>0:
+                q_types = random.choices(self.q_types,self.q_type_weights,k=self.questions*50)
+            else:
+                q_types = ['np']*(self.questions*20)
         else:
             q_types = []
             for entry in entries:
