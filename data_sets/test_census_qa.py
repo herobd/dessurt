@@ -94,10 +94,10 @@ if __name__ == "__main__":
     else:
         repeat=1
     data=census_qa.CensusQA(dirPath=dirPath,split='train',config={
-        'rescale_range': [1.2,1.2],
+        'rescale_range': [1,1.15],
         'rescale_to_crop_size_first': True,
         'crop_params': {
-            "crop_size":[960,1280],#5953x4504  6164x4631  6234x4769
+            "crop_size":[1056,1408],#5953x4504  6164x4631  6234x4769
             "pad":0,
             "rot_degree_std_dev": 1
             },
