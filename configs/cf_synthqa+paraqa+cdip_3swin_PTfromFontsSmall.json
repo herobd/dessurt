@@ -97,9 +97,10 @@
                     "batch_size": 1,
                     "num_workers": 4,
                     "rescale_range": [
-                        0.42,
-                        0.5
+                        0.9,
+                        1.1
                     ],
+		    "rescale_to_crop_size_first": true,
                     "crop_params": {
                         "crop_size": [
                             1152,
@@ -126,8 +127,8 @@
     "loss": {
         "#answer": "padded_seq_cross_entropy",
         "answer": "label_smoothing",
-	"mask": "sigmoid_BCE_mask_loss",
-	"#mask": "IoULoss"
+	"#mask": "sigmoid_BCE_mask_loss",
+	"mask": "focalLoss"
     },
     "loss_weights": {
         "answer": 1,

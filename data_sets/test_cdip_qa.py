@@ -84,7 +84,7 @@ if __name__ == "__main__":
     if len(sys.argv)>1:
         dirPath = sys.argv[1]
     else:
-        dirPath = '../data/CDIP_ready'
+        dirPath = '../data/CDIP_ready2'
     if len(sys.argv)>2:
         start = int(sys.argv[2])
     else:
@@ -94,10 +94,11 @@ if __name__ == "__main__":
     else:
         repeat=1
     data=cdip_qa.CDIPQA(dirPath=dirPath,split='train',config={
-        'rescale_range': [1.0,1.0],
+        'rescale_range': [1,1.3],
         'rescale_to_crop_size_first': True,
         'crop_params': {
-            "crop_size":[1152,768],
+            "crop_size":[960,1280],
+            "#crop_size":[1152,768],
             "pad":0,
             "rot_degree_std_dev": 1
             },

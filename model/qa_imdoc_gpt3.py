@@ -283,6 +283,7 @@ class QAImDocGPT3(BaseModel):
                             nn.ReLU(inplace=True)]
             d_im = d_im_out
         upsample_net.append(nn.Conv2d(d_im,1,1,1,0))
+        upsample_net.append(nn.Sigmoid())
         self.upsample_net= nn.Sequential(*upsample_net)
         
         
@@ -841,7 +842,7 @@ class QAImDocGPT3(BaseModel):
             
             if PRINT_ATT:
                 attDisplay(image[0],full_ocr_string,'|'+questions[0],'|'+final_str[0]+'^',final_str)
-            return final_str, torch.sigmoid(out_mask)
+            return final_str, out_mask #torch.sigmoid(out_mask)
             ############
 
 
