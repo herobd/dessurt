@@ -32,7 +32,7 @@ class RecordQA(QADataset):
         else:
             #these are what we'll use to actually score
             #(not actually looked at as it isn't sampling)
-            raise NotImplementedError()
+            self.q_types =         ['get-field']
 
         self.q_types_for_np = ['next-name','get-field']
 
@@ -54,7 +54,8 @@ class RecordQA(QADataset):
         all_ids=set()
         for entry in entries:
             for id_n in self.id_fields:
-                all_ids.add(self.punc_regex.sub('',entry[id_n].lower()))
+                if entry[id_n] is not None:
+                    all_ids.add(self.punc_regex.sub('',entry[id_n].lower()))
 
         q_a_pairs = []
         if self.train:
@@ -107,9 +108,11 @@ class RecordQA(QADataset):
 
 
                 id_prompt = entry[id_field]
+                if id_prompt is None:
+                    continue
                 value = entry[target_field]
 
-                question = 'f:{}~{}'.format(target_field,id_prompt)
+                question = 'f{}:{}~{}'.format(id_field[:2],target_field,id_prompt)
                 question = self.getFrontText(question)
                 if value is not None:
                     value = self.getFrontText(value)
