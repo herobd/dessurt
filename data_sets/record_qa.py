@@ -64,7 +64,7 @@ class RecordQA(QADataset):
             if len(entries)>1:
                 q_types = random.choices(self.q_types,self.q_type_weights,k=self.questions*50)
             elif len(entries)>0:
-                q_types = random.choices(self.q_types_single,self.q_type_single_weights_single,k=self.questions*50)
+                q_types = random.choices(self.q_types_single,self.q_type_single_weights,k=self.questions*50)
             else:
                 q_types = ['np']*(self.questions*20)
         else:
@@ -93,12 +93,15 @@ class RecordQA(QADataset):
                         step=start
                         start=start+1
                     prompt = entries[start][name_id]
-                    if len(prompt)>0:
+                    if prompt is not None and len(prompt)>0:
                         break
 
                 response = entries[step][name_id]
                 prompt = self.getFrontText(prompt)
-                response = self.getFrontText(response)
+                if response is not None:
+                    response = self.getFrontText(response)
+                else:
+                    response = self.blank_token
                 
                 self.qaAdd(q_a_pairs,question+prompt,response)
 

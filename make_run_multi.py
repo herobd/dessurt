@@ -41,8 +41,25 @@ do
     fi
 done
 
-for pid in "${pids[@]}"; do
-    wait "$pid"
+sleep 120
+
+SLEEP_TIME=30
+
+while (( ${#pids[@]} )); do
+  for pid_idx in "${!pids[@]}"; do
+    pid=${pids[$pid_idx]}
+    if ! kill -0 "$pid" 2>/dev/null; then # kill -0 checks for process existance
+      # we know this pid has exited; retrieve its exit status
+      echo "ended $pid"
+      wait "$pid" || exit 1
+      unset "pids[$pid_idx]"
+    fi
+  done
+  sleep $SLEEP_TIME # in bash, consider a shorter non-integer interval, ie. 0.2
+  if (( SLEEP_TIME<600 )); then
+    #max of 5 minute sleep
+    SLEEP_TIME=$((SLEEP_TIME+30))
+  fi
 done
 
 """

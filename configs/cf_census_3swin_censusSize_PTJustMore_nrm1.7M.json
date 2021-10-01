@@ -23,6 +23,7 @@
         "max_qa_len": 26
     },
     "validation": {
+        "batch_size":4,
         "shuffle": false,
         "rescale_range": [1.05,1.05],
         "rescale_to_crop_size_first": true,

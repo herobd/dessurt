@@ -467,6 +467,12 @@ class QATrainer(BaseTrainer):
                     log['E_read_ed'].append(ed)
                     if answer[0]=='\\':
                         log['E_read_1stNewline_acc'].append(1 if pred[0]=='\\' else 0)
+                elif question.startswith('fli:'):
+                    typ = question[4:question.find('~')]
+                    ed = editdistance.eval(answer,pred)
+                    hit = ed/((len(answer)+len(pred))/2) < 0.1
+                    log['E_{}_acc'.format(typ)].append(int(hit))
+                    log['E_{}_ed'.format(typ)].append(ed)
                 else:
                     print('ERROR: missed question -- {}'.format(question))
                 
