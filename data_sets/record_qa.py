@@ -150,7 +150,7 @@ class RecordQA(QADataset):
 
                     question = 'f:{}~{}'.format(target_field,prompt_text)
                     question = self.getFrontText(question)
-                self.qaAdd(q_a_pairs,question+prompt_text,self.np_token,None,[],[]) #no mask pred
+                self.qaAdd(q_a_pairs,question+prompt_text,self.np_token) #Normally this has a blank out mask GT, but during training, we don't want this as it never is encrouraged to predict
 
             else:
                 assert False
