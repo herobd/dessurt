@@ -419,6 +419,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     #rebuilt_answer = ''
                     last_ti = ti
                     for ali,answer_line in enumerate(answer_lines):
+                        if answer_line == ' ' or len(answer_line)==0:
+                            continue
                         print('Trying to match: {}'.format(answer_line))
                         not_last = ali<len(answer_lines)-1
                         matching=[]
