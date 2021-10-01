@@ -92,7 +92,7 @@ class QATrainer(BaseTrainer):
         
         #t#self.opt_history = defaultdict(list)#t#
         self.do_ocr = config['trainer']['do_ocr'] if 'do_ocr' in config['trainer'] else False
-        if self.do_ocr:
+        if self.do_ocr and self.do_ocr!='no':
             self.ocr_reader = easyocr.Reader(['en'],gpu=config['cuda'])
 
 
