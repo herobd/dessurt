@@ -164,7 +164,7 @@ def calcXYWH(tlX,tlY,trX,trY,brX,brY,blX,blY):
     rot = np.arctan2(-(rY-lY),rX-lX)
     height = np.abs(h)*2    #this is FULL height
     width = d #and FULL width
-    return lX,lY, rX,rY,width,height
+    return lX,lY, rX,rY,width,height,rot
 
 def plotRect(img,color,xyrhw,lineWidth=1):
     xc=xyrhw[0].item()

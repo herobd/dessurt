@@ -564,7 +564,7 @@ class ConvPatchEmbed(nn.Module):
 
         cnn = nn.Sequential()
         norm = 'group'
-        nc = 1 #gray
+        nc = in_chans
 
         def convRelu(i, norm=None):
             nIn = nc if i == 0 else nm[i - 1]

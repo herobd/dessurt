@@ -10,7 +10,7 @@ from model.swin_transformer import ConvPatchEmbed, SwinTransformerBlock, PatchMe
 from model.trans_pooling import OCRPooler, QPooler
 try:
     from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
-    from transformers import LayoutLMTokenizer, LayoutLMModel
+    #from transformers import LayoutLMTokenizer, LayoutLMModel
 except:
     pass
 from utils.character_tokenizer import CharacterTokenizer
@@ -328,7 +328,7 @@ class QAImDocGPT2(BaseModel):
                 trX,trY = bb[1]
                 brX,brY = bb[2]
                 blX,blY = bb[3]
-                lX,lY,rX,rY,width,height = calcXYWH(tlX,tlY,trX,trY,brX,brY,blX,blY)
+                lX,lY,rX,rY,width,height,rot = calcXYWH(tlX,tlY,trX,trY,brX,brY,blX,blY)
                 cX = (lX+rX)/2
                 cY = (lY+rY)/2
                 #we'll use the entire height for each part
@@ -728,7 +728,7 @@ class QAImDocGPT2(BaseModel):
             response_greedy_token = response_decoded.argmax(dim=2)
 
             output_tokens.append(response_greedy_token[0,0].item())
-            print('first token: {}'.format(output_tokens[0]))
+            #print('first token: {}'.format(output_tokens[0]))
 
             offset = 1
 
@@ -798,7 +798,7 @@ class QAImDocGPT2(BaseModel):
                 
 
                 output_tokens.append(response_greedy_token[0,0].item())
-                print('next token: {}'.format(output_tokens[-1]))
+                #print('next token: {}'.format(output_tokens[-1]))
                 offset += 1
 
             
@@ -848,7 +848,7 @@ class QAImDocGPT2(BaseModel):
         #import pdb;pdb.set_trace()
         if PRINT_ATT:
             attDisplay(image[0],full_ocr_string,'|'+questions[0],'|'+answers[0]+'^',batch_string_response[0])
-        return response_decoded, target_decoded.to(device), batch_string_response
+        return response_decoded, target_decoded.to(device), batch_string_response, None
 
     #t#def print_opt_times(self):#t#
         #t#for name,times in self.opt_history.items():#t#

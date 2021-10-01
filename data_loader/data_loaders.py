@@ -1,35 +1,38 @@
 import torch
 import torch.utils.data
 import numpy as np
-#from datasets.cancer import CancerDataset
-from datasets.ai2d import AI2D
-from datasets import forms_detect
-from datasets.forms_detect import FormsDetect
-from datasets import forms_box_detect
-from datasets.forms_box_detect import FormsBoxDetect
-from datasets import ai2d_box_detect
-from datasets import multiple_dataset
-from datasets import synth_qa_dataset
-from datasets import synth_qadoc_dataset
-from datasets import funsd_qa
-from datasets import nobrain_qa
-from datasets import nobrain_graph_pair
-from datasets import forms_graph_pair
-from datasets import forms_box_pair
-from datasets import funsd_graph_pair
-from datasets import funsd_box_detect
-from datasets import adobe_graph_pair
-from datasets import adobe_box_detect
-from datasets.forms_box_pair import FormsBoxPair
-from datasets.forms_feature_pair import FormsFeaturePair
-from datasets import forms_feature_pair
-from datasets.forms_pair import FormsPair
-from datasets.forms_lf import FormsLF
-from datasets import random_messages
-from datasets import random_diffusion
-from datasets import random_maxpairs
-from datasets import formlines_atr_dataset
-#from torchvision import datasets, transforms
+#from data_sets.cancer import CancerDataset
+from data_sets.ai2d import AI2D
+from data_sets import forms_detect
+from data_sets.forms_detect import FormsDetect
+from data_sets import forms_box_detect
+from data_sets.forms_box_detect import FormsBoxDetect
+from data_sets import ai2d_box_detect
+from data_sets import multiple_dataset
+from data_sets import synth_qa_dataset
+from data_sets import synth_qadoc_dataset
+from data_sets import synth_para_qa
+from data_sets import funsd_qa
+from data_sets import cdip_qa
+from data_sets import census_qa
+from data_sets import nobrain_qa
+from data_sets import nobrain_graph_pair
+from data_sets import forms_graph_pair
+from data_sets import forms_box_pair
+from data_sets import funsd_graph_pair
+from data_sets import funsd_box_detect
+from data_sets import adobe_graph_pair
+from data_sets import adobe_box_detect
+from data_sets.forms_box_pair import FormsBoxPair
+from data_sets.forms_feature_pair import FormsFeaturePair
+from data_sets import forms_feature_pair
+from data_sets.forms_pair import FormsPair
+from data_sets.forms_lf import FormsLF
+from data_sets import random_messages
+from data_sets import random_diffusion
+from data_sets import random_maxpairs
+from data_sets import formlines_atr_dataset
+#from torchvision import data_sets, transforms
 from base import BaseDataLoader
 
 
@@ -42,7 +45,7 @@ from base import BaseDataLoader
 #        super(MnistDataLoader, self).__init__(config)
 #        self.data_dir = config['data_loader']['data_dir']
 #        self.data_loader = torch.utils.data.DataLoader(
-#            datasets.MNIST('../data', train=True, download=True,
+#            data_sets.MNIST('../data', train=True, download=True,
 #                           transform=transforms.Compose([
 #                               transforms.ToTensor(),
 #                               transforms.Normalize((0.1307,), (0.3081,))
@@ -122,6 +125,8 @@ def getDataLoader(config,split,rank=None,world_size=None):
             return withCollate(synth_qa_dataset.SynthQADataset,synth_qa_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='SynthQADocDataset':
             return withCollate(synth_qadoc_dataset.SynthQADocDataset,synth_qadoc_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='SynthParaQA':
+            return withCollate(synth_para_qa.SynthParaQA,synth_para_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='NobrainQA':
             return withCollate(nobrain_qa.NobrainQA,nobrain_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='NobrainGraphPair':
@@ -134,6 +139,10 @@ def getDataLoader(config,split,rank=None,world_size=None):
             return withCollate(funsd_graph_pair.FUNSDGraphPair,funsd_graph_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='FUNSDQA':
             return withCollate(funsd_qa.FUNSDQA,funsd_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='CDIPQA':
+            return withCollate(cdip_qa.CDIPQA,cdip_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='CensusQA':
+            return withCollate(census_qa.CensusQA,census_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='AdobeBoxDetect':
             return withCollate(adobe_box_detect.AdobeBoxDetect,adobe_box_detect.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='AdobeGraphPair':
@@ -188,7 +197,10 @@ def basic(setObj,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers
         validData = setObj(dirPath=data_dir, split=['train','valid'], config=config['validation'])
         validLoader = torch.utils.data.DataLoader(validData, batch_size=valid_batch_size, shuffle=shuffleValid, num_workers=numDataWorkers)
         return trainLoader, validLoader
+
 def withCollate(setObj,collateFunc,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config,rank=None,world_size=None):
+    prefetch_factor = config['data_loader']['prefetch_factor'] if 'prefetch_factor' in config else 2
+    persistent_workers = config['data_loader']['persistent_workers'] if 'persistent_workers' in config else False
     if split=='train':
         trainData = setObj(dirPath=data_dir, split='train', config=config['data_loader'])
         if rank is not None:
@@ -199,7 +211,7 @@ def withCollate(setObj,collateFunc,batch_size,valid_batch_size,shuffle,shuffleVa
         else:
             train_sampler = None
 
-        trainLoader = torch.utils.data.DataLoader(trainData, batch_size=batch_size, shuffle=shuffle, num_workers=numDataWorkers, collate_fn=collateFunc, sampler=train_sampler)
+        trainLoader = torch.utils.data.DataLoader(trainData, batch_size=batch_size, shuffle=shuffle, num_workers=numDataWorkers, collate_fn=collateFunc, sampler=train_sampler, prefetch_factor=prefetch_factor, persistent_workers=persistent_workers)
         if rank is None or rank==0:
             validData = setObj(dirPath=data_dir, split='valid', config=config['validation'])
             validLoader = torch.utils.data.DataLoader(validData, batch_size=valid_batch_size, shuffle=shuffleValid, num_workers=numDataWorkers, collate_fn=collateFunc)

@@ -25,7 +25,7 @@
         "image_size": [384,384],
         "change_size": true,
         "word_questions": "simple",
-        "tables": 0.2,
+        "tables": false,
         "multiline": 0.6,
 	"max_qa_len": 26,
         "header_dir": "../data/english4line_fonts",

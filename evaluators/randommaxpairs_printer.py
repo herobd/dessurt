@@ -4,7 +4,7 @@ import torch
 import utils.img_f as img_f
 import math
 from model.loss import *
-from datasets.test_random_maxpairs import display
+from data_sets.test_random_maxpairs import display
 
 
 

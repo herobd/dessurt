@@ -8,7 +8,7 @@ from evaluators.draw_graph import draw_graph
 import matplotlib.pyplot as plt
 from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist, AP_textLines, getTargIndexForPreds_iou, newGetTargIndexForPreds_iou, getTargIndexForPreds_dist, newGetTargIndexForPreds_textLines, computeAP, non_max_sup_overseg
 from utils.group_pairing import getGTGroup, pure, purity
-from datasets.testforms_graph_pair import display
+from data_sets.testforms_graph_pair import display
 import random, os, math
 
 from model.oversegment_loss import build_oversegmented_targets_multiscale
@@ -2677,24 +2677,37 @@ class GraphPairTrainer(BaseTrainer):
         gtRelHit=set()
         gtRelHit_BROS=set()
         gtRelHit_strict=set()
+        gtRelHit_XLMstrict=set()
         relPrec=0
         relPrec_BROS=0
         relPrec_strict=0
+        relPrec_XLMstrict=0
         if predPairs is None:
             predPairs=[]
         if 'blank' in self.classMap and predGroups is not None:
             rel_types=['UP']*num_pred_pairs_with_blanks
         else:
             rel_types=[]
+        
+        XLM_predCount=0
+        relPrec_XLM=0
         for pi,(n0,n1) in enumerate(predPairs):
+            bb0 = predGroups[n0][0]
+            bb1 = predGroups[n0][0]
+            if outputBoxes[bb0][6:6+numClasses].argmax()!=0 and outputBoxes[bb1][6:6+numClasses].argmax()!=0:
+                XLM_predCount+=1
             BROS_gtG0 = predToGTGroup_BROS[n0]
             BROS_gtG1 = predToGTGroup_BROS[n1]
             hit=False
+            hit_XLM=False
             if BROS_gtG0>=0 and BROS_gtG1>=0:
                 pair_id = (min(BROS_gtG0,BROS_gtG1),max(BROS_gtG0,BROS_gtG1))
                 if pair_id in gt_groups_adj:
                     hit=True
                     relPrec_BROS+=1
+                    if outputBoxes[bb0][6:6+numClasses].argmax()!=0 and outputBoxes[bb1][6:6+numClasses].argmax()!=0:
+                        relPrec_XLM+=1
+                        hit_XML=True
                     gtRelHit_BROS.add((min(BROS_gtG0,BROS_gtG1),max(BROS_gtG0,BROS_gtG1)))
                     if 'blank' in self.classMap:
                         old_pi = newToOldPredPairs[pi]
@@ -2722,6 +2735,14 @@ class GraphPairTrainer(BaseTrainer):
                     if groupPurity[gtG0]==1 and groupPurity[gtG1]==1 and n0 in groupCompleteness and groupCompleteness[n0]==1 and n1 in groupCompleteness and groupCompleteness[n1]==1:
                         relPrec_strict+=1
                         gtRelHit_strict.add((min(gtG0,gtG1),max(gtG0,gtG1)))
+
+                        bb0 = predGroups[n0][0]
+                        bb1 = predGroups[n1][0]
+                        if outputBoxes[bb0][6:6+numClasses].argmax()!=0 and outputBoxes[bb1][6:6+numClasses].argmax()!=0:
+                            relPrec_XLMstrict+=1
+                            gtRelHit_XLMstrict.add((min(gtG0,gtG1),max(gtG0,gtG1)))
+                            if not hit_XML:
+                                import pdb;pdb.set_trace()
                         #TODO failed in training
                         #assert BROS_gtG0==gtG0
                         #assert BROS_gtG1==gtG1
@@ -2750,6 +2771,18 @@ class GraphPairTrainer(BaseTrainer):
         log['final_rel_XX_BROS_TP']=relPrec_BROS
         log['final_rel_XX_predCount']=len(predPairs)
         log['final_rel_XX_gtCount']=len(gt_groups_adj)
+        
+        XLM_gtCount=0
+        for g0,g1 in gt_groups_adj:
+            bb0 = gtGroups[g0][0]
+            bb1 = gtGroups[g1][0]
+            
+            if target_for_b[bb0][-numClasses:].argmax()!=0 and target_for_b[bb1][-numClasses:].argmax()!=0:
+                XLM_gtCount+=1
+        log['final_rel_XX_XLM_TP']=relPrec_XLM
+        log['final_rel_XX_XLM_predCount']=XLM_predCount
+        log['final_rel_XX_XLM_gtCount']=XLM_gtCount
+        log['final_rel_XX_XLMstrict_TP']=relPrec_XLMstrict
         if len(predPairs)>0:
             relPrec /= len(predPairs)
             relPrec_strict /= len(predPairs)
