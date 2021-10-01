@@ -28,12 +28,23 @@ except:
 def norm_ed(s1,s2):
     return editdistance.eval(s1,s2)/max(len(s1),len(s2))
 
-def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False):
+
+def unrollLongText(model,img,ocr,answer):
+    full_answer=''
+    while answer[-2:]=='>>':
+        full_answer += answer[:-2] #add to full text
+        new_question='re~'+answer[:-2] #form new question from last part
+        answer = model(img,ocr,[[new_question]],RUN=True)  #new response
+        print(' cont>> {}'.format(answer))
+    if answer != '[ end ]' and answer != '[ np ]':
+        full_answer += answer #finish text
+    return full_answer
+
+def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False,max_qa_len=None):
     np.random.seed(1234)
     torch.manual_seed(1234)
     
-    too_long_read_thresh=100
-    too_long_gen_thresh=30
+    #too_long_gen_thresh=10
 
     if resume is not None:
         checkpoint = torch.load(resume, map_location=lambda storage, location: storage)
@@ -56,6 +67,9 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
     else:
         config['cuda']=True
         config['gpu']=gpu
+
+    if max_qa_len is None:
+        max_qa_len=config['data_loader']['max_qa_len']
 
     do_ocr=config['trainer']['do_ocr'] if 'do_ocr' in config['trainer'] else False
     if do_ocr and do_ocr!='no':
@@ -181,6 +195,10 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
 
             gt_line_to_group = instance['targetIndexToGroup']
 
+            transcription_groups = []
+            for group in groups:
+                transcription_groups.append('\\'.join([transcription_lines[t] for t in group]))
+
 
             classes = [classes_lines[group[0]].argmax() for group in groups]
             if draw:
@@ -239,15 +257,20 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 question='ch~'+str(table_i)
                 answer = model(img,ocr,[[question]],RUN=True)
                 print(question+' {:} '+answer)
+                if answer[-2:]=='>>':
+                    answer = unrollLongText(model,img,ocr,answer)
                 column_headers = [h.strip() for h in answer.split(',')]
                 
                 question='rh~'+str(table_i)
                 answer = model(img,ocr,[[question]],RUN=True)
                 print(question+' {:} '+answer)
+                if answer[-2:]=='>>':
+                    answer = unrollLongText(model,img,ocr,answer)
                 row_headers = [h.strip() for h in answer.split(',')]
 
                 #align headers to gt
                 h_to_g = [None]*(len(column_headers)+len(row_headers))
+                c_to_g = {}
                 g_to_h = {}
                 matchings = [None]*(len(column_headers)+len(row_headers))
                 for i,h in enumerate(column_headers+row_headers):
@@ -275,15 +298,17 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 ch_to_g = h_to_g[:len(column_headers)]
                 rh_to_g = h_to_g[len(column_headers):]
 
-                pred_cells += [group[g] for g in h_to_g] #is this cheating?
+                pred_cells += [groups[g] if g is not None else [-1] for g in h_to_g] #is this cheating?
                 pred_cell_classes += [1]*len(pred_cells)
                 
                 i=len(column_headers)+len(row_headers)
                 for ch in column_headers:
-                    for rh in column_headers:
+                    for rh in row_headers:
                         question='t~{}~~{}'.format(ch,rh)
                         answer = model(img,ocr,[[question]],RUN=True)
                         print(question+' {:} '+answer)
+                        if answer[-2:]=='>>':
+                            answer = unrollLongText(model,img,ocr,answer)
 
                         matching=[]
                         for gi,text in enumerate(transcription_groups):
@@ -292,7 +317,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                                 matching.append((gi,score))
                         if len(matching)>0:
                             matching.sort(key=lambda a:a[1])
-                            matchings[i]=matching
+                            assert i == len(matchings)
+                            matchings.append(matching)
                             #it's possible there are several texts that are the same
                             #so we'll take distance into account
                             top_matching=matching[0:1]
@@ -325,17 +351,20 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 for ci,ch in enumerate(column_headers):
                     for ri,rh in enumerate(column_headers):
                         assert i == len(pred_cells)
-                        g = c_to_g[i]
-                        pred_cells.append(groups[g])
+                        if i in c_to_g:
+                            g = c_to_g[i]
+                            pred_cells.append(groups[g])
+                        else:
+                            pred_cells.append([-1])
                         pred_cell_classes.append(2)
-                        rel_tables.append((index_start+ci,index_start+i))
-                        rel_tables.append((index_start+ri+len(column_headers),index_start+i))
+                        rel_tables.append((index_start+ci,i))
+                        rel_tables.append((index_start+ri+len(column_headers),i))
                         i+=1
-                used.extend(c_to_g)
+                used.extend(c_to_g.values())
 
                 #TODO use 'ac~' and 'ar~' as a second check?
 
-                used = [li for g in used for li in group[g]]
+                used = [li for g in used if g is not None for li in groups[g]]
                 #we purge the table from being processed latter
                 #used.sort(reverse=True)
                 #for ti in used:
@@ -352,49 +381,36 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             for ti,textline in enumerate(transcription_lines):
                 if ti in used:
                     continue
-                if len(textline)>too_long_read_thresh:
-                    textline=textline[-too_long_read_thresh:]
+                if len(textline)>max_qa_len:
+                    textline=textline[-max_qa_len:]
                 question='re~'+textline
                 answer = model(img,ocr,[[question]],RUN=True)
                 print(question+' {:} '+answer)
                 
                 #import pdb;pdb.set_trace()
-                if len(answer)>too_long_gen_thresh:
-                    #If predictions are too long, they become unreliable
-                    #So we'll keep only the first part and requery with the (good) predicted part
-                    part_answer=answer
-                    new_textline = textline
-                    answer = ''
-                    while len(part_answer)>too_long_gen_thresh:
-                        #we'll try to break at spaces
-                        break_pos = too_long_gen_thresh
-                        while part_answer[break_pos] != ' ':
-                            break_pos+=1
-                            if break_pos> too_long_gen_thresh*1.5 or break_pos>=len(part_answer):
-                                #not found? search backwards
-                                break_pos = too_long_gen_thresh
-                                while part_answer[break_pos] != ' ':
-                                    break_pos-=1
-                                    if break_pos< too_long_gen_thresh*0.5 or break_pos==0:
-                                        #still not found? ugh just  brak anywhere
-                                        break_pos = too_long_gen_thresh
-                                        break
-                                break
-                                
-                        part_answer = part_answer[:break_pos] #remove unreliable prediction
-
-                        new_textline = new_textline+' '+part_answer
-                        answer +=part_answer+' '
-                        if len(new_textline)>too_long_read_thresh:
-                            new_textline=new_textline[-too_long_read_thresh:]
-                        new_question='re~'+new_textline
-                        part_answer = model(img,ocr,[[new_question]],RUN=True)
-                        print('TOO LONG, cur answer: {}'.format(answer))
-                        print('new question > '+new_question+' {:} '+part_answer)
-                    if part_answer != '[ end ]' and answer != '[ np ]':
-                        answer +=part_answer
-                    else:
-                        answer = answer[:-1] #remove last space
+                #if len(answer)>too_long_gen_thresh:
+                #    #If predictions are too long, they become unreliable
+                #    #So we'll keep only the first part and requery with the (good) predicted part
+                #    part_answer=answer
+                #    new_textline = textline
+                #    answer = ''
+                #    while len(part_answer)>too_long_gen_thresh:
+                #        part_answer = part_answer[:too_long_gen_thresh] #remove unreliable prediction
+                #        new_textline = new_textline+' '+part_answer
+                #        answer +=part_answer+' '
+                #        if len(new_textline)>max_qa_len:
+                #            new_textline=new_textline[-max_qa_len:]
+                #        new_question='re~'+new_textline
+                #        part_answer = model(img,ocr,[[new_question]],RUN=True)
+                #        print('TOO LONG, cur answer: {}'.format(answer))
+                #        print('new question > '+new_question+' {:} '+part_answer)
+                #    if part_answer != '[ end ]' and answer != '[ np ]':
+                #        answer +=part_answer
+                #    else:
+                #        answer = answer[:-1] #remove last space
+                if answer[-2:]=='>>':
+                    answer = unrollLongText(model,img,ocr,answer)
+                    
 
                 #if len(answer)>1:# and answer!=' ' and answer!=':':
                 if answer != '[ end ]' and answer != '[ np ]':
@@ -425,13 +441,9 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                             matching.sort(key=lambda a:a[1])
                         best_ti2, best_score = matching[0]
                         if best_score<0.7:
-                            if last_ti in pred_chain and pred_chain[last_ti]<len(loc_lines):
-                                #assert best_ti2 == pred_chain[last_ti] #hopefully we're consistent...
-                                #of course it isn't... uhh, just pick the longest
-                                if len(transcription_lines[pred_chain[last_ti]]) > len(transcription_lines[best_ti2]):
-                                    print('INCONSISTENT CHAIN prediction "{}" vs "{}"'.format(transcription_lines[pred_chain[last_ti]],transcription_lines[best_ti2]))
-                                    #we're bad? stop here
-                                    break
+                            if last_ti in pred_chain:
+                                if best_ti2 != pred_chain[last_ti]: #hopefully we're consistent...
+                                    print('Warning: Inconsistent chaining. Matched to [{}], but should be [{}]'.format(best_ti2,pred_chain[last_ti]))
 
                             print('matched [{}] to [{}]  {}'.format(answer_line,transcription_lines[best_ti2],best_score))
                             #rebuilt_answer+='\\'+transcription_lines[best_ti2]
@@ -491,7 +503,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             #Now get their class
             pred_classes = []
             for text in pred_inst:
-                text = text[:100] #if it's really long, that probably won't help
+                text = text[:max_qa_len] #if it's really long, that probably won't help
                 question='cs~'+text
                 answer = model(img,ocr,[[question]],RUN=True)
                 print(question+' {:} '+answer)
@@ -544,8 +556,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             rel_score=defaultdict(int)
             inconsistent_class_count=0
             for pgi,text in enumerate(pred_inst):
-                short_text_front = text[:100]
-                short_text_back = text[-100:]
+                short_text_front = text[:max_qa_len]
+                short_text_back = text[-max_qa_len:]
                 
                 if pred_classes[pgi]==0: #header
                     qs=[('hd~',short_text_back)]
@@ -554,10 +566,13 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     #qs=['l~']
                 elif pred_classes[pgi]==2: #answer
                     qs=[('v~',short_text_front)]
+
                 for q,t in qs:
                     question=q+t
                     answer = model(img,ocr,[[question]],RUN=True)
                     print(question+' {:} '+answer)
+                    if answer[-2:]=='>>':
+                        answer = unrollLongText(model,img,ocr,answer)
                     #if 'may' in answer or 'june' in answer:
                     #if 'from' in answer or 'to :' in answer:
                     #    import pdb;pdb.set_trace()
@@ -614,7 +629,11 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 for rel in rel_score:
                     if rel!=examine and test in rel:
                         #The other instance has a relationship, this can probably to safely pruned
-                        del rel_score[examine]
+                        try:
+                            del rel_score[examine]
+                        except KeyError:
+                            #double del?
+                            pass
                         break
 
             pred_rel = list(rel_score.keys())
@@ -665,8 +684,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             print('inconsistent_class_count={}'.format(inconsistent_class_count))
 
             if draw:
-                assert len(pred_classes) == len(loc_pgroup)
-                for cls,loc,pgroup in zip(pred_classes,loc_pgroup,pred_groups):
+                assert len(pred_classes+pred_cell_classes) == len(loc_pgroup)
+                for cls,loc,pgroup in zip(pred_classes+pred_cell_classes,loc_pgroup,pred_groups+pred_cells):
                     if cls==0:
                         color=(0,0,255) #header
                     elif cls==1:
@@ -726,6 +745,8 @@ if __name__ == '__main__':
                         help='Arbitrary key-value pairs to add to config of the form "k1=v1,k2=v2,...kn=vn".  You can nest keys with k1=k2=k3=v')
     parser.add_argument('-T', '--test', default=False, type=bool,
                         help='run test set (default: False)')
+    parser.add_argument('-m', '--max-qa-len', default=None, type=int,
+                        help='max len for questions')
 
     args = parser.parse_args()
 
@@ -742,6 +763,6 @@ if __name__ == '__main__':
         exit()
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,test=args.test)
+            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len)
     else:
-        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,test=args.test)
+        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len)

@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 import torch.nn.functional as F
 import utils
 #import torch.nn as nn
@@ -15,6 +16,14 @@ def my_loss(y_input, y_target):
 
 def sigmoid_BCE_loss(y_input, y_target):
     return F.binary_cross_entropy_with_logits(y_input, y_target)
+def sigmoid_BCE_mask_loss(y_input, y_target):
+    loss= F.binary_cross_entropy_with_logits(y_input, y_target,reduction='none')
+    if y_target.sum()==0:
+        return loss.mean()
+    positive_loss = (loss*y_target).sum()/y_target.sum()
+    anti_target = 1-y_target
+    negative_loss = (loss*anti_target).sum()/anti_target.sum()
+    return (positive_loss+ negative_loss)/2
 def padded_seq_cross_entropy(x,target):
     batchsize = x.size(0)
     lenn = x.size(1)
@@ -106,3 +115,32 @@ def label_smoothing(x, target, padding_idx=0, smoothing=0.0): #huggingface padds
         mask10.index_fill_(0, mask.squeeze(), 0.0)
         x=x*mask10
     return F.kl_div(x.view(batchsize,lenn,size), true_dist.view(batchsize,lenn,size),reduction='batchmean')
+
+
+def IoULoss(pred,target):
+    if len(pred.size())==4:
+        assert pred.size(1)==1
+        pred = pred[:,0]
+    eps=0.001
+    intersection = (pred*target).sum(dim=2).sum(dim=1)
+    comb = (pred+target).sum(dim=2).sum(dim=1)
+    iou = (intersection+eps)/(comb-intersection+eps)
+    return -iou.mean()
+
+#from https://github.com/mathiaszinnen/focal_loss_torch/blob/main/focal_loss/focal_loss.py
+#MIT license
+def focalLoss(x, target,alpha=1,gamma=2):
+    #fix binary cases
+    if len(x.size())==3:
+        x = torch.stack((x,1-x),dim=1)
+        target = torch.stack((target,1-target),dim=1)
+    elif x.size(1)==1:
+        x = torch.cat((x,1-x),dim=1)
+        target = torch.cat((target,1-target),dim=1)
+    eps = np.finfo(float).eps
+    p_t = torch.where(target == 1, x, 1-x)
+    fl = - 1 * (1 - p_t) ** gamma * torch.log(p_t + eps)
+    fl = torch.where(target == 1, fl * alpha, fl * (1 - alpha))
+    if torch.isnan(fl).any():
+        import pdb;pdb.set_trace()
+    return fl.mean()

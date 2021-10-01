@@ -10,7 +10,7 @@
         "textdir": "../data/",
         "data_dir": "../data/english4line_fonts",
         "include_ocr": false,
-        "batch_size": 28,
+        "batch_size": 26,
         "num_workers": 4,
         "rescale_range": [1.0,1.0],
         "crop_params": {
@@ -24,6 +24,7 @@
         "max_entries": 2,
 	"use_read": 0.01,
 	"multiline": 0.000001,
+        "change_size": true,
 	"word_questions": "simple",
         "text_height": 32,
         "image_size": 192,
