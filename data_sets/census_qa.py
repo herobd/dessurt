@@ -25,6 +25,7 @@ class CensusQA(RecordQA):
 
         self.cache_resized = False
         self.do_masks=True
+        self.valid = 'valid'==split
 
         self.all_fields=set(['line no.','household','name','previous','race','relationship','sex', 'given name', 'age', 'birthplace'])
         self.id_fields=set(['line no.','name'])
@@ -118,6 +119,11 @@ class CensusQA(RecordQA):
             data = data['indexed']
         else:
             recognition = None
+        
+        if self.valid:
+            #the validation set is too big to run through frequently. So instead we'll only take every other entry
+            data = data[::2]
+            #This allows us to cover more variety in handwriting than just making the validation set smaller
 
         #entries =[
         #        {
