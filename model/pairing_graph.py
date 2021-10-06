@@ -4,8 +4,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from model import *
-from model.graph_net import GraphNet
-from model.meta_graph_net import MetaGraphNet
+#from model.graph_net import GraphNet
+#from model.meta_graph_net import MetaGraphNet
 from model.binary_pair_net import BinaryPairNet
 from model.binary_pair_real import BinaryPairReal
 try:
@@ -32,6 +32,8 @@ import utils.img_f as img_f
 class PairingGraph(BaseModel):
     def __init__(self, config):
         super(PairingGraph, self).__init__(config)
+        from model.graph_net import GraphNet
+        from model.meta_graph_net import MetaGraphNet
 
         if 'detector_checkpoint' in config:
             checkpoint = torch.load(config['detector_checkpoint'], map_location=lambda storage, location: storage)

@@ -4,12 +4,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from model import *
-from model.graph_net import GraphNet
-from model.meta_graph_net import MetaGraphNet
+#from model.graph_net import GraphNet
+#from model.meta_graph_net import MetaGraphNet
 from model.binary_pair_net import BinaryPairNet
 from model.binary_pair_real import BinaryPairReal
-#from model.roi_align.roi_align import RoIAlign
-#from model.roi_align import ROIAlign as RoIAlign
 from torchvision.ops import RoIAlign
 from model.cnn_lstm import CRNN, SmallCRNN
 from model.tesseract_wrap import TesseractWrap
@@ -22,7 +20,6 @@ from model.net_builder import make_layers, getGroupSize
 from utils.yolo_tools import non_max_sup_iou, non_max_sup_dist, non_max_sup_overseg, allIOU, allIO_clipU
 from utils.util import decode_handwriting
 from utils.bb_merging import TextLine, xyrwh_TextLine
-#from utils.string_utils import correctTrans
 import editdistance
 import math, os
 import random
@@ -104,6 +101,8 @@ def correctTrans(pred,predBB,gt,gtBB):
 class PairingGroupingGraphEnsemble(PairingGroupingGraph):
     def __init__(self, config):
         super(PairingGroupingGraph, self).__init__(config)
+        from model.graph_net import GraphNet
+        from model.meta_graph_net import MetaGraphNet
 
         self.models=[]
         for checkpoint_path in config['models']:
