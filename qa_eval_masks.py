@@ -25,19 +25,40 @@ try:
 except:
     pass
 
+end_token = '‡'
+np_token = '№'
+blank_token = 'ø'
+
 def norm_ed(s1,s2):
     return editdistance.eval(s1,s2)/max(len(s1),len(s2))
 
+def unrollList(model,img,ocr,prev_answer,query):
+    if prev_answer!=end_token and prev_answer!=np_token:
+        ret = [prev_answer]
+        while prev_answer[-1]!=end_token:
+            if prev_answer[-1]=='|':
+                ready_answer = prev_answer[:-1]
+            else:
+                ready_answer = prev_answer
 
-def unrollLongText(model,img,ocr,answer):
+            prev_answer, outmask = model(img,ocr,[[query+ready_answer]],RUN=True)
+            if prev_answer != end_token:
+                ret.append(prev_answer)
+        return ret
+    else:
+        return []
+def readLongText(model,img,ocr,answer):
     full_answer=''
-    while answer[-2:]=='>>':
-        full_answer += answer[:-2] #add to full text
-        new_question='re~'+answer[:-2] #form new question from last part
-        answer = model(img,ocr,[[new_question]],RUN=True)  #new response
+    while len(answer)>0 and answer[-1]!=end_token:
+        full_answer += answer #add to full text
+        new_question='re~'+answer #form new question from last part
+        #TODO masks
+        answer,outmask = model(img,ocr,[[new_question]],RUN=True)  #new response
         print(' cont>> {}'.format(answer))
-    if answer != '[ end ]' and answer != '[ np ]':
+    if answer != np_token:
         full_answer += answer #finish text
+    if full_answer[-1]==end_token:
+        full_answer = full_answer[:-1]
     return full_answer
 
 def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False,max_qa_len=None):
@@ -68,8 +89,6 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
         config['cuda']=True
         config['gpu']=gpu
 
-    if max_qa_len is None:
-        max_qa_len=config['data_loader']['max_qa_len']
 
     do_ocr=config['trainer']['do_ocr'] if 'do_ocr' in config['trainer'] else False
     if do_ocr and do_ocr!='no':
@@ -105,25 +124,23 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             print(printM)
             #if (add[-2]=='useDetections' or add[-2]=='useDetect') and 'gt' not in value:
             #    addDATASET=True
+    if max_qa_len is None:
+        max_qa_len=config['data_loader']['max_qa_len']
         
     if checkpoint is not None:
         if 'swa_state_dict' in checkpoint and checkpoint['iteration']>config['trainer']['swa_start']:
-            model = eval(config['arch'])(config['model'])
-            if 'style' in config['model'] and 'lookup' in config['model']['style']:
-                model.style_extractor.add_authors(data_loader.dataset.authors) ##HERE
-            #just strip off the 'module.' tag. I DON'T KNOW IF THIS WILL WORK PROPERLY WITH BATCHNORM
-            new_state_dict = {key[7:]:value for key,value in checkpoint['swa_state_dict'].items() if key.startswith('module.')}
-            model.load_state_dict(new_state_dict)
-            print('Successfully loaded SWA model')
-        elif 'state_dict' in checkpoint:
-            model = eval(config['arch'])(config['model'])
-            if 'style' in config['model'] and 'lookup' in config['model']['style']:
-                model.style_extractor.add_authors(data_loader.dataset.authors) ##HERE
-            model.load_state_dict(checkpoint['state_dict'])
-        elif 'swa_model' in checkpoint:
-            model = checkpoint['swa_model']
+            state_dict = checkpoint['swa_state_dict']
+            #SWA  leaves the state dict with 'module' in front of each name and adds extra params
+            new_state_dict = {key[7:]:value for key,value in state_dict.items() if key.startswith('module.')}
+            print('Loading SWA model')
         else:
-            model = checkpoint['model']
+            state_dict = checkpoint['state_dict']
+            #DataParaellel leaves the state dict with 'module' in front of each name
+            new_state_dict = {
+                    (key[7:] if key.startswith('module.') else key):value for key,value in state_dict.items()
+                    }
+        model = eval(config['arch'])(config['model'])
+        model.load_state_dict(new_state_dict)
     else:
         model = eval(config['arch'])(config['model'])
 
@@ -182,11 +199,18 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
     total_rel_true_pos =0
     total_rel_pred =0
     total_rel_gt =0
+    total_entity_true_pos2 =0
+    total_entity_pred2 =0
+    total_entity_gt2 =0
+    total_rel_true_pos2 =0
+    total_rel_pred2 =0
+    total_rel_gt2 =0
     with torch.no_grad():
         for instance in valid_iter:
             groups = instance['gt_groups']
             classes_lines = instance['bb_gt'][0,:,-num_classes:]
             loc_lines = instance['bb_gt'][0,:,0:2] #x,y
+            bb_lines = instance['bb_gt'][0,:,0:8].long() #tlX,tlY,trX,trY,brX,brY,blX,blY
             pairs = instance['gt_groups_adj']
             transcription_lines = instance['transcription']
             transcription_lines = [s.lower() for s in transcription_lines]
@@ -221,6 +245,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 img=p_img
 
             img = img[None,...] #re add batch 
+            img = torch.cat((img,torch.zeros_like(img)),dim=1) #add blank mask channel
 
             if do_ocr=='no':
                 ocr = [[]]
@@ -245,7 +270,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             rel_tables=[]
             used=[]
             question='t#>'
-            answer = model(img,ocr,[[question]],RUN=True)
+            answer,out_mask = model(img,ocr,[[question]],RUN=True)
             print(question+' {:} '+answer)
             if answer=='yes':
                 answer=1
@@ -255,18 +280,37 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 index_start = len(pred_cells)
                 #get column and row headers
                 question='ch~'+str(table_i)
-                answer = model(img,ocr,[[question]],RUN=True)
+                answer,out_mask = model(img,ocr,[[question]],RUN=True)
                 print(question+' {:} '+answer)
-                if answer[-2:]=='>>':
-                    answer = unrollLongText(model,img,ocr,answer)
-                column_headers = [h.strip() for h in answer.split(',')]
+                if answer==blank_token or answer==np_token:
+                    col_headers = []
+                else:
+                    count_stop = answer.find('>')
+                    count = int(answer[:count_stop])
+                    answer = answer[count_stop+1:]
+                    if count==1:
+                        col_headers = [answer]
+                    else:
+                        col_headers = unrollList(model,img,ocr,answer,'ch>')
+                    col_headers = [readLongText(model,img,ocr,ans) if (ans[-1]!='|' and ans[-1]!=end_token) else ans[:-1] for ans in col_headers]
                 
                 question='rh~'+str(table_i)
-                answer = model(img,ocr,[[question]],RUN=True)
+                answer, out_mask = model(img,ocr,[[question]],RUN=True)
                 print(question+' {:} '+answer)
-                if answer[-2:]=='>>':
-                    answer = unrollLongText(model,img,ocr,answer)
-                row_headers = [h.strip() for h in answer.split(',')]
+                if answer==blank_token or answer==np_token:
+                    row_headers = []
+                else:
+                    count_stop = answer.find('>')
+                    count = int(answer[:count_stop])
+                    answer = answer[count_stop+1:]
+                    if count==1:
+                        row_headers = [answer]
+                    else:
+                        row_headers = unrollList(model,img,ocr,answer,'rh>')
+                    row_headers = [
+                            readLongText(model,img,ocr,ans) \
+                                    if (ans[-1]!='|' and ans[-1]!=end_token) else ans[:-1] \
+                            for ans in row_headers]
 
                 #align headers to gt
                 h_to_g = [None]*(len(column_headers)+len(row_headers))
@@ -305,10 +349,9 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 for ch in column_headers:
                     for rh in row_headers:
                         question='t~{}~~{}'.format(ch,rh)
-                        answer = model(img,ocr,[[question]],RUN=True)
+                        answer, out_mask = model(img,ocr,[[question]],RUN=True)
                         print(question+' {:} '+answer)
-                        if answer[-2:]=='>>':
-                            answer = unrollLongText(model,img,ocr,answer)
+                        answer = readLongText(model,img,ocr,answer)
 
                         matching=[]
                         for gi,text in enumerate(transcription_groups):
@@ -383,39 +426,20 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     continue
                 if len(textline)>max_qa_len:
                     textline=textline[-max_qa_len:]
-                question='re~'+textline
-                answer = model(img,ocr,[[question]],RUN=True)
+                question='r0~'+textline
+                tlX,tlY,trX,trY,brX,brY,blX,blY = bb_lines[ti]
+                mask = torch.zeros_like(img[:,1])
+                mask[:,tlY:brY+1,tlX:brX+1] = 1
+                answer, out_mask = model(torch.stack((img[:,0],mask),dim=1),ocr,[[question]],RUN=True)
                 print(question+' {:} '+answer)
-                
-                #import pdb;pdb.set_trace()
-                #if len(answer)>too_long_gen_thresh:
-                #    #If predictions are too long, they become unreliable
-                #    #So we'll keep only the first part and requery with the (good) predicted part
-                #    part_answer=answer
-                #    new_textline = textline
-                #    answer = ''
-                #    while len(part_answer)>too_long_gen_thresh:
-                #        part_answer = part_answer[:too_long_gen_thresh] #remove unreliable prediction
-                #        new_textline = new_textline+' '+part_answer
-                #        answer +=part_answer+' '
-                #        if len(new_textline)>max_qa_len:
-                #            new_textline=new_textline[-max_qa_len:]
-                #        new_question='re~'+new_textline
-                #        part_answer = model(img,ocr,[[new_question]],RUN=True)
-                #        print('TOO LONG, cur answer: {}'.format(answer))
-                #        print('new question > '+new_question+' {:} '+part_answer)
-                #    if part_answer != '[ end ]' and answer != '[ np ]':
-                #        answer +=part_answer
-                #    else:
-                #        answer = answer[:-1] #remove last space
-                if answer[-2:]=='>>':
-                    answer = unrollLongText(model,img,ocr,answer)
-                    
-
-                #if len(answer)>1:# and answer!=' ' and answer!=':':
-                if answer != '[ end ]' and answer != '[ np ]':
-                    #now break it into lines
-                    answer_lines = answer.split('\\') #This is the special newline character
+                answer = readLongText(model,img,ocr,answer)
+                if answer==np_token or answer == '':
+                    final_text = textline
+                else:
+                    final_text = textline+(' ' if answer[0]!='\\' else '')+answer
+                #now break it into lines
+                answer_lines = final_text.split('\\')[1:]
+                if len(answer_lines)>0:
                     #rebuilt_answer = ''
                     last_ti = ti
                     for ali,answer_line in enumerate(answer_lines):
@@ -502,10 +526,15 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
 
             #Now get their class
             pred_classes = []
-            for text in pred_inst:
+            for text,pred_group in zip(pred_inst,pred_groups):
                 text = text[:max_qa_len] #if it's really long, that probably won't help
-                question='cs~'+text
-                answer = model(img,ocr,[[question]],RUN=True)
+                question='c$~'+text
+                mask = torch.zeros_like(img[:,1])
+                for ti in pred_group:
+                    if ti < len(bb_lines):
+                        tlX,tlY,trX,trY,brX,brY,blX,blY = bb_lines[ti]
+                        mask[:,tlY:brY+1,tlX:brX+1] = 1
+                answer,out_mask = model(torch.stack((img[:,0],mask),dim=1),ocr,[[question]],RUN=True)
                 print(question+' {:} '+answer)
                 pcls = answer[2:-2] #remove '[ ' & ' ]'
                 if pcls in valid_data_loader.dataset.classMap:
@@ -514,6 +543,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     print('Odd class output')
                     icls=len(valid_data_loader.dataset.classMap)-1
                 pred_classes.append(icls)
+
 
             #We now can calculate the entity scores
             #We'll align the pred_groups to gt ones
@@ -558,25 +588,29 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             for pgi,text in enumerate(pred_inst):
                 short_text_front = text[:max_qa_len]
                 short_text_back = text[-max_qa_len:]
+
+                mask = torch.zeros_like(img[:,1])
+                for ti in pred_groups[pgi]:
+                    if ti < len(bb_lines):
+                        tlX,tlY,trX,trY,brX,brY,blX,blY = bb_lines[ti]
+                        mask[:,:,tlY:brY+1,tlX:brX+1] = 1
+                q_img = torch.stack((img[:,0],mask),dim=1)
                 
                 if pred_classes[pgi]==0: #header
-                    qs=[('hd~',short_text_back)]
+                    qs=[('h0~',short_text_back)]
                 elif pred_classes[pgi]==1: #question
-                    qs=[('qu~',short_text_front),('l~',short_text_back)]
+                    qs=[('q0~',short_text_front),('l0~',short_text_back)]
                     #qs=['l~']
                 elif pred_classes[pgi]==2: #answer
-                    qs=[('v~',short_text_front)]
+                    qs=[('v0~',short_text_front)]
 
                 for q,t in qs:
                     question=q+t
-                    answer = model(img,ocr,[[question]],RUN=True)
+                    answer, out_mask = model(q_img,ocr,[[question]],RUN=True)
                     print(question+' {:} '+answer)
-                    if answer[-2:]=='>>':
-                        answer = unrollLongText(model,img,ocr,answer)
-                    #if 'may' in answer or 'june' in answer:
-                    #if 'from' in answer or 'to :' in answer:
-                    #    import pdb;pdb.set_trace()
-                    if len(answer)>0 and answer!='[ blank ]' and answer!='[ np ]':
+                    if answer!=blank_token and answer!=np_token:
+                        answer = readLongText(model,img,ocr,answer)
+
                         matching=[]
                         for pgi2,text2 in enumerate(pred_inst):
                             if pgi!=pgi2:
@@ -683,6 +717,153 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             print('Rel_noclass Fm:        {}'.format(2*rel_noclass_recall*rel_noclass_prec/(rel_noclass_recall+rel_noclass_prec) if rel_noclass_recall+rel_noclass_prec>0 else 0))
             print('inconsistent_class_count={}'.format(inconsistent_class_count))
 
+
+
+            ######################
+            #New prediction method
+            ######################
+            pred_classes2 = []
+            pred_rel2 = []
+            pred_links=[]
+            for gi,(text,pred_group) in emumerate(zip(pred_inst,pred_groups)):
+                text = text[:max_qa_len] #if it's really long, that probably won't help
+                question='g0~'+text
+                mask = torch.zeros_like(img[:,1])
+                for ti in pred_group:
+                    if ti < len(bb_lines):
+                        tlX,tlY,trX,trY,brX,brY,blX,blY = bb_lines[ti]
+                        mask[:,:,tlY:brY+1,tlX:brX+1] = 1
+                answer, out_mask = model(torch.stack((img[:,0],mask),dim=1),ocr,[[question]],RUN=True)
+                print(question+' {:} '+answer)
+                assert answer[0]=='['
+                assert answer[2]==']'
+                pcls = answer[1] #remove '[ ' & ' ]'
+                #expand from single letter, and get class index
+                for cls,icls in valid_data_loader.dataset.classMap.items():
+                    if cls[0]==pcls:
+                        pcls=cls
+                        icls-=16
+                        break
+                pred_classes2.append(cls)
+                
+                answer = answer[3:]
+                if answer==blank_token or answer==np_token:
+                    linked_to = []
+                else:
+                    count_stop = answer.find('>')
+                    count = int(answer[:count_stop])
+                    answer = answer[count_stop+1:]
+                    if count==1:
+                        linked_pred = [answer]
+                    else:
+                        linked_pred = unrollList(model,img,ocr,answer,'g0>',answer)
+                    #linked_pred = [readLongText(model,img,ocr,ans) for ans in linked_pred]
+                    #shouldn't need full text, just enough to match
+                    #remove ending characters
+                    linked_pred = [ans[:-1] if (ans[-1]=='|' or ans[-1]==end_token) else ans for ans in linked_pred]
+                    links = []
+                    for pred in linked_pred:
+                        best_score=0.6
+                        best_match=None
+                        for other_gi,text in enumerate(pred_inst):
+                            text = text[:len(pred)] #shorten text
+                            score = norm_ed(text,pred)
+                            if score<best_score:
+                                best_score=score
+                                best_match=other_gi
+                        if best_match is not None:
+                            links.append(best_match)
+                            pred_rel2.append((gi,best_match))
+
+                pred_links.append(links)
+            
+            #Now settle the class predictions using the links
+            #for gi,pred_class,links in enumerate(zip(pred_classes2,pred_links)):
+            #    votes = defaultdict(int)
+            #    votes[pred_class]+=1
+            #    for link_i in links:
+            #        other_class = pred_classes2[link_i]
+            #        if other_class=='answer':
+            #            votes['question']
+
+            #We now can calculate the entity scores
+            #We'll align the pred_groups to gt ones
+            true_pos=0
+            group_claimed = [False]*len(groups)
+            alignment = {}
+            alignment_class = {}
+            loc_pgroup=[]
+            for pgi,(pgroup,pclass) in enumerate(zip(pred_groups+pred_cells,pred_classes2+pred_cell_classes)):
+                ggi = alignment_class[pgi]
+
+                for ggi,(ggroup,gclass) in enumerate(zip(groups,classes)):
+                    if pclass==gclass and len(pgroup)==len(ggroup) and all(x==y for x,y in zip(pgroup,ggroup)) and not group_claimed[ggi]:
+                        group_claimed[ggi]=True
+                        true_pos+=1
+                    if pgroup[0] == ggroup[0]:
+                        alignment[pgi]=ggi
+                        if pclass==gclass:
+                            alignment_class[pgi]=ggi
+                pgroup = [li for li in pgroup if li<len(loc_lines)] #filter out unmatched lines
+                x = sum(loc_lines[li][0].item() for li in pgroup)/len(pgroup)
+                y = sum(loc_lines[li][1].item() for li in pgroup)/len(pgroup)
+                loc_pgroup.append((x,y))
+
+            #we added the table groups to the end, so we'll bump their alignemtn
+            rel_tables = [(a+len(pred_groups),b+len(groups)) for a,b in rel_tables]
+
+            entity_recall = true_pos/len(groups) if len(groups)>0 else 1
+            entity_prec = true_pos/len(pred_inst) if len(pred_inst)>0 else 1
+            total_entity_true_pos2 += true_pos
+            total_entity_pred2 += len(pred_inst)
+            total_entity_gt2 += len(groups)
+            print('New Entity precision: {}'.format(entity_prec))
+            print('New Entity recall:    {}'.format(entity_recall))
+            print('New Entity Fm:        {}'.format(2*entity_recall*entity_prec/(entity_recall+entity_prec) if entity_recall+entity_prec>0 else 0))
+
+            #Finally, score the relationships
+            true_pos=0
+            true_pos_noclass=0
+            claimed=set()
+            claimed_noclass=set()
+            for rel in pred_rel2+rel_tables:
+                try:
+                    a0 = alignment[rel[0]]
+                    a1 = alignment[rel[1]]
+                    rel_a = (min(a0,a1),max(a0,a1))
+                    if rel_a not in claimed and rel_a in pairs:
+                        true_pos_noclass+=1
+                        claimed_noclass.add(rel_a)
+                except KeyError:
+                    pass
+                try:
+                    a0 = alignment_class[rel[0]]
+                    a1 = alignment_class[rel[1]]
+                    rel_a = (min(a0,a1),max(a0,a1))
+                    if rel_a not in claimed and rel_a in pairs:
+                        true_pos+=1
+                        claimed.add(rel_a)
+                except KeyError:
+                    pass
+                if draw:
+                    img_f.line(draw_img,loc_pgroup[rel[0]],loc_pgroup[rel[1]],(0,255,0),2)
+
+            rel_prec = true_pos/len(pred_rel+rel_tables) if len(pred_rel+rel_tables) > 0 else 1
+            rel_recall = true_pos/len(pairs) if len(pairs)>0 else 1
+            rel_noclass_prec = true_pos_noclass/len(pred_rel+rel_tables) if len(pred_rel+rel_tables)>0 else 1
+            rel_noclass_recall = true_pos_noclass/len(pairs) if len(pairs)>0 else 1
+
+            #import pdb;pdb.set_trace()
+            total_rel_true_pos2 += true_pos
+            total_rel_pred2 += len(pred_rel+rel_tables)
+            total_rel_gt2 += len(pairs)
+            print('New Rel precision: {}'.format(rel_prec))
+            print('New Rel recall:    {}'.format(rel_recall))
+            print('New Rel Fm:        {}'.format(2*rel_recall*rel_prec/(rel_recall+rel_prec) if rel_recall+rel_prec> 0 else 0))
+            print('New Rel_noclass precision: {}'.format(rel_noclass_prec))
+            print('New Rel_noclass recall:    {}'.format(rel_noclass_recall))
+            print('New Rel_noclass Fm:        {}'.format(2*rel_noclass_recall*rel_noclass_prec/(rel_noclass_recall+rel_noclass_prec) if rel_noclass_recall+rel_noclass_prec>0 else 0))
+
             if draw:
                 assert len(pred_classes+pred_cell_classes) == len(loc_pgroup)
                 for cls,loc,pgroup in zip(pred_classes+pred_cell_classes,loc_pgroup,pred_groups+pred_cells):
@@ -726,6 +907,15 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
         print('Total entity recall, prec, Fm:\t{}\t{}\t{}'.format(total_entity_recall,total_entity_prec,total_entity_F))
         print('Total rel recall, prec, Fm:\t{}\t{}\t{}'.format(total_rel_recall,total_rel_prec,total_rel_F))
 
+        total_rel_prec = total_rel_true_pos2/total_rel_pred2
+        total_rel_recall = total_rel_true_pos2/total_rel_gt
+        total_rel_F = 2*total_rel_prec*total_rel_recall/(total_rel_recall+total_rel_prec) if total_rel_recall+total_rel_prec>0 else 0
+        total_entity_prec = total_entity_true_pos2/total_entity_pred2
+        total_entity_recall = total_entity_true_pos2/total_entity_gt
+        total_entity_F = 2*total_entity_prec*total_entity_recall/(total_entity_recall+total_entity_prec) if total_entity_recall+total_entity_prec>0 else 0
+
+        print('New Total entity recall, prec, Fm:\t{}\t{}\t{}'.format(total_entity_recall,total_entity_prec,total_entity_F))
+        print('New Total rel recall, prec, Fm:\t{}\t{}\t{}'.format(total_rel_recall,total_rel_prec,total_rel_F))
 
 if __name__ == '__main__':
     logger = logging.getLogger()
