@@ -23,6 +23,8 @@ class CensusQA(RecordQA):
     def __init__(self, dirPath=None, split=None, config=None, images=None):
         super(CensusQA, self).__init__(dirPath,split,config,images)
 
+        self.use_recognition = config['use_recognition'] if 'use_recognition' in config else False
+
         self.cache_resized = False
         self.do_masks=True
         self.valid = 'valid'==split
@@ -144,6 +146,27 @@ class CensusQA(RecordQA):
         entries = [ {key:entry[self.name_to_id[key]] if self.name_to_id[key] in entry else None for key in self.all_fields} for entry in data]
         qa = self.makeQuestions(s,entries)
 
-
-        return np.zeros(0), [], None, {}, {}, qa
+        if recognition is None:
+            metadata = {}
+        else:
+            recog_strings=[]
+            recog_bbs=[]
+            for r in recognition:
+                recog_strings.append(r['text'])
+                tlX,tlY = r['tl']
+                trX,trY = r['tr']
+                brX,brY = r['br']
+                blX,blY = r['bl']
+                #lX,lY, rX,rY,width,height,rot = calcXYWH(tlX,tlY,trX,trY,brX,brY,blX,blY)
+                lX = (tlX+blX)/2
+                lY = (tlY+blY)/2
+                rX = (trX+brX)/2
+                rY = (trY+brY)/2
+                tX = (tlX+trX)/2
+                tY = (tlY+trY)/2
+                bX = (blX+brX)/2
+                bY = (blY+brY)/2
+                recog_bbs.append([tlX,tlY,trX,trY,brX,brY,blX,blY,lX,lY,rX,rY,tX,tY,bX,bY])
+            metadata = {'pre-recognition_bbs': recog_bbs, 'pre-recognition': recog_strings}
+        return np.zeros(0), [], None, metadata, {}, qa
 

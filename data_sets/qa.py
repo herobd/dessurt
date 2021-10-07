@@ -38,8 +38,9 @@ def collate(batch):
             'questions': [b['questions'] for b in batch],
             'answers': [b['answers'] for b in batch],
             'mask_label': mask_labels,
-            'mask_labels_batch_mask': mask_labels_batch_mask
+            'mask_labels_batch_mask': mask_labels_batch_mask,
             #'mask_label': torch.cat([b['mask_label'] for b in batch],dim=0) if batch[0]['mask_label'] is not None else [b['mask_label'] for b in batch],
+            'pre-recognition': [b['pre-recognition'] for b in batch]
             }
 
 def getMask(shape,boxes):
@@ -98,6 +99,10 @@ class QADataset(torch.utils.data.Dataset):
         self.pixel_count_thresh = config['pixel_count_thresh'] if 'pixel_count_thresh' in config else 10000000
         self.max_dim_thresh = config['max_dim_thresh'] if 'max_dim_thresh' in config else 2700
         self.do_masks=False    
+
+        self.ocr_out_dim = 97 #EasyOCR
+        self.char_to_ocr = "0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÀÁÂÃÄÅÆÇÈÉÊËÍÎÑÒÓÔÕÖØÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿąęĮįıŁłŒœŠšųŽž"
+        self.char_to_ocr = {char:i+1 for i,char in enumerate(self.char_to_ocr)} #+1 as 0 is the blank token
 
         #t#self.opt_history = defaultdict(list)#t#
 
@@ -246,6 +251,9 @@ class QADataset(torch.utils.data.Dataset):
                     mask_ids+=  ['in{}_{}'.format(i,ii) for ii in range(len(inmask_bbs))] + \
                                 ['blank{}_{}'.format(i,ii) for ii in range(len(blank_bbs))]
                 #mask_ids+=(['in{}'.format(i)]*len(inmask_bbs)) + (['out{}'.format(i)]*len(outmask_bbs)) + (['blank{}'.format(i)]*len(blank_bbs))
+            if 'pre-recognition_bbs' in form_metadata:
+                mask_bbs+= form_metadata['pre-recognition_bbs']
+                mask_ids+=  ['recog{}'.format(ii) for ii in range(len(form_metadata['pre-recognition_bbs']))]
             mask_bbs = np.array(mask_bbs)
             #if len(mask_bbs.shape)==1:
             #    mask_bbs=mask_bbs[None]
@@ -295,6 +303,7 @@ class QADataset(torch.utils.data.Dataset):
             else:
                 new_q_outboxes=None
             new_q_blankboxes=defaultdict(list)
+            new_recog_boxes={}
             if 'word_boxes' in form_metadata:
                 saw_word=False
                 word_index=-1
@@ -328,6 +337,9 @@ class QADataset(torch.utils.data.Dataset):
                         nums = bb_id[5:].split('_')
                         i=int(nums[0])
                         new_q_blankboxes[i].append(bb)
+                    elif bb_id.startswith('recog'):
+                        i=int(bb_id[5:])
+                        new_recog_boxes[i]=bb
                 bbs = out['bb_gt'][0,:orig_idx]
                 ids= out['bb_auxs'][:orig_idx]
 
@@ -420,6 +432,19 @@ class QADataset(torch.utils.data.Dataset):
         else:
             transcription = None
 
+
+        if 'pre-recognition' in form_metadata:
+            #format similar to output of EasyOCR
+            pre_recog=[]
+            for i,bb in new_recog_boxes:
+                string = form_metadata['pre-recognition'][i]
+                char_prob = torch.FloatTensor(len(string),self.ocr_out_dim).fill_(0.05/(self.ocr_out_dim-1)) #fill with 5% distributed to all non-char places
+                for pos,char in enumerate(string):
+                    char_prob[pos,self.char_to_ocr[char]]=0.95
+                pre_recog.append( (bb[0:8].reshape(4,2),(string,char_prob),None) )
+        else:
+            pre_recog = None
+
         #t#time = timeit.default_timer()#t#
         #t#self.opt_history['remainder'].append(time-tic)#t#
         #t#self.opt_history['Full get_item'].append(time-ticFull)#t#
@@ -438,7 +463,8 @@ class QADataset(torch.utils.data.Dataset):
                 "form_metadata": None,
                 "questions": questions,
                 "answers": answers,
-                "mask_label": mask_label
+                "mask_label": mask_label,
+                "pre-recognition": pre_recog
                 }
 
 

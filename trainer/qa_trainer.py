@@ -326,8 +326,8 @@ class QATrainer(BaseTrainer):
         if self.do_ocr:
             if self.do_ocr == 'no':
                 ocr_res=[[]]*image.size(0)
-            elif self.do_ocr = 'json':
-
+            elif self.do_ocr == 'json':
+                ocr_res = instance['pre-recognition']
             else:
                 ocr_res=[]
                 normal_img = (128*(image[:,0]+1)).cpu().numpy().astype(np.uint8)
