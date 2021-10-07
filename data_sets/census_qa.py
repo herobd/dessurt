@@ -125,7 +125,7 @@ class CensusQA(RecordQA):
         
         if self.valid:
             #the validation set is too big to run through frequently. So instead we'll only take every other entry
-            data = data[::2]
+            data = data[::10]
             #This allows us to cover more variety in handwriting than just making the validation set smaller
 
         #entries =[
