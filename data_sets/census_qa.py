@@ -26,7 +26,8 @@ class CensusQA(RecordQA):
         self.cache_resized = False
         self.do_masks=True
         self.valid = 'valid'==split
-
+        
+        self.max_records=40
         self.all_fields=set(['line no.','household','name','previous','race','relationship','sex', 'given name', 'age', 'birthplace'])
         self.id_fields=set(['line no.','name'])
         self.next_name_ids = ['given name','name']
@@ -119,6 +120,8 @@ class CensusQA(RecordQA):
             data = data['indexed']
         else:
             recognition = None
+
+        data = data[:self.max_records]
         
         if self.valid:
             #the validation set is too big to run through frequently. So instead we'll only take every other entry
