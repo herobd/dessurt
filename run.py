@@ -28,6 +28,7 @@ except:
 def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None):
     np.random.seed(1234)
     torch.manual_seed(1234)
+    no_mask_qs = ['fli:','fna:','re~','l~','v~']
     if resume is not None:
         checkpoint = torch.load(resume, map_location=lambda storage, location: storage)
         print('loaded {} iteration {}'.format(checkpoint['config']['name'],checkpoint['iteration']))
@@ -87,22 +88,36 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None):
         
     if checkpoint is not None:
         if 'swa_state_dict' in checkpoint and checkpoint['iteration']>config['trainer']['swa_start']:
-            model = eval(config['arch'])(config['model'])
-            if 'style' in config['model'] and 'lookup' in config['model']['style']:
-                model.style_extractor.add_authors(data_loader.dataset.authors) ##HERE
-            #just strip off the 'module.' tag. I DON'T KNOW IF THIS WILL WORK PROPERLY WITH BATCHNORM
-            new_state_dict = {key[7:]:value for key,value in checkpoint['swa_state_dict'].items() if key.startswith('module.')}
-            model.load_state_dict(new_state_dict)
-            print('Successfully loaded SWA model')
-        elif 'state_dict' in checkpoint:
-            model = eval(config['arch'])(config['model'])
-            if 'style' in config['model'] and 'lookup' in config['model']['style']:
-                model.style_extractor.add_authors(data_loader.dataset.authors) ##HERE
-            model.load_state_dict(checkpoint['state_dict'])
-        elif 'swa_model' in checkpoint:
-            model = checkpoint['swa_model']
+            state_dict = checkpoint['swa_state_dict']
+            #SWA  leaves the state dict with 'module' in front of each name and adds extra params
+            new_state_dict = {key[7:]:value for key,value in state_dict.items() if key.startswith('module.')}
+            print('Loading SWA model')
         else:
-            model = checkpoint['model']
+            state_dict = checkpoint['state_dict']
+            #DataParaellel leaves the state dict with 'module' in front of each name
+            new_state_dict = {
+                    (key[7:] if key.startswith('module.') else key):value for key,value in state_dict.items()
+                    }
+        model = eval(config['arch'])(config['model'])
+        model.load_state_dict(new_state_dict)
+
+        #if 'swa_state_dict' in checkpoint and checkpoint['iteration']>config['trainer']['swa_start']:
+        #    model = eval(config['arch'])(config['model'])
+        #    if 'style' in config['model'] and 'lookup' in config['model']['style']:
+        #        model.style_extractor.add_authors(data_loader.dataset.authors) ##HERE
+        #    #just strip off the 'module.' tag. I DON'T KNOW IF THIS WILL WORK PROPERLY WITH BATCHNORM
+        #    new_state_dict = {key[7:]:value for key,value in checkpoint['swa_state_dict'].items() if key.startswith('module.')}
+        #    model.load_state_dict(new_state_dict)
+        #    print('Successfully loaded SWA model')
+        #elif 'state_dict' in checkpoint:
+        #    model = eval(config['arch'])(config['model'])
+        #    if 'style' in config['model'] and 'lookup' in config['model']['style']:
+        #        model.style_extractor.add_authors(data_loader.dataset.authors) ##HERE
+        #    model.load_state_dict(checkpoint['state_dict'])
+        #elif 'swa_model' in checkpoint:
+        #    model = checkpoint['swa_model']
+        #else:
+        #    model = checkpoint['model']
     else:
         model = eval(config['arch'])(config['model'])
 
@@ -132,6 +147,17 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None):
             if img.max()<=1:
                 img*=255
 
+            if 'rescale_to_crop_size_first' in config['data_loader'] and  config['data_loader']['rescale_to_crop_size_first']:
+                scale_height = do_pad[0]/img.shape[0]
+                scale_width = do_pad[1]/img.shape[1]
+                choosen_scale = min(scale_height, scale_width)
+                if scale:
+                    scale*=choosen_scale
+                else:
+                    scale=choosen_scale
+
+
+
             if scale:
                 img = img_f.resize(img,fx=scale,fy=scale)
             
@@ -140,13 +166,13 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None):
                 diff_y = do_pad[0]-img.shape[0]
                 p_img = np.zeros(do_pad,dtype=img.dtype)
                 if diff_x>=0 and diff_y>=0:
-                    p_img[diff_y//2:-(diff_y//2 + diff_y%2),diff_x//2:-(diff_x//2 + diff_x%2)] = img
+                    p_img[diff_y//2:p_img.shape[0]-(diff_y//2 + diff_y%2),diff_x//2:p_img.shape[1]-(diff_x//2 + diff_x%2)] = img
                 elif diff_x<0 and diff_y>=0:
-                    p_img[diff_y//2:-(diff_y//2 + diff_y%2),:] = img[:,(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
+                    p_img[diff_y//2:p_img.shape[0]-(diff_y//2 + diff_y%2),:] = img[:,(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
                 elif diff_x>=0 and diff_y<0:
-                    p_img[:,diff_x//2:-(diff_x//2 + diff_x%2)] = img[(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),:]
+                    p_img[:,diff_x//2:p_img.shape[1]-(diff_x//2 + diff_x%2)] = img[(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),:]
                 else:
-                    p_img = img[(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
+                    p_img = img[(-diff_y)//2:((-diff_y)//2 + (-diff_y)%2),(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
                 img=p_img
 
             if do_ocr=='no':
@@ -181,12 +207,20 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None):
                     ocr=[[]]
                     ocr=(ocrBoxes,ocr)
 
-                # get input mask
-                mask = future.manual_lasso_segmentation(np_img)
-                if mask.sum()==0:
-                    mask = np.zeros_like(mask)
-                mask = torch.from_numpy(mask)[None,None,...] #add batch and color channel
-                in_img = torch.cat((img,mask.to(img.device)),dim=1)
+                needs_input_mask=True
+                for q in no_mask_qs:
+                    if question.startswith(q):
+                        needs_input_mask=False
+                        break
+                if needs_input_mask:
+                    # get input mask
+                    mask = future.manual_lasso_segmentation(np_img)
+                    if mask.sum()==0:
+                        mask = np.zeros_like(mask)
+                    mask = torch.from_numpy(mask)[None,None,...].to(img.device) #add batch and color channel
+                else:
+                    mask = torch.zeros_like(img)
+                in_img = torch.cat((img,mask),dim=1)
 
                 answer,pred_mask = model(in_img,ocr,[[question]],RUN=run)
                 #pred_a, target_a, answer, pred_mask = model(img,ocr,[[question]],[['number']])

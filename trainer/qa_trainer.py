@@ -92,7 +92,7 @@ class QATrainer(BaseTrainer):
         
         #t#self.opt_history = defaultdict(list)#t#
         self.do_ocr = config['trainer']['do_ocr'] if 'do_ocr' in config['trainer'] else False
-        if self.do_ocr:
+        if self.do_ocr and self.do_ocr!='no':
             self.ocr_reader = easyocr.Reader(['en'],gpu=config['cuda'])
 
 
@@ -469,6 +469,12 @@ class QATrainer(BaseTrainer):
                     log['E_read_ed'].append(ed)
                     if answer[0]=='\\':
                         log['E_read_1stNewline_acc'].append(1 if pred[0]=='\\' else 0)
+                elif question.startswith('fli:'):
+                    typ = question[4:question.find('~')]
+                    ed = editdistance.eval(answer,pred)
+                    hit = ed/((len(answer)+len(pred))/2) < 0.1
+                    log['E_{}_acc'.format(typ)].append(int(hit))
+                    log['E_{}_ed'.format(typ)].append(ed)
                 else:
                     print('ERROR: missed question -- {}'.format(question))
                 

@@ -5,8 +5,8 @@
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
-        "data_set_name": "MultipleDataset",
-        "data_dir": "",
+        "data_set_name": "CensusQA",
+        "data_dir": "../data/familysearch",
         "shuffle": true,
         "prefetch_factor": 10,
         "persistent_workers": true,
@@ -23,6 +23,7 @@
         "max_qa_len": 26
     },
     "validation": {
+        "batch_size":4,
         "shuffle": false,
         "rescale_range": [1.05,1.05],
         "rescale_to_crop_size_first": true,
@@ -62,7 +63,7 @@
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
-        "val_step": 25000,
+        "val_step": 50000,
         "save_step": 100000,
         "save_step_minor": 200,
         "log_step": 1000,
