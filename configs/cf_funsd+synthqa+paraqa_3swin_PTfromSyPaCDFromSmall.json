@@ -160,7 +160,7 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 900000,
+        "iterations": 2000000,
         "accum_grad_steps": 30,
         "#swa": true,
         "#swa_start": 200000,
