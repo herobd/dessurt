@@ -1,3 +1,4 @@
+read_blanked','read_replaced','read_with_masked','read_line','highlight_text','read_highlighted','masked_lm','put_in_place','read_on','read_backwards','highlight_block','
 Data in FS jsons
 
 probably filter this char out of recog results: ' ̟'
