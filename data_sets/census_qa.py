@@ -118,9 +118,11 @@ class CensusQA(RecordQA):
 
     def parseAnn(self,data,s):
         if isinstance(data,dict):
+            #print('recognition here!')
             recognition = data['recognition'] if self.use_recognition else None
             data = data['indexed']
         else:
+            #print('no recog')
             recognition = None
 
         data = data[:self.max_records]
@@ -145,8 +147,8 @@ class CensusQA(RecordQA):
         #            } for entry in data]
         entries = [ {key:entry[self.name_to_id[key]] if self.name_to_id[key] in entry else None for key in self.all_fields} for entry in data]
         qa = self.makeQuestions(s,entries)
-
-        if recognition is None:
+        
+        if recognition is None or not self.use_recognition:
             metadata = {}
         else:
             recog_strings=[]
@@ -157,6 +159,8 @@ class CensusQA(RecordQA):
                 trX,trY = r['tr']
                 brX,brY = r['br']
                 blX,blY = r['bl']
+                #rescale
+                tlX,tlY,trX,trY,brX,brY,blX,blY = [s*v for v in [tlX,tlY,trX,trY,brX,brY,blX,blY]]
                 #lX,lY, rX,rY,width,height,rot = calcXYWH(tlX,tlY,trX,trY,brX,brY,blX,blY)
                 lX = (tlX+blX)/2
                 lY = (tlY+blY)/2
@@ -168,5 +172,5 @@ class CensusQA(RecordQA):
                 bY = (blY+brY)/2
                 recog_bbs.append([tlX,tlY,trX,trY,brX,brY,blX,blY,lX,lY,rX,rY,tX,tY,bX,bY])
             metadata = {'pre-recognition_bbs': recog_bbs, 'pre-recognition': recog_strings}
-        return np.zeros(0), [], None, metadata, {}, qa
+        return np.zeros(0), [], None, {}, metadata, qa
 

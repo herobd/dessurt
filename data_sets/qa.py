@@ -103,6 +103,7 @@ class QADataset(torch.utils.data.Dataset):
         self.ocr_out_dim = 97 #EasyOCR
         self.char_to_ocr = "0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÀÁÂÃÄÅÆÇÈÉÊËÍÎÑÒÓÔÕÖØÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿąęĮįıŁłŒœŠšųŽž"
         self.char_to_ocr = {char:i+1 for i,char in enumerate(self.char_to_ocr)} #+1 as 0 is the blank token
+        self.one_hot_conf = 0.9
 
         #t#self.opt_history = defaultdict(list)#t#
 
@@ -297,6 +298,7 @@ class QADataset(torch.utils.data.Dataset):
             }, cropPoint)
             np_img = out['img']
 
+
             new_q_inboxes=defaultdict(list)
             if outmasks:
                 new_q_outboxes=defaultdict(list)
@@ -431,16 +433,15 @@ class QADataset(torch.utils.data.Dataset):
             transcription = [trans[id] for id in ids]
         else:
             transcription = None
-
-
         if 'pre-recognition' in form_metadata:
             #format similar to output of EasyOCR
             pre_recog=[]
-            for i,bb in new_recog_boxes:
+            for i,bb in new_recog_boxes.items():
                 string = form_metadata['pre-recognition'][i]
-                char_prob = torch.FloatTensor(len(string),self.ocr_out_dim).fill_(0.05/(self.ocr_out_dim-1)) #fill with 5% distributed to all non-char places
-                for pos,char in enumerate(string):
-                    char_prob[pos,self.char_to_ocr[char]]=0.95
+                #char_prob = torch.FloatTensor(len(string),self.ocr_out_dim).fill_((1-self.one_hot_conf)/(self.ocr_out_dim-1)) #fill with 5% distributed to all non-char places
+                #for pos,char in enumerate(string):
+                #    char_prob[pos,self.char_to_ocr[char]]=self.one_hot_conf
+                char_prob = [self.char_to_ocr[char] for char in string]
                 pre_recog.append( (bb[0:8].reshape(4,2),(string,char_prob),None) )
         else:
             pre_recog = None
@@ -449,8 +450,6 @@ class QADataset(torch.utils.data.Dataset):
         #t#self.opt_history['remainder'].append(time-tic)#t#
         #t#self.opt_history['Full get_item'].append(time-ticFull)#t#
         #t#self.print_opt_times()#t#
-
-
 
         return {
                 "img": img,
