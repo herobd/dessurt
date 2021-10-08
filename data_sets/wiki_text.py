@@ -2,6 +2,7 @@ from datasets import load_dataset
 import random
 import os
 from utils.util import ensure_dir
+import re
 #import unicodedata
 
 
@@ -40,6 +41,7 @@ def getWikiArticle():
         text = text[:cut_i]
 
     #break by paragraph (double newline)
+    text=re.sub(r' +',r' ',text)
     paras = text.split('\n\n')
 
     paras = [para for para in paras if para.strip() not in _prune_headers]

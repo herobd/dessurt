@@ -42,12 +42,12 @@ def display(data,write):
         
         #draw='ar~' in q or 'ac~' in q or '%' in q or '&' in q or 'rh~' in q or 'ch~' in q
         #draw = 'l~' in q or 'v~' in q or 'd0~' in q or 'v0~' in q
-        draw = False
-        for x in ['al~']:#['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
-            if x in q:
-                draw = True
-                break
-        #draw = True
+        #draw = False
+        #for x in ['al~']:#['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
+        #    if x in q:
+        #        draw = True
+        #        break
+        draw = True
         if write:
             cv2.imwrite('test_single_512.png',(img.numpy()*255)[:,:,0].astype(np.uint8))
         if draw :
@@ -110,8 +110,8 @@ if __name__ == "__main__":
 	"questions": 1,
 	"max_qa_len": 26,
         "min_entries": None,
-        "max_entries": 2,
-	"use_read": 0.01,
+        "max_entries": 44,
+	"use_read": 1,
 	"multiline": 0.5,
         "tables": 0.5,
         "change_size": True,
