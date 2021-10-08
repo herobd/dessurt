@@ -23,10 +23,13 @@ class CensusQA(RecordQA):
     def __init__(self, dirPath=None, split=None, config=None, images=None):
         super(CensusQA, self).__init__(dirPath,split,config,images)
 
+        self.use_recognition = config['use_recognition'] if 'use_recognition' in config else False
+
         self.cache_resized = False
         self.do_masks=True
         self.valid = 'valid'==split
-
+        
+        self.max_records=40
         self.all_fields=set(['line no.','household','name','previous','race','relationship','sex', 'given name', 'age', 'birthplace'])
         self.id_fields=set(['line no.','name'])
         self.next_name_ids = ['given name','name']
@@ -115,14 +118,18 @@ class CensusQA(RecordQA):
 
     def parseAnn(self,data,s):
         if isinstance(data,dict):
+            #print('recognition here!')
             recognition = data['recognition'] if self.use_recognition else None
             data = data['indexed']
         else:
+            #print('no recog')
             recognition = None
+
+        data = data[:self.max_records]
         
         if self.valid:
             #the validation set is too big to run through frequently. So instead we'll only take every other entry
-            data = data[::2]
+            data = data[::10]
             #This allows us to cover more variety in handwriting than just making the validation set smaller
 
         #entries =[
@@ -140,7 +147,30 @@ class CensusQA(RecordQA):
         #            } for entry in data]
         entries = [ {key:entry[self.name_to_id[key]] if self.name_to_id[key] in entry else None for key in self.all_fields} for entry in data]
         qa = self.makeQuestions(s,entries)
-
-
-        return np.zeros(0), [], None, {}, {}, qa
+        
+        if recognition is None or not self.use_recognition:
+            metadata = {}
+        else:
+            recog_strings=[]
+            recog_bbs=[]
+            for r in recognition:
+                recog_strings.append(r['text'])
+                tlX,tlY = r['tl']
+                trX,trY = r['tr']
+                brX,brY = r['br']
+                blX,blY = r['bl']
+                #rescale
+                tlX,tlY,trX,trY,brX,brY,blX,blY = [s*v for v in [tlX,tlY,trX,trY,brX,brY,blX,blY]]
+                #lX,lY, rX,rY,width,height,rot = calcXYWH(tlX,tlY,trX,trY,brX,brY,blX,blY)
+                lX = (tlX+blX)/2
+                lY = (tlY+blY)/2
+                rX = (trX+brX)/2
+                rY = (trY+brY)/2
+                tX = (tlX+trX)/2
+                tY = (tlY+trY)/2
+                bX = (blX+brX)/2
+                bY = (blY+brY)/2
+                recog_bbs.append([tlX,tlY,trX,trY,brX,brY,blX,blY,lX,lY,rX,rY,tX,tY,bX,bY])
+            metadata = {'pre-recognition_bbs': recog_bbs, 'pre-recognition': recog_strings}
+        return np.zeros(0), [], None, {}, metadata, qa
 
