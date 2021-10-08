@@ -16,16 +16,21 @@ import utils.img_f as img_f
 
 
 def collate(batch):
-    mask_labels = []
-    mask_labels_batch_mask = torch.FloatTensor(len(batch))
-    for bi,b in enumerate(batch):
-        if b['mask_label'] is None:
-            mask_labels_batch_mask[bi]=00
-            mask_labels.append( torch.FloatTensor(1,1,b['img'].shape[2],b['img'].shape[3]).fill_(0))
-        else:
-            mask_labels_batch_mask[bi]=1
-            mask_labels.append( b['mask_label'] )
-    mask_labels = torch.cat(mask_labels,dim=0)
+    if any(b['mask_label'] is not None for b in batch):
+        mask_labels = []
+        mask_labels_batch_mask = torch.FloatTensor(len(batch))
+        for bi,b in enumerate(batch):
+            if b['mask_label'] is None:
+                mask_labels_batch_mask[bi]=00
+                mask_labels.append( torch.FloatTensor(1,1,b['img'].shape[2],b['img'].shape[3]).fill_(0))
+            else:
+                mask_labels_batch_mask[bi]=1
+                mask_labels.append( b['mask_label'] )
+        mask_labels = torch.cat(mask_labels,dim=0)
+    else:
+        mask_labels = None
+        mask_labels_batch_mask = None
+
     return {
             'img': torch.cat([b['img'] for b in batch],dim=0),
             'bb_gt': [b['bb_gt'] for b in batch], #torch.cat([b['bb_gt'] for b in batch],dim=0),

@@ -128,7 +128,78 @@ class GenDaemon:
         else:
             return self.generate()
 
-    
+    def generateLabelValuePairs(self):
+        paras = getWikiArticle()
+
+        lengths = [(i,len(p)) for i,p in enumerate(paras)]
+        lengths.sort(key=lambda a:a[0])
+
+        used=set()
+
+        for p_i,length in lengths:
+            if p_i<len(paras)-1:
+                label = paras[p_i]
+                value = paras[p_i+1]
+
+                font,font_name,fontN,fontN_name = self.gen.getFont()
+                if random.random()<0.5: #sometimes use same font
+                    fontv=font
+                    fontNv=fontN
+                else:
+                    fontv,fontv_name,fontNv,fontNv_name = self.gen.getFont()
+
+
+                if label[-1] != ':' and label[-1] != '=' and label[-1] != '>':
+                    if random.random()<0.1:
+                        label+=':'
+                    elif random.random()<0.01:
+                        if random.random()<0.5:
+                            label+='='
+                        else:
+                            label+='>'
+
+        #text = re.sub(r'\s+',' ',text) #replace all whitespace with space
+        #words = text.split(' ')
+
+        #font,font_name,fontN,fontN_name = self.gen.getFont()
+        out_words = []   
+        for word in words:
+            if re.match(r'\d',word):
+                _font = fontN
+            else:
+                _font = font
+            if word[-1]=='\n':
+                newline=True
+                word = word[:-1]
+            else:
+                newline=False
+            img = self.gen.getRenderedText(_font,word)
+            if img is None:
+                #retry generation
+                if _font!=fontN:
+                    img = self.gen.getRenderedText(fontN,word)
+
+                if img is None:
+                    _,_,font2,font2_name = self.gen.getFont()
+                    img = self.gen.getRenderedText(font2,word)
+
+                if img is None:
+                    print('no image for word: {}'.format(word))
+                    continue
+            
+            img = (img*255).astype(np.uint8)
+            if newline:
+                #f.write(word+'¶\n')
+                out_words.append((word+'¶',img))
+            else:
+                #f.write(word+'\n'
+                out_words.append((word,img))
+        
+        if len(words)>0:
+            return out_words
+        else:
+            return self.generate()
+
     def getTextSample(self):
         paras = getWikiArticle()
 
