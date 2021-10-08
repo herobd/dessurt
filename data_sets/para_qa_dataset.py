@@ -90,7 +90,7 @@ class ParaQADataset(QADataset):
         if use_blocks:
             q_types = random.choices(self.q_types,self.q_type_weights,k=self.questions*50)
         else:
-            q_types = random.choices(self.q_types_noblock,self.q_types_weights_noblock,k=self.questions*50)
+            q_types = random.choices(self.q_types_noblock,self.q_type_weights_noblock,k=self.questions*50)
 
         qa=[]
         #for i in range(self.questions*10): #return extra in case the cropping/rotations clips some words
