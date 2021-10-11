@@ -59,33 +59,36 @@ def getWordAndLineBoundaries(xmlPath):
         lines.append(([minY,maxY+1,minX,maxX+1],trans))
         w_lines.append(words)
         allHs+=1+maxY-minY
-    meanH = allHs/len(lines)
-    newLines=[]
-    for bounds,trans in lines:
-        diff = meanH-(bounds[1]-bounds[0])
-        if diff>0:
-            bounds[0]-=diff/2
-            bounds[1]+=diff/2
-        bounds[2]-= meanH/4
-        bounds[3]+= meanH/4
-        bounds = [round(v) for v in bounds]
-        #lineImg = formImg[bounds[0]:bounds[1],bounds[2]:bounds[3]]
-        newLines.append((bounds,trans))
-    newW_lines=[]
-    for words in w_lines:
-        newWords=[]
-        for bounds,trans,id in words:
-            diff = meanH-(bounds[1]-bounds[0])
-            if diff>0:
-                bounds[0]-=diff/2
-                bounds[1]+=diff/2
-            bounds[2]-= meanH/4
-            bounds[3]+= meanH/4
-            bounds = [round(v) for v in bounds]
-            #lineImg = formImg[bounds[0]:bounds[1],bounds[2]:bounds[3]]
-            newWords.append((bounds,trans,id))
-        newW_lines.append(newWords)
-    return  newW_lines,newLines, writer, height,width
+    return w_lines,lines,writer,height,width
+
+    ##This is the height normalization code:
+    #meanH = allHs/len(lines)
+    #newLines=[]
+    #for bounds,trans in lines:
+    #    diff = meanH-(bounds[1]-bounds[0])
+    #    if diff>0:
+    #        bounds[0]-=diff/2
+    #        bounds[1]+=diff/2
+    #    bounds[2]-= meanH/4
+    #    bounds[3]+= meanH/4
+    #    bounds = [round(v) for v in bounds]
+    #    #lineImg = formImg[bounds[0]:bounds[1],bounds[2]:bounds[3]]
+    #    newLines.append((bounds,trans))
+    #newW_lines=[]
+    #for words in w_lines:
+    #    newWords=[]
+    #    for bounds,trans,id in words:
+    #        diff = meanH-(bounds[1]-bounds[0])
+    #        if diff>0:
+    #            bounds[0]-=diff/2
+    #            bounds[1]+=diff/2
+    #        bounds[2]-= meanH/4
+    #        bounds[3]+= meanH/4
+    #        bounds = [round(v) for v in bounds]
+    #        #lineImg = formImg[bounds[0]:bounds[1],bounds[2]:bounds[3]]
+    #        newWords.append((bounds,trans,id))
+    #    newW_lines.append(newWords)
+    #return  newW_lines,newLines, writer, height,width
 
 def getLineBoundaries(xmlPath):
     lines=[]
