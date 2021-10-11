@@ -44,9 +44,8 @@ class IAMQA(ParaQADataset):
             rescale=1.0
             self.images=[]
             for name in doc_set:
-                xml_path = os.path.join(dirPath,'xmls',name+'.  xml')
+                xml_path = os.path.join(dirPath,'xmls',name+'.xml')
                 image_path = os.path.join(dirPath,'forms',name+'.png')
-                path = imagePath
                 self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':xml_path, 'rescaled':rescale })
 
 
@@ -61,15 +60,15 @@ class IAMQA(ParaQADataset):
         for words,line in zip(W_lines,lines):
             ocr_words=[]
             for word in words:
-                word={'bb':[word[0][0],words[0][2],word[0][1],word[0][3]],
+                ocr_word={'box':[word[0][2],word[0][0],word[0][3],word[0][1]],
                       'text':word[1]}
-                ocr_words.append(word)
+                ocr_words.append(ocr_word)
                         
-            line = {'bb':[line[0][0],lines[0][2],line[0][1],line[0][3]],
+            ocr_line = {'box':[line[0][2],line[0][0],line[0][3],line[0][1]],
                     'text':line[1],
                     'words':ocr_words}
-            ocr_lines.append(line)
-        ocr=[{'paragraphs':{'lines':ocr_lines}}]
+            ocr_lines.append(ocr_line)
+        ocr=[{'paragraphs':[{'lines':ocr_lines}]}]
 
         use_blocks = False
         #print('block_score: {} {}'.format(block_score,'good!' if use_blocks else 'bad'))
