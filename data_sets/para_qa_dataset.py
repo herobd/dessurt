@@ -41,10 +41,28 @@ class ParaQADataset(QADataset):
                 w=w.strip()
                 self.vocab[len(w)].append(w)
 
-        self.q_types =      ['read_blanked','read_replaced','read_with_masked','read_line','highlight_text','read_highlighted','masked_lm','put_in_place','read_on','read_backwards','highlight_block']
-        self.q_type_weights=[0.5,           0.5,            1.0,               0.5,        1.0,             0.5,               4.0,        1.0,            0.5,      0.5,             1.0]
-        self.q_types_noblock =      ['read_blanked','read_replaced','read_with_masked','read_line','highlight_text','read_highlighted','masked_lm','put_in_place']
-        self.q_type_weights_noblock=[0.5,           0.5,            1.0,               0.5,        1.0,             0.5,               4.0,        1.0]
+        self.q_types = {
+                'read_blanked':0.5,
+                'read_replaced':0.5,
+                'read_with_masked':1.0,
+                'read_line':0.5,
+                'highlight_text':1.0,
+                'read_highlighted':0.5,
+                'masked_lm':4.0,
+                'put_in_place':1.0,
+                'read_on':0.4,
+                'read_backwards':0.5,
+                'highlight_block':1.0}
+        self.q_types_noblock = {
+                'read_blanked':0.5,
+                'read_replaced':0.5,
+                'read_with_masked':1.0,
+                'read_line':0.5,
+                'highlight_text':1.0,
+                'read_highlighted':0.5,
+                'masked_lm':4.0,
+                'put_in_place':1.0}
+
 
         #self.num_question_types_all=11 #15
         #self.num_question_types_noblock=8
@@ -88,9 +106,9 @@ class ParaQADataset(QADataset):
             return [],np.array([])
         linemap = makeLinemap(ocr)
         if use_blocks:
-            q_types = random.choices(self.q_types,self.q_type_weights,k=self.questions*50)
+            q_types = random.choices(list(self.q_types.keys()),self.q_types.values(),k=self.questions*50)
         else:
-            q_types = random.choices(self.q_types_noblock,self.q_type_weights_noblock,k=self.questions*50)
+            q_types = random.choices(list(self.q_types_noblock.keys()),self.q_types_noblock.values(),k=self.questions*50)
 
         qa=[]
         #for i in range(self.questions*10): #return extra in case the cropping/rotations clips some words
