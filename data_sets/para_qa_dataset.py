@@ -457,6 +457,8 @@ class ParaQADataset(QADataset):
                         num_blanks = 2
                     word_idxs = random.sample(range(len(wordmap)),num_blanks-1)
                     allmaps = [wordmap[i] for i in word_idxs if i != it_word_idx]
+                if len(allmaps)==0:
+                    continue
 
                 #We may have blanked other instances of the same word. We'll just say they are right answers too.
                 for this_word_map in allmaps:
