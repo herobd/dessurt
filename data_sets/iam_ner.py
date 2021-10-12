@@ -9,26 +9,27 @@ import math, random, string, re
 from collections import defaultdict, OrderedDict
 from utils.parseIAM import getWordAndLineBoundaries
 import timeit
-from data_sets.para_qa_dataset import ParaQADataset, collate
+from data_sets.qa import QADataset, collate
 
 import utils.img_f as img_f
 
 
-class IAMQA(ParaQADataset):
+class IAMNER(QADataset):
     """
-    Class for reading forms dataset and creating starting and ending gt
+    Named entity recognition task on IAM
     """
 
 
     def __init__(self, dirPath=None, split=None, config=None, images=None):
-        super(IAMQA, self).__init__(dirPath,split,config,images)
+        super(IAMNER, self).__init__(dirPath,split,config,images)
 
+        self.do_masks=True
         self.crop_to_data=True
         split_by = 'rwth'
         self.cache_resized = False
-        #NEW the document must have a block_score above thresh for anything useing blocks (this is newline following too)
-        self.block_score_thresh = 0.73 #eye-balled this one
 
+        self.current_crop=None
+        self.word_id_to_cls={}
 
         if images is not None:
             self.images=images
@@ -42,12 +43,22 @@ class IAMQA(ParaQADataset):
                 if len(parts)>1:
                     name = '-'.join(parts[:2])
                     doc_set.add(name)
+
+                    word_id, cls = line.strip().split(' ')
+                    self.word_id_to_cls[word_id]=cls
             rescale=1.0
             self.images=[]
             for name in doc_set:
                 xml_path = os.path.join(dirPath,'xmls',name+'.xml')
                 image_path = os.path.join(dirPath,'forms',name+'.png')
-                self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':xml_path, 'rescaled':rescale })
+                if self.train:
+                    self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':xml_path, 'rescaled':rescale })
+                else:
+                    qas,bbs = self.makeQuestions(xml_path,rescale)
+                    for qa in qas:
+                        qa['bb_ids']=None
+                        self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':xml_path, 'rescaled':rescale,'qa':[qa]})
+
 
 
 
@@ -64,7 +75,7 @@ class IAMQA(ParaQADataset):
         maxY=0
         minX=image_w
         minY=image_h
-        for words,line in zip(W_lines,lines):
+        for words in W_lines:
             ocr_words=[]
             for word in words:
                 minX = min(minX,word[0][2])
@@ -78,43 +89,39 @@ class IAMQA(ParaQADataset):
         self.current_crop=crop[:2]
         return crop
 
-    def parseAnn(self,xmlfile,s):
+    def makeQuestions(self,xmlfile,s):
         W_lines,lines, writer,image_h,image_w = getWordAndLineBoundaries(xmlfile)
         #W_lines is list of lists
         # inner list has ([minY,maxY,minX,maxX],text,id) id=gt for NER
-
+        if self.current_crop is None:
+            self.getCrop(xmlfile)
         crop_x,crop_y = self.current_crop
-        self.current_crop=None
-        maxX=0
-        maxY=0
-        minX=image_w
-        minY=image_h
-        ocr_lines=[]
-        for words,line in zip(W_lines,lines):
-            ocr_words=[]
+        self.current_crop = None
+        qas=[]
+        bbs = []
+        for words in W_lines:
             for word in words:
-                ocr_word={'box':[word[0][2]-crop_x,word[0][0]-crop_y,word[0][3]-crop_x,word[0][1]-crop_y],
-                      'text':word[1]}
-                ocr_words.append(ocr_word)
-                minX = min(minX,word[0][2])
-                minY = min(minY,word[0][0])
-                maxX = max(maxX,word[0][3])
-                maxY = max(maxY,word[0][1])
-                        
-            ocr_line = {'box':[line[0][2]-crop_x,line[0][0]-crop_y,line[0][3]-crop_x,line[0][1]-crop_y],
-                    'text':line[1],
-                    'words':ocr_words}
-            ocr_lines.append(ocr_line)
-        ocr=[{'paragraphs':[{'lines':ocr_lines}],
-              'box': [minX-crop_x,minY-crop_y,maxX-crop_x,maxY-crop_y]
-              }]
+                cls = self.word_id_to_cls[word[2]]
+                tY,bY,lX,rX = word[0]
+                tY-=crop_y
+                bY-=crop_y
+                lX-=crop_x
+                rX-=crop_x
+                bb = [lX*s, tY*s, rX*s, tY*s, rX*s, bY*s, lX*s, bY*s,
+                            s*lX, s*(tY+bY)/2.0, s*rX, s*(tY+bY)/2.0, s*(lX+rX)/2.0, s*tY, s*(rX+lX)/ 2.0, s*bY]
+                inmask = [bb]
+                if self.train and random.random()<0.5:
+                    q='ne>'
+                    a='['+cls+']'+word[1]
+                else:
+                    q='ne~'+word[1]
+                    a='['+cls+']'
+                self.qaAdd(qas,q,a,[len(bbs)],inmask)
+                bbs.append(bb)
+        return qas,bbs
 
-
-
-        use_blocks = False
-        #print('block_score: {} {}'.format(block_score,'good!' if use_blocks else 'bad'))
-        qa, qa_bbs = self.makeQuestions(ocr,image_h,image_w,s,use_blocks)
-
-
-        return qa_bbs, list(range(qa_bbs.shape[0])), None, {}, {}, qa
+    def parseAnn(self,xmlfile,s):
+        qas,bbs = self.makeQuestions(xmlfile,s)
+        bbs = np.array(bbs)
+        return bbs, list(range(bbs.shape[0])), None, {}, {}, qas
 

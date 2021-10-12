@@ -1,4 +1,4 @@
-from data_sets import iam_qa
+from data_sets import iam_ner
 import math
 import sys
 from matplotlib import pyplot as plt
@@ -25,7 +25,8 @@ def display(data):
         mask = data['img'][b,1]<0
         img[:,:,0] *= ~mask
         img[:,:,1] *= ~show
-        img[:,:,2] *= 1-data['mask_label'][b,0]
+        if data['mask_label'] is not None:
+            img[:,:,2] *= 1-data['mask_label'][b,0]
         #img[2,img[2]<1]=0
 
         #label = data['label']
@@ -93,21 +94,23 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=iam_qa.IAMQA(dirPath=dirPath,split='train',config={
-        'rescale_range': [0.75,1],
+    data=iam_ner.IAMNER(dirPath=dirPath,split='valid',config={
+        '#rescale_range': [0.75,1],
+        'rescale_range': [0.9,0.9],
         'rescale_to_crop_size_first': True,
         'crop_params': {
             "#crop_size":[960,1280],
             "crop_size":[768,768],
             "pad":0,
-            "rot_degree_std_dev": 1
+            "#rot_degree_std_dev": 1,
+            "random": False
             },
         'questions':1,
-        'max_qa_len': 26
+        'max_ner_len': 26
 
 })
 
-    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=iam_qa.collate)
+    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=iam_ner.collate)
     dataLoaderIter = iter(dataLoader)
 
         #if start==0:
