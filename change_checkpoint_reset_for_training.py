@@ -19,6 +19,7 @@ if __name__ == '__main__':
     del saved['optimizer']
     if 'swa_state_dict' in saved:
         del saved['swa_state_dict']
+    print('was iteration {}'.format(saved['iteration']))
     saved['iteration']=0
     saved['logger']=None
 
