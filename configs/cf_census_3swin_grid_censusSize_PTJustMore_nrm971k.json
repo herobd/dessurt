@@ -1,5 +1,5 @@
 {
-    "name": "census_3swin_grid_censusSize_PTJustMore_nrm1.7M",
+    "name": "census_3swin_grid_censusSize_PTJustMore_nrm971k",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -24,7 +24,7 @@
         "use_recognition": true
     },
     "validation": {
-        "batch_size":4,
+        "batch_size":5,
         "shuffle": false,
         "rescale_range": [1.05,1.05],
         "rescale_to_crop_size_first": true,
@@ -59,12 +59,12 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 1000000,
+        "iterations": 2000000,
         "accum_grad_steps": 10,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
-        "val_step": 50000,
+        "val_step": 100000,
         "save_step": 100000,
         "save_step_minor": 200,
         "log_step": 1000,
