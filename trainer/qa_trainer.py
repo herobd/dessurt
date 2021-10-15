@@ -520,13 +520,16 @@ class QATrainer(BaseTrainer):
         if self.print_pred_every>0 and self.iteration%self.print_pred_every==0:
             self.logger.info('iteration {}'.format(self.iteration))
             for b,(b_question,b_answer,b_pred) in enumerate(zip(questions,answers,string_a)):
-                if self.do_ocr:
-                    self.logger.info('{} OCR: ')
-                    for res in ocr_res[b]:
-                        self.logger.info(res[1][0])
+                #if self.do_ocr:
+                #    if ocr_res[b] is not None:
+                #        self.logger.info('{} OCR: ')
+                #        for res in ocr_res[b]:
+                #            self.logger.info(res[1][0])
+                #    else:
+                #        self.logger.info('{} OCR: None')
 
-                elif ocr is not None and not self.model_ref.blank_ocr:
-                    self.logger.info('{} OCR: {}'.format(b,ocr[b]))
+                #elif ocr is not None and not self.model_ref.blank_ocr:
+                #    self.logger.info('{} OCR: {}'.format(b,ocr[b]))
                 for question,answer,pred in zip(b_question,b_answer,b_pred):
                     self.logger.info('{} [Q]:{}\t[A]:{}\t[P]:{}'.format(b,question,answer,pred))
 

@@ -51,7 +51,10 @@ class MultipleDataset(Dataset):
         return None
 
     def __len__(self):
-        return sum(self.lens)
+        if self.train:
+            return sum(self.lens)*1000
+        else:
+            return sum(self.lens)
 
     def __getitem__(self, idx):
         if self.train:
