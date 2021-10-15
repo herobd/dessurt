@@ -95,15 +95,15 @@ if __name__ == "__main__":
     else:
         repeat=1
     data=iam_ner.IAMNER(dirPath=dirPath,split='valid',config={
-        '#rescale_range': [0.75,1],
-        'rescale_range': [0.9,0.9],
+        'rescale_range': [0.75,1],
+        '#rescale_range': [0.9,0.9],
         'rescale_to_crop_size_first': True,
         'crop_params': {
             "#crop_size":[960,1280],
             "crop_size":[768,768],
             "pad":0,
-            "#rot_degree_std_dev": 1,
-            "random": False
+            "rot_degree_std_dev": 1,
+            "#random": False
             },
         'questions':1,
         'max_ner_len': 26
@@ -111,6 +111,7 @@ if __name__ == "__main__":
 })
 
     dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=iam_ner.collate)
+    print('dataset size: {}'.format(len(dataLoader)))
     dataLoaderIter = iter(dataLoader)
 
         #if start==0:

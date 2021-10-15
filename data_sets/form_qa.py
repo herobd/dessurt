@@ -244,6 +244,8 @@ class FormQA(QADataset):
 
             elif q_type == 'class-link':
                 if self.train:
+                    if len(full_entities)==0:
+                        continue
                     ei = random.randrange(len(full_entities))
                 else:
                     ei = instance
