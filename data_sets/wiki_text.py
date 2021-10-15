@@ -45,5 +45,8 @@ def getWikiArticle():
     paras = text.split('\n\n')
 
     paras = [para for para in paras if para.strip() not in _prune_headers]
-
-    return paras
+    
+    if len(paras)>0:
+        return paras
+    else:
+        return getWikiArticle()
