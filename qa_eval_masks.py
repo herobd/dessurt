@@ -4,8 +4,6 @@ import logging
 import argparse
 import torch
 from model import *
-from model.metric import *
-from model.loss import *
 from logger import Logger
 from trainer import *
 from data_loader import getDataLoader
@@ -20,6 +18,7 @@ from utils.debug_graph import GraphChecker
 from utils import img_f
 from utils.util import pointDistance
 import editdistance
+import random
 try:
     import easyocr
 except:
@@ -30,40 +29,63 @@ np_token = '№'
 blank_token = 'ø'
 
 def norm_ed(s1,s2):
-    return editdistance.eval(s1,s2)/max(len(s1),len(s2))
+    return editdistance.eval(s1,s2)/max(len(s1),len(s2),1)
 
-def unrollList(model,img,ocr,prev_answer,query):
-    if prev_answer!=end_token and prev_answer!=np_token:
+def unrollList(model,img,ocr,prev_answer,query,count=10):
+    if prev_answer[-1]!=end_token and prev_answer[-1]!=np_token and prev_answer[-1]!=blank_token:
         ret = [prev_answer]
-        while prev_answer[-1]!=end_token:
+        i=0
+        while prev_answer[-1]!=end_token and prev_answer[-1]!=blank_token and prev_answer[-1]!=np_token and i<count*2:
             if prev_answer[-1]=='|':
                 ready_answer = prev_answer[:-1]
             else:
                 ready_answer = prev_answer
 
             prev_answer, outmask = model(img,ocr,[[query+ready_answer]],RUN=True)
-            if prev_answer != end_token:
+            print(query+ready_answer+' {:} '+prev_answer)
+            if prev_answer[0]=='[' and prev_answer[2]==']':
+                prev_answer = prev_answer[3:] #strip off class prediciton
+            if prev_answer != end_token and prev_answer != blank_token and prev_answer != np_token:
                 ret.append(prev_answer)
+            i+=1
         return ret
     else:
         return []
-def readLongText(model,img,ocr,answer):
+def readLongText(model,img,ocr,answer,reverse=False):
     full_answer=''
-    while len(answer)>0 and answer[-1]!=end_token:
+    prev_answers=[]
+    while len(answer)>0 and answer[-1]!=end_token and answer[-1]!=np_token and answer[-1]!=blank_token:
         full_answer += answer #add to full text
-        new_question='re~'+answer #form new question from last part
+        if reverse:
+            new_question='pr~'+answer #form new question from last part
+        else:
+            new_question='fi~'+answer #form new question from last part
         #TODO masks
         answer,outmask = model(img,ocr,[[new_question]],RUN=True)  #new response
+        repeat=False
+        for pa in prev_answers:
+            if answer==pa:
+                repeat=True
+                break
+        if repeat:
+            print('repeat...')
+            break
         print(' cont>> {}'.format(answer))
+        prev_answers.append(answer)
     if answer != np_token:
         full_answer += answer #finish text
-    if full_answer[-1]==end_token:
+    if len(full_answer)>0 and full_answer[-1]==end_token:
         full_answer = full_answer[:-1]
-    return full_answer
+
+    if reverse:
+        return full_answer[::-1]
+    else:
+        return full_answer
 
 def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False,max_qa_len=None):
     np.random.seed(1234)
     torch.manual_seed(1234)
+    PREVENT_MULTILINE=True
     
     #too_long_gen_thresh=10
 
@@ -93,7 +115,6 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
     do_ocr=config['trainer']['do_ocr'] if 'do_ocr' in config['trainer'] else False
     if do_ocr and do_ocr!='no':
         ocr_reader = easyocr.Reader(['en'],gpu=config['cuda'])
-    addDATASET=False
     if addToConfig is not None:
         for add in addToConfig:
             addTo=config
@@ -210,7 +231,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             groups = instance['gt_groups']
             classes_lines = instance['bb_gt'][0,:,-num_classes:]
             loc_lines = instance['bb_gt'][0,:,0:2] #x,y
-            bb_lines = instance['bb_gt'][0,:,0:8].long() #tlX,tlY,trX,trY,brX,brY,blX,blY
+            bb_lines = instance['bb_gt'][0,:,[5,10,7,12]].long()
             pairs = instance['gt_groups_adj']
             transcription_lines = instance['transcription']
             transcription_lines = [s.lower() for s in transcription_lines]
@@ -243,6 +264,13 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 else:
                     p_img = img[:,(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
                 img=p_img
+
+                loc_lines[:,0]+=pad_x
+                loc_lines[:,1]+=pad_y
+                bb_lines[:,0]+=pad_x
+                bb_lines[:,1]+=pad_y
+                bb_lines[:,2]+=pad_x
+                bb_lines[:,3]+=pad_y
 
             img = img[None,...] #re add batch 
             img = torch.cat((img,torch.zeros_like(img)),dim=1) #add blank mask channel
@@ -291,7 +319,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     if count==1:
                         col_headers = [answer]
                     else:
-                        col_headers = unrollList(model,img,ocr,answer,'ch>')
+                        col_headers = unrollList(model,img,ocr,answer,'ch>',count)
                     col_headers = [readLongText(model,img,ocr,ans) if (ans[-1]!='|' and ans[-1]!=end_token) else ans[:-1] for ans in col_headers]
                 
                 question='rh~'+str(table_i)
@@ -306,18 +334,19 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     if count==1:
                         row_headers = [answer]
                     else:
-                        row_headers = unrollList(model,img,ocr,answer,'rh>')
+                        row_headers = unrollList(model,img,ocr,answer,'rh>',count)
                     row_headers = [
                             readLongText(model,img,ocr,ans) \
                                     if (ans[-1]!='|' and ans[-1]!=end_token) else ans[:-1] \
                             for ans in row_headers]
 
                 #align headers to gt
-                h_to_g = [None]*(len(column_headers)+len(row_headers))
-                c_to_g = {}
+                h_to_g = [None]*(len(col_headers)+len(row_headers))
                 g_to_h = {}
-                matchings = [None]*(len(column_headers)+len(row_headers))
-                for i,h in enumerate(column_headers+row_headers):
+                c_to_g = {}
+                g_to_c = {}
+                matchings = [None]*(len(col_headers)+len(row_headers))
+                for i,h in enumerate(col_headers+row_headers):
                     matching=[]
                     for gi,text in enumerate(transcription_groups):
                         matching.append((gi,norm_ed(answer,text)))
@@ -339,15 +368,15 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                                 h_to_g[other] = matchings[other][other_place][0]
                                 g_to_h[matchings[other][other_place][0]] = (other,matchings[other][other_place][1])
                 used += h_to_g
-                ch_to_g = h_to_g[:len(column_headers)]
-                rh_to_g = h_to_g[len(column_headers):]
+                ch_to_g = h_to_g[:len(col_headers)]
+                rh_to_g = h_to_g[len(col_headers):]
 
                 pred_cells += [groups[g] if g is not None else [-1] for g in h_to_g] #is this cheating?
                 pred_cell_classes += [1]*len(pred_cells)
                 
-                i=len(column_headers)+len(row_headers)
-                for ch in column_headers:
-                    for rh in row_headers:
+                i=len(col_headers)+len(row_headers)
+                for ch_i,ch in enumerate(col_headers):
+                    for rh_i,rh in enumerate(row_headers):
                         question='t~{}~~{}'.format(ch,rh)
                         answer, out_mask = model(img,ocr,[[question]],RUN=True)
                         print(question+' {:} '+answer)
@@ -371,8 +400,11 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                                 else:
                                     break
                             if len(top_matching)>1:
-                                table_point = (loc_lines[groups[ch_to_g[ch]][0]][0], loc_lines[groups[rh_to_g[rh]][0]][1])
-                                matching = [(gi,pointDistance(loc_lines[groups[gi][0]],table_point)) for gi,score in top_matching]
+                                if ch_to_g[ch_i] is not None and rh_to_g[rh_i] is not None:
+                                    table_point = (loc_lines[groups[ch_to_g[ch_i]][0]][0], loc_lines[groups[rh_to_g[rh_i]][0]][1])
+                                    matching = [(gi,pointDistance(loc_lines[groups[gi][0]],table_point)) for gi,score in top_matching]
+                                else:
+                                    matching = [(gi,score) for gi,score in top_matching]
                                 matching.sort(key=lambda a:a[1])
                             best_gi, best_score = matching[0]
                             if best_gi not in g_to_c:
@@ -388,11 +420,13 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                                 if matchings[other][other_place][1]<0.7:
                                     c_to_g[other] = matchings[other][other_place][0]
                                     g_to_c[matchings[other][other_place][0]] = (other,matchings[other][other_place][1])
+                        else:
+                            matchings.append(matching)
                         i+=1
                 
-                i=len(column_headers)+len(row_headers)
-                for ci,ch in enumerate(column_headers):
-                    for ri,rh in enumerate(column_headers):
+                i=len(col_headers)+len(row_headers)
+                for ci,ch in enumerate(col_headers):
+                    for ri,rh in enumerate(col_headers):
                         assert i == len(pred_cells)
                         if i in c_to_g:
                             g = c_to_g[i]
@@ -401,7 +435,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                             pred_cells.append([-1])
                         pred_cell_classes.append(2)
                         rel_tables.append((index_start+ci,i))
-                        rel_tables.append((index_start+ri+len(column_headers),i))
+                        rel_tables.append((index_start+ri+len(col_headers),i))
                         i+=1
                 used.extend(c_to_g.values())
 
@@ -426,17 +460,24 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     continue
                 if len(textline)>max_qa_len:
                     textline=textline[-max_qa_len:]
-                question='r0~'+textline
-                tlX,tlY,trX,trY,brX,brY,blX,blY = bb_lines[ti]
-                mask = torch.zeros_like(img[:,1])
-                mask[:,tlY:brY+1,tlX:brX+1] = 1
-                answer, out_mask = model(torch.stack((img[:,0],mask),dim=1),ocr,[[question]],RUN=True)
-                print(question+' {:} '+answer)
-                answer = readLongText(model,img,ocr,answer)
-                if answer==np_token or answer == '':
-                    final_text = textline
+                question='f0~'+textline
+                if PREVENT_MULTILINE:
+                    final_text=textline
                 else:
-                    final_text = textline+(' ' if answer[0]!='\\' else '')+answer
+                    tlX,tlY,brX,brY = bb_lines[ti]
+                    mask = torch.zeros_like(img[:,1])
+                    mask[:,tlY:brY+1,tlX:brX+1] = 1
+                    answer, out_mask = model(torch.stack((img[:,0],mask),dim=1),ocr,[[question]],RUN=True)
+                    print(question+' {:} '+answer)
+                    if answer==np_token:
+                        disp_img = (torch.cat((1-2*img[:,0],1-2*img[:,0],mask),dim=0)*255).cpu().permute(1,2,0).numpy().astype(np.uint8)
+                        img_f.imshow('s',disp_img)
+                        img_f.show()
+                    answer = readLongText(model,img,ocr,answer)
+                    if answer==np_token or answer == '':
+                        final_text = textline
+                    else:
+                        final_text = textline+(' ' if answer[0]!='\\' else '')+answer
                 #now break it into lines
                 answer_lines = final_text.split('\\')[1:]
                 if len(answer_lines)>0:
@@ -532,7 +573,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 mask = torch.zeros_like(img[:,1])
                 for ti in pred_group:
                     if ti < len(bb_lines):
-                        tlX,tlY,trX,trY,brX,brY,blX,blY = bb_lines[ti]
+                        tlX,tlY,brX,brY = bb_lines[ti]
                         mask[:,tlY:brY+1,tlX:brX+1] = 1
                 answer,out_mask = model(torch.stack((img[:,0],mask),dim=1),ocr,[[question]],RUN=True)
                 print(question+' {:} '+answer)
@@ -567,7 +608,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 pgroup = [li for li in pgroup if li<len(loc_lines)] #filter out unmatched lines
                 x = sum(loc_lines[li][0].item() for li in pgroup)/len(pgroup)
                 y = sum(loc_lines[li][1].item() for li in pgroup)/len(pgroup)
-                loc_pgroup.append((x,y))
+                loc_pgroup.append((x-pad_x,y-pad_y))
 
             #we added the table groups to the end, so we'll bump their alignemtn
             rel_tables = [(a+len(pred_groups),b+len(groups)) for a,b in rel_tables]
@@ -592,24 +633,24 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 mask = torch.zeros_like(img[:,1])
                 for ti in pred_groups[pgi]:
                     if ti < len(bb_lines):
-                        tlX,tlY,trX,trY,brX,brY,blX,blY = bb_lines[ti]
-                        mask[:,:,tlY:brY+1,tlX:brX+1] = 1
+                        tlX,tlY,brX,brY = bb_lines[ti]
+                        mask[:,tlY:brY+1,tlX:brX+1] = 1
                 q_img = torch.stack((img[:,0],mask),dim=1)
                 
                 if pred_classes[pgi]==0: #header
-                    qs=[('h0~',short_text_back)]
+                    qs=[('h0~',short_text_back,False)]
                 elif pred_classes[pgi]==1: #question
-                    qs=[('q0~',short_text_front),('l0~',short_text_back)]
+                    qs=[('q0~',short_text_front,True),('l0~',short_text_back,False)]
                     #qs=['l~']
                 elif pred_classes[pgi]==2: #answer
-                    qs=[('v0~',short_text_front)]
+                    qs=[('v0~',short_text_front,True)]
 
-                for q,t in qs:
+                for q,t,reverse in qs:
                     question=q+t
                     answer, out_mask = model(q_img,ocr,[[question]],RUN=True)
                     print(question+' {:} '+answer)
                     if answer!=blank_token and answer!=np_token:
-                        answer = readLongText(model,img,ocr,answer)
+                        answer = readLongText(model,img,ocr,answer,reverse=reverse)
 
                         matching=[]
                         for pgi2,text2 in enumerate(pred_inst):
@@ -725,14 +766,14 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             pred_classes2 = []
             pred_rel2 = []
             pred_links=[]
-            for gi,(text,pred_group) in emumerate(zip(pred_inst,pred_groups)):
+            for gi,(text,pred_group) in enumerate(zip(pred_inst,pred_groups)):
                 text = text[:max_qa_len] #if it's really long, that probably won't help
                 question='g0~'+text
                 mask = torch.zeros_like(img[:,1])
                 for ti in pred_group:
                     if ti < len(bb_lines):
-                        tlX,tlY,trX,trY,brX,brY,blX,blY = bb_lines[ti]
-                        mask[:,:,tlY:brY+1,tlX:brX+1] = 1
+                        tlX,tlY,brX,brY = bb_lines[ti]
+                        mask[:,tlY:brY+1,tlX:brX+1] = 1
                 answer, out_mask = model(torch.stack((img[:,0],mask),dim=1),ocr,[[question]],RUN=True)
                 print(question+' {:} '+answer)
                 assert answer[0]=='['
@@ -744,11 +785,11 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                         pcls=cls
                         icls-=16
                         break
-                pred_classes2.append(cls)
+                pred_classes2.append(icls)
                 
                 answer = answer[3:]
                 if answer==blank_token or answer==np_token:
-                    linked_to = []
+                    links = []
                 else:
                     count_stop = answer.find('>')
                     count = int(answer[:count_stop])
@@ -756,7 +797,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     if count==1:
                         linked_pred = [answer]
                     else:
-                        linked_pred = unrollList(model,img,ocr,answer,'g0>',answer)
+                        linked_pred = unrollList(model,img,ocr,answer,'gs>',count)
                     #linked_pred = [readLongText(model,img,ocr,ans) for ans in linked_pred]
                     #shouldn't need full text, just enough to match
                     #remove ending characters
@@ -794,8 +835,6 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             alignment_class = {}
             loc_pgroup=[]
             for pgi,(pgroup,pclass) in enumerate(zip(pred_groups+pred_cells,pred_classes2+pred_cell_classes)):
-                ggi = alignment_class[pgi]
-
                 for ggi,(ggroup,gclass) in enumerate(zip(groups,classes)):
                     if pclass==gclass and len(pgroup)==len(ggroup) and all(x==y for x,y in zip(pgroup,ggroup)) and not group_claimed[ggi]:
                         group_claimed[ggi]=True
@@ -807,7 +846,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 pgroup = [li for li in pgroup if li<len(loc_lines)] #filter out unmatched lines
                 x = sum(loc_lines[li][0].item() for li in pgroup)/len(pgroup)
                 y = sum(loc_lines[li][1].item() for li in pgroup)/len(pgroup)
-                loc_pgroup.append((x,y))
+                loc_pgroup.append((x-pad_x,y-pad_y))
 
             #we added the table groups to the end, so we'll bump their alignemtn
             rel_tables = [(a+len(pred_groups),b+len(groups)) for a,b in rel_tables]
@@ -845,17 +884,17 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                         claimed.add(rel_a)
                 except KeyError:
                     pass
-                if draw:
-                    img_f.line(draw_img,loc_pgroup[rel[0]],loc_pgroup[rel[1]],(0,255,0),2)
+                #if draw:
+                #    img_f.line(draw_img,loc_pgroup[rel[0]],loc_pgroup[rel[1]],(0,255,0),2)
 
-            rel_prec = true_pos/len(pred_rel+rel_tables) if len(pred_rel+rel_tables) > 0 else 1
+            rel_prec = true_pos/len(pred_rel2+rel_tables) if len(pred_rel2+rel_tables) > 0 else 1
             rel_recall = true_pos/len(pairs) if len(pairs)>0 else 1
-            rel_noclass_prec = true_pos_noclass/len(pred_rel+rel_tables) if len(pred_rel+rel_tables)>0 else 1
+            rel_noclass_prec = true_pos_noclass/len(pred_rel2+rel_tables) if len(pred_rel2+rel_tables)>0 else 1
             rel_noclass_recall = true_pos_noclass/len(pairs) if len(pairs)>0 else 1
 
             #import pdb;pdb.set_trace()
             total_rel_true_pos2 += true_pos
-            total_rel_pred2 += len(pred_rel+rel_tables)
+            total_rel_pred2 += len(pred_rel2+rel_tables)
             total_rel_gt2 += len(pairs)
             print('New Rel precision: {}'.format(rel_prec))
             print('New Rel recall:    {}'.format(rel_recall))
@@ -875,46 +914,56 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                         color=(255,255,0) #answer
                     elif cls==3:
                         color=(255,0,255) #other 
-                    draw_img[round(loc[1]-4):round(loc[1]+4),round(loc[0]-4):round(loc[0]+4)]=color
-                    min_x = draw_img.shape[1]
-                    max_x = 0
-                    min_y = draw_img.shape[0]
-                    max_y = 0
+                    #min_x = draw_img.shape[1]
+                    #max_x = 0
+                    #min_y = draw_img.shape[0]
+                    #max_y = 0
+
+                    group_color = (random.randrange(200),random.randrange(200),random.randrange(200))
                     for li in pgroup:
                         if li<len(loc_lines):
-                            x=int(loc_lines[li,0].item())
-                            y=int(loc_lines[li,1].item())
-                            draw_img[round(y-3):round(y+3),round(x-3):round(x+3)]=color
-                            min_x = min(x,min_x)
-                            max_x = max(x,max_x)
-                            min_y = min(y,min_y)
-                            max_y = max(y,max_y)
-                    img_f.line(draw_img,(min_x,min_y),(max_x,min_y),color,2)
-                    img_f.line(draw_img,(max_x,min_y),(max_x,max_y),color,2)
-                    img_f.line(draw_img,(max_x,max_y),(min_x,max_y),color,2)
-                    img_f.line(draw_img,(min_x,max_y),(min_x,min_y),color,2)
+                            x1,y1,x2,y2 = bb_lines[li]
+                            x1 = (x1-pad_x).item()
+                            y1 = (y1-pad_y).item()
+                            x2 = (x2-pad_x).item()
+                            y2 = (y2-pad_y).item()
+                            img_f.rectangle(draw_img,(x1,y1),(x2,y2),group_color,2)
+                            #x=int(loc_lines[li,0].item())
+                            #y=int(loc_lines[li,1].item())
+                            #draw_img[round(y-3):round(y+3),round(x-3):round(x+3)]=color
+                            #min_x = min(x,min_x)
+                            #max_x = max(x,max_x)
+                            #min_y = min(y,min_y)
+                            #max_y = max(y,max_y)
+                    #img_f.line(draw_img,(min_x,min_y),(max_x,min_y),group_color,2)
+                    #img_f.line(draw_img,(max_x,min_y),(max_x,max_y),group_color,2)
+                    #img_f.line(draw_img,(max_x,max_y),(min_x,max_y),group_color,2)
+                    #img_f.line(draw_img,(min_x,max_y),(min_x,min_y),group_color,2)
+                    draw_img[round(loc[1]-4):round(loc[1]+4),round(loc[0]-4):round(loc[0]+4)]=color
 
                 img_f.imshow('f',draw_img)
                 img_f.show()
 
-        total_rel_prec = total_rel_true_pos/total_rel_pred
-        total_rel_recall = total_rel_true_pos/total_rel_gt
-        total_rel_F = 2*total_rel_prec*total_rel_recall/(total_rel_recall+total_rel_prec) if total_rel_recall+total_rel_prec>0 else 0
         total_entity_prec = total_entity_true_pos/total_entity_pred
         total_entity_recall = total_entity_true_pos/total_entity_gt
         total_entity_F = 2*total_entity_prec*total_entity_recall/(total_entity_recall+total_entity_prec) if total_entity_recall+total_entity_prec>0 else 0
 
-        print('Total entity recall, prec, Fm:\t{}\t{}\t{}'.format(total_entity_recall,total_entity_prec,total_entity_F))
-        print('Total rel recall, prec, Fm:\t{}\t{}\t{}'.format(total_rel_recall,total_rel_prec,total_rel_F))
+        print('old Total entity recall, prec, Fm:\t{}\t{}\t{}'.format(total_entity_recall,total_entity_prec,total_entity_F))
 
-        total_rel_prec = total_rel_true_pos2/total_rel_pred2
-        total_rel_recall = total_rel_true_pos2/total_rel_gt
-        total_rel_F = 2*total_rel_prec*total_rel_recall/(total_rel_recall+total_rel_prec) if total_rel_recall+total_rel_prec>0 else 0
         total_entity_prec = total_entity_true_pos2/total_entity_pred2
         total_entity_recall = total_entity_true_pos2/total_entity_gt
         total_entity_F = 2*total_entity_prec*total_entity_recall/(total_entity_recall+total_entity_prec) if total_entity_recall+total_entity_prec>0 else 0
 
         print('New Total entity recall, prec, Fm:\t{}\t{}\t{}'.format(total_entity_recall,total_entity_prec,total_entity_F))
+
+        total_rel_prec = total_rel_true_pos/total_rel_pred
+        total_rel_recall = total_rel_true_pos/total_rel_gt
+        total_rel_F = 2*total_rel_prec*total_rel_recall/(total_rel_recall+total_rel_prec) if total_rel_recall+total_rel_prec>0 else 0
+        print('old Total rel recall, prec, Fm:\t{}\t{}\t{}'.format(total_rel_recall,total_rel_prec,total_rel_F))
+
+        total_rel_prec = total_rel_true_pos2/total_rel_pred2
+        total_rel_recall = total_rel_true_pos2/total_rel_gt
+        total_rel_F = 2*total_rel_prec*total_rel_recall/(total_rel_recall+total_rel_prec) if total_rel_recall+total_rel_prec>0 else 0
         print('New Total rel recall, prec, Fm:\t{}\t{}\t{}'.format(total_rel_recall,total_rel_prec,total_rel_F))
 
 if __name__ == '__main__':
@@ -933,10 +982,12 @@ if __name__ == '__main__':
                         help='config override')
     parser.add_argument('-a', '--addtoconfig', default=None, type=str,
                         help='Arbitrary key-value pairs to add to config of the form "k1=v1,k2=v2,...kn=vn".  You can nest keys with k1=k2=k3=v')
-    parser.add_argument('-T', '--test', default=False, type=bool,
+    parser.add_argument('-T', '--test', default=False, action='store_const', const=True,
                         help='run test set (default: False)')
     parser.add_argument('-m', '--max-qa-len', default=None, type=int,
                         help='max len for questions')
+    parser.add_argument('-d', '--draw', default=False, action='store_const', const=True,
+                        help='display image with pred annotated (default: False)')
 
     args = parser.parse_args()
 
@@ -953,6 +1004,6 @@ if __name__ == '__main__':
         exit()
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len)
+            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw)
     else:
-        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len)
+        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw)
