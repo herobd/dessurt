@@ -593,7 +593,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 for ti in pred_groups[pgi]:
                     if ti < len(bb_lines):
                         tlX,tlY,trX,trY,brX,brY,blX,blY = bb_lines[ti]
-                        mask[:,:,tlY:brY+1,tlX:brX+1] = 1
+                        mask[:,tlY:brY+1,tlX:brX+1] = 1
                 q_img = torch.stack((img[:,0],mask),dim=1)
                 
                 if pred_classes[pgi]==0: #header
@@ -725,14 +725,14 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             pred_classes2 = []
             pred_rel2 = []
             pred_links=[]
-            for gi,(text,pred_group) in emumerate(zip(pred_inst,pred_groups)):
+            for gi,(text,pred_group) in enumerate(zip(pred_inst,pred_groups)):
                 text = text[:max_qa_len] #if it's really long, that probably won't help
                 question='g0~'+text
                 mask = torch.zeros_like(img[:,1])
                 for ti in pred_group:
                     if ti < len(bb_lines):
                         tlX,tlY,trX,trY,brX,brY,blX,blY = bb_lines[ti]
-                        mask[:,:,tlY:brY+1,tlX:brX+1] = 1
+                        mask[:,tlY:brY+1,tlX:brX+1] = 1
                 answer, out_mask = model(torch.stack((img[:,0],mask),dim=1),ocr,[[question]],RUN=True)
                 print(question+' {:} '+answer)
                 assert answer[0]=='['
