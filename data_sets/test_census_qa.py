@@ -6,7 +6,7 @@ from matplotlib import gridspec
 from matplotlib.patches import Polygon
 import numpy as np
 import torch
-import utils.img_f as cv2
+import utils.img_f as img_f
 from collections import defaultdict
 
 widths=[]
@@ -52,20 +52,44 @@ def display(data):
 
         #widths.append(img.size(1))
         
-        draw=False#q.startswith('mm')
+        draw=True#q.startswith('mm')
         if draw :
-            #cv2.imshow('line',img.numpy())
-            #cv2.imshow('mask',maskb.numpy())
-            #cv2.imwrite('out/mask{}.png'.format(b),maskb.numpy()*255)
-            #cv2.imwrite('out/fg_mask{}.png'.format(b),fg_mask.numpy()*255)
-            #cv2.imwrite('out/img{}.png'.format(b),img.numpy()*255)
-            #cv2.imwrite('out/changed_img{}.png'.format(b),changed_img.numpy()*255)
+            #img_f.imshow('line',img.numpy())
+            #img_f.imshow('mask',maskb.numpy())
+            #img_f.imwrite('out/mask{}.png'.format(b),maskb.numpy()*255)
+            #img_f.imwrite('out/fg_mask{}.png'.format(b),fg_mask.numpy()*255)
+            #img_f.imwrite('out/img{}.png'.format(b),img.numpy()*255)
+            #img_f.imwrite('out/changed_img{}.png'.format(b),changed_img.numpy()*255)
             #plt.imshow(img.numpy()[:,:,0], cmap='gray')
             #plt.show()
-            cv2.imshow('x',(img*255).numpy().astype(np.uint8))
-            cv2.show()
+            draw_img = (img*255).numpy().astype(np.uint8)
 
-            #cv2.imwrite('testsinglesize_1024.png',img.numpy()[:,:,0])
+            if data['pre-recognition'][b] is not None:
+                for bb,(string,char_prob),score in data['pre-recognition'][b]:
+                    print('{} :'.format(string))
+                    for probs in char_prob:
+                        s=''
+                        for p in probs:
+                            if p>0.5:
+                                s+= '1,'
+                            else:
+                                s+= '.,'
+                            #s+='{:.2},'.format(p)
+                        print(s)
+
+                    tl = bb[0]
+                    tr = bb[1]
+                    br = bb[2]
+                    bl = bb[3] 
+                    img_f.line(draw_img,tl,bl,(255,0,0),2)
+                    img_f.line(draw_img,br,bl,(0,0,255),2)
+                    img_f.line(draw_img,br,tr,(0,0,255),2)
+                    img_f.line(draw_img,tr,tl,(0,0,255),2)
+
+            img_f.imshow('x',draw_img)
+            img_f.show()
+
+            #img_f.imwrite('testsinglesize_1024.png',img.numpy()[:,:,0])
 
         #fig = plt.figure()
 
@@ -103,7 +127,8 @@ if __name__ == "__main__":
             "random":False
             },
         'questions':1,
-        'max_qa_len': 26
+        'max_qa_len': 26,
+        'use_recognition': True
 
 })
 

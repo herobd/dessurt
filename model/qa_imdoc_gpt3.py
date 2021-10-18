@@ -139,6 +139,8 @@ class QAImDocGPT3(BaseModel):
 
         self.text_embedding = nn.Embedding(self.tokenizer.vocab_size, d_model)
         self.ocr_out_dim = 97
+        self.one_hot_conf = 0.9
+        self.zero_hot_conf = (1-self.one_hot_conf)/(self.ocr_out_dim-1)
         if not self.ocr_in_image:
             self.ocr_emb = nn.Sequential(
                     nn.Conv1d(self.ocr_out_dim,d_model,3,padding=1), #this will mix neighboring instances....
@@ -369,8 +371,9 @@ class QAImDocGPT3(BaseModel):
         all_ocr_bbs=[]
         all_ocr_1dpos=[]
         all_ocr_seqid=[]
+        max_len=0
+        batch_size = image.size(0)
         if self.ocr_in_image:
-            batch_size = image.size(0)
             ocr_grid = torch.FloatTensor(batch_size,self.ocr_out_dim,*self.patches_resolution).fill_(-1).to(device)
             for b,res_im in enumerate(ocrRes):
                 ocr_res = []#[torch.zeros_like(preds[0])]
@@ -379,8 +382,11 @@ class QAImDocGPT3(BaseModel):
                 ocr_seqid = []#[0]
                 if PRINT_ATT:
                     full_ocr_string='$'
+                if res_im is None:
+                    res_im = []
                 for i,(bb,(string,char_prob),score) in enumerate(res_im):
                     #We will draw the character probabilities into the image using the 
+                    #print('XX inserting grid {}/{}'.format(i,len(res_im)))
                     # bounding box
                     tlX,tlY = bb[0]
                     trX,trY = bb[1]
@@ -401,8 +407,13 @@ class QAImDocGPT3(BaseModel):
                     h=max(tlY,trY,blY,brY) - min(tlY,trY,blY,brY)
                     w=max(tlX,trX,blX,brX) - min(tlX,trX,blX,brX)
                     patch_size = (1,self.ocr_out_dim,max(1,round(h)),max(1,round(w)))
+                    if isinstance(char_prob,list):
+                        tensor = torch.FloatTensor(len(char_prob),self.ocr_out_dim).fill_(self.zero_hot_conf)
+                        tensor[range(len(char_prob)),char_prob]=self.one_hot_conf
+                        char_prob=tensor.to(device)
+
                     im_patch = affineTransform(
-                            char_prob.permute(1,0)[None,:,None],#make sequance an image,
+                            char_prob.permute(1,0)[None,:,None],#.to(device),#make sequance an image,
                             patch_size, #canvas to draw in
                             w/width,
                             h/height, #expand height of char prob to fill vert space
@@ -447,9 +458,9 @@ class QAImDocGPT3(BaseModel):
             
             ocr_grid = ocr_grid.permute(0,2,3,1).view(batch_size,-1,self.ocr_out_dim) #flatten
             im_tokens += self.embed_ocr_grid(ocr_grid)
-            max_len=0
         else:
-            max_len=0
+            if ocrRes is None:
+                ocrRes = [[]]*batch_size
             if PRINT_ATT:
                 assert image.size(0)==1
             for b,res_im in enumerate(ocrRes):

@@ -16,16 +16,21 @@ import utils.img_f as img_f
 
 
 def collate(batch):
-    mask_labels = []
-    mask_labels_batch_mask = torch.FloatTensor(len(batch))
-    for bi,b in enumerate(batch):
-        if b['mask_label'] is None:
-            mask_labels_batch_mask[bi]=00
-            mask_labels.append( torch.FloatTensor(1,1,b['img'].shape[2],b['img'].shape[3]).fill_(0))
-        else:
-            mask_labels_batch_mask[bi]=1
-            mask_labels.append( b['mask_label'] )
-    mask_labels = torch.cat(mask_labels,dim=0)
+    if any(b['mask_label'] is not None for b in batch):
+        mask_labels = []
+        mask_labels_batch_mask = torch.FloatTensor(len(batch))
+        for bi,b in enumerate(batch):
+            if b['mask_label'] is None:
+                mask_labels_batch_mask[bi]=00
+                mask_labels.append( torch.FloatTensor(1,1,b['img'].shape[2],b['img'].shape[3]).fill_(0))
+            else:
+                mask_labels_batch_mask[bi]=1
+                mask_labels.append( b['mask_label'] )
+        mask_labels = torch.cat(mask_labels,dim=0)
+    else:
+        mask_labels = None
+        mask_labels_batch_mask = None
+
     return {
             'img': torch.cat([b['img'] for b in batch],dim=0),
             'bb_gt': [b['bb_gt'] for b in batch], #torch.cat([b['bb_gt'] for b in batch],dim=0),
@@ -38,8 +43,9 @@ def collate(batch):
             'questions': [b['questions'] for b in batch],
             'answers': [b['answers'] for b in batch],
             'mask_label': mask_labels,
-            'mask_labels_batch_mask': mask_labels_batch_mask
+            'mask_labels_batch_mask': mask_labels_batch_mask,
             #'mask_label': torch.cat([b['mask_label'] for b in batch],dim=0) if batch[0]['mask_label'] is not None else [b['mask_label'] for b in batch],
+            'pre-recognition': [b['pre-recognition'] for b in batch]
             }
 
 def getMask(shape,boxes):
@@ -95,11 +101,16 @@ class QADataset(torch.utils.data.Dataset):
         self.aug_params = config['additional_aug_params'] if 'additional_aug_params' in config else {}
 
 
-        self.pixel_count_thresh = config['pixel_count_thresh'] if 'pixel_count_thresh' in config else 10000000
-        self.max_dim_thresh = config['max_dim_thresh'] if 'max_dim_thresh' in config else 2700
         self.do_masks=False    
 
+        self.ocr_out_dim = 97 #EasyOCR
+        self.char_to_ocr = "0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÀÁÂÃÄÅÆÇÈÉÊËÍÎÑÒÓÔÕÖØÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿąęĮįıŁłŒœŠšųŽž"
+        self.char_to_ocr = {char:i+1 for i,char in enumerate(self.char_to_ocr)} #+1 as 0 is the blank token
+        self.one_hot_conf = 0.9
+
         #t#self.opt_history = defaultdict(list)#t#
+
+        self.crop_to_data = False
 
 
 
@@ -130,10 +141,13 @@ class QADataset(torch.utils.data.Dataset):
         rescaled = self.images[index]['rescaled']
         if type(annotationPath) is int:
             annotations = annotationPath
-        else:
+        elif annotationPath.endswith('.json'):
             with open(annotationPath) as annFile:
                 annotations = json.loads(annFile.read())
+        else:
+            annotations=annotationPath
 
+        #Load image
         #t#tic=timeit.default_timer()#t#
         if imagePath is not None:
             np_img = img_f.imread(imagePath, 1 if self.color else 0)#*255.0
@@ -144,6 +158,14 @@ class QADataset(torch.utils.data.Dataset):
                 return self.__getitem__((index+1)%self.__len__())
         else:
             np_img = None#np.zeros([1000,1000])
+
+        if self.crop_to_data:
+            #This exists for the IAM dataset so we don't include the form prompt text (which would be easy to cheat from)
+            x1,y1,x2,y2 = self.getCrop(annotations)
+            np_img = np_img[y1:y2,x1:x2]
+
+
+        #
         if scaleP is None:
             s = np.random.uniform(self.rescale_range[0], self.rescale_range[1])
         else:
@@ -175,34 +197,32 @@ class QADataset(torch.utils.data.Dataset):
             s=partial_rescale
         else:
             partial_rescale = s/rescaled
-        #if self.transform is None: #we're doing the whole image
-        #    #this is a check to be sure we don't send too big images through
-        #    pixel_count = partial_rescale*partial_rescale*np_img.shape[0]*np_img.shape[1]
-        #    if pixel_count > self.pixel_count_thresh:
-        #        partial_rescale = math.sqrt(partial_rescale*partial_rescale*self.pixel_count_thresh/pixel_count)
-        #        print('{} exceed thresh: {}: {}, new {}: {}'.format(imageName,s,pixel_count,rescaled*partial_rescale,partial_rescale*partial_rescale*np_img.shape[0]*np_img.shape[1]))
-        #        s = rescaled*partial_rescale
-
-
-        #    max_dim = partial_rescale*max(np_img.shape[0],np_img.shape[1])
-        #    if max_dim > self.max_dim_thresh:
-        #        partial_rescale = partial_rescale*(self.max_dim_thresh/max_dim)
-        #        print('{} exceed thresh: {}: {}, new {}: {}'.format(imageName,s,max_dim,rescaled*partial_rescale,partial_rescale*max(np_img.shape[0],np_img.shape[1])))
-        #        s = rescaled*partial_rescale
-
-        #
-        ##np_img = img_f.resize(np_img,(target_dim1, target_dim0))
-
-        #np_img = np.zeros([1000,1000])
         
         #t#time = timeit.default_timer()-tic#t#
         #t#self.opt_history['image read and setup'].append(time)#t#
         #t#tic=timeit.default_timer()#t#
 
         
+
+        ##print('resize: {}  [{}, {}]'.format(timeit.default_timer()-tic,np_img.shape[0],np_img.shape[1]))
+
+        #t#time = timeit.default_timer()-tic#t#
+        #t#self.opt_history['parseAnn'].append(time)#t#
+        #t#tic=timeit.default_timer()#t#
+
+        #Parse annotation file
         bbs,ids,trans, metadata, form_metadata, questions_and_answers = self.parseAnn(annotations,s)
+
+
         if not self.train:
             questions_and_answers = self.images[index]['qa']
+            #But the scale doesn't match! So fix it
+            for qa in questions_and_answers:
+                for bb_name in ['in_bbs','out_bbs','mask_bbs']:
+                    if qa[bb_name] is not None:
+                        qa[bb_name] = [ [s*v for v in bb] for bb in qa[bb_name] ]
+
+
 
         if np_img is None:
             np_img=metadata['image']
@@ -218,12 +238,8 @@ class QADataset(torch.utils.data.Dataset):
             np_img=np_img[...,None] #add 'color' channel
         if self.color and np_img.shape[2]==1:
             np_img = np.repeat(np_img,3,axis=2)
-        ##print('resize: {}  [{}, {}]'.format(timeit.default_timer()-tic,np_img.shape[0],np_img.shape[1]))
-
-        #t#time = timeit.default_timer()-tic#t#
-        #t#self.opt_history['parseAnn'].append(time)#t#
-        #t#tic=timeit.default_timer()#t#
         
+        #set up for cropping
         outmasks=False
         if self.do_masks:
             assert self.questions==1 #right now, we only allow 1 qa pair if using masking
@@ -246,11 +262,14 @@ class QADataset(torch.utils.data.Dataset):
                     mask_ids+=  ['in{}_{}'.format(i,ii) for ii in range(len(inmask_bbs))] + \
                                 ['blank{}_{}'.format(i,ii) for ii in range(len(blank_bbs))]
                 #mask_ids+=(['in{}'.format(i)]*len(inmask_bbs)) + (['out{}'.format(i)]*len(outmask_bbs)) + (['blank{}'.format(i)]*len(blank_bbs))
+            if 'pre-recognition_bbs' in form_metadata:
+                mask_bbs+= form_metadata['pre-recognition_bbs']
+                mask_ids+=  ['recog{}'.format(ii) for ii in range(len(form_metadata['pre-recognition_bbs']))]
             mask_bbs = np.array(mask_bbs)
             #if len(mask_bbs.shape)==1:
             #    mask_bbs=mask_bbs[None]
 
-
+        #Do crop
         if self.transform is not None:
             if 'word_boxes' in form_metadata:
                 raise NotImplementedError('have not added mask_bbs')
@@ -289,12 +308,14 @@ class QADataset(torch.utils.data.Dataset):
             }, cropPoint)
             np_img = out['img']
 
+
             new_q_inboxes=defaultdict(list)
             if outmasks:
                 new_q_outboxes=defaultdict(list)
             else:
                 new_q_outboxes=None
             new_q_blankboxes=defaultdict(list)
+            new_recog_boxes={}
             if 'word_boxes' in form_metadata:
                 saw_word=False
                 word_index=-1
@@ -328,6 +349,9 @@ class QADataset(torch.utils.data.Dataset):
                         nums = bb_id[5:].split('_')
                         i=int(nums[0])
                         new_q_blankboxes[i].append(bb)
+                    elif bb_id.startswith('recog'):
+                        i=int(bb_id[5:])
+                        new_recog_boxes[i]=bb
                 bbs = out['bb_gt'][0,:orig_idx]
                 ids= out['bb_auxs'][:orig_idx]
 
@@ -419,13 +443,23 @@ class QADataset(torch.utils.data.Dataset):
             transcription = [trans[id] for id in ids]
         else:
             transcription = None
+        if 'pre-recognition' in form_metadata:
+            #format similar to output of EasyOCR
+            pre_recog=[]
+            for i,bb in new_recog_boxes.items():
+                string = form_metadata['pre-recognition'][i]
+                #char_prob = torch.FloatTensor(len(string),self.ocr_out_dim).fill_((1-self.one_hot_conf)/(self.ocr_out_dim-1)) #fill with 5% distributed to all non-char places
+                #for pos,char in enumerate(string):
+                #    char_prob[pos,self.char_to_ocr[char]]=self.one_hot_conf
+                char_prob = [self.char_to_ocr[char] for char in string]
+                pre_recog.append( (bb[0:8].reshape(4,2),(string,char_prob),None) )
+        else:
+            pre_recog = None
 
         #t#time = timeit.default_timer()#t#
         #t#self.opt_history['remainder'].append(time-tic)#t#
         #t#self.opt_history['Full get_item'].append(time-ticFull)#t#
         #t#self.print_opt_times()#t#
-
-
 
         return {
                 "img": img,
@@ -438,7 +472,8 @@ class QADataset(torch.utils.data.Dataset):
                 "form_metadata": None,
                 "questions": questions,
                 "answers": answers,
-                "mask_label": mask_label
+                "mask_label": mask_label,
+                "pre-recognition": pre_recog
                 }
 
 

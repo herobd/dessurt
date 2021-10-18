@@ -110,21 +110,56 @@ class FormQA(QADataset):
         #self.do_words = config['do_words']
         #self.char_qs = config['char_qs'] if 'char_qs' in config else False
         if self.train:
-            self.q_types =         ['np','all','class-link','class','down-pair','up-pair','read','cell','row-header','col-header','all-row','all-col', 'list-row-headers','list-col-headers','count-tables','highlight-table']
-            self.q_type_weights = [0.2,  1.0,  1.3, 0.7,    1.0,        1.0,      1.0,   1.1,   1.1,         1.1,         1.1,       1.1,       1.1,              1.1,              0.9,           1.1]
-            self.q_types_no_table =         ['np','all','class-link','class','down-pair','up-pair','read','count-tables']
-            self.q_type_no_table_weights = [0.2,  1.0,  1.3, 0.7,    1.0,        1.0,      1.0,   0.05]
-            self.q_types_only_table =        ['np','all','class-link','class','read','cell','row-header','col-header','all-row','all-col', 'list-row-headers','list-col-headers','count-tables','highlight-table']
-            self.q_type_only_table_weights = [0.2, 1.0,  1.3, 0.7,    1.0,   1.1,   1.1,         1.1,         1.1,       1.1,       1.1,              1.1,              0.9,           1.1]
+            self.q_types = {
+                    'np':0.2,
+                    'all':1.0,
+                    'class-link':1.3,
+                    'class':0.7,
+                    'down-pair':1.0,
+                    'up-pair':1.0,
+                    'read':1.0,
+                    'cell':1.1,
+                    'row-header':1.1,
+                    'col-header':1.1,
+                    'all-row':1.1,
+                    'all-col':1.1,
+                     'list-row-headers':1.1,
+                    'list-col-headers':1.1,
+                    'count-tables':0.9,
+                    'highlight-table':1.1
+                    }
+            self.q_types_no_table = {
+                    'np':0.2,
+                    'all':1.0,
+                    'class-link':1.3,
+                    'class':0.7,
+                    'down-pair':1.0,
+                    'up-pair':1.0,
+                    'read':1.0,
+                    'count-tables':0.05
+                    }
+            self.q_types_only_table = {
+                    'np':0.2,
+                    'all':1.0,
+                    'class-link':1.3,
+                    'class':0.7,
+                    'read':1.0,
+                    'cell':1.1,
+                    'row-header':1.1,
+                    'col-header':1.1,
+                    'all-row':1.1,
+                    'all-col':1.1,
+                     'list-row-headers':1.1,
+                    'list-col-headers':1.1,
+                    'count-tables':0.9,
+                    'highlight-table':1.1
+                    }
         else:
             #these are what we'll use to actually score
             #(not actually looked at as it isn't sampling)
             self.q_types =         ['all','class-link','read']
-            self.q_type_weights = [1,1,1]
             self.q_types_no_table =        ['all','class-link','read']
-            self.q_type_no_table_weights = [1,1,1]
             self.q_types_only_table =        ['all','class-link','read']
-            self.q_type_only_table_weights = [1,1,1]
 
         self.q_types_for_np = ['class-link','class','down-pair','up-pair','read','cell','row-header','col-header','all-row', 'list-row-headers','list-col-headers']
 
@@ -153,11 +188,12 @@ class FormQA(QADataset):
         if self.train:
             if len(tables)>0:
                 if len(entity_link)>0:
-                    q_types = random.choices(self.q_types,self.q_type_weights,k=self.questions*50)
+                    probs = self.q_types
                 else:
-                    q_types = random.choices(self.q_types_only_table,self.q_type_only_table_weights,k=self.questions*50)
+                    probs = self.q_types_only_table
             else:
-                q_types = random.choices(self.q_types_no_table,self.q_type_no_table_weights,k=self.questions*50)
+                probs = self.q_types_no_table
+            q_types = random.choices(list(probs.keys()),probs.values(),k=self.questions*50)
         else:
             q_types = []
             for cls in all_of_cls:
@@ -208,6 +244,8 @@ class FormQA(QADataset):
 
             elif q_type == 'class-link':
                 if self.train:
+                    if len(full_entities)==0:
+                        continue
                     ei = random.randrange(len(full_entities))
                 else:
                     ei = instance

@@ -92,7 +92,7 @@ class QATrainer(BaseTrainer):
         
         #t#self.opt_history = defaultdict(list)#t#
         self.do_ocr = config['trainer']['do_ocr'] if 'do_ocr' in config['trainer'] else False
-        if self.do_ocr and self.do_ocr!='no':
+        if self.do_ocr and self.do_ocr!='no' and self.do_ocr!='json':
             self.ocr_reader = easyocr.Reader(['en'],gpu=config['cuda'])
 
 
@@ -297,10 +297,32 @@ class QATrainer(BaseTrainer):
 
 
                 #total_val_metrics += self._eval_metrics(output, target)
-
+        F_measure_prec={}
+        F_measure_recall={}
         for val_name in val_metrics:
             if val_count[val_name]>0:
                 val_metrics[val_name] =  val_metrics[val_name]/val_count[val_name]
+                if 'F_prec' in val_name:
+                    last_underscore = val_name.rfind('_')
+                    var_name = val_name[last_underscore+1:]
+                    F_measure_prec[var_name]=val_metrics[val_name]
+                if 'F_recall' in val_name:
+                    last_underscore = val_name.rfind('_')
+                    var_name = val_name[last_underscore+1:]
+                    F_measure_recall[var_name]=val_metrics[val_name]
+
+        names = set(F_measure_prec.keys())
+        names.update(F_measure_recall.keys())
+        if len(names)>0:
+            total_Fms=0
+            for name in names:
+                p = F_measure_prec[name] if name in F_measure_prec else 1
+                r = F_measure_recall[name] if name in F_measure_recall else 1
+                f = 2*(p*r)/(p+r)
+                total_Fms+=f
+                val_metrics['val_F_Measure_{}'.format(name)]=f
+            val_metrics['val_F_Measure_MACRO']=total_Fms/len(names)
+
         return val_metrics
 
 
@@ -326,6 +348,8 @@ class QATrainer(BaseTrainer):
         if self.do_ocr:
             if self.do_ocr == 'no':
                 ocr_res=[[]]*image.size(0)
+            elif self.do_ocr == 'json':
+                ocr_res = instance['pre-recognition']
             else:
                 ocr_res=[]
                 normal_img = (128*(image[:,0]+1)).cpu().numpy().astype(np.uint8)
@@ -473,6 +497,15 @@ class QATrainer(BaseTrainer):
                     hit = ed/((len(answer)+len(pred))/2) < 0.1
                     log['E_{}_acc'.format(typ)].append(int(hit))
                     log['E_{}_ed'.format(typ)].append(ed)
+                elif question.startswith('ne~'):
+                    pred_type = pred[1]
+                    gt_type = answer[1]
+                    log['E_NER_acc'].append(1 if pred_type==gt_type else 0)
+                    if gt_type!='o':
+                        log['F_recall_{}'.format(gt_type)].append(1 if pred_type==gt_type else 0)
+                    if pred_type!='o':
+                        log['F_prec_{}'.format(gt_type)].append(1 if pred_type==gt_type else   0)
+
                 else:
                     print('ERROR: missed question -- {}'.format(question))
                 
@@ -487,13 +520,16 @@ class QATrainer(BaseTrainer):
         if self.print_pred_every>0 and self.iteration%self.print_pred_every==0:
             self.logger.info('iteration {}'.format(self.iteration))
             for b,(b_question,b_answer,b_pred) in enumerate(zip(questions,answers,string_a)):
-                if self.do_ocr:
-                    self.logger.info('{} OCR: ')
-                    for res in ocr_res[b]:
-                        self.logger.info(res[1][0])
+                #if self.do_ocr:
+                #    if ocr_res[b] is not None:
+                #        self.logger.info('{} OCR: ')
+                #        for res in ocr_res[b]:
+                #            self.logger.info(res[1][0])
+                #    else:
+                #        self.logger.info('{} OCR: None')
 
-                elif ocr is not None and not self.model_ref.blank_ocr:
-                    self.logger.info('{} OCR: {}'.format(b,ocr[b]))
+                #elif ocr is not None and not self.model_ref.blank_ocr:
+                #    self.logger.info('{} OCR: {}'.format(b,ocr[b]))
                 for question,answer,pred in zip(b_question,b_answer,b_pred):
                     self.logger.info('{} [Q]:{}\t[A]:{}\t[P]:{}'.format(b,question,answer,pred))
 
