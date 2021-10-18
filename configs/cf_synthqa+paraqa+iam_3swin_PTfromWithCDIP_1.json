@@ -1,5 +1,5 @@
 {
-    "name": "synthqa+paraqa+cdip_3swin_PTfromFontsSmall",
+    "name": "synthqa+paraqa+iam_3swin_PTfromWithCDIP_1",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -21,14 +21,13 @@
                     "textdir": "../data/",
                     "data_dir": "../data/english4line_fontslonger2",
                     "batch_size": 1,
-                    "num_workers": 4,
                     "rescale_range": [
                         1.0,
                         1.0
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1152,
+                            768,
                             768
                         ],
                         "pad": 0,
@@ -40,7 +39,7 @@
                     "text_height": 32,
                     "wider": 200,
                     "image_size": [
-                        1152,
+                        768,
                         768
                     ],
                     "change_size": true,
@@ -73,7 +72,7 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1152,
+                            768,
                             768
                         ],
                         "pad": 0,
@@ -92,18 +91,15 @@
             {
                 "freq": 0.2,
                 "config": {
-                    "data_set_name": "CDIPQA",
-                    "data_dir": "../data/CDIP_ready2",
+                    "data_set_name": "IAMQA",
+                    "data_dir": "../data/IAM",
                     "batch_size": 1,
                     "num_workers": 4,
-                    "rescale_range": [
-                        0.9,
-                        1.1
-                    ],
+                    "rescale_range": [0.75,1],
 		    "rescale_to_crop_size_first": true,
                     "crop_params": {
                         "crop_size": [
-                            1152,
+                            768,
                             768
                         ],
                         "pad": 0,
@@ -144,7 +140,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 3000000,
-        "accum_grad_steps": 30,
+        "accum_grad_steps": 32,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
@@ -172,7 +168,7 @@
         "char_output": true,
         "char_tokens": true,
         "image_size": [
-            1152,
+            768,
             768
         ],
         "no_dropout": false,

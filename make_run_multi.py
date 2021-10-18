@@ -32,7 +32,7 @@ export NCCL_SOCKET_IFNAME=eth,ib
 set -eu
 pids=()
 
-for rank in [[0..{}]]
+for rank in ~<0..{}~>
 do
     srun -N 1 -n 1 --gpus 1 --exclusive  python  train.py --supercomputer -c configs/cf_{}.json -s saved/{}/checkpoint-latest.pth --rank $rank --worldsize 4 &
     pids+=($!)
@@ -45,9 +45,9 @@ sleep 120
 
 SLEEP_TIME=30
 
-while (( ${#pids[@]} )); do
-  for pid_idx in "${!pids[@]}"; do
-    pid=${pids[$pid_idx]}
+while (( $~<#pids[@]~> )); do
+  for pid_idx in "$~<!pids[@]~>"; do
+    pid=$~<pids[$pid_idx]~>
     if ! kill -0 "$pid" 2>/dev/null; then # kill -0 checks for process existance
       # we know this pid has exited; retrieve its exit status
       echo "ended $pid"
@@ -68,8 +68,8 @@ import sys
 N=4
 def create(job_name):
     script = template.format(N,job_name,N-1,job_name,job_name,job_name,job_name)
-    script=script.replace('[[','{')
-    script=script.replace(']]','}')
+    script=script.replace('~<','{')
+    script=script.replace('~>','}')
 
     with open('runs/run_{}.pbs'.format(job_name),'w') as f:
         f.write(script)

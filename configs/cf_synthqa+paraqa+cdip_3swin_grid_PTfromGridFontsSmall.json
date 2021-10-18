@@ -14,7 +14,7 @@
         "num_workers": 4,
         "datasets": [
             {
-                "freq": 0.4,
+                "freq": 0.3,
                 "config": {
                     "data_set_name": "SynthQADocDataset",
                     "fontdir": "../data/fonts/",
@@ -90,7 +90,7 @@
                 }
             },
             {
-                "freq": 0.1,
+                "freq": 0.2,
                 "config": {
                     "data_set_name": "CDIPQA",
                     "data_dir": "../data/CDIP_ready2",
@@ -143,7 +143,7 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 900000,
+        "iterations": 3000000,
         "accum_grad_steps": 30,
         "#swa": true,
         "#swa_start": 200000,

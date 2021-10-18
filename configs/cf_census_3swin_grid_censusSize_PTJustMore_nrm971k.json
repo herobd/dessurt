@@ -1,5 +1,5 @@
 {
-    "name": "census_3swin_censusSize_PTJustMore_nrm1.7M",
+    "name": "census_3swin_grid_censusSize_PTJustMore_nrm971k",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -8,7 +8,7 @@
         "data_set_name": "CensusQA",
         "data_dir": "../data/familysearch",
         "shuffle": true,
-        "prefetch_factor": 10,
+        "prefetch_factor": 5,
         "persistent_workers": true,
         "batch_size": 1,
         "num_workers": 4,
@@ -20,10 +20,11 @@
             "rot_degree_std_dev": 1
             },
         "questions":1,
-        "max_qa_len": 26
+        "max_qa_len": 26,
+        "use_recognition": true
     },
     "validation": {
-        "batch_size":4,
+        "batch_size":5,
         "shuffle": false,
         "rescale_range": [1.05,1.05],
         "rescale_to_crop_size_first": true,
@@ -58,12 +59,12 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 1000000,
+        "iterations": 2000000,
         "accum_grad_steps": 60,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
-        "val_step": 50000,
+        "val_step": 100000,
         "save_step": 100000,
         "save_step_minor": 200,
         "log_step": 1000,
@@ -72,7 +73,7 @@
         "monitor": "loss",
         "monitor_mode": "none",
         "retry_count": 0,
-        "do_ocr": "no",
+        "do_ocr": "json",
         "#use_learning_schedule": "multi_rise then ramp_to_swa",
         "use_learning_schedule": "multi_rise",
         "warmup_steps": [
@@ -83,7 +84,8 @@
     },
     "arch": "QAImDocGPT3",
     "model": {
-        "blank_ocr": 0.2,
+        "blank_ocr": 0.05,
+        "grid_ocr": true,
         "char_output": true,
         "char_tokens": true,
         "image_size": [

@@ -41,9 +41,31 @@ class ParaQADataset(QADataset):
                 w=w.strip()
                 self.vocab[len(w)].append(w)
 
+        self.q_types = {
+                'read_blanked':0.5,
+                'read_replaced':0.5,
+                'read_with_masked':1.0,
+                'read_line':0.5,
+                'highlight_text':1.0,
+                'read_highlighted':0.5,
+                'masked_lm':4.0,
+                'put_in_place':1.0,
+                'read_on':0.4,
+                'read_backwards':0.5,
+                'highlight_block':1.0}
+        self.q_types_noblock = {
+                'read_blanked':0.5,
+                'read_replaced':0.5,
+                'read_with_masked':1.0,
+                'read_line':0.5,
+                'highlight_text':1.0,
+                'read_highlighted':0.5,
+                'masked_lm':4.0,
+                'put_in_place':1.0}
 
-        self.num_question_types_all=11 #15
-        self.num_question_types_noblock=8
+
+        #self.num_question_types_all=11 #15
+        #self.num_question_types_noblock=8
         #question types
         #0. Return blanked words (no highlight) and draw where it is "the [blank] chased the cat" > "dog" [kb]
         # . Return blanked words (with highlight) and draw where it is "the [blank] chased the cat" > "dog" [k0]
@@ -83,14 +105,20 @@ class ParaQADataset(QADataset):
         if len(wordmap)==0:
             return [],np.array([])
         linemap = makeLinemap(ocr)
+        if use_blocks:
+            q_types = random.choices(list(self.q_types.keys()),self.q_types.values(),k=self.questions*50)
+        else:
+            q_types = random.choices(list(self.q_types_noblock.keys()),self.q_types_noblock.values(),k=self.questions*50)
+
         qa=[]
-        for i in range(self.questions*10): #return extra in case the cropping/rotations clips some words
-            #question_type = random.randrange(self.num_question_types)
-            if use_blocks:
-                question_type = random.randrange(self.num_question_types_all)
-            else:
-                question_type = random.randrange(self.num_question_types_noblock)
-            if question_type == 0 or question_type == 1 or question_type == 5:
+        #for i in range(self.questions*10): #return extra in case the cropping/rotations clips some words
+        for question_type in q_types:
+            #if use_blocks:
+            #    question_type = random.randrange(self.num_question_types_all)
+            #else:
+            #    question_type = random.randrange(self.num_question_types_noblock)
+            #if question_type == 0 or question_type == 1 or question_type == 5:
+            if question_type == 'read_blanked' or question_type == 'read_replaced' or question_type == 'read_with_masked':
 
                 #0. Return blanked words (no highlight) and draw where it is "the [blank] chased the cat" > "dog"
                 # . Return blanked words (with highlight) and draw where it is "the [blank] chased the cat" > "dog"
@@ -98,9 +126,9 @@ class ParaQADataset(QADataset):
                 # . Return replaced word (with highlight) and draw where it is "the industrial chased the cat" > "dog"
                 #5. Read highlighted section filling in masked word
 
-                read_with_masked = question_type == 5
+                read_with_masked = question_type == 'read_with_masked'
                 use_highlight = random.random()<0.5 or read_with_masked
-                blank = question_type == 0
+                blank = question_type == 'read_blanked'
                 for i in range(10):
                     blank_word_idx = random.randrange(len(wordmap))
                     outmask = [wordmap[blank_word_idx]]
@@ -213,7 +241,8 @@ class ParaQADataset(QADataset):
                     maskmask = None
                 qa.append([question+prompt,response,[wordmap[i] for i in words_in_prompt+[blank_word_idx]],inmask,outmask,maskmask])
 
-            elif question_type == 2:
+            #elif question_type == 2:
+            elif question_type == 'read_line':
                 #2. Read line above (no highlight)and draw where it is. based on position, not just para/block
                 # . Read line above (with highlight) and draw where it is. based on position, not just para/block
                 # . Read line below (no highlight)and draw where it is. based on position, not just para/block
@@ -282,7 +311,8 @@ class ParaQADataset(QADataset):
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
 
 
-            elif question_type == 3 and random.random()<0.5:
+            #elif question_type == 3 and random.random()<0.5:
+            elif question_type == 'highlight_text' and random.random()<0.5:
                 #3a. draw the line this is in 
                 line_idx = random.randrange(len(linemap))
                 line_map = linemap[line_idx]
@@ -319,10 +349,11 @@ class ParaQADataset(QADataset):
                 question = '0;~'
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
 
-            elif question_type == 3 or question_type == 4:
+            #elif question_type == 3 or question_type == 4:
+            elif question_type == 'highlight_text' or question_type == 'read_highlighted':
                 #3b. draw where this text is 
                 #4. Read highlighted section
-                do_draw = question_type == 3
+                do_draw = question_type == 'highlight_text'
                 if not do_draw:
                     whole_line = random.random()<0.5
                 else:
@@ -392,7 +423,8 @@ class ParaQADataset(QADataset):
                         question = 'w0>'
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
             #question_type 5 is under the first
-            elif question_type == 6:
+            #elif question_type == 6:
+            elif question_type == 'masked_lm':
                 #6. guess masked word (HARD!)
                 blank_word_idx = random.randrange(len(wordmap))
                 maskmask = [wordmap[blank_word_idx]]
@@ -401,7 +433,8 @@ class ParaQADataset(QADataset):
                 question = 'mk>'
                 qa.append([question,response,maskmask,maskmask,None,maskmask])
 
-            elif question_type == 7 and len(wordmap)>1:
+            #elif question_type == 7 and len(wordmap)>1:
+            elif question_type == 'put_in_place' and len(wordmap)>1:
                 #7. given a word a several masked spots, hightlight which masked spot this belongs in
                 num_blanks = random.randrange(2,9)
                 it_word_idx = random.randrange(len(wordmap))
@@ -424,6 +457,8 @@ class ParaQADataset(QADataset):
                         num_blanks = 2
                     word_idxs = random.sample(range(len(wordmap)),num_blanks-1)
                     allmaps = [wordmap[i] for i in word_idxs if i != it_word_idx]
+                if len(allmaps)==0:
+                    continue
 
                 #We may have blanked other instances of the same word. We'll just say they are right answers too.
                 for this_word_map in allmaps:
@@ -437,12 +472,13 @@ class ParaQADataset(QADataset):
                 question = 'mm~'
                 qa.append([question+prompt,response,allmaps,None,it_word_maps,allmaps])
 
-            elif question_type ==8 or question_type==9:
+            #elif question_type ==8 or question_type==9:
+            elif question_type =='read_on' or question_type=='read_backwards':
                 #8. Read from prompt (no highlight) including new lines (stops at block end) and draw where you read
                 # . Read from prompt (with highlight) including new lines (stops at block end) and draw where you read
                 #9. Read backwards from prompt (no highlight) including new lines (stops at block end) and draw where you read
                 # . Read backwards from prompt (with highlight) including new lines (stops at block end) and draw where you read
-                forward = question_type ==8
+                forward = question_type =='read_on'
                 use_highlight = random.random()<0.5
                 if use_highlight:
                     min_read_start = self.min_read_start_with_mask
@@ -547,7 +583,8 @@ class ParaQADataset(QADataset):
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
 
 
-            elif question_type == 10:
+            #elif question_type == 10:
+            elif question_type == 'highlight_block':
                 #10. draw the block this is in
                 use_highlight = random.random()<0.5
                 block_idx = random.randrange(len(ocr))
@@ -595,6 +632,9 @@ class ParaQADataset(QADataset):
                     inmask=[]
                     question = '0p~'
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
+
+            if len(qa)>=self.questions*10:
+                break
 
         #return qa
 

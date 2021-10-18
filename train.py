@@ -70,7 +70,7 @@ def main(rank,config, resume,world_size=None):
                             init_method='file:///fslhome/brianld/job_comm/{}'.format(config['name']),
                             rank=rank,
                             world_size=world_size,
-                            timeout=datetime.timedelta(0, 6000))
+                            timeout=datetime.timedelta(0, 22000))
             logger.info('{} finished dist.init_process_group() <<<<'.format(rank))
         else:
             dist.init_process_group("gloo", rank=rank, world_size=world_size)
