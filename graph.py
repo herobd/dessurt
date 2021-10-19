@@ -7,11 +7,12 @@ import argparse
 import torch
 from collections import defaultdict
 import numpy as np
+import re
 
 logging.basicConfig(level=logging.INFO, format='')
 
 
-def graph(log,plot=True,substring=None):
+def graph(log,plot=True,substring=None,regex=None):
     graphs=defaultdict(lambda:{'iters':[], 'values':[]})
     for index, entry in log.entries.items():
         iteration = entry['iteration']
@@ -39,7 +40,7 @@ def graph(log,plot=True,substring=None):
         for metric, data in graphs.items():
             if metric in skip:
                 continue
-            if (substring is None and (metric[:3]=='avg' or metric[:3]=='val')) or (substring is not None and substring in metric):
+            if (substring is None and regex is None and (metric[:3]=='avg' or metric[:3]=='val')) or (substring is not None and substring in metric) or (regex is not None and re.match(regex,metric)):
                 #print('{} == {}? {}'.format(metric[:len(substring)],substring,metric[:len(substring)]==substring))
                 plt.figure(i)
                 i+=1
@@ -73,6 +74,8 @@ if __name__ == '__main__':
                         help='plot (default: True)')
     parser.add_argument('-o', '--only', default=None, type=str,
                         help='only stats with all these substrings (default: None)')
+    parser.add_argument('-r', '--regex', default=None, type=str,
+                        help='only stats that match regex (default: None)')
     parser.add_argument('-e', '--extract', default=None, type=str,
                         help='instead of ploting, save a new file with only the log (default: None)')
     parser.add_argument('-C', '--printconfig', default=False, type=bool,
@@ -93,7 +96,7 @@ if __name__ == '__main__':
     saved=None
 
     if args.extract is None:
-        graph(log,args.plot,args.only)
+        graph(log,args.plot,args.only,args.regex)
     else:
         new_save = {
                 'iteration': iteration,
