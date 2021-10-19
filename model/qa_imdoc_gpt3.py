@@ -350,7 +350,7 @@ class QAImDocGPT3(BaseModel):
 
         #if self.blank_ocr:
         #   ocrRes=[[]]*len(questions)
-        torch.autograd.set_detect_anomaly(True)
+        #torch.autograd.set_detect_anomaly(True)
         #there's got to be a better way...
         for name,buff in self.named_buffers():
             if 'im_xs' in name:

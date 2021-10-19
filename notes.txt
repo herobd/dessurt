@@ -24,6 +24,28 @@ New Total entity recall, prec, Fm:      0.7600950118764845      0.69945355191256
 old Total rel recall, prec, Fm: 0.5038759689922481      0.39274924471299094     0.4414261460101867
 New Total rel recall, prec, Fm: 0.4496124031007752      0.33048433048433046     0.380952380952381
 
+iter 1,000,000
+loaded funsd+synthqa+paraqa_3swin_PTfromSyPaCDFromSmall153M iteration 1000000
+old Total entity recall, prec, Fm:      0.7838479809976246      0.7213114754098361      0.7512805919180421
+New Total entity recall, prec, Fm:      0.7826603325415677      0.7202185792349727      0.7501422879908936
+old Total rel recall, prec, Fm: 0.4573643410852713      0.3475699558173785      0.3949790794979079
+New Total rel recall, prec, Fm: 0.4728682170542636      0.33748271092669435     0.39386602098466506
+
+iter 900,000
+loaded funsd+synthqa+paraqa_3swin_PTfromSyPaCDFromSmall153M iteration 900000
+old Total entity recall, prec, Fm:      0.7826603325415677      0.7217962760131434      0.7509971509971509
+New Total entity recall, prec, Fm:      0.7826603325415677      0.7217962760131434      0.7509971509971509
+old Total rel recall, prec, Fm: 0.4844961240310077      0.34965034965034963     0.4061738424045492
+New Total rel recall, prec, Fm: 0.5     0.3363754889178618      0.40218238503507403
+
+iter 800,000
+loaded funsd+synthqa+paraqa_3swin_PTfromSyPaCDFromSmall153M iteration 800000
+old Total entity recall, prec, Fm:      0.7684085510688836      0.7063318777292577      0.7360637087599546
+New Total entity recall, prec, Fm:      0.7731591448931117      0.7106986899563319      0.7406143344709898
+old Total rel recall, prec, Fm: 0.47093023255813954     0.34129213483146065     0.39576547231270354
+New Total rel recall, prec, Fm: 0.48643410852713176     0.34010840108401086     0.4003189792663477
+
+
 =======
 read_blanked','read_replaced','read_with_masked','read_line','highlight_text','read_highlighted','masked_lm','put_in_place','read_on','read_backwards','highlight_block','
 
