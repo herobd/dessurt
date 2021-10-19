@@ -16,7 +16,7 @@ from model.pairing_g_graph_layoutlm import PairingGGraphLayoutLM
 from model.binary_pair_net import BinaryPairNet
 from model.binary_pair_real import BinaryPairReal
 from model.graph_net import GraphNet
-from model.meta_graph_net import MetaGraphNet
+#from model.meta_graph_net import MetaGraphNet
 from model.line_follower import LineFollower
 from model.simpleNN import SimpleNN
 from model.tesseract_wrap import TesseractWrap
@@ -26,6 +26,7 @@ from model.qa_gpt import QAGPT
 from model.qa_layout_gpt import QALayoutGPT
 from model.qa_imdoc_gpt import QAImDocGPT
 from model.qa_imdoc_gpt2 import QAImDocGPT2
+from model.qa_imdoc_gpt3 import QAImDocGPT3
 #from model.test import TEST
 #from .roi_align import ROIAlign
 #from .roi_align import roi_align

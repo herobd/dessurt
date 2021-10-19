@@ -7,6 +7,88 @@ import torch.nn.functional as F
 from .attention import PosBiasedMultiHeadedAttention
 from torch.nn.modules.transformer import _get_activation_fn
 
+class RelPosQTransformerLayer(nn.Module):
+    r"""TransformerEncoderLayer is made up of self-attn and feedforward network.
+    This standard encoder layer is based on the paper "Attention Is All You Need".
+    Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+    Lukasz Kaiser, and Illia Polosukhin. 2017. Attention is all you need. In Advances in
+    Neural Information Processing Systems, pages 6000-6010. Users may modify or implement
+    in a different way during application.
+
+    Args:
+        d_model: the number of expected features in the input (required).
+        nhead: the number of heads in the multiheadattention models (required).
+        dim_feedforward: the dimension of the feedforward network model (default=2048).
+        dropout: the dropout value (default=0.1).
+        activation: the activation function of intermediate layer, relu or gelu (default=relu).
+
+    Examples::
+        >>> encoder_layer = nn.TransformerEncoderLayer(d_model=512, nhead=8)
+        >>> src = torch.rand(10, 32, 512)
+        >>> out = encoder_layer(src)
+    """
+
+    def __init__(self, d_model, nhead, max_dist, dim_feedforward=2048, dropout=0.1, activation="relu",fixed=True):
+        super(RelPosQTransformerLayer, self).__init__()
+        self.self_attn = PosBiasedMultiHeadedAttention(nhead,d_model,max_dist,dropout=dropout)
+        # Implementation of Feedforward model
+        self.linear1 = Linear(d_model, dim_feedforward)
+        self.dropout = Dropout(dropout)
+        self.linear2 = Linear(dim_feedforward, d_model)
+
+        self.norm1 = LayerNorm(d_model)
+        self.norm2 = LayerNorm(d_model)
+        self.dropout1 = Dropout(dropout)
+        self.dropout2 = Dropout(dropout)
+
+        self.activation = _get_activation_fn(activation)
+
+        self.fixed=fixed
+
+
+    def __setstate__(self, state):
+        if 'activation' not in state:
+            state['activation'] = F.relu
+        super(RelPosQTransformerLayer, self).__setstate__(state)
+
+    def forward(self, 
+            query_tokens: Tensor, 
+            query_x: Tensor, 
+            query_y: Tensor, 
+            query_pos_mask: Tensor,
+            all_tokens: Tensor, 
+            all_tokens_x: Tensor, 
+            all_tokens_y: Tensor, 
+            all_pos_mask: Tensor,
+            full_mask = None, 
+            all_padding_mask= None,
+            ) -> Tensor:
+        r"""Pass the input through the encoder layer.
+
+        Args:
+            query_tokens: B,Q,D
+            query_x,query_y: B,Q
+            query_pos_mask: B,Q (bool)
+            all_tokens: B,A,D
+            all_tokens_x,all_tokens_y: B,A
+            all_pos_mask: B,A (bool)
+            full_mask: B,Q,A (?) This will be a subpart of all_mask[:,num_q+num_a,num_all] This is attention
+            all_padding_mask: B,A
+
+        """
+        
+        full_pos_mask = all_pos_mask[:,None,:].expand(-1,query_x.size(1),-1,1) * query_pos_mask[:,:,None].expand(-1,-1,all_tokens_x.size(1),1)
+        response = self.self_attn(query_tokens, all_tokens, all_tokens, query_x,query_y,all_tokens_x,all_tokens_y, 
+                mask=full_mask,
+                key_padding_mask=all_padding_mask,
+                pos_mask=full_pos_mask)
+
+        query_tokens = query_tokens + self.dropout1(response)
+        query_tokens = self.norm1(query_tokens)
+        response = self.linear2(self.dropout(self.activation(self.linear1(query_tokens))))
+        query_tokens = query_tokens + self.dropout2(response)
+        query_tokens = self.norm2(query_tokens)
+        return query_tokens
 
 
 class RelPosImTransformerLayer(nn.Module):
@@ -30,7 +112,7 @@ class RelPosImTransformerLayer(nn.Module):
         >>> out = encoder_layer(src)
     """
 
-    def __init__(self, d_model, nhead, max_dist, dim_feedforward=2048, dropout=0.1, activation="relu",fixed=False):
+    def __init__(self, d_model, nhead, max_dist, dim_feedforward=2048, dropout=0.1, activation="relu",fixed=True):
         super(RelPosImTransformerLayer, self).__init__()
         self.self_attn = PosBiasedMultiHeadedAttention(nhead,d_model,max_dist,dropout=dropout)
         # Implementation of Feedforward model

@@ -16,8 +16,8 @@ import requests, socket
 import warnings
 
 import torch.distributed as dist
+import datetime
 import torch.multiprocessing as mp
-from torch.nn.parallel import DistributedDataParallel
 
 
 try: 
@@ -64,11 +64,13 @@ def main(rank,config, resume,world_size=None):
             print('env NCCL_SOCKET_IFNAME: {}'.format(os.environ['NCCL_SOCKET_IFNAME']))
             logger.info('{} calling dist.init_process_group() <<<<'.format(rank))
             os.environ['CUDA_VISIBLE_DEVICES']='0'
+            os.environ['NCCL_ASYNC_ERROR_HANDLING']='1'
             dist.init_process_group(
                             "nccl",
                             init_method='file:///fslhome/brianld/job_comm/{}'.format(config['name']),
                             rank=rank,
-                            world_size=world_size)
+                            world_size=world_size,
+                            timeout=datetime.timedelta(0, 22000))
             logger.info('{} finished dist.init_process_group() <<<<'.format(rank))
         else:
             dist.init_process_group("gloo", rank=rank, world_size=world_size)

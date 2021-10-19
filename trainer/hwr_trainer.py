@@ -7,7 +7,7 @@ import timeit
 from utils import util, string_utils, error_rates
 from collections import defaultdict
 import random, json
-#from datasets.text_data import TextData
+#from data_sets.text_data import TextData
 from data_loader import getDataLoader
 
 PADDING_CONSTANT = -1

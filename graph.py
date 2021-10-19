@@ -84,7 +84,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     assert args.checkpoint is not None
-    saved = torch.load(args.checkpoint,map_location=lambda storage, loc: storage)
+    try:
+        saved = torch.load(args.checkpoint,map_location=lambda storage, loc: storage)
+    except RuntimeError:
+        saved = torch.jit.load(args.checkpoint)
     log = saved['logger']
     iteration = saved['iteration']
     print('loaded iteration {}'.format(iteration))
