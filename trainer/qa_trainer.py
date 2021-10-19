@@ -8,7 +8,7 @@ from evaluators.draw_graph import draw_graph
 import matplotlib.pyplot as plt
 from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist, AP_textLines, getTargIndexForPreds_iou, newGetTargIndexForPreds_iou, getTargIndexForPreds_dist, newGetTargIndexForPreds_textLines, computeAP, non_max_sup_overseg
 from utils.group_pairing import getGTGroup, pure, purity
-from datasets.testforms_graph_pair import display
+from data_sets.testforms_graph_pair import display
 import random, os, math
 import editdistance
 
@@ -92,17 +92,15 @@ class QATrainer(BaseTrainer):
         
         #t#self.opt_history = defaultdict(list)#t#
         self.do_ocr = config['trainer']['do_ocr'] if 'do_ocr' in config['trainer'] else False
-        if self.do_ocr:
+        if self.do_ocr and self.do_ocr!='no' and self.do_ocr!='json':
             self.ocr_reader = easyocr.Reader(['en'],gpu=config['cuda'])
 
 
 
-    def _to_tensor(self, instance):
-        image = instance['img']
-
+    def _to_tensor(self, t):
         if self.with_cuda:
-            image = image.to(self.gpu)
-        return image
+            t = t.to(self.gpu)
+        return t
 
     def _eval_metrics(self, typ,name,output, target):
         if len(self.metrics[typ])>0:
@@ -258,8 +256,8 @@ class QATrainer(BaseTrainer):
         """
         self.model.eval()
 
-        val_metrics = {}#defaultdict(lambda: 0.0)
-        val_count = defaultdict(lambda: 1)
+        val_metrics = {}#not a default dict since it can have different kinds of data in it
+        val_count = defaultdict(int)
 
         prefix = 'val_'
 
@@ -268,33 +266,63 @@ class QATrainer(BaseTrainer):
             for batch_idx, instance in enumerate(self.valid_data_loader):
                 if not self.logged:
                     print('iter:{} valid batch: {}/{}'.format(self.iteration,batch_idx,len(self.valid_data_loader)), end='\r')
-                losses,log_run, out = self.run(instance)
+                losses,log_run, out = self.run(instance,valid=True)
 
                 for name,value in log_run.items():
                     if value is not None:
                         val_name = prefix+name
-                        if val_name in val_metrics:
-                            val_metrics[val_name]+=value
+                        if isinstance(value,(list,tuple)):
+                            if val_name in val_metrics:
+                                val_metrics[val_name]+=sum(value)
+                            else:
+                                val_metrics[val_name]=sum(value)
+                            val_count[val_name]+=len(value)
+                        else:   
+                            if val_name in val_metrics:
+                                val_metrics[val_name]+=value
+                            else:
+                                val_metrics[val_name]=value
                             val_count[val_name]+=1
-                        else:
-                            val_metrics[val_name]=value
+
                 for name,value in losses.items():
                     if value is not None:
                         value = value.item()
                         val_name = prefix+name
                         if val_name in val_metrics:
                             val_metrics[val_name]+=value
-                            val_count[val_name]+=1
                         else:
                             val_metrics[val_name]=value
+                        val_count[val_name]+=1
 
 
 
                 #total_val_metrics += self._eval_metrics(output, target)
-
+        F_measure_prec={}
+        F_measure_recall={}
         for val_name in val_metrics:
             if val_count[val_name]>0:
                 val_metrics[val_name] =  val_metrics[val_name]/val_count[val_name]
+                if 'F_prec' in val_name:
+                    last_underscore = val_name.rfind('_')
+                    var_name = val_name[last_underscore+1:]
+                    F_measure_prec[var_name]=val_metrics[val_name]
+                if 'F_recall' in val_name:
+                    last_underscore = val_name.rfind('_')
+                    var_name = val_name[last_underscore+1:]
+                    F_measure_recall[var_name]=val_metrics[val_name]
+
+        names = set(F_measure_prec.keys())
+        names.update(F_measure_recall.keys())
+        if len(names)>0:
+            total_Fms=0
+            for name in names:
+                p = F_measure_prec[name] if name in F_measure_prec else 1
+                r = F_measure_recall[name] if name in F_measure_recall else 1
+                f = 2*(p*r)/(p+r)
+                total_Fms+=f
+                val_metrics['val_F_Measure_{}'.format(name)]=f
+            val_metrics['val_F_Measure_MACRO']=total_Fms/len(names)
+
         return val_metrics
 
 
@@ -302,11 +330,15 @@ class QATrainer(BaseTrainer):
 
 
 
-    def run(self,instance,get=[],forward_only=False):#
-        image = self._to_tensor(instance)
+    def run(self,instance,get=[],forward_only=False,valid=False):#
+        image = self._to_tensor(instance['img'])
+        device = image.device
         ocrBoxes = instance['bb_gt']
         questions = instance['questions']
         answers = instance['answers']
+        gt_mask = instance['mask_label']
+        if gt_mask is not None:
+            gt_mask = gt_mask.to(device)
 
         #OCR possibilities
         #-All correct
@@ -316,6 +348,8 @@ class QATrainer(BaseTrainer):
         if self.do_ocr:
             if self.do_ocr == 'no':
                 ocr_res=[[]]*image.size(0)
+            elif self.do_ocr == 'json':
+                ocr_res = instance['pre-recognition']
             else:
                 ocr_res=[]
                 normal_img = (128*(image[:,0]+1)).cpu().numpy().astype(np.uint8)
@@ -330,7 +364,7 @@ class QATrainer(BaseTrainer):
             #t##t#tic=timeit.default_timer()#t##t#
             if self.ocr_word_bbs: #useOnlyGTSpace and self.use_word_bbs_gt:
                 word_boxes = torch.stack([form_metadata['word_boxes'] for form_metadata in instance['form_metadata']],dim=0)
-                word_boxes = word_boxes.to(image.device) #I can change this as it isn't used later
+                word_boxes = word_boxes.to(device) #I can change this as it isn't used later
                 ocrBoxes=word_boxes
 
             if ocrBoxes is not None:
@@ -342,7 +376,7 @@ class QATrainer(BaseTrainer):
             ocr_res = (ocrBoxes,ocr)
 
         #import pdb;pdb.set_trace()
-        pred_a, target_a, string_a = self.model(image,ocr_res,questions,answers)
+        pred_a, target_a, string_a, pred_mask = self.model(image,ocr_res,questions,answers)
 
         #pred_a[:,0].sum().backward()
         #print(self.model.start_token.grad)
@@ -356,51 +390,146 @@ class QATrainer(BaseTrainer):
         #t##t#self.opt_history['run model'].append(timeit.default_timer()-tic)#t#
         #t##t#tic=timeit.default_timer()#t##t#
         losses=defaultdict(lambda:0)
-        log={}
+        log=defaultdict(list)
         
-
         losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
         #losses['answerLoss'] = pred_a.sum()
+        if 'mask' in self.loss and gt_mask is not None: #we allow gt_mask to be none to not supervise
+            mask_labels_batch_mask = instance['mask_labels_batch_mask'].to(device)
+            losses['maskLoss'] = self.loss['mask'](pred_mask*mask_labels_batch_mask[:,None,None,None],gt_mask)
 
 
         #t#tic=timeit.default_timer()#t#
-        cor_present=0
-        total_present=0
-        cor_pair=0
-        total_pair=0
-        score_ed = 0
-        total_score = 0
+        score_ed = []
         for b_answers,b_pred in zip(answers,string_a):
             for answer,pred in zip(b_answers,b_pred):
-                if len(pred)>0 and len(answer)>0 and answer[0]==pred[0]:
-                    cor_present+=1
-                total_present+=1
-                if len(answer)>2:
-                    if answer[2:]==pred[2:]:
-                        cor_pair+=1
-                    total_pair+=1
                 if len(answer)>0 or len(pred)>0:
-                    score_ed += editdistance.eval(answer,pred)/((len(answer)+len(pred))/2)
+                    score_ed.append( editdistance.eval(answer,pred)/((len(answer)+len(pred))/2) )
                 else:
-                    score_ed += 0
-                total_score +=1
+                    score_ed.append( 0 )
                 
-        log['present_acc']=cor_present/total_present
-        if total_pair>0:
-            log['pair_acc']=cor_pair/total_pair
-        log['score_ed'] = score_ed/total_score
+        log['score_ed'] = np.mean(score_ed)
+
+        if valid:
+            if gt_mask is not None:
+                #compute pixel IoU
+                pred_binary_mask = pred_mask>0
+                intersection = (pred_binary_mask*gt_mask).sum(dim=3).sum(dim=2)
+                union = (pred_binary_mask+gt_mask).sum(dim=3).sum(dim=2)
+                iou = (intersection/union).cpu()
+            else:
+                iou = None
+            for b,(b_answers,b_pred,b_questions) in enumerate(zip(answers,string_a,questions)):
+                assert len(b_questions)==1
+                answer = b_answers[0]
+                pred = b_pred[0]
+                question = b_questions[0]
+            
+                #print(question)
+                #print(' answ:'+answer)
+                #print(' pred:'+pred)
+                if question.startswith('al~'):
+                    cls = question[3:]
+                    try:
+                        count_pred = int(pred)
+                    except ValueError:
+                        count_pred = 0
+                    count_gt = int(answer)
+                    log['E_all_{}_IoU'.format(cls)].append(iou[b].item())
+                    log['E_all_{}_count_err'.format(cls)].append(abs(count_pred-count_gt))
+                elif question.startswith('z0') or question.startswith('g0'):
+                    cls_pred = pred[:3]
+                    cls_gt = answer[:3]
+                    log['E_class_acc'].append(cls_pred==cls_gt)
+                    
+                    if question.startswith('z0'):
+                        try:
+                            count_pred = int(pred[3:]) if pred[3:]!='ø' else 0
+                        except ValueError:
+                            count_pred = 0
+                        count_gt = int(answer[3:]) if answer[3:]!='ø' else 0
+                        log['E_link_count_err'].append(abs(count_pred-count_gt))
+                        log['E_link_all_IoU'].append(iou[b].item())
+                    else:
+                        if 'g0~' in question:
+                            if answer[3:] != 'ø':
+                                start_gt = answer.find('>')
+                                count_gt = int(answer[3:start_gt])
+                            else:
+                                start_gt = 2
+                                count_gt = 0
+                            if pred[3:] != 'ø':
+                                start_pred = pred.find('>')
+                                if start_pred>-1:
+                                    try:
+                                        count_pred = int(pred[3:start_pred])
+                                    except ValueError:
+                                        count_pred = 0
+                                else:
+                                    start_pred=2
+                                    count_pred=0
+                            else:
+                                start_pred=2
+                                count_pred=0
+
+                            log['E_link_count_err'].append(abs(count_pred-count_gt))
+                            pred_s = pred[start_pred+1:]
+                            answer_s = answer[start_gt+1:]
+                        else:
+                            pred_s = pred[3:]
+                            answer_s = answer[3:]
+
+                        log['E_link_step_IoU'].append(iou[b].item())
+                        ed = editdistance.eval(answer_s,pred_s)
+                        hit = ed/((len(answer_s)+len(pred_s))/2) < 0.1
+                        log['E_link_step_acc'].append(int(hit))
+                        log['E_link_step_ed'].append(ed)
+                elif question.startswith('f1~') or question.startswith('p1~'):
+                    ed = editdistance.eval(answer,pred)
+                    hit = ed/((len(answer)+len(pred))/2) < 0.1
+                    log['E_read_acc'].append(int(hit))
+                    log['E_read_ed'].append(ed)
+                    if answer[0]=='\\':
+                        log['E_read_1stNewline_acc'].append(1 if pred[0]=='\\' else 0)
+                elif question.startswith('fli:'):
+                    typ = question[4:question.find('~')]
+                    ed = editdistance.eval(answer,pred)
+                    hit = ed/((len(answer)+len(pred))/2) < 0.1
+                    log['E_{}_acc'.format(typ)].append(int(hit))
+                    log['E_{}_ed'.format(typ)].append(ed)
+                elif question.startswith('ne~'):
+                    pred_type = pred[1]
+                    gt_type = answer[1]
+                    log['E_NER_acc'].append(1 if pred_type==gt_type else 0)
+                    if gt_type!='o':
+                        log['F_recall_{}'.format(gt_type)].append(1 if pred_type==gt_type else 0)
+                    if pred_type!='o':
+                        log['F_prec_{}'.format(pred_type)].append(1 if pred_type==gt_type else   0)
+
+                else:
+                    print('ERROR: missed question -- {}'.format(question))
+                
+                #for name,values in log.items():
+                #    if name.startswith('E_'):
+                #        print('{}: {}'.format(name,values[-1]))
+
+
+
         #t#self.opt_history['score'].append(timeit.default_timer()-tic)#t#
 
         if self.print_pred_every>0 and self.iteration%self.print_pred_every==0:
             self.logger.info('iteration {}'.format(self.iteration))
             for b,(b_question,b_answer,b_pred) in enumerate(zip(questions,answers,string_a)):
-                if self.do_ocr:
-                    self.logger.info('{} OCR: ')
-                    for res in ocr_res[b]:
-                        self.logger.info(res[1][0])
+                #if self.do_ocr:
+                #    if ocr_res[b] is not None:
+                #        self.logger.info('{} OCR: ')
+                #        for res in ocr_res[b]:
+                #            self.logger.info(res[1][0])
+                #    else:
+                #        self.logger.info('{} OCR: None')
 
-                elif ocr is not None and not self.model_ref.blank_ocr:
-                    self.logger.info('{} OCR: {}'.format(b,ocr[b]))
+                #elif ocr is not None and not self.model_ref.blank_ocr:
+                #    self.logger.info('{} OCR: {}'.format(b,ocr[b]))
                 for question,answer,pred in zip(b_question,b_answer,b_pred):
                     self.logger.info('{} [Q]:{}\t[A]:{}\t[P]:{}'.format(b,question,answer,pred))
 
@@ -419,6 +548,10 @@ class QATrainer(BaseTrainer):
                     got[name]=ret
                 else:
                     raise NotImplementedError('Cannot get [{}], unknown'.format(name))
+        if not valid:
+            for name in log:
+                if isinstance(log[name],list):
+                    log[name] = np.mean(log[name])
         return losses, log, got
 
     def bn_update(self):

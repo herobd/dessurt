@@ -10,7 +10,7 @@ from model.swin_transformer import ConvPatchEmbed, SwinTransformerBlock, PatchMe
 from model.trans_pooling import OCRPooler, QPooler
 try:
     from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
-    from transformers import LayoutLMTokenizer, LayoutLMModel
+    #from transformers import LayoutLMTokenizer, LayoutLMModel
 except:
     pass
 from utils.character_tokenizer import CharacterTokenizer
@@ -48,13 +48,17 @@ class QAImDocGPT2(BaseModel):
             fd_model=None
         if blocks_per_level is not None:
             if 'swin_text_downsample_all' in config:
-                swin_text_downsample = config['swin_text_downsample_all']
+                swin_text_downsample = [[d,d] if type(d) is bool else d for d in config['swin_text_downsample_all']]
                 swin_text_downsample_dense=True
-                assert (not swin_text_downsample[-1]) and "Shouldn't downsample final. Not used."
+                assert (not swin_text_downsample[-1][0] and not swin_text_downsample[-1][1]) and "Shouldn't downsample final. Not used."
+                self.downsample_ocr = sum(d[0] for d in swin_text_downsample)
+                self.downsample_q = sum(d[1] for d in swin_text_downsample)
+
             else:
                 swin_text_downsample = config['swin_text_downsample'] if 'swin_text_downsample' in config else [False]*len(blocks_per_level)
                 swin_text_downsample_dense=False
-            self.downsample_ocr = sum(swin_text_downsample)
+                self.downsample_ocr = sum(swin_text_downsample)
+                self.downsample_q = None
 
             window_size = config['window_size'] #7
             if type(window_size) is int:
@@ -161,11 +165,14 @@ class QAImDocGPT2(BaseModel):
                 self.register_buffer("im_ys{}".format(level),im_ys,persistent=False)
                 for block in range(blocks):
                     last = level<len(blocks_per_level)-1 and block == blocks-1
-                    if (swin_text_downsample_dense and swin_text_downsample[len(self.swin_layers)]) or (last and swin_text_downsample[level]):
+                    if (swin_text_downsample_dense and swin_text_downsample[len(self.swin_layers)][0]) or (last and swin_text_downsample[level]):
                         ocr_pool = OCRPooler(d_model)
+                    else:
+                        ocr_pool = None
+                    if (swin_text_downsample_dense and swin_text_downsample[len(self.swin_layers)][1]) or (last and swin_text_downsample[level]):
                         q_pool = QPooler(d_model)
                     else:
-                        ocr_pool = q_pool = None
+                        q_pool = None
                     self.swin_layers.append( nn.ModuleList( [
                         SwinTransformerBlock(dim=d_im, 
                                     input_resolution=cur_resolution,
@@ -269,6 +276,8 @@ class QAImDocGPT2(BaseModel):
         #t#self.opt_history=defaultdict(list)#t#
 
 
+
+
     #we're building this for fixed images size
     def forward(self,image,ocrRes,questions,answers=None,useCurvedBBs=False,RUN=False):
         ##DDD
@@ -319,7 +328,7 @@ class QAImDocGPT2(BaseModel):
                 trX,trY = bb[1]
                 brX,brY = bb[2]
                 blX,blY = bb[3]
-                lX,lY,rX,rY,width,height = calcXYWH(tlX,tlY,trX,trY,brX,brY,blX,blY)
+                lX,lY,rX,rY,width,height,rot = calcXYWH(tlX,tlY,trX,trY,brX,brY,blX,blY)
                 cX = (lX+rX)/2
                 cY = (lY+rY)/2
                 #we'll use the entire height for each part
@@ -462,7 +471,16 @@ class QAImDocGPT2(BaseModel):
         ocr_pos = ocr_bbs[:,:,0:2] #just x,y
 
         q_tokens = self.q_pos_1d_enc(q_tokens)
-        q_padding_mask = (1-q_t['attention_mask']).bool().to(device) 
+        q_padding_mask = (1-q_t['attention_mask']).bool()#.to(device) 
+        if self.downsample_q is not None and self.downsample_q>0:
+            #pad it out
+            missing = q_tokens.size(1)% (2**self.downsample_q)
+            missing = ((2**self.downsample_q)-missing) % (2**self.downsample_q)
+            q_tokens = torch.cat((q_tokens,torch.FloatTensor(new_batch_size,missing,q_tokens.size(2)).fill_(0).to(device)),dim=1)
+            q_padding_mask = torch.cat((q_padding_mask,torch.BoolTensor(new_batch_size,missing).fill_(True)),dim=1)
+            num_q+=missing
+        q_padding_mask = q_padding_mask.to(device)
+
         a_tokens = self.a_pos_1d_enc(a_tokens)
         a_padding_mask = (1-a_t['attention_mask'][:,1:]).bool().to(device) #remove last SEP
 
@@ -552,6 +570,10 @@ class QAImDocGPT2(BaseModel):
                     saved_ocr_padding_mask.append(ocr_padding_mask)
                     saved_q_padding_mask.append(q_padding_mask)
                 
+                ##
+                #a_tokens = ocrqa_tokens[:,num_ocr+num_q:]
+                #import pdb;pdb.set_trace()
+                ##
                 ocrqa_tokens = layout_layer(
                         ocrqa_tokens,
                         ocrqa_pos[:,:,0], #x
@@ -562,21 +584,24 @@ class QAImDocGPT2(BaseModel):
                         docqa_mask=ocrqa_att_mask.expand(new_batch_size,-1,-1),
                         docqa_padding_mask=ocrqa_padding_mask,
                         pos_mask = ocrqa_pos_mask)
+                
 
 
                 if im_downsample is not None:
                     im_tokens = im_downsample(im_tokens)
                     level+=1
                     num_im = im_tokens.size(1)
-                num_ocr_old=num_ocr
+
+                ocr_tokens = ocrqa_tokens[:,:num_ocr]
+                q_tokens = ocrqa_tokens[:,num_ocr:num_ocr+num_q]
+                a_tokens = ocrqa_tokens[:,num_ocr+num_q:]
+                #num_ocr_old=num_ocr
                 if ocr_downsample is not None:
-                    ocr_tokens = ocrqa_tokens[:,:num_ocr]
                     ocr_tokens,ocr_pos,ocr_padding_mask = ocr_downsample(ocr_tokens,ocr_pos,ocr_padding_mask)
                     num_ocr = ocr_tokens.size(1)
                     ocr_pos_mask = ocr_padding_mask[:,:,None]#torch.FloatTensor(new_batch_size,ocr_tokens.size(1),1).fill_(1).to(device)
                 #num_q_old=num_q
                 if q_downsample is not None:
-                    q_tokens = ocrqa_tokens[:,num_ocr_old:num_ocr_old+num_q]
                     q_tokens,q_padding_mask = q_downsample(q_tokens,q_padding_mask)
                     num_q = q_tokens.size(1)
                     q_pos = q_pos[:,:num_q]
@@ -617,7 +642,9 @@ class QAImDocGPT2(BaseModel):
             all_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask,a_padding_mask),dim=1)
             for im_downsample, ocr_downsample, q_downsample, layer in self.full_layers:
                 num_im_old=num_im
+                did_downsample=False
                 if im_downsample is not None:
+                    did_downsample=True
                     im_tokens = all_tokens[:,:num_im]
                     im_tokens,im_pos = im_downsample(im_tokens,im_pos)
                     num_im = im_tokens.size(1)
@@ -625,12 +652,14 @@ class QAImDocGPT2(BaseModel):
                     im_padding_mask = im_padding_mask[:,:num_im]#torch.BoolTensor(new_batch_size,num_im).fill_(1).to(device)
                 num_ocr_old=num_ocr
                 if ocr_downsample is not None and num_ocr>5:
+                    did_downsample=True
                     ocr_tokens = all_tokens[:,num_im_old:num_im+num_ocr]
                     ocr_tokens,ocr_pos,ocr_padding_mask = ocr_downsample(ocr_tokens,ocr_pos,ocr_padding_mask)
                     num_ocr = ocr_tokens.size(1)
                     ocr_pos_mask = ocr_padding_mask[:,:,None]#torch.FloatTensor(new_batch_size,ocr_tokens.size(1),1).fill_(1).to(device)
                 #num_q_old=num_q
                 if q_downsample is not None and num_q>5:
+                    did_downsample=True
                     q_tokens = all_tokens[:,num_im_old+num_ocr_old:num_im_old+num_ocr_old+num_q]
                     q_tokens,q_padding_mask = q_downsample(q_tokens,q_padding_mask)
                     num_q = q_tokens.size(1)
@@ -639,7 +668,7 @@ class QAImDocGPT2(BaseModel):
                     q_pos_ex = q_pos.expand(new_batch_size,-1,-1)
                     q_pos_mask_ex = q_pos_mask.expand(new_batch_size,-1,-1)
 
-                if im_downsample is not None or ocr_downsample is not None or q_downsample is not None:
+                if did_downsample:
                     num_all = num_im+num_ocr+num_q+num_a
                     all_tokens = torch.cat( (im_tokens,ocr_tokens,q_tokens,a_tokens),dim=1)
                     all_pos = torch.cat( (im_pos,ocr_pos,q_pos_ex,a_pos_ex),dim=1)
@@ -699,7 +728,7 @@ class QAImDocGPT2(BaseModel):
             response_greedy_token = response_decoded.argmax(dim=2)
 
             output_tokens.append(response_greedy_token[0,0].item())
-            print('first token: {}'.format(output_tokens[0]))
+            #print('first token: {}'.format(output_tokens[0]))
 
             offset = 1
 
@@ -711,7 +740,6 @@ class QAImDocGPT2(BaseModel):
                 ans_emb = self.text_embedding(response_greedy_token)
                 ans = self.a_pos_1d_enc(ans_emb,offset=offset)
                 num_a += 1
-
 
 
                 level=0
@@ -730,6 +758,7 @@ class QAImDocGPT2(BaseModel):
                     ocrqa_att_mask = holder_all_att_mask[:,num_im:num_im+num_ocr+num_q+num_a,num_im:num_im+num_ocr+num_q+num_a]
                     ocrqa_padding_mask = torch.cat((saved_ocr_padding_mask[li],saved_q_padding_mask[li],holder_a_padding_mask[:,:num_a]),dim=1)
 
+                    #import pdb;pdb.set_trace()
                     ans = layout_layer(
                             ocrqa_tokens,
                             ocrqa_pos[:,:,0], #x
@@ -769,7 +798,7 @@ class QAImDocGPT2(BaseModel):
                 
 
                 output_tokens.append(response_greedy_token[0,0].item())
-                print('next token: {}'.format(output_tokens[-1]))
+                #print('next token: {}'.format(output_tokens[-1]))
                 offset += 1
 
             
@@ -819,7 +848,7 @@ class QAImDocGPT2(BaseModel):
         #import pdb;pdb.set_trace()
         if PRINT_ATT:
             attDisplay(image[0],full_ocr_string,'|'+questions[0],'|'+answers[0]+'^',batch_string_response[0])
-        return response_decoded, target_decoded.to(device), batch_string_response
+        return response_decoded, target_decoded.to(device), batch_string_response, None
 
     #t#def print_opt_times(self):#t#
         #t#for name,times in self.opt_history.items():#t#
