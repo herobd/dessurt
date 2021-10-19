@@ -94,7 +94,7 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=iam_ner.IAMNER(dirPath=dirPath,split='valid',config={
+    data=iam_ner.IAMNER(dirPath=dirPath,split='train',config={
         'rescale_range': [0.75,1],
         '#rescale_range': [0.9,0.9],
         'rescale_to_crop_size_first': True,
