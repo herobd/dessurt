@@ -504,7 +504,7 @@ class QATrainer(BaseTrainer):
                     if gt_type!='o':
                         log['F_recall_{}'.format(gt_type)].append(1 if pred_type==gt_type else 0)
                     if pred_type!='o':
-                        log['F_prec_{}'.format(gt_type)].append(1 if pred_type==gt_type else   0)
+                        log['F_prec_{}'.format(pred_type)].append(1 if pred_type==gt_type else   0)
 
                 else:
                     print('ERROR: missed question -- {}'.format(question))
