@@ -172,7 +172,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None):
                 elif diff_x>=0 and diff_y<0:
                     p_img[:,diff_x//2:p_img.shape[1]-(diff_x//2 + diff_x%2)] = img[(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),:]
                 else:
-                    p_img = img[(-diff_y)//2:((-diff_y)//2 + (-diff_y)%2),(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
+                    p_img = img[(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
                 img=p_img
 
             if do_ocr=='no':

@@ -28,13 +28,15 @@ class IAMNER(QADataset):
         split_by = 'rwth'
         self.cache_resized = False
 
+        task = config['task'] if 'task' in config else 6
+
         self.current_crop=None
         self.word_id_to_cls={}
 
         if images is not None:
             self.images=images
         else:
-            split_file = os.path.join(dirPath,'ne_annotations','iam',split_by,'iam_{}_{}_6_all.txt'.format(split,split_by))
+            split_file = os.path.join(dirPath,'ne_annotations','iam',split_by,'iam_{}_{}_{}_all.txt'.format(split,split_by,task))
             doc_set = set()
             with open(split_file) as f:
                 lines = f.readlines()
@@ -55,7 +57,7 @@ class IAMNER(QADataset):
                     self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':xml_path, 'rescaled':rescale })
                 else:
                     qas,bbs = self.makeQuestions(xml_path,rescale)
-                    for qa in qas:
+                    for qa in qas:#[::20]:
                         qa['bb_ids']=None
                         self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':xml_path, 'rescaled':rescale,'qa':[qa]})
 
@@ -97,7 +99,7 @@ class IAMNER(QADataset):
             self.getCrop(xmlfile)
         crop_x,crop_y = self.current_crop
         self.current_crop = None
-        qas=[]
+        qa_by_class = defaultdict(list)
         bbs = []
         for words in W_lines:
             for word in words:
@@ -116,8 +118,30 @@ class IAMNER(QADataset):
                 else:
                     q='ne~'+word[1]
                     a='['+cls+']'
-                self.qaAdd(qas,q,a,[len(bbs)],inmask)
+                qa_by_class[cls].append((q,a,[len(bbs)],inmask))
+                #self.qaAdd(qas,q,a,[len(bbs)],inmask)
                 bbs.append(bb)
+
+        qas=[]
+        if self.train:
+            #balance by class
+            classes = list(qa_by_class.keys())
+            random.shuffle(classes)
+            for qa_cls in qa_by_class.values():
+                random.shuffle(qa_cls)
+            i=0
+            some_added=True
+            while len(qas)<3*self.questions and some_added:
+                some_added = False
+                for cls in classes:
+                    if len(qa_by_class[cls])>i:
+                        self.qaAdd(qas,*qa_by_class[cls][i])
+                        some_added=True
+                i+=1
+        else:
+            for qa_cls in qa_by_class.values():
+                for qa in qa_cls:
+                    self.qaAdd(qas,*qa)
         return qas,bbs
 
     def parseAnn(self,xmlfile,s):

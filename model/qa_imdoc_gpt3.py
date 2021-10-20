@@ -350,7 +350,7 @@ class QAImDocGPT3(BaseModel):
 
         #if self.blank_ocr:
         #   ocrRes=[[]]*len(questions)
-        torch.autograd.set_detect_anomaly(True)
+        #torch.autograd.set_detect_anomaly(True)
         #there's got to be a better way...
         for name,buff in self.named_buffers():
             if 'im_xs' in name:
@@ -371,8 +371,9 @@ class QAImDocGPT3(BaseModel):
         all_ocr_bbs=[]
         all_ocr_1dpos=[]
         all_ocr_seqid=[]
+        max_len=0
+        batch_size = image.size(0)
         if self.ocr_in_image:
-            batch_size = image.size(0)
             ocr_grid = torch.FloatTensor(batch_size,self.ocr_out_dim,*self.patches_resolution).fill_(-1).to(device)
             for b,res_im in enumerate(ocrRes):
                 ocr_res = []#[torch.zeros_like(preds[0])]
@@ -457,9 +458,9 @@ class QAImDocGPT3(BaseModel):
             
             ocr_grid = ocr_grid.permute(0,2,3,1).view(batch_size,-1,self.ocr_out_dim) #flatten
             im_tokens += self.embed_ocr_grid(ocr_grid)
-            max_len=0
         else:
-            max_len=0
+            if ocrRes is None:
+                ocrRes = [[]]*batch_size
             if PRINT_ATT:
                 assert image.size(0)==1
             for b,res_im in enumerate(ocrRes):

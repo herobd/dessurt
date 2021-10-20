@@ -645,6 +645,34 @@ class BaseTrainer:
             self.run(instance)
         self.model=tmp
 
+    def validate(self):
+        log={}
+        if self.swa and self.iteration>=self.swa_start:
+            temp_model = self.model.cpu()
+            self.model = self.swa_model
+            self.bn_update()
+            val_result = self._valid_epoch()
+            self.model = temp_model.cuda()
+            for key, value in val_result.items():
+                if 'metrics' in key:
+                    for i, metric in enumerate(self.metrics):
+                        log['swa_val_' + metric.__name__] = val_result[key][i]
+                else:
+                    log['swa_'+key] = value
+        else:
+            val_result = self._valid_epoch()
+            for key, value in val_result.items():
+                if 'metrics' in key:
+                    for i, metric in enumerate(self.metrics):
+                        log['val_' + metric.__name__] = val_result[key][i]
+                else:
+                    log[key] = value
+                    #sumLog['avg_'+key] += value
+
+        self.train_logger.add_entry(log)
+        for key, value in log.items():
+            self.logger.info('    {:15s}: {}'.format(str(key), value))
+
 def moving_average(net1, net2, alpha=1):
     for param1, param2 in zip(net1.parameters(), net2.parameters()):
         param1.data *= (1.0 - alpha)
