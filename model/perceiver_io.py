@@ -67,23 +67,27 @@ class FeedForward(nn.Module):
         return self.net(x)
 
 class Attention(nn.Module):
-    def __init__(self, query_dim, context_dim = None, heads = 8, dim_head = 64):
+    def __init__(self, query_dim, context_dim = None, heads = 8, dim_head = 64, v_dim=None):
         super().__init__()
         inner_dim = dim_head * heads
         context_dim = default(context_dim, query_dim)
+        if v_dim is None:
+            v_dim = context_dim
         self.scale = dim_head ** -0.5
         self.heads = heads
 
-        self.to_q = nn.Linear(query_dim, inner_dim, bias = False)
-        self.to_kv = nn.Linear(context_dim, inner_dim * 2, bias = False)
-        self.to_out = nn.Linear(inner_dim, query_dim)
+        self.to_q = nn.Linear(query_dim, inner_dim, bias = True) #Official implementation uses bias (defaults to True)
+        self.to_k = nn.Linear(context_dim, inner_dim, bias = True)
+        self.to_v = nn.Linear(context_dim, v_dim, bias = True)
+        self.to_out = nn.Linear(v_dim, v_dim, bias=True)
 
     def forward(self, x, context = None, mask = None):
         h = self.heads
 
         q = self.to_q(x)
         context = default(context, x)
-        k, v = self.to_kv(context).chunk(2, dim = -1)
+        k = self.to_k(context)
+        v = self.to_v(context)
 
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h = h), (q, k, v))
 
@@ -104,28 +108,25 @@ class Attention(nn.Module):
 
 # main class
 
-class PerceiverIO(nn.Module):
+class PerceiverI(nn.Module):
     def __init__(
         self,
         *,
         depth,
         dim,
-        queries_dim,
-        logits_dim = None,
         num_latents = 512,
         latent_dim = 512,
         cross_heads = 1,
         latent_heads = 8,
         cross_dim_head = 64,
         latent_dim_head = 64,
-        weight_tie_layers = False,
-        decoder_ff = False
+        weight_tie_layers = False
     ):
         super().__init__()
         self.latents = nn.Parameter(torch.randn(num_latents, latent_dim))
 
         self.cross_attend_blocks = nn.ModuleList([
-            PreNorm(latent_dim, Attention(latent_dim, dim, heads = cross_heads, dim_head = cross_dim_head), context_dim = dim),
+            PreNorm(latent_dim, Attention(latent_dim, dim, heads = cross_heads, dim_head = cross_dim_head, v_dim=latent_dim), context_dim = dim),
             PreNorm(latent_dim, FeedForward(latent_dim))
         ])
 
@@ -142,16 +143,10 @@ class PerceiverIO(nn.Module):
                 get_latent_ff(**cache_args)
             ]))
 
-        self.decoder_cross_attn = PreNorm(queries_dim, Attention(queries_dim, latent_dim, heads = cross_heads, dim_head = cross_dim_head), context_dim = latent_dim)
-        self.decoder_ff = PreNorm(queries_dim, FeedForward(queries_dim)) if decoder_ff else None
-
-        self.to_logits = nn.Linear(queries_dim, logits_dim) if exists(logits_dim) else nn.Identity()
-
     def forward(
         self,
         data,
-        mask = None,
-        queries = None
+        mask = None
     ):
         b, *_, device = *data.shape, data.device
 
@@ -170,8 +165,31 @@ class PerceiverIO(nn.Module):
             x = self_attn(x) + x
             x = self_ff(x) + x
 
-        if not exists(queries):
-            return x
+        return x
+
+class DecoderO(nn.Module):
+    def __init__(
+        self,
+        *,
+        queries_dim,
+        logits_dim = None,
+        latent_dim = 512,
+        cross_heads = 1,
+        cross_dim_head = 64,
+        decoder_ff = True
+    ):
+        super().__init__()
+        self.decoder_cross_attn = PreNorm(queries_dim, Attention(queries_dim, latent_dim, heads = cross_heads, dim_head = cross_dim_head, v_dim = queries_dim), context_dim = latent_dim)
+        self.decoder_ff = PreNorm(queries_dim, FeedForward(queries_dim)) if decoder_ff else None
+
+        self.to_logits = nn.Linear(queries_dim, logits_dim) if exists(logits_dim) else nn.Identity()
+
+    def forward(
+        self,
+        x,
+        queries
+    ):
+        b = x.shape[0]
 
         # make sure queries contains batch dimension
 
