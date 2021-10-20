@@ -157,7 +157,7 @@ class QAImDocPerceiver(BaseModel):
             self.embed_ocr_grid = nn.Linear(self.ocr_out_dim,im_embed_dim)
 
         self.q_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000)
-        self.a_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000,offset_start=1000)
+        #self.a_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000,offset_start=1000)
 
 
 
@@ -197,6 +197,8 @@ class QAImDocPerceiver(BaseModel):
                 latent_heads = 8,
                 **kwargs #decoder_ff=True?
             )
+        out_length = 2048
+        out_dim = 768
 
 
         self.final_resolution = self.patches_resolution
@@ -222,6 +224,9 @@ class QAImDocPerceiver(BaseModel):
                 nn.Linear(fd_model,self.decode_tokenizer.vocab_size),
                 nn.LogSoftmax(dim=-1) #except
                 )
+
+        #We'll precompute the query tokens for the text answer
+        self.query_a_tokens = nn.Parameter(torch.FloatTensor(out_length,out_dim).normal_())
 
 
         #t#self.opt_history=defaultdict(list)#t#
@@ -276,9 +281,16 @@ class QAImDocPerceiver(BaseModel):
         num_q = q_t['input_ids'].size(1)
         a_t = self.tokenizer(answers,return_tensors="pt",padding=True)
         num_a = a_t['input_ids'].size(1)-1 #remove last SEP token
-        qa_tokens = self.text_embedding(torch.cat((q_t['input_ids'],a_t['input_ids'][:,:-1]),dim=1).to(device))
-        q_tokens = qa_tokens[:,:num_q] 
-        a_tokens = qa_tokens[:,num_q:] 
+
+        #We may need to do the answer autoregressively, but for now we won't
+        #qa_tokens = self.text_embedding(torch.cat((q_t['input_ids'],a_t['input_ids'][:,:-1]),dim=1).to(device))
+        #q_tokens = qa_tokens[:,:num_q] 
+        #a_tokens = qa_tokens[:,num_q:] 
+        #a_tokens = self.a_pos_1d_enc(a_tokens)
+        #a_padding_mask = (1-a_t['attention_mask'][:,1:]).bool().to(device) #remove last SEP
+
+        #just embed question
+        q_tokens = self.text_embedding(q_t['input_ids'].to(device))
 
         #the model input ends up being [CLS] Question  [SEP] Answer
         #                             { q tokens     }{ a tokens   }
@@ -287,15 +299,13 @@ class QAImDocPerceiver(BaseModel):
         #ys=ocr_bbs[:,:,1]
         #ws=ocr_bbs[:,:,2]
         #hs=ocr_bbs[:,:,3]
-        #ocr_pos = ocr_bbs[:,:,0:2] #just x,y
+        #ocr_pos = ocr_bbs[:,:,0:2] #just x,y?
 
         q_tokens = self.q_pos_1d_enc(q_tokens)
         q_padding_mask = (1-q_t['attention_mask']).bool()#.to(device) 
         q_padding_mask = q_padding_mask.to(device)
 
 
-        a_tokens = self.a_pos_1d_enc(a_tokens)
-        a_padding_mask = (1-a_t['attention_mask'][:,1:]).bool().to(device) #remove last SEP
         
         if num_ocr>0:
             ocr_tokens += self.ocr_pos_emb_x(xs) + self.ocr_pos_emb_y(ys) + self.ocr_pos_emb_w(ws) + self.ocr_pos_emb_h(hs) + self.ocr_1dpos_enc(ocr_1dpos) + self.ocr_seqid_enc(ocr_seqid)
