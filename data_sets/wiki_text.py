@@ -49,4 +49,8 @@ def getWikiArticle():
     if len(paras)>0:
         return paras
     else:
+        print('blank article:')
+        print(text)
+        print('------------')
+        print(_text_data[instance_i]['text'])
         return getWikiArticle()
