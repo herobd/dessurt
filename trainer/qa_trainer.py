@@ -148,7 +148,6 @@ class QATrainer(BaseTrainer):
             thisInstance = self.data_loader_iter.next()
         #t#self.opt_history['get data'].append(timeit.default_timer()-ticAll)#t#
 
-
         
         if self.accum_grad_steps<2 or iteration%self.accum_grad_steps==1:
             self.optimizer.zero_grad()
@@ -309,6 +308,7 @@ class QATrainer(BaseTrainer):
 
 
     def run(self,instance,get=[],forward_only=False,valid=False):#
+
         image = self._to_tensor(instance['img'])
         device = image.device
         ocrBoxes = instance['bb_gt']
