@@ -296,10 +296,32 @@ class QATrainer(BaseTrainer):
 
 
                 #total_val_metrics += self._eval_metrics(output, target)
-
+        F_measure_prec={}
+        F_measure_recall={}
         for val_name in val_metrics:
             if val_count[val_name]>0:
                 val_metrics[val_name] =  val_metrics[val_name]/val_count[val_name]
+                if 'F_prec' in val_name:
+                    last_underscore = val_name.rfind('_')
+                    var_name = val_name[last_underscore+1:]
+                    F_measure_prec[var_name]=val_metrics[val_name]
+                if 'F_recall' in val_name:
+                    last_underscore = val_name.rfind('_')
+                    var_name = val_name[last_underscore+1:]
+                    F_measure_recall[var_name]=val_metrics[val_name]
+
+        names = set(F_measure_prec.keys())
+        names.update(F_measure_recall.keys())
+        if len(names)>0:
+            total_Fms=0
+            for name in names:
+                p = F_measure_prec[name] if name in F_measure_prec else 1
+                r = F_measure_recall[name] if name in F_measure_recall else 1
+                f = 2*(p*r)/(p+r)
+                total_Fms+=f
+                val_metrics['val_F_Measure_{}'.format(name)]=f
+            val_metrics['val_F_Measure_MACRO']=total_Fms/len(names)
+
         return val_metrics
 
 
@@ -475,6 +497,15 @@ class QATrainer(BaseTrainer):
                     hit = ed/((len(answer)+len(pred))/2) < 0.1
                     log['E_{}_acc'.format(typ)].append(int(hit))
                     log['E_{}_ed'.format(typ)].append(ed)
+                elif question.startswith('ne~'):
+                    pred_type = pred[1]
+                    gt_type = answer[1]
+                    log['E_NER_acc'].append(1 if pred_type==gt_type else 0)
+                    if gt_type!='o':
+                        log['F_recall_{}'.format(gt_type)].append(1 if pred_type==gt_type else 0)
+                    if pred_type!='o':
+                        log['F_prec_{}'.format(pred_type)].append(1 if pred_type==gt_type else   0)
+
                 else:
                     print('ERROR: missed question -- {}'.format(question))
                 
