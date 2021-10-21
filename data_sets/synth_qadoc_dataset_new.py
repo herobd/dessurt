@@ -172,14 +172,6 @@ class SynthQADocDataset(FormQA):
 
         wider = round(random.triangular(0,self.wider,0)) if self.wider else False
 
-        if self.use_hw:
-            num_hw_entries = int(self.use_hw*num_entries)
-            num_entries = num_entries-num_hw_entries
-
-            hw_labels = random.sample(list(enumerate(self.header_labels)),k=num_hw_entries)
-            hw_labels = [a+(self.header_dir,True) for a in hw_labels]
-            hw_values = random.sample(list(enumerate(self.hw_labels)),k=num_hw_entries)
-            hw_values = [a+(self.hw_dir,False) for a in hw_values]
 
         #How many text lines (images) per label and value?
         if self.multiline:
