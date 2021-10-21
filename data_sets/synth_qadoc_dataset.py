@@ -165,6 +165,17 @@ class SynthQADocDataset(FormQA):
         for i in range(config['batch_size']*100): #we just randomly generate instances on the fly
             self.images.append({'id':'{}'.format(i), 'imagePath':None, 'annotationPath':0, 'rescaled':1.0, 'imageName':'0'})
 
+        if 'pretrain' in config and config['pretrain']:
+            self.q_types_no_table = {
+                    'np':0.0000001,
+                    'all':0.0000001,
+                    'class-link':0.1,
+                    'class':0.00000001,
+                    'down-pair':1.0,
+                    'up-pair':1.0,
+                    'read':1.0,
+                    'count-tables':0.0000000001
+                    }
 
     def readGT(self,gt_filename,directory,set_size=None):
         init_size=0
