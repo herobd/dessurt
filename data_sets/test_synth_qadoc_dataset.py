@@ -47,7 +47,7 @@ def display(data,write):
         #    if x in q:
         #        draw = True
         #        break
-        draw = True
+        draw = False
         if write:
             cv2.imwrite('test_single_512.png',(img.numpy()*255)[:,:,0].astype(np.uint8))
         if draw :
@@ -95,6 +95,7 @@ if __name__ == "__main__":
         repeat=1
     data=synth_qadoc_dataset.SynthQADocDataset(dirPath=dirPath,split='train',config={
         "data_set_name": "SynthQADocDataset",
+        "pretrain": False,
         "fontdir": "../data/fonts",
         "textdir": "../data/",
         "header_dir": "../data/english4line_fonts",
@@ -112,8 +113,8 @@ if __name__ == "__main__":
         "min_entries": None,
         "max_entries": 44,
 	"use_read": 1,
-	"multiline": 0.5,
-        "tables": 0.5,
+	"multiline": 0.0,
+        "tables": 0.0,
         "change_size": True,
 	"word_questions": "simple",
 	"do_masks": True,

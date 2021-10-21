@@ -63,13 +63,15 @@ class QAImDocPerceiver(BaseModel):
         self.ocr_in_image = config['grid_ocr'] if 'grid_ocr' in config else False
         self.ocr_seperate_tokens = config['ocr_tokens'] if 'ocr_tokens' in config else False
 
+        self.autoregressive = config['autoregressive'] if 'autoregressive' in config else False
+
         self.image_size = config['image_size'] #start at 512?
-        dropout = 0.1
+        dropout = 0.0625
         lighter_conv_patch_emb = config['lighter_conv_patch_emb'] if 'lighter_conv_patch_emb' in config else False
 
         #Perceiver parameters
         input_dim = config['input_dim'] if 'input_dim' in config else 768
-        perveiver_depth = config['perveiver_depth'] if 'perveiver_depth' in config else 26
+        perveiver_blocks = config['perveiver_blocks'] if 'perveiver_depth' in config else [(26,1)]
         num_latents = config['num_latents'] if 'num_latents' in config else 256
         latent_dim = config['latent_dim'] if 'latent_dim' in config else 1280
         self_heads = config['self_heads'] if 'self_heads' in config else 8
@@ -136,7 +138,8 @@ class QAImDocPerceiver(BaseModel):
             self.embed_ocr_grid = nn.Linear(self.ocr_out_dim,input_dim)
 
         self.q_pos_1d_enc = PositionalEncoding(input_dim,dropout=dropout,max_len=out_length)
-        #self.a_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000,offset_start=1000)
+        if self.autoregressive:
+            self.a_pos_1d_enc = PositionalEncoding(output_dim,dropout=dropout,max_len=out_length)
 
 
 
@@ -167,7 +170,7 @@ class QAImDocPerceiver(BaseModel):
         #dim=32?
         #logits dim=100
         self.perciever = PerceiverI(
-                depth = perveiver_depth,
+                block_specification = perveiver_blocks,
                 num_latents = num_latents,
                 latent_dim=latent_dim,
                 dim = input_dim, #input dim
@@ -216,8 +219,9 @@ class QAImDocPerceiver(BaseModel):
                 nn.LogSoftmax(dim=-1) #except
                 )
 
-        #We'll precompute the query tokens for the text answer
-        self.query_a_tokens = nn.Parameter(torch.FloatTensor(1,out_length,output_dim).normal_())
+        if not self.autoregressive:
+            #We'll precompute the query tokens for the text answer
+            self.query_a_tokens = nn.Parameter(torch.FloatTensor(1,out_length,output_dim).normal_())
 
 
         #t#self.opt_history=defaultdict(list)#t#
@@ -274,15 +278,14 @@ class QAImDocPerceiver(BaseModel):
         a_t = self.tokenizer(answers,return_tensors="pt",padding=True)
         num_a = a_t['input_ids'].size(1)-1 #remove last SEP token
 
-        #We may need to do the answer autoregressively, but for now we won't
-        #qa_tokens = self.text_embedding(torch.cat((q_t['input_ids'],a_t['input_ids'][:,:-1]),dim=1).to(device))
-        #q_tokens = qa_tokens[:,:num_q] 
-        #a_tokens = qa_tokens[:,num_q:] 
-        #a_tokens = self.a_pos_1d_enc(a_tokens)
-        #a_padding_mask = (1-a_t['attention_mask'][:,1:]).bool().to(device) #remove last SEP
-
-        #just embed question
-        q_tokens = self.text_embedding(q_t['input_ids'].to(device))
+        if self.autoregressive:
+            qa_tokens = self.text_embedding(torch.cat((q_t['input_ids'],a_t['input_ids'][:,:-1]),dim=1).to(device))
+            q_tokens = qa_tokens[:,:num_q] 
+            a_tokens = qa_tokens[:,num_q:] 
+            a_tokens = self.a_pos_1d_enc(a_tokens)
+        else:
+            #just embed question
+            q_tokens = self.text_embedding(q_t['input_ids'].to(device))
 
         #the model input ends up being [CLS] Question  [SEP] Answer
         #                             { q tokens     }{ a tokens   }
@@ -322,7 +325,12 @@ class QAImDocPerceiver(BaseModel):
         latent = self.perciever(input_tokens,input_padding_mask)
 
         im_tokens = self.decoder_image(latent,query_im_tokens)
-        a_tokens = self.decoder_answer(latent,self.query_a_tokens.expand(batch_size,-1,-  1))
+
+        if self.autoregressive:
+            query_a_tokens = a_tokens
+        else:        
+            query_a_tokens = self.query_a_tokens.expand(batch_size,-1,-  1)
+        a_tokens = self.decoder_answer(latent,query_a_tokens)
 
 
         ##############

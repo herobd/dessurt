@@ -112,7 +112,7 @@ class PerceiverI(nn.Module):
     def __init__(
         self,
         *,
-        depth,
+        block_specification,
         dim,
         num_latents = 512,
         latent_dim = 512,
@@ -125,23 +125,44 @@ class PerceiverI(nn.Module):
         super().__init__()
         self.latents = nn.Parameter(torch.randn(num_latents, latent_dim))
 
-        self.cross_attend_blocks = nn.ModuleList([
-            PreNorm(latent_dim, Attention(latent_dim, dim, heads = cross_heads, dim_head = cross_dim_head, v_dim=latent_dim), context_dim = dim),
-            PreNorm(latent_dim, FeedForward(latent_dim))
-        ])
+        #self.cross_attend_blocks = nn.ModuleList([
+        #    PreNorm(latent_dim, Attention(latent_dim, dim, heads = cross_heads, dim_head = cross_dim_head, v_dim=latent_dim), context_dim = dim),
+        #    PreNorm(latent_dim, FeedForward(latent_dim))
+        #])
 
-        get_latent_attn = lambda: PreNorm(latent_dim, Attention(latent_dim, heads = latent_heads, dim_head = latent_dim_head))
-        get_latent_ff = lambda: PreNorm(latent_dim, FeedForward(latent_dim))
-        get_latent_attn, get_latent_ff = map(cache_fn, (get_latent_attn, get_latent_ff))
+        #get_latent_attn = lambda: PreNorm(latent_dim, Attention(latent_dim, heads = latent_heads, dim_head = latent_dim_head))
+        #get_latent_ff = lambda: PreNorm(latent_dim, FeedForward(latent_dim))
+        #get_latent_attn, get_latent_ff = map(cache_fn, (get_latent_attn, get_latent_ff))
 
-        self.layers = nn.ModuleList([])
-        cache_args = {'_cache': weight_tie_layers}
+        #self.layers = nn.ModuleList([])
+        #cache_args = {'_cache': weight_tie_layers}
 
-        for i in range(depth):
-            self.layers.append(nn.ModuleList([
-                get_latent_attn(**cache_args),
-                get_latent_ff(**cache_args)
-            ]))
+        #for i in range(depth):
+        #    self.layers.append(nn.ModuleList([
+        #        get_latent_attn(**cache_args),
+        #        get_latent_ff(**cache_args)
+        #    ]))
+
+        self.cross_blocks = nn.ModuleList([])
+        self.inner_block_count = []
+        for num_self_att_per_block, num_blocks in block_specification:
+
+            cross_att = PreNorm(latent_dim, Attention(latent_dim, dim, heads = cross_heads, dim_head = cross_dim_head, v_dim=latent_dim), context_dim = dim)
+            cross_ff = PreNorm(latent_dim, FeedForward(latent_dim))
+
+            self_att = nn.ModuleList([])
+            self_ff = nn.ModuleList([])
+            for i in range(num_self_att_per_block):
+                self_att.append(PreNorm(latent_dim, Attention(latent_dim, heads = latent_heads, dim_head = latent_dim_head)))
+                self_ff.append(PreNorm(latent_dim, FeedForward(latent_dim)))
+            self.cross_blocks.append(nn.ModuleList([
+                cross_att,
+                cross_ff,
+                self_att,
+                self_ff]))
+            self.inner_block_count.append(num_blocks)
+
+            
 
     def forward(
         self,
@@ -152,18 +173,27 @@ class PerceiverI(nn.Module):
 
         x = repeat(self.latents, 'n d -> b n d', b = b)
 
-        cross_attn, cross_ff = self.cross_attend_blocks
+        #cross_attn, cross_ff = self.cross_attend_blocks
 
-        # cross attention only happens once for Perceiver IO
+        ## cross attention only happens once for Perceiver IO
 
-        x = cross_attn(x, context = data, mask = mask) + x
-        x = cross_ff(x) + x
+        #x = cross_attn(x, context = data, mask = mask) + x
+        #x = cross_ff(x) + x
 
-        # layers
+        ## layers
 
-        for self_attn, self_ff in self.layers:
-            x = self_attn(x) + x
-            x = self_ff(x) + x
+        #for self_attn, self_ff in self.layers:
+        #    x = self_attn(x) + x
+        #    x = self_ff(x) + x
+
+        for (cross_att, cross_ff, self_att, self_ff),num_blocks in zip(self.cross_blocks,self.inner_block_count):
+            x = cross_att(x, context = data, mask = mask) + x
+            x = cross_ff(x) + x
+
+            for i in range(num_blocks):
+                for att,ff in zip(self_att, self_ff):
+                    x = att(x) + x
+                    x = ff(x) + x
 
         return x
 
