@@ -274,7 +274,7 @@ def main(resume,config,addToConfig,gpu=False,crop_size=False,test=False,draw=Fal
                 print(' \tpred: {}'.format(answer))
                 assert '\\' not in answer
 
-                ed = editdistance.eval(answer,gt_text)
+                ed = editdistance.eval(answer,gt_text.lower())
                 cer = ed/len(gt_text)
                 sum_cer += cer
                 count_lines += 1

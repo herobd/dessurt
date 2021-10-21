@@ -128,38 +128,60 @@ class GenDaemon:
         else:
             return self.generate()
 
-    def generateLabelValuePairs(self):
-        paras = getWikiArticle()
+    def generateLabelValuePairs(self,number):
+        pairs=[]
+        while len(pairs)<number:
+            paras = getWikiArticle(True)
 
-        lengths = [(i,len(p)) for i,p in enumerate(paras)]
-        lengths.sort(key=lambda a:a[0])
+            lengths = [(i,len(p)) for i,p in enumerate(paras)]
+            lengths.sort(key=lambda a:a[1])
 
-        used=set()
+            used=set()
+        
+            for p_i,length in lengths:
+                if p_i in used or p_i+1 in used:
+                    #print('already used')
+                    break
+                if p_i<len(paras)-1:
+                    label = paras[p_i]
+                    if label.count(' ')>6:
+                        #print('rejected label: '+label)
+                        continue
+                    value = paras[p_i+1]
+                    if len(value)==0 or len(label)==0:
+                        continue
 
-        for p_i,length in lengths:
-            if p_i<len(paras)-1:
-                label = paras[p_i]
-                value = paras[p_i+1]
+                    used.add(p_i)
+                    used.add(p_i+1)
 
-                font,font_name,fontN,fontN_name = self.gen.getFont()
-                if random.random()<0.5: #sometimes use same font
-                    fontv=font
-                    fontNv=fontN
-                else:
-                    fontv,fontv_name,fontNv,fontNv_name = self.gen.getFont()
+                    font,font_name,fontN,fontN_name = self.gen.getFont()
+                    if random.random()<0.5: #sometimes use same font
+                        fontv=font
+                        fontNv=fontN
+                    else:
+                        fontv,fontv_name,fontNv,fontNv_name = self.gen.getFont()
 
 
-                if label[-1] != ':' and label[-1] != '=' and label[-1] != '>':
-                    if random.random()<0.1:
-                        label+=':'
-                    elif random.random()<0.01:
-                        if random.random()<0.5:
-                            label+='='
-                        else:
-                            label+='>'
+                    if label[-1] != ':' and label[-1] != '=' and label[-1] != '>':
+                        if random.random()<0.1:
+                            label+=':'
+                        elif random.random()<0.01:
+                            if random.random()<0.5:
+                                label+='='
+                            else:
+                                label+='>'
+                    pairs.append((label,font,fontN,value,fontv,fontNv))
+                    if len(pairs)>=number:
+                        break
+                    #print(label)
+                    #print('----')
+                    #print(value)
+                    #print('---=================')
 
         #text = re.sub(r'\s+',' ',text) #replace all whitespace with space
         #words = text.split(' ')
+        for label,font,fontN,value,fontv,fontN,v in pairs:
+            TODO()
 
         #font,font_name,fontN,fontN_name = self.gen.getFont()
         out_words = []   
