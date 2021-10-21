@@ -546,6 +546,13 @@ class FormQA(QADataset):
                     print(er)
                     print('question is {}'.format(question))
                     continue
+                except KeyError as er:
+                    print(er)
+                    print('question is {}'.format(question))
+                    print('prompt_text is {}'.format(prompt_text))
+
+                    continue
+
 
             elif q_type=='read':
                 #finish reading entity

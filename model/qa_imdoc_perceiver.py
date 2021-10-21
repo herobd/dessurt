@@ -5,9 +5,8 @@ import torch.nn.functional as F
 import numpy as np
 from model.pairing_g_graph_layoutlm import  runLayoutLM
 from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding
-from model.rel_pos_im_transformer import RelPosQTransformerLayer, RelPosTransformerLayer
-from model.swin_transformer import ConvPatchEmbed, SwinTransformerBlock, PatchMerging
-from model.trans_pooling import OCRPooler, QPooler
+from model.perceiver_io import PerceiverI, DecoderO
+from model.swin_transformer import ConvPatchEmbed
 try:
     from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
     from transformers import LayoutLMTokenizer, LayoutLMModel
@@ -62,44 +61,24 @@ class QAImDocPerceiver(BaseModel):
         super(QAImDocPerceiver, self).__init__(config)
         self.blank_ocr = config['blank_ocr'] if 'blank_ocr' in config else False
         self.ocr_in_image = config['grid_ocr'] if 'grid_ocr' in config else False
+        self.ocr_seperate_tokens = config['ocr_tokens'] if 'ocr_tokens' in config else False
+
+        self.autoregressive = config['autoregressive'] if 'autoregressive' in config else False
+
         self.image_size = config['image_size'] #start at 512?
-        dropout = 0 if 'no_dropout' in config and  config['no_dropout'] else 0.1
+        dropout = 0.0625
         lighter_conv_patch_emb = config['lighter_conv_patch_emb'] if 'lighter_conv_patch_emb' in config else False
 
-        blocks_per_level = config['swin_blocks_per_level'] #[2,2,6,2] -> in:512,emb:64 then 64,32,16,8
-        full_layers = config['full_layers']
-        if full_layers is not None:
-            fd_model = config['full_dim']
-            fnhead = config['full_num_heads']
-            fdim_ff = config['fdim_ff']
-        else:
-            fd_model=None
-        if blocks_per_level is not None:
-            if 'swin_text_downsample_all' in config:
-                swin_text_downsample = [[d,d] if type(d) is bool else d for d in config['swin_text_downsample_all']]
-                swin_text_downsample_dense=True
-                assert (not swin_text_downsample[-1][0] and not swin_text_downsample[-1][1]) and "Shouldn't downsample final. Not used."
-                self.downsample_ocr = sum(d[0] for d in swin_text_downsample)
-                self.downsample_q = sum(d[1] for d in swin_text_downsample)
-
-            else:
-                swin_text_downsample = config['swin_text_downsample'] if 'swin_text_downsample' in config else [False]*len(blocks_per_level)
-                swin_text_downsample_dense=False
-                self.downsample_ocr = sum(swin_text_downsample)
-
-            window_size = config['window_size'] #7
-            if type(window_size) is int:
-                window_size = [window_size]*len(blocks_per_level)
-            d_model = config['decode_dim']
-            if fd_model is None:
-                fd_model = d_model
-            dim_ff = config['dim_ff']
-            nhead = config['decode_num_heads']
-            swin_nhead = config['swin_nheads'] #[3,6,12,24] | [2,6,12,12] probably don't need as much later
-            im_embed_dim = config['im_embed_dim'] #96 -> 96,192,384,768 | 64->64,128,256,512
-        else:
-            d_model = fd_model
-            im_embed_dim = fd_model
+        #Perceiver parameters
+        input_dim = config['input_dim'] if 'input_dim' in config else 768
+        perveiver_blocks = config['perveiver_blocks'] if 'perveiver_depth' in config else [(26,1)]
+        num_latents = config['num_latents'] if 'num_latents' in config else 256
+        latent_dim = config['latent_dim'] if 'latent_dim' in config else 1280
+        self_heads = config['self_heads'] if 'self_heads' in config else 8
+        cross_heads = config['cross_heads'] if 'cross_heads' in config else 8
+        output_dim = config['output_dim'] if 'output_dim' in config else 768
+        out_length = config['out_length'] if 'out_length' in config else 2048
+        qk_dim = 32 #per collab example
 
         if isinstance(self.image_size,int):
             self.image_size = (self.image_size,self.image_size)
@@ -136,34 +115,37 @@ class QAImDocPerceiver(BaseModel):
             self.DECODE_CLS_TOKEN=self.CLS_TOKEN
 
 
-        self.text_embedding = nn.Embedding(self.tokenizer.vocab_size, d_model)
+        self.text_embedding = nn.Embedding(self.tokenizer.vocab_size, input_dim)
         self.ocr_out_dim = 97
         self.one_hot_conf = 0.9
         self.zero_hot_conf = (1-self.one_hot_conf)/(self.ocr_out_dim-1)
-        if not self.ocr_in_image:
-            self.ocr_emb = nn.Sequential(
-                    nn.Conv1d(self.ocr_out_dim,d_model,3,padding=1), #this will mix neighboring instances....
-                    nn.ReLU(True),
-                    nn.Conv1d(d_model,d_model,3,padding=1),
-                    )
-                    #nn.Linear(97,d_model,bias=False)
-            self.ocr_1dpos_enc = ReturnPositionalEncoding(d_model,dropout=dropout,max_len=1000)
-            self.ocr_seqid_enc = ReturnPositionalEncoding(d_model,dropout=dropout,max_len=1000,offset_start=2000)
-            self.ocr_pos_emb_x = UniformRealEmbedding(d_model,0,self.image_size[1],100)
-            self.ocr_pos_emb_y = UniformRealEmbedding(d_model,0,self.image_size[0],100)
-            self.ocr_pos_emb_w = PositiveRealEmbedding(d_model,0,int(0.5*self.image_size[1]),30)
-            self.ocr_pos_emb_h = PositiveRealEmbedding(d_model,0,int(0.3*self.image_size[0]),30)
-        else:
-            self.embed_ocr_grid = nn.Linear(self.ocr_out_dim,im_embed_dim)
 
-        self.q_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000)
-        #self.a_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000,offset_start=1000)
+        if self.ocr_seperate_tokens:
+            self.ocr_emb = nn.Sequential(
+                    nn.Conv1d(self.ocr_out_dim,input_dim,3,padding=1), #this will mix neighboring instances....
+                    nn.ReLU(True),
+                    nn.Conv1d(input_dim,input_dim,3,padding=1),
+                    )
+                    #nn.Linear(97,input_dim,bias=False)
+            self.ocr_1dpos_enc = ReturnPositionalEncoding(input_dim,dropout=dropout,max_len=out_length)
+            self.ocr_seqid_enc = ReturnPositionalEncoding(input_dim,dropout=dropout,max_len=out_length,offset_start=out_length)
+            self.ocr_pos_emb_x = UniformRealEmbedding(input_dim,0,self.image_size[1],100)
+            self.ocr_pos_emb_y = UniformRealEmbedding(input_dim,0,self.image_size[0],100)
+            self.ocr_pos_emb_w = PositiveRealEmbedding(input_dim,0,int(0.5*self.image_size[1]),30)
+            self.ocr_pos_emb_h = PositiveRealEmbedding(input_dim,0,int(0.3*self.image_size[0]),30)
+
+        if self.ocr_in_image:
+            self.embed_ocr_grid = nn.Linear(self.ocr_out_dim,input_dim)
+
+        self.q_pos_1d_enc = PositionalEncoding(input_dim,dropout=dropout,max_len=out_length)
+        if self.autoregressive:
+            self.a_pos_1d_enc = PositionalEncoding(output_dim,dropout=dropout,max_len=out_length)
 
 
 
         self.patch_embed =  ConvPatchEmbed(
                 img_size=self.image_size, 
-                embed_dim=im_embed_dim,
+                embed_dim=input_dim,
                 norm_layer=nn.LayerNorm,
                 lighter=lighter_conv_patch_emb,
                 in_chans=2) #now includes the mask channel
@@ -182,51 +164,64 @@ class QAImDocPerceiver(BaseModel):
         self.patch_scale_y = 1/self.patch_embed.patch_size[0]
 
 
-        self.absolute_2dpos_embed = nn.Parameter(torch.zeros(1, num_patches, im_embed_dim))
+        self.absolute_2dpos_embed = nn.Parameter(torch.zeros(1, num_patches, input_dim))
         trunc_normal_(self.absolute_2dpos_embed, std=.02)
 
         #dim=32?
         #logits dim=100
-        self.perciever = PerceiverIO(
-                depth = 26,
-                num_latents = 256,
-                latent_dim=1280
-                dim = 768, #input dim
-                queries_dim = 768, #output dim
-                cross_heads = 8,
-                latent_heads = 8,
-                **kwargs #decoder_ff=True?
+        self.perciever = PerceiverI(
+                block_specification = perveiver_blocks,
+                num_latents = num_latents,
+                latent_dim=latent_dim,
+                dim = input_dim, #input dim
+                cross_heads = cross_heads,
+                cross_dim_head = qk_dim,
+                latent_heads = self_heads,
+                latent_dim_head = qk_dim,
             )
-        out_length = 2048
-        out_dim = 768
+        self.decoder_image = DecoderO(
+                queries_dim = input_dim, #it reuses the image as query
+                latent_dim=latent_dim,
+                cross_heads = cross_heads,
+                cross_dim_head = qk_dim,
+                )
+        self.decoder_answer = DecoderO(
+                queries_dim = output_dim,
+                latent_dim=latent_dim,
+                cross_heads = cross_heads,
+                cross_dim_head = qk_dim,
+                )
+
 
 
         self.final_resolution = self.patches_resolution
-        upsample_net = [nn.ConvTranspose2d(d_im,d_im//2,4,2,1),
+        d_im = 128
+        upsample_net = [nn.ConvTranspose2d(input_dim,d_im,4,2,1),
+                        nn.InstanceNorm2d(d_im),
+                        nn.Dropout2d(p=0.125,inplace=True),
+                        nn.ReLU(inplace=True),
+                        nn.Conv2d(d_im,d_im//2,3,1,1),
                         nn.InstanceNorm2d(d_im//2),
                         nn.Dropout2d(p=0.125,inplace=True),
                         nn.ReLU(inplace=True),
-                        nn.Conv2d(d_im//2,d_im//4,3,1,1),
+                        nn.ConvTranspose2d(d_im//2,d_im//4,4,2,1),
                         nn.InstanceNorm2d(d_im//4),
                         nn.Dropout2d(p=0.125,inplace=True),
-                        nn.ReLU(inplace=True)
-                        nn.ConvTranspose2d(d_im//4,d_im//8,4,2,1),
-                        nn.InstanceNorm2d(d_im//8),
-                        nn.Dropout2d(p=0.125,inplace=True),
                         nn.ReLU(inplace=True),
-                        nn.Conv2d(d_im//8,1,1,1,0),
+                        nn.Conv2d(d_im//4,1,1,1,0),
                         nn.Sigmoid()]
         self.upsample_net= nn.Sequential(*upsample_net)
         
         
 
         self.answer_decode = nn.Sequential(
-                nn.Linear(fd_model,self.decode_tokenizer.vocab_size),
+                nn.Linear(output_dim,self.decode_tokenizer.vocab_size),
                 nn.LogSoftmax(dim=-1) #except
                 )
 
-        #We'll precompute the query tokens for the text answer
-        self.query_a_tokens = nn.Parameter(torch.FloatTensor(out_length,out_dim).normal_())
+        if not self.autoregressive:
+            #We'll precompute the query tokens for the text answer
+            self.query_a_tokens = nn.Parameter(torch.FloatTensor(1,out_length,output_dim).normal_())
 
 
         #t#self.opt_history=defaultdict(list)#t#
@@ -236,7 +231,8 @@ class QAImDocPerceiver(BaseModel):
 
     #we're building this for fixed images size
     def forward(self,image,ocr_results,questions,answers=None,RUN=False):
-
+        batch_size = image.size(0)
+        assert batch_size == len(questions)
 
         #t#ticA=timeit.default_timer()#t#
         device = image.device
@@ -248,16 +244,16 @@ class QAImDocPerceiver(BaseModel):
         #Dropout?
 
         if self.ocr_seperate_tokens:
-            ocr_tokens,ocr_bbs,ocr_1dpos,ocr_seqid,ocr_padding_mask = self.prepareOCRTokens(ocr_results)
+            ocr_tokens,ocr_bbs,ocr_1dpos,ocr_seqid,ocr_padding_mask = self.prepareOCRTokens(ocr_results,device)
         else:
             ocr_padding_mask = torch.BoolTensor(batch_size,0)
             ocr_tokens =None
-            ocr_bbs = torch.FloatTensor(batch_size,4)
+            ocr_bbs = torch.FloatTensor(batch_size,0,4)
             ocr_1dpos = torch.LongTensor(batch_size,0)
             ocr_seqid = torch.LongTensor(batch_size,0)
 
         if self.ocr_in_image:
-            im_tokens += self.appendOCRToVisual(ocrRes)
+            im_tokens += self.appendOCRToVisual(ocr_results,device)#.to(device)
 
         ocr_bbs = ocr_bbs.to(device)
         ocr_1dpos = ocr_1dpos.to(device)
@@ -282,27 +278,26 @@ class QAImDocPerceiver(BaseModel):
         a_t = self.tokenizer(answers,return_tensors="pt",padding=True)
         num_a = a_t['input_ids'].size(1)-1 #remove last SEP token
 
-        #We may need to do the answer autoregressively, but for now we won't
-        #qa_tokens = self.text_embedding(torch.cat((q_t['input_ids'],a_t['input_ids'][:,:-1]),dim=1).to(device))
-        #q_tokens = qa_tokens[:,:num_q] 
-        #a_tokens = qa_tokens[:,num_q:] 
-        #a_tokens = self.a_pos_1d_enc(a_tokens)
-        #a_padding_mask = (1-a_t['attention_mask'][:,1:]).bool().to(device) #remove last SEP
-
-        #just embed question
-        q_tokens = self.text_embedding(q_t['input_ids'].to(device))
+        if self.autoregressive:
+            qa_tokens = self.text_embedding(torch.cat((q_t['input_ids'],a_t['input_ids'][:,:-1]),dim=1).to(device))
+            q_tokens = qa_tokens[:,:num_q] 
+            a_tokens = qa_tokens[:,num_q:] 
+            a_tokens = self.a_pos_1d_enc(a_tokens)
+        else:
+            #just embed question
+            q_tokens = self.text_embedding(q_t['input_ids'].to(device))
 
         #the model input ends up being [CLS] Question  [SEP] Answer
         #                             { q tokens     }{ a tokens   }
 
-        #xs=ocr_bbs[:,:,0]
-        #ys=ocr_bbs[:,:,1]
-        #ws=ocr_bbs[:,:,2]
-        #hs=ocr_bbs[:,:,3]
+        xs=ocr_bbs[:,:,0]
+        ys=ocr_bbs[:,:,1]
+        ws=ocr_bbs[:,:,2]
+        hs=ocr_bbs[:,:,3]
         #ocr_pos = ocr_bbs[:,:,0:2] #just x,y?
 
         q_tokens = self.q_pos_1d_enc(q_tokens)
-        q_padding_mask = (1-q_t['attention_mask']).bool()#.to(device) 
+        q_padding_mask = q_t['attention_mask'].bool()#.to(device) 
         q_padding_mask = q_padding_mask.to(device)
 
 
@@ -317,22 +312,25 @@ class QAImDocPerceiver(BaseModel):
         #make position (2d) masks. Controls whether relative position attention bias is applied
         #ocr_pos_mask = (~ocr_padding_mask[:,:,None]).float()
 
+        im_padding_mask = torch.BoolTensor(batch_size,num_im).fill_(1).to(device)
+
 
         #Put full input together. im, ocr,question
 
         input_tokens = torch.cat( (im_tokens,ocr_tokens,q_tokens), dim=1)
         input_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask), dim=1)
         
-        #Put query together
-        query_tokens = torch.cat((query_im_tokens,self.query_a_tokens),dim=1)
 
         #Run through Perceiver
-        output = self.perciever(input_tokens,input_padding_mask,query_tokens)
+        latent = self.perciever(input_tokens,input_padding_mask)
 
-        num_out_im_tokens = self.patches_resolution[0]*self.patches_resolution[1]
+        im_tokens = self.decoder_image(latent,query_im_tokens)
 
-        im_tokens = output[:,:num_out_im_tokens]
-        a_tokens = output[:,num_out_im_tokens:]
+        if self.autoregressive:
+            query_a_tokens = a_tokens
+        else:        
+            query_a_tokens = self.query_a_tokens.expand(batch_size,-1,-  1)
+        a_tokens = self.decoder_answer(latent,query_a_tokens)
 
 
         ##############
@@ -389,86 +387,79 @@ class QAImDocPerceiver(BaseModel):
                 #t#if len(times)>600:#t#
                     #t#times.pop(0)#t#
 
-    def prepareForOCRTokens(self,ocr_results):
+    def prepareOCRTokens(self,ocr_results,device):
         all_ocr_res=[]
         all_ocr_bbs=[]
         all_ocr_1dpos=[]
         all_ocr_seqid=[]
         max_len=0
         batch_size = len(ocr_results)
-            if ocrRes is None:
-                ocrRes = [[]]*batch_size
-            for b,res_im in enumerate(ocr_results):
-                ocr_res = []#[torch.zeros_like(preds[0])]
-                ocr_bbs = []#[[0,0,0,0]]
-                ocr_1dpos = []#[0]
-                ocr_seqid = []#[0]
-                for i,(bb,(string,char_prob),score) in enumerate(res_im):
-                    if len(string)==0 or (self.blank_ocr and self.train and random.random()<self.blank_ocr):
-                        continue
-                    #spread x,y location along span
-                    tlX,tlY = bb[0]
-                    trX,trY = bb[1]
-                    brX,brY = bb[2]
-                    blX,blY = bb[3]
-                    lX,lY,rX,rY,width,height,rot = calcXYWH(tlX,tlY,trX,trY,brX,brY,blX,blY)
-                    #cX = (lX+rX)/2
-                    cY = (lY+rY)/2
-                    #we'll use the entire height for each part
-                    start_point = torch.FloatTensor([lX,cY])
-                    end_point = torch.FloatTensor([rX,cY])
-                    step = 1/(char_prob.size(0)-1)
-                    forward = torch.arange(1,-(step-0.00001),-step)[:,None] #add xy dim
-                    backward = torch.arange(0,1+(step-0.00001),step)[:,None]
-                    assert forward.size(0)==char_prob.size(0) and backward.size(0)==char_prob.size(0)
-                    all_xy = forward*start_point + backward*end_point
+        if ocr_results is None:
+            ocr_results = [[]]*batch_size
+        for b,res_im in enumerate(ocr_results):
+            ocr_res = []#[torch.zeros_like(preds[0])]
+            ocr_bbs = []#[[0,0,0,0]]
+            ocr_1dpos = []#[0]
+            ocr_seqid = []#[0]
+            for i,(bb,(string,char_prob),score) in enumerate(res_im):
+                if len(string)==0 or (self.blank_ocr and self.train and random.random()<self.blank_ocr):
+                    continue
+                #spread x,y location along span
+                tlX,tlY = bb[0]
+                trX,trY = bb[1]
+                brX,brY = bb[2]
+                blX,blY = bb[3]
+                lX,lY,rX,rY,width,height,rot = calcXYWH(tlX,tlY,trX,trY,brX,brY,blX,blY)
+                #cX = (lX+rX)/2
+                cY = (lY+rY)/2
+                #we'll use the entire height for each part
+                start_point = torch.FloatTensor([lX,cY])
+                end_point = torch.FloatTensor([rX,cY])
+                step = 1/(char_prob.size(0)-1)
+                forward = torch.arange(1,-(step-0.00001),-step)[:,None] #add xy dim
+                backward = torch.arange(0,1+(step-0.00001),step)[:,None]
+                assert forward.size(0)==char_prob.size(0) and backward.size(0)==char_prob.size(0)
+                all_xy = forward*start_point + backward*end_point
 
 
 
-                    #rather than taking the whol sequence, we'll just take the probabilities at character predictions (nonblank)
-                    char_pred = char_prob.argmax(dim=1)
-                    char_loc = char_pred!=0
-                    new_char_prob = char_prob[char_loc] #this will be on the GPU
-                    new_xy = all_xy[char_loc]
-                    wh = torch.FloatTensor([width,height])[None,:].expand(new_xy.size(0),-1)
+                #rather than taking the whol sequence, we'll just take the probabilities at character predictions (nonblank)
+                char_pred = char_prob.argmax(dim=1)
+                char_loc = char_pred!=0
+                new_char_prob = char_prob[char_loc] #this will be on the GPU
+                new_xy = all_xy[char_loc]
+                wh = torch.FloatTensor([width,height])[None,:].expand(new_xy.size(0),-1)
 
-                    bbs = torch.cat( (new_xy,wh), dim=1)
+                bbs = torch.cat( (new_xy,wh), dim=1)
 
-                    #We'll append additional entries at the begining and end. We'll first be sure there is one ad the front back, and then add however many needed to the back so that pooling always is self contained
-                    start_bb = bbs[0:1]
-                    end_bb = bbs[-1:]
-                    empty_prob = -1*torch.ones_like(new_char_prob[0:1])
-                    if self.downsample_ocr>0:
-                        missing = (2+new_char_prob.size(0))% (2**self.downsample_ocr)
-                        missing = ((2**self.downsample_ocr)-missing) % (2**self.downsample_ocr)
-                        add_front = 1
-                        add_back = 1+missing
-                        bbs = torch.cat( ([start_bb]*add_front) + [bbs] + ([end_bb]*add_back), dim=0)
-                        new_char_prob = torch.cat( ([empty_prob]*add_front) + [new_char_prob] + ([empty_prob]*add_back), dim=0)
+                #We'll append additional entries at the begining and end. We'll first be sure there is one ad the front back, and then add however many needed to the back so that pooling always is self contained
+                start_bb = bbs[0:1]
+                end_bb = bbs[-1:]
+                empty_prob = -1*torch.ones_like(new_char_prob[0:1])
 
-                    ocr_res.append(new_char_prob)
-                    ocr_bbs.append(bbs)
-                    assert new_char_prob.size(0) == bbs.size(0)
-                    ocr_1dpos.extend(range(0,new_char_prob.size(0)))
-                    ocr_seqid.extend([len(ocr_bbs)]*new_char_prob.size(0))
+                ocr_res.append(new_char_prob)
+                ocr_bbs.append(bbs)
+                assert new_char_prob.size(0) == bbs.size(0)
+                ocr_1dpos.extend(range(0,new_char_prob.size(0)))
+                ocr_seqid.extend([len(ocr_bbs)]*new_char_prob.size(0))
 
-                
-                #ocr_bbs.append([0,0,0,0])
-                #ocr_pos.append(0)
-                max_len = max(max_len,len(ocr_1dpos))
-                if len(ocr_res)>0:
-                    all_ocr_res.append(torch.cat(ocr_res,dim=0))
-                    all_ocr_bbs.append(torch.cat(ocr_bbs,dim=0))
-                    all_ocr_1dpos.append(ocr_1dpos)
-                    all_ocr_seqid.append(ocr_seqid)
-                else:
-                    all_ocr_res.append(torch.FloatTensor(0,97).to(device))
-                    all_ocr_bbs.append(torch.FloatTensor(0,4))#.to(device))
-                    all_ocr_1dpos.append([])
-                    all_ocr_seqid.append([])
+            
+            #ocr_bbs.append([0,0,0,0])
+            #ocr_pos.append(0)
+            max_len = max(max_len,len(ocr_1dpos))
+            if len(ocr_res)>0:
+                all_ocr_res.append(torch.cat(ocr_res,dim=0))
+                all_ocr_bbs.append(torch.cat(ocr_bbs,dim=0))
+                all_ocr_1dpos.append(ocr_1dpos)
+                all_ocr_seqid.append(ocr_seqid)
+            else:
+                all_ocr_res.append(torch.FloatTensor(0,97).to(device))
+                all_ocr_bbs.append(torch.FloatTensor(0,4))#.to(device))
+                all_ocr_1dpos.append([])
+                all_ocr_seqid.append([])
 
         #padding
-        ocr_padding_mask = torch.BoolTensor(len(all_ocr_res),max_len).fill_(0) #0 / 1 on when a padded value
+        ocr_padding_mask = torch.BoolTensor(len(all_ocr_res),max_len).fill_(1) #1 / 0 on when a padded value
         for i in range(len(all_ocr_res)):
             if all_ocr_res[i].size(0)<max_len:
                 diff = max_len - all_ocr_res[i].size(0)
@@ -476,7 +467,7 @@ class QAImDocPerceiver(BaseModel):
                 all_ocr_bbs[i] = F.pad(all_ocr_bbs[i],(0,0,0,diff))
                 all_ocr_1dpos[i] += [0]*diff
                 all_ocr_seqid[i] += [0]*diff
-                ocr_padding_mask[i,-diff:]=1
+                ocr_padding_mask[i,-diff:]=0
         if max_len!=0:
             ocr_tokens = self.ocr_emb(torch.stack(all_ocr_res,dim=0).permute(0,2,1)).permute(0,2,1)
         else:
@@ -487,7 +478,7 @@ class QAImDocPerceiver(BaseModel):
 
         return ocr_tokens,ocr_bbs,ocr_1dpos,ocr_seqid,ocr_padding_mask
 
-    def appendOCRToVisual(self,ocr_results):
+    def appendOCRToVisual(self,ocr_results,device):
         batch_size = len(ocr_results)
         ocr_grid = torch.FloatTensor(batch_size,self.ocr_out_dim,*self.patches_resolution).fill_(-1).to(device)
         for b,res_im in enumerate(ocr_results):

@@ -232,7 +232,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None):
                 #import pdb;pdb.set_trace()
                 #high = pred_mask/pred_mask.max()
                 #high = torch.where(pred_mask>0.5,high_score,draw_img)
-                show_im = torch.cat((draw_img,draw_img-pred_mask,threshed),dim=1)
+                show_im = torch.cat((draw_img,draw_img*(1-pred_mask),threshed),dim=1)
                 #show_im = torch.cat((1-high,draw_img-pred_mask,threshed),dim=1)
                 #show_im = torch.cat((high,draw_img,draw_img),dim=1)
                 show_im = (show_im[0]*255).cpu().permute(1,2,0).numpy().astype(np.uint8)

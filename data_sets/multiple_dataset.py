@@ -52,11 +52,12 @@ class MultipleDataset(Dataset):
 
     def __len__(self):
         if self.train:
-            return sum(self.lens)*1000
+            return sum(self.lens)*10
         else:
             return sum(self.lens)
 
     def __getitem__(self, idx):
+        #import pdb;pdb.set_trace()
         if self.train:
             choice = random.random()
             dataset_i=0
