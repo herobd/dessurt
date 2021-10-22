@@ -31,7 +31,7 @@ blank_token = 'ø'
 def norm_ed(s1,s2):
     return editdistance.eval(s1,s2)/max(len(s1),len(s2),1)
 
-def unrollList(model,img,ocr,prev_answer,query,count=10):
+def unrollList(model,img,ocr,prev_answer,query,count=10,quiet=False):
     if prev_answer[-1]!=end_token and prev_answer[-1]!=np_token and prev_answer[-1]!=blank_token:
         ret = [prev_answer]
         i=0
@@ -42,7 +42,8 @@ def unrollList(model,img,ocr,prev_answer,query,count=10):
                 ready_answer = prev_answer
 
             prev_answer, outmask = model(img,ocr,[[query+ready_answer]],RUN=True)
-            print(query+ready_answer+' {:} '+prev_answer)
+            if not quiet:
+                print(query+ready_answer+' {:} '+prev_answer)
             if prev_answer[0]=='[' and prev_answer[2]==']':
                 prev_answer = prev_answer[3:] #strip off class prediciton
             if prev_answer != end_token and prev_answer != blank_token and prev_answer != np_token:
@@ -51,7 +52,7 @@ def unrollList(model,img,ocr,prev_answer,query,count=10):
         return ret
     else:
         return []
-def readLongText(model,img,ocr,answer,reverse=False):
+def readLongText(model,img,ocr,answer,reverse=False,quiet=False):
     full_answer=''
     prev_answers=[]
     while len(answer)>0 and answer[-1]!=end_token and answer[-1]!=np_token and answer[-1]!=blank_token:
@@ -68,9 +69,11 @@ def readLongText(model,img,ocr,answer,reverse=False):
                 repeat=True
                 break
         if repeat:
-            print('repeat...')
+            if not quiet:
+                print('repeat...')
             break
-        print(' cont>> {}'.format(answer))
+        if not quiet:
+            print(' cont>> {}'.format(answer))
         prev_answers.append(answer)
     if answer != np_token:
         full_answer += answer #finish text
@@ -82,7 +85,7 @@ def readLongText(model,img,ocr,answer,reverse=False):
     else:
         return full_answer
 
-def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False,max_qa_len=None):
+def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False,max_qa_len=None,quiet=False):
     np.random.seed(1234)
     torch.manual_seed(1234)
     PREVENT_MULTILINE=True
@@ -236,7 +239,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             transcription_lines = instance['transcription']
             transcription_lines = [s.lower() for s in transcription_lines]
             img = instance['img'][0]
-            print(instance['imgName'])
+            if not quiet:
+                print(instance['imgName'])
 
             gt_line_to_group = instance['targetIndexToGroup']
 
@@ -278,11 +282,12 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             if do_ocr=='no':
                 ocr = [[]]
             elif do_ocr:
-                np_img = (255*(1-img[0])/2).numpy().astype(np.uint64)
+                np_img = (255*(1-img[0,0])/2).numpy().astype(np.uint8)
                 ocr_res = ocr_reader.readtext(np_img,decoder='greedy+softmax')
-                print('OCR:')
-                for res in ocr_res:
-                    print(res[1][0])
+                if not quiet:
+                    print('OCR:')
+                    for res in ocr_res:
+                        print(res[1][0])
                 ocr = [ocr_res]
             else:
                 ocrBoxes=[[]]
@@ -299,7 +304,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             used=[]
             question='t#>'
             answer,out_mask = model(img,ocr,[[question]],RUN=True)
-            print(question+' {:} '+answer)
+            if not quiet:
+                print(question+' {:} '+answer)
             if answer=='yes':
                 answer=1
             pred_cells=[]
@@ -309,7 +315,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 #get column and row headers
                 question='ch~'+str(table_i)
                 answer,out_mask = model(img,ocr,[[question]],RUN=True)
-                print(question+' {:} '+answer)
+                if not quiet:
+                    print(question+' {:} '+answer)
                 if answer==blank_token or answer==np_token:
                     col_headers = []
                 else:
@@ -319,12 +326,13 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     if count==1:
                         col_headers = [answer]
                     else:
-                        col_headers = unrollList(model,img,ocr,answer,'ch>',count)
-                    col_headers = [readLongText(model,img,ocr,ans) if (ans[-1]!='|' and ans[-1]!=end_token) else ans[:-1] for ans in col_headers]
+                        col_headers = unrollList(model,img,ocr,answer,'ch>',count,quiet=quiet)
+                    col_headers = [readLongText(model,img,ocr,ans,quiet=quiet) if (ans[-1]!='|' and ans[-1]!=end_token) else ans[:-1] for ans in col_headers]
                 
                 question='rh~'+str(table_i)
                 answer, out_mask = model(img,ocr,[[question]],RUN=True)
-                print(question+' {:} '+answer)
+                if not quiet:
+                    print(question+' {:} '+answer)
                 if answer==blank_token or answer==np_token:
                     row_headers = []
                 else:
@@ -334,9 +342,9 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     if count==1:
                         row_headers = [answer]
                     else:
-                        row_headers = unrollList(model,img,ocr,answer,'rh>',count)
+                        row_headers = unrollList(model,img,ocr,answer,'rh>',count,quiet=quiet)
                     row_headers = [
-                            readLongText(model,img,ocr,ans) \
+                            readLongText(model,img,ocr,ans,quiet=quiet) \
                                     if (ans[-1]!='|' and ans[-1]!=end_token) else ans[:-1] \
                             for ans in row_headers]
 
@@ -379,8 +387,9 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     for rh_i,rh in enumerate(row_headers):
                         question='t~{}~~{}'.format(ch,rh)
                         answer, out_mask = model(img,ocr,[[question]],RUN=True)
-                        print(question+' {:} '+answer)
-                        answer = readLongText(model,img,ocr,answer)
+                        if not quiet:
+                            print(question+' {:} '+answer)
+                        answer = readLongText(model,img,ocr,answer,quiet=quiet)
 
                         matching=[]
                         for gi,text in enumerate(transcription_groups):
@@ -468,12 +477,13 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     mask = torch.zeros_like(img[:,1])
                     mask[:,tlY:brY+1,tlX:brX+1] = 1
                     answer, out_mask = model(torch.stack((img[:,0],mask),dim=1),ocr,[[question]],RUN=True)
-                    print(question+' {:} '+answer)
+                    if not quiet:
+                        print(question+' {:} '+answer)
                     if answer==np_token:
                         disp_img = (torch.cat((1-2*img[:,0],1-2*img[:,0],mask),dim=0)*255).cpu().permute(1,2,0).numpy().astype(np.uint8)
                         img_f.imshow('s',disp_img)
                         img_f.show()
-                    answer = readLongText(model,img,ocr,answer)
+                    answer = readLongText(model,img,ocr,answer,quiet=quiet)
                     if answer==np_token or answer == '':
                         final_text = textline
                     else:
@@ -486,7 +496,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     for ali,answer_line in enumerate(answer_lines):
                         if answer_line == ' ' or len(answer_line)==0:
                             continue
-                        print('Trying to match: {}'.format(answer_line))
+                        if not quiet:
+                            print('Trying to match: {}'.format(answer_line))
                         not_last = ali<len(answer_lines)-1
                         matching=[]
                         for ti2,textline2 in enumerate(transcription_lines):
@@ -509,8 +520,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                             if last_ti in pred_chain:
                                 if best_ti2 != pred_chain[last_ti]: #hopefully we're consistent...
                                     print('Warning: Inconsistent chaining. Matched to [{}], but should be [{}]'.format(best_ti2,pred_chain[last_ti]))
-
-                            print('matched [{}] to [{}]  {}'.format(answer_line,transcription_lines[best_ti2],best_score))
+                            if not quiet:
+                                print('matched [{}] to [{}]  {}'.format(answer_line,transcription_lines[best_ti2],best_score))
                             #rebuilt_answer+='\\'+transcription_lines[best_ti2]
                             if best_ti2 not in claimed:
                                 pred_chain[last_ti] = best_ti2
@@ -527,7 +538,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                                 pred_chain[last_ti] = new_id
                                 claimed[new_id]=(last_ti,None)
                                 new_id+=1
-                                print('Made new line (alread claimed): {}'.format(answer_line))
+                                if not quiet:
+                                    print('Made new line (alread claimed): {}'.format(answer_line))
                             if best_ti2 not in groups[gt_line_to_group[ti]]:
                                 read_error+=1
                         elif len(answer_line)>3 or not_last:
@@ -536,11 +548,13 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                             pred_chain[last_ti] = new_id
                             claimed[new_id]=(last_ti,None)
                             new_id+=1
-                            print('Made new line (no match): {}'.format(answer_line))
+                            if not quiet:
+                                print('Made new line (no match): {}'.format(answer_line))
                     else:
                         if len(groups[gt_line_to_group[ti]])>1:
                             read_error+=1
-            print('read accuracy {}'.format((len(transcription_lines)-read_error)/len(transcription_lines)))
+            if not quiet:
+                print('read accuracy {}'.format((len(transcription_lines)-read_error)/len(transcription_lines)))
             pred_inst = []
             pred_first = []
             pred_groups = []
@@ -576,7 +590,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                         tlX,tlY,brX,brY = bb_lines[ti]
                         mask[:,tlY:brY+1,tlX:brX+1] = 1
                 answer,out_mask = model(torch.stack((img[:,0],mask),dim=1),ocr,[[question]],RUN=True)
-                print(question+' {:} '+answer)
+                if not quiet:
+                    print(question+' {:} '+answer)
                 pcls = answer[2:-2] #remove '[ ' & ' ]'
                 if pcls in valid_data_loader.dataset.classMap:
                     icls = valid_data_loader.dataset.classMap[pcls] - 16
@@ -618,9 +633,10 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             total_entity_true_pos += true_pos
             total_entity_pred += len(pred_inst)
             total_entity_gt += len(groups)
-            print('Entity precision: {}'.format(entity_prec))
-            print('Entity recall:    {}'.format(entity_recall))
-            print('Entity Fm:        {}'.format(2*entity_recall*entity_prec/(entity_recall+entity_prec) if entity_recall+entity_prec>0 else 0))
+            if not quiet:
+                print('Entity precision: {}'.format(entity_prec))
+                print('Entity recall:    {}'.format(entity_recall))
+                print('Entity Fm:        {}'.format(2*entity_recall*entity_prec/(entity_recall+entity_prec) if entity_recall+entity_prec>0 else 0))
 
             
             #Now predict linking/pairing
@@ -648,9 +664,10 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 for q,t,reverse in qs:
                     question=q+t
                     answer, out_mask = model(q_img,ocr,[[question]],RUN=True)
-                    print(question+' {:} '+answer)
+                    if not quiet:
+                        print(question+' {:} '+answer)
                     if answer!=blank_token and answer!=np_token:
-                        answer = readLongText(model,img,ocr,answer,reverse=reverse)
+                        answer = readLongText(model,img,ocr,answer,reverse=reverse,quiet=quiet)
 
                         matching=[]
                         for pgi2,text2 in enumerate(pred_inst):
@@ -750,13 +767,14 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             total_rel_true_pos += true_pos
             total_rel_pred += len(pred_rel+rel_tables)
             total_rel_gt += len(pairs)
-            print('Rel precision: {}'.format(rel_prec))
-            print('Rel recall:    {}'.format(rel_recall))
-            print('Rel Fm:        {}'.format(2*rel_recall*rel_prec/(rel_recall+rel_prec) if rel_recall+rel_prec> 0 else 0))
-            print('Rel_noclass precision: {}'.format(rel_noclass_prec))
-            print('Rel_noclass recall:    {}'.format(rel_noclass_recall))
-            print('Rel_noclass Fm:        {}'.format(2*rel_noclass_recall*rel_noclass_prec/(rel_noclass_recall+rel_noclass_prec) if rel_noclass_recall+rel_noclass_prec>0 else 0))
-            print('inconsistent_class_count={}'.format(inconsistent_class_count))
+            if not quiet:
+                print('Rel precision: {}'.format(rel_prec))
+                print('Rel recall:    {}'.format(rel_recall))
+                print('Rel Fm:        {}'.format(2*rel_recall*rel_prec/(rel_recall+rel_prec) if rel_recall+rel_prec> 0 else 0))
+                print('Rel_noclass precision: {}'.format(rel_noclass_prec))
+                print('Rel_noclass recall:    {}'.format(rel_noclass_recall))
+                print('Rel_noclass Fm:        {}'.format(2*rel_noclass_recall*rel_noclass_prec/(rel_noclass_recall+rel_noclass_prec) if rel_noclass_recall+rel_noclass_prec>0 else 0))
+                print('inconsistent_class_count={}'.format(inconsistent_class_count))
 
 
 
@@ -775,7 +793,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                         tlX,tlY,brX,brY = bb_lines[ti]
                         mask[:,tlY:brY+1,tlX:brX+1] = 1
                 answer, out_mask = model(torch.stack((img[:,0],mask),dim=1),ocr,[[question]],RUN=True)
-                print(question+' {:} '+answer)
+                if not quiet:
+                    print(question+' {:} '+answer)
                 assert answer[0]=='['
                 assert answer[2]==']'
                 pcls = answer[1] #remove '[ ' & ' ]'
@@ -797,7 +816,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     if count==1:
                         linked_pred = [answer]
                     else:
-                        linked_pred = unrollList(model,img,ocr,answer,'gs>',count)
+                        linked_pred = unrollList(model,img,ocr,answer,'gs>',count,quiet=quiet)
                     #linked_pred = [readLongText(model,img,ocr,ans) for ans in linked_pred]
                     #shouldn't need full text, just enough to match
                     #remove ending characters
@@ -856,9 +875,10 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             total_entity_true_pos2 += true_pos
             total_entity_pred2 += len(pred_inst)
             total_entity_gt2 += len(groups)
-            print('New Entity precision: {}'.format(entity_prec))
-            print('New Entity recall:    {}'.format(entity_recall))
-            print('New Entity Fm:        {}'.format(2*entity_recall*entity_prec/(entity_recall+entity_prec) if entity_recall+entity_prec>0 else 0))
+            if not quiet:
+                print('New Entity precision: {}'.format(entity_prec))
+                print('New Entity recall:    {}'.format(entity_recall))
+                print('New Entity Fm:        {}'.format(2*entity_recall*entity_prec/(entity_recall+entity_prec) if entity_recall+entity_prec>0 else 0))
 
             #Finally, score the relationships
             true_pos=0
@@ -896,12 +916,13 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             total_rel_true_pos2 += true_pos
             total_rel_pred2 += len(pred_rel2+rel_tables)
             total_rel_gt2 += len(pairs)
-            print('New Rel precision: {}'.format(rel_prec))
-            print('New Rel recall:    {}'.format(rel_recall))
-            print('New Rel Fm:        {}'.format(2*rel_recall*rel_prec/(rel_recall+rel_prec) if rel_recall+rel_prec> 0 else 0))
-            print('New Rel_noclass precision: {}'.format(rel_noclass_prec))
-            print('New Rel_noclass recall:    {}'.format(rel_noclass_recall))
-            print('New Rel_noclass Fm:        {}'.format(2*rel_noclass_recall*rel_noclass_prec/(rel_noclass_recall+rel_noclass_prec) if rel_noclass_recall+rel_noclass_prec>0 else 0))
+            if not quiet:
+                print('New Rel precision: {}'.format(rel_prec))
+                print('New Rel recall:    {}'.format(rel_recall))
+                print('New Rel Fm:        {}'.format(2*rel_recall*rel_prec/(rel_recall+rel_prec) if rel_recall+rel_prec> 0 else 0))
+                print('New Rel_noclass precision: {}'.format(rel_noclass_prec))
+                print('New Rel_noclass recall:    {}'.format(rel_noclass_recall))
+                print('New Rel_noclass Fm:        {}'.format(2*rel_noclass_recall*rel_noclass_prec/(rel_noclass_recall+rel_noclass_prec) if rel_noclass_recall+rel_noclass_prec>0 else 0))
 
             if draw:
                 assert len(pred_classes+pred_cell_classes) == len(loc_pgroup)
@@ -984,6 +1005,8 @@ if __name__ == '__main__':
                         help='Arbitrary key-value pairs to add to config of the form "k1=v1,k2=v2,...kn=vn".  You can nest keys with k1=k2=k3=v')
     parser.add_argument('-T', '--test', default=False, action='store_const', const=True,
                         help='run test set (default: False)')
+    parser.add_argument('-q', '--quiet', default=False, action='store_const', const=True,
+                        help='prevent pred prints (default: False)')
     parser.add_argument('-m', '--max-qa-len', default=None, type=int,
                         help='max len for questions')
     parser.add_argument('-d', '--draw', default=False, action='store_const', const=True,
@@ -1004,6 +1027,6 @@ if __name__ == '__main__':
         exit()
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw)
+            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw, quiet=args.quiet)
     else:
-        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw)
+        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw,quiet=args.quiet)
