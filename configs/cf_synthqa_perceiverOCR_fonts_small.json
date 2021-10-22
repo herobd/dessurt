@@ -1,5 +1,5 @@
 {
-    "name": "synthqa_perceiverAutoR_3c_ocr_fonts_small",
+    "name": "synthqa_perceiverOCR_fonts_small",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -11,7 +11,7 @@
         "textdir": "../data/",
         "data_dir": "../data/english4line_fonts",
         "include_ocr": false,
-        "batch_size": 3,
+        "batch_size": 6,
         "num_workers": 4,
         "rescale_range": [1.0,1.0],
         "crop_params": {
@@ -72,7 +72,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 500000,
-        "accum_grad_steps": 20,
+        "accum_grad_steps": 10,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
@@ -100,7 +100,6 @@
     "model": {
 	    "grid_ocr": false,
 	    "ocr_tokens": true,
-	    "autoregressive": true,
 	    "char_output": true,
 	    "char_tokens": true,
             "image_size": [192,384],
@@ -108,12 +107,12 @@
                 "patch_emb": "saved/synth_ocr_crnnskipforswin_new/checkpoint-iteration400000.pth"
             },
 	    "input_dim": 256,
-	    "perceiver_blocks": [[6,1],[6,1],[7,2]],
+	    "perveiver_depth": 26,
 	    "num_latents": 256,
 	    "latent_dim": 800,
 	    "cross_heads": 8,
 	    "self_heads": 8,
-	    "output_dim": 256,
+	    "output_dim": 128,
 	    "out_length": 2048
 	    
     }
