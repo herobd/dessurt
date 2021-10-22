@@ -108,7 +108,7 @@
                 "patch_emb": "saved/synth_ocr_crnnskipforswin_new/checkpoint-iteration400000.pth"
             },
 	    "input_dim": 256,
-	    "perveiver_blocks": [[6,1],[6,1],[7,2]],
+	    "perceiver_blocks": [[6,1],[6,1],[7,2]],
 	    "num_latents": 256,
 	    "latent_dim": 800,
 	    "cross_heads": 8,
