@@ -1,5 +1,5 @@
 {
-    "name": "synthqa_perceiverAutoR_3c_fonts_small",
+    "name": "synthqa_perceiverOCR_fonts_small",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -20,7 +20,7 @@
                 "rot_degree_std_dev": 1
             },
 	"questions": 1,
-	"max_qa_len": 2048,
+	"max_qa_len": 2044,
         "min_entries": null,
         "max_entries": 2,
 	"use_read": 0.01,
@@ -86,7 +86,7 @@
         "monitor_mode": "none",
         "retry_count":0,
 
-	"do_ocr": "no",
+	"do_ocr": "yes",
 
 
         "#use_learning_schedule": "multi_rise then ramp_to_swa",
@@ -99,8 +99,7 @@
     "arch": "QAImDocPerceiver", 
     "model": {
 	    "grid_ocr": false,
-	    "ocr_tokens": false,
-	    "autoregressive": true,
+	    "ocr_tokens": true,
 	    "char_output": true,
 	    "char_tokens": true,
             "image_size": [192,384],
@@ -108,12 +107,12 @@
                 "patch_emb": "saved/synth_ocr_crnnskipforswin_new/checkpoint-iteration400000.pth"
             },
 	    "input_dim": 256,
-	    "perceiver_blocks": [[6,1],[6,1],[7,2]],
+	    "perveiver_depth": 26,
 	    "num_latents": 256,
 	    "latent_dim": 800,
 	    "cross_heads": 8,
 	    "self_heads": 8,
-	    "output_dim": 256,
+	    "output_dim": 128,
 	    "out_length": 2048
 	    
     }
