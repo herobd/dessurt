@@ -557,6 +557,8 @@ class FormQA(QADataset):
             elif q_type=='read':
                 #finish reading entity
                 if self.train:
+                    if len(entities)==0:
+                        continue
                     for i in range(10):
                         entity = random.choice(entities)
                         text = entity.text
