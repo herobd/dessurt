@@ -282,7 +282,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             if do_ocr=='no':
                 ocr = [[]]
             elif do_ocr:
-                np_img = (255*(1-img[0])/2).numpy().astype(np.uint64)
+                np_img = (255*(1-img[0,0])/2).numpy().astype(np.uint8)
                 ocr_res = ocr_reader.readtext(np_img,decoder='greedy+softmax')
                 if not quiet:
                     print('OCR:')
