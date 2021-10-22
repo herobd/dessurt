@@ -79,6 +79,7 @@ class QAImDocPerceiver(BaseModel):
         output_dim = config['output_dim'] if 'output_dim' in config else 768
         out_length = config['out_length'] if 'out_length' in config else 2048
         qk_dim = 32 #per collab example
+        self.out_length = out_length
 
         if isinstance(self.image_size,int):
             self.image_size = (self.image_size,self.image_size)
@@ -282,6 +283,8 @@ class QAImDocPerceiver(BaseModel):
             qa_tokens = self.text_embedding(torch.cat((q_t['input_ids'],a_t['input_ids'][:,:-1]),dim=1).to(device))
             q_tokens = qa_tokens[:,:num_q] 
             a_tokens = qa_tokens[:,num_q:] 
+            if a_tokens.size(1) > self.out_length:
+                a_tokens = a_tokens[:,:self.out_length]
             a_tokens = self.a_pos_1d_enc(a_tokens)
         else:
             #just embed question
@@ -295,6 +298,9 @@ class QAImDocPerceiver(BaseModel):
         ws=ocr_bbs[:,:,2]
         hs=ocr_bbs[:,:,3]
         #ocr_pos = ocr_bbs[:,:,0:2] #just x,y?
+
+        if q_tokens.size(1) > self.out_length:
+            q_tokens = q_tokens[:,:self.out_length]
 
         q_tokens = self.q_pos_1d_enc(q_tokens)
         q_padding_mask = q_t['attention_mask'].bool()#.to(device) 
