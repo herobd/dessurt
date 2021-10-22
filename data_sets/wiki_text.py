@@ -21,7 +21,7 @@ _wiki_end_keywords = ['References','Sources','External links']
 _wiki_end_keywords = ['\n'+k+'\n' for k in _wiki_end_keywords] + ['\n'+k+' \n' for k in _wiki_end_keywords] + ['\nCategory:']
 
 
-def getWikiArticle():
+def getWikiArticle(all_newline=False):
     global _text_data
     #Returns a list of text paragraphs from a randome wikipedia article
     if '_text_data' not in globals():
@@ -42,7 +42,11 @@ def getWikiArticle():
 
     #break by paragraph (double newline)
     text=re.sub(r' +',r' ',text)
-    paras = text.split('\n\n')
+    if all_newline:
+        text=re.sub(r'\n+',r'\n',text)
+        paras = text.split('\n')
+    else:
+        paras = text.split('\n\n')
 
     paras = [para for para in paras if para.strip() not in _prune_headers]
     
