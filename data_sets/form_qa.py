@@ -366,7 +366,7 @@ class FormQA(QADataset):
             
             elif q_type in ('down-pair', 'up-pair'):
                 down = q_type=='down-pair'
-
+                prompt_id = None
                 for i in range(min(10,len(entity_link))):
                     #head_id, tail_id = random.choice(entity_link)
                     if down:

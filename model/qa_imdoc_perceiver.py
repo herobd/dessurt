@@ -71,7 +71,7 @@ class QAImDocPerceiver(BaseModel):
 
         #Perceiver parameters
         input_dim = config['input_dim'] if 'input_dim' in config else 768
-        perveiver_blocks = config['perveiver_blocks'] if 'perveiver_depth' in config else [(26,1)]
+        perceiver_blocks = config['perceiver_blocks'] if 'perceiver_blocks' in config else [(26,1)]
         num_latents = config['num_latents'] if 'num_latents' in config else 256
         latent_dim = config['latent_dim'] if 'latent_dim' in config else 1280
         self_heads = config['self_heads'] if 'self_heads' in config else 8
@@ -170,7 +170,7 @@ class QAImDocPerceiver(BaseModel):
         #dim=32?
         #logits dim=100
         self.perciever = PerceiverI(
-                block_specification = perveiver_blocks,
+                block_specification = perceiver_blocks,
                 num_latents = num_latents,
                 latent_dim=latent_dim,
                 dim = input_dim, #input dim
