@@ -2,7 +2,7 @@ from utils.filelock import FileLock, FileLockException
 from utils.util import ensure_dir
 import threading
 from synthetic_text_gen import SyntheticWord
-from data_sets import getWikiArticle
+from data_sets import getWikiArticle, getWikiDataset
 import os, random, re, time
 import unicodedata
 import numpy as np
@@ -35,6 +35,7 @@ def threadFunction(self,nums):
 class GenDaemon:
     def __init__(self,font_dir,out_dir=None,num_held=0):
         self.gen = SyntheticWord(font_dir)
+        self.wiki_dataset = getWikiDataset()
         self.used_thresh=-1
         self.multi_para = 0.1
         self.num_held = num_held
@@ -116,7 +117,7 @@ class GenDaemon:
     def generateLabelValuePairs(self,number):
         pairs=[]
         while len(pairs)<number:
-            paras = getWikiArticle(True)
+            paras = getWikiArticle(True,self.wiki_dataset)
 
             lengths = [(i,len(p)) for i,p in enumerate(paras)]
             lengths.sort(key=lambda a:a[1])
@@ -214,7 +215,7 @@ class GenDaemon:
         return img
 
     def getTextSample(self):
-        paras = getWikiArticle()
+        paras = getWikiArticle(dataset=self.wiki_dataset)
 
         #select para or paras
         if self.multi_para<random.random():

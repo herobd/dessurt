@@ -12,6 +12,7 @@ from data_sets import multiple_dataset
 from data_sets import synth_qa_dataset
 from data_sets import synth_qadoc_dataset
 from data_sets import synth_para_qa
+from data_sets import test_qa
 from data_sets import funsd_qa
 from data_sets import cdip_qa
 from data_sets import iam_qa
@@ -129,6 +130,8 @@ def getDataLoader(config,split,rank=None,world_size=None):
             return withCollate(synth_qadoc_dataset.SynthQADocDataset,synth_qadoc_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='SynthParaQA':
             return withCollate(synth_para_qa.SynthParaQA,synth_para_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='TestQA':
+            return withCollate(test_qa.TestQA,test_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='NobrainQA':
             return withCollate(nobrain_qa.NobrainQA,nobrain_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='NobrainGraphPair':

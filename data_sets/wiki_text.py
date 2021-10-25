@@ -20,12 +20,22 @@ _prune_headers = ["See also", "Gallery", "External media", "History", "Notes"]
 _wiki_end_keywords = ['References','Sources','External links']
 _wiki_end_keywords = ['\n'+k+'\n' for k in _wiki_end_keywords] + ['\n'+k+' \n' for k in _wiki_end_keywords] + ['\nCategory:']
 
-
-def getWikiArticle(all_newline=False):
+def getWikiDataset():
     global _text_data
     #Returns a list of text paragraphs from a randome wikipedia article
     if '_text_data' not in globals():
         _text_data = load_dataset('wikipedia', '20200501.en', cache_dir=cache_path)['train']
+    return _text_data
+
+def getWikiArticle(all_newline=False,dataset=None):
+    global _text_data
+    #Returns a list of text paragraphs from a randome wikipedia article
+
+    if dataset is None:
+        if '_text_data' not in globals():
+            _text_data = load_dataset('wikipedia', '20200501.en', cache_dir=cache_path)['train']
+    else:
+        _text_data = dataset
 
     instance_i = random.randrange(_text_data.num_rows)
     text = _text_data[instance_i]['text']
