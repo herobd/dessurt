@@ -10,6 +10,9 @@ from collections import defaultdict, OrderedDict
 from utils.funsd_annotations import createLines
 import timeit
 from data_sets.para_qa_dataset import ParaQADataset, collate
+import threading
+import urllib
+import csv
 
 import utils.img_f as img_f
 
@@ -27,6 +30,8 @@ class CDIPQA(ParaQADataset):
         #NEW the document must have a block_score above thresh for anything useing blocks (this is newline following too)
         self.block_score_thresh = 0.73 #eye-balled this one
 
+        self._lock = threading.Lock()
+        self.loader_lock = threading.Lock()
         self.reuse_factor = config['reuse_factor'] if 'reuse_factor' in config else 1.0
         self.calls = 0
 
@@ -38,92 +43,43 @@ class CDIPQA(ParaQADataset):
             self.download_urls = {name:url for name,url in download_urls}
 
         #check if any are downloaded:
-        if os.path.exists(log_path):
-            with open(log_path) as f:
-                log = f.readlines()
-            tar_name1,downloaded1,untared1,calls1 = log[0].split(',')
-            ...
+        status = self.getStatus()
+        min_calls = 999999999999999
+        list_path = None
+        self.using = None
+        for i,s in enumerate(status):
+            if s['downloaded'] and s['untared'] and s['calls']<min_calls:
+                self.using = i
+                min_calls = s['calls']
+                list_path = s['list_path']
+                self.calls = s['calls']
 
-            if untared1 and (not untared2 or calls1<calls2):
-                #start using tar_name1
-            elif untarted2:
-                #start using tar_name2:
-
-        if none ready:
-            #how to stall?
-
-
-            if 'overfit' in config and config['overfit']:
-                splitFile = 'overfit_split.json'
+        if list_path is None:
+            if status[0]['downloaded']:
+                untar(self,status[0]['tar_name'])
+            elif downloaded1:
+                untar(self,tar_name1)
             else:
-                splitFile = 'train_valid_test_split.json'
-            with open(os.path.join(dirPath,splitFile)) as f:
-                #if split=='valid' or split=='validation':
-                #    trainTest='train'
-                #else:
-                #    trainTest=split
-                readFile = json.loads(f.read())
-                if split in readFile:
-                    subdirs = readFile[split]
-                    new_subdirs=[]
-                    for sub in subdirs:
-                        if '.' in sub:
-                            new_subdirs.append(sub)
-                        else:
-                            for a in 'abcdefghijklmnopqrstuvwxyz':
-                                new_subdirs.append(sub+'.'+a)
-                    toUse=[]
-                    for subdir in new_subdirs:
-                        try:
-                            with open(os.path.join(dirPath,subdir+'.list')) as lst:
-                                toUse += [path.strip() for path in lst.readlines()]
-                        except FileNotFoundError:
-                            print('{} not found'.format(os.path.join(dirPath,subdir+'.list')))
-                    imagesAndAnn = []
-                    for path in toUse:#['images']:
-                        try:
-                            name = path[path.rindex('/')+1:]
-                        except ValueError:
-                            name = path
-                        imagesAndAnn.append( (name,os.path.join(dirPath,path+'.png'),os.path.join(dirPath,path+'.layout.json')) )
-                else:
-                    print("Error, unknown split {}".format(split))
-                    exit(1)
-            self.images=[]
-            for imageName,imagePath,jsonPath in imagesAndAnn:
-                #if os.path.exists(jsonPath):
-                #    org_path = imagePath
-                #    if self.cache_resized:
-                #        path = os.path.join(self.cache_path,imageName+'.png')
-                #    else:
-                #        path = org_path
+                download(self,tar_name0)
+            #how to stall?
+        else:
+            self.updateImages(list_path)
 
-                #    rescale=1.0
-                #    if self.cache_resized:
-                #        rescale = self.rescale_range[1]
-                #        if not os.path.exists(path):
-                #            org_img = img_f.imread(org_path)
-                #            if org_img is None:
-                #                print('WARNING, could not read {}'.format(org_img))
-                #                continue
-                #            resized = img_f.resize(org_img,(0,0),
-                #                    fx=self.rescale_range[1], 
-                #                    fy=self.rescale_range[1], 
-                #                    )
-                #            img_f.imwrite(path,resized)
-                rescale=1.0
-                path = imagePath
-                self.images.append({'id':imageName, 'imageName':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale })
-                #else:
-                #    print('{} does not exist'.format(jsonPath))
-                #    print('No json found for {}'.format(imagePath))
-                #    #exit(1)
-        self.errors=[]
+        self.startWorker()
+
 
 
 
 
     def parseAnn(self,ocr,s):
+        
+        self.calls += 1
+        if self.calls > len(self.images)*self.reuse_factor:
+            self.switch()
+        elif self.calls%100 == 0:
+            self.updateStatus(self.using,calls=self.calls)
+            
+
         image_h=ocr['height']
         image_w=ocr['width']
         ocr=ocr['blocks']
@@ -163,3 +119,113 @@ class CDIPQA(ParaQADataset):
 
         return qa_bbs, list(range(qa_bbs.shape[0])), None, {}, {}, qa
 
+    def switch(self):
+        use_next = None
+
+        status = self.getStatus()
+        status_tars=set()
+        for i,s in status:
+            status_tars.add(s['name'])
+            if i!=self.using and s['downloaded'] and s['untared']:
+                    use_next=i
+
+        if use_next is not None:
+
+            self.updateImages(status[next]['list_path'])
+            
+            #pick next tar
+            all_tars = set(self.download_urls.keys())
+            new_tars = all_tars-status_tars
+            todo_tar = random.choice(list(new_tars))
+            #update status
+            self.updateStatus(self.using,todo_tar,False,False,'',0)
+
+            self.using = use_next
+            self.calls=status[use_next]['calls']
+            
+            assert len(status)==2
+            self.startWorker()
+
+
+
+    def getStatus(self):
+        ret = []
+        with self._lock:
+            if os.path.exists(self.status_path):
+                with open(self.status_path) as f:
+                    status = f.readlines()
+                for l in status:
+                    tar_name0,downloaded0,untared0,list_path0,calls0 = l.strip().split(',')
+
+                    tar_info = {'name': tar_name0,
+                                 'downloaded': downloaded0=='True',
+                                 'untared': untared0=='True',
+                                 'list_path': list_path0,
+                                 'calls': int(calls0)
+                                 }
+                    ret.append(tar_info)
+        return ret
+    def updateStatus(self,status_i,tar_name=None,downloaded=None,untared=None,list_path=None,calls=None):
+        with self._lock:
+            with open(self.status_path) as f:
+                status = [s.strip() for s in f.readlines()]
+
+            status_i_data = status[status_i].split(',')
+            if tar_name is None:
+                tar_name = status_i_data[0]
+            if downloaded is None:
+                downloaded = status_i_data[0]
+            if untared is None:
+                untared = status_i_data[0]
+            if list_path is None:
+                list_path = status_i_data[0]
+            if calls is None:
+                calls = status_i_data[0]
+
+
+            status[status_i] = '{},{},{},{},{}'.format(tar_name,downloaded,untared,list_path,calls)
+
+            with open(self.status_path, 'w') as f:
+                f.write('\n'.join(status))
+
+
+    def updateImages(self,list_path):
+        self.images = []
+        with open(list_path) as lst:
+            images = [path.strip() for path in lst.readlines()]
+        for path in images:
+            try:
+                name = path[path.rindex('/')+1:]
+            except ValueError:
+                name = path
+            image_path = os.path.join(dirPath,path+'.png')
+            json_path = os.path.join(dirPath,path+'.layout.json')
+
+            self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':json_path, 'rescaled':1.0 })
+
+    def startWorker(self):
+        x = threading.Thread(target=loader, args=(self,), daemon=True)
+        x.start()
+
+
+def loader(dataset):
+    with dataset.loader_lock:
+        did_something=True
+        while did_something:
+            status=dataset.getStatus()
+            did_something = False
+            for i,(tar_name,downloaded,untared,list_path,calls):
+                if not downloaded:
+                    download(dataset,tar_name)
+                    downloaded=True
+                    dataset.updateStatus(i,downloaded=True)
+                if not untared:
+                    untar(dataset,tar_name)
+                    list_path = getListPath(dataset,tar_name)
+                    untared=True
+                    dataset.updateStatus(i,untared=True,list_path=list_path)
+                    did_something = True
+
+def download(dataset,tar_name):
+    url = dataset.download_urls[tar_name]
+    urllib.request.urlretrieve(url, outpath)
