@@ -47,6 +47,12 @@ class MultipleDataset(Dataset):
         #else:
         #    self.lens = [min(len(d) for d in self.data_sets)]*len(self.datasets)
 
+        if self.train:
+            self.orders=[]
+            for dataset in self.data_sets:
+                dataset_len = len(dataset)
+                self.orders.append(random.sample(range(dataset_len),k=dataset_len))
+
     def max_len(self):
         return None
 
@@ -63,7 +69,12 @@ class MultipleDataset(Dataset):
             dataset_i=0
             while choice>self.d_ranges[dataset_i]:
                 dataset_i+=1
-            index = random.randrange(0,self.lens[dataset_i])
+
+            if len(self.orders[dataset_i])==0:
+                dataset_len = len(self.data_sets[dataset_i])
+                self.orders[dataset_i]=random.sample(range(dataset_len),k=dataset_len)
+            index = self.orders[dataset_i].pop()
+            #index = random.randrange(0,self.lens[dataset_i])
             ret = self.data_sets[dataset_i][index]
         else:
             dataset_i=0

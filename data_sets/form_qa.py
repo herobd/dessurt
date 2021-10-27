@@ -10,7 +10,7 @@ from collections import defaultdict, OrderedDict
 from utils.funsd_annotations import createLines
 import timeit
 from data_sets.qa import QADataset,collate
-from data_sets.wiki_text import getWikiArticle
+from data_sets.wiki_text import getWikiArticle,getWikiDataset
 
 import utils.img_f as img_f
 
@@ -103,6 +103,7 @@ class FormQA(QADataset):
 
     def __init__(self, dirPath=None, split=None, config=None, images=None):
         super(FormQA, self).__init__(dirPath,split,config,images)
+        self.wiki_dataset = getWikiDataset()
         self.punc_regex = re.compile('[%s]' % re.escape(string.punctuation))
         self.do_masks=True
 
@@ -1081,7 +1082,7 @@ class FormQA(QADataset):
         if length is None:
             length = self.max_qa_len
 
-        para = random.choice(getWikiArticle()) #select random paragraph
+        para = random.choice(getWikiArticle(dataset=self.wiki_dataset)) #select random paragraph
 
         para=re.sub(r' +',r' ',para)
         para=re.sub(r' ?\n ?',r'\n ',para)
