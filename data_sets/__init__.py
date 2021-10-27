@@ -1,1 +1,1 @@
-from .wiki_text import getWikiArticle
+from .wiki_text import getWikiArticle, getWikiDataset

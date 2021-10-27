@@ -47,7 +47,7 @@ def display(data,write):
         #    if x in q:
         #        draw = True
         #        break
-        draw = False
+        draw = True
         if write:
             cv2.imwrite('test_single_512.png',(img.numpy()*255)[:,:,0].astype(np.uint8))
         if draw :

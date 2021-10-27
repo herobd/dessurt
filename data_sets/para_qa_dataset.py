@@ -40,28 +40,51 @@ class ParaQADataset(QADataset):
             for w in f.readlines():
                 w=w.strip()
                 self.vocab[len(w)].append(w)
-
-        self.q_types = {
-                'read_blanked':0.5,
-                'read_replaced':0.5,
-                'read_with_masked':1.0,
-                'read_line':0.5,
-                'highlight_text':1.0,
-                'read_highlighted':0.5,
-                'masked_lm':4.0,
-                'put_in_place':1.0,
-                'read_on':0.4,
-                'read_backwards':0.5,
-                'highlight_block':1.0}
-        self.q_types_noblock = {
-                'read_blanked':0.5,
-                'read_replaced':0.5,
-                'read_with_masked':1.0,
-                'read_line':0.5,
-                'highlight_text':1.0,
-                'read_highlighted':0.5,
-                'masked_lm':4.0,
-                'put_in_place':1.0}
+        easy = config['easy'] if 'easy' in config else False
+        if easy:
+            self.q_types = {
+                    'read_blanked':1,
+                    'read_replaced':1,
+                    'read_with_masked':1,
+                    'read_line':1,
+                    'highlight_text':1.0,
+                    'read_highlighted':1,
+                    'masked_lm':1.0,
+                    'put_in_place':1.0,
+                    'read_on':0.5,
+                    'read_backwards':0.5,
+                    'highlight_block':1.0}
+            self.q_types_noblock = {
+                    'read_blanked':1,
+                    'read_replaced':1,
+                    'read_with_masked':1.0,
+                    'read_line':1,
+                    'highlight_text':1.0,
+                    'read_highlighted':1,
+                    'masked_lm':1.0,
+                    'put_in_place':1.0}
+        else:
+            self.q_types = {
+                    'read_blanked':0.5,
+                    'read_replaced':0.5,
+                    'read_with_masked':1.0,
+                    'read_line':0.5,
+                    'highlight_text':1.0,
+                    'read_highlighted':0.5,
+                    'masked_lm':4.0,
+                    'put_in_place':1.0,
+                    'read_on':0.4,
+                    'read_backwards':0.5,
+                    'highlight_block':1.0}
+            self.q_types_noblock = {
+                    'read_blanked':0.5,
+                    'read_replaced':0.5,
+                    'read_with_masked':1.0,
+                    'read_line':0.5,
+                    'highlight_text':1.0,
+                    'read_highlighted':0.5,
+                    'masked_lm':4.0,
+                    'put_in_place':1.0}
 
 
         #self.num_question_types_all=11 #15

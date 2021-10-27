@@ -82,7 +82,7 @@ def main(rank,config, resume,world_size=None):
     #valid_data_loader = data_loader.split_validation()
 
     model = eval(config['arch'])(config['model'])
-    model.summary()
+    #model.summary()
 
     if type(config['loss'])==dict:
         loss={}#[eval(l) for l in config['loss']]
@@ -169,8 +169,8 @@ if __name__ == '__main__':
                 filename = os.fsdecode(file)
                 if filename!='config.json': 
                     assert False, "Path {} already used!".format(path)
-    if args.supercomputer:
-        config['super_computer']=True
+    
+    config['super_computer']=args.supercomputer
     supercomputer = config['super_computer'] if 'super_computer' in config else False
     name=config['name']
     if args.config is not None:
