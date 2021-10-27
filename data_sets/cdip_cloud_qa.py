@@ -1,9 +1,6 @@
-import torch.utils.data
+#Dataset for CDIP dataset hosted on my Box
+#Dowloads a chunk to use and starts downloading another
 import numpy as np
-import json
-#from skimage import io
-#from skimage import draw
-#import skimage.transform as sktransform
 import os
 import math, random, string, re
 from collections import defaultdict, OrderedDict
@@ -13,37 +10,71 @@ from data_sets.para_qa_dataset import ParaQADataset, collate
 import threading
 import urllib
 import csv
+import tarfile
+from utils.util import ensure_dir
 
 import utils.img_f as img_f
 
 
-class CDIPQA(ParaQADataset):
+class CDIPCloudQA(ParaQADataset):
     """
     Class for reading forms dataset and creating starting and ending gt
     """
 
 
     def __init__(self, dirPath=None, split=None, config=None, images=None):
-        super(CDIPQA, self).__init__(dirPath,split,config,images)
+        super().__init__(dirPath,split,config,images)
+        if split!='train':
+            self.images=[]
+            return
 
         self.cache_resized = False
         #NEW the document must have a block_score above thresh for anything useing blocks (this is newline following too)
         self.block_score_thresh = 0.73 #eye-balled this one
 
+        if config['super_computer']:
+            self.cache_dir = '/tmp/cdip_cloud_cache'
+            self.status_path = '/tmp/cdip_cloud_cache/status.csv'
+        else:
+            self.cache_dir = os.path.join(dirPath,'cache')
+            self.status_path = os.path.join(dirPath,'status.csv')
+        ensure_dir(self.cache_dir)
+
         self._lock = threading.Lock()
         self.loader_lock = threading.Lock()
         self.reuse_factor = config['reuse_factor'] if 'reuse_factor' in config else 1.0
         self.calls = 0
+        self.num_load_queue = 2
 
         assert images is None
 
-        csv_path = os.path.join(dirPath,'download_urls.csv')
+        csv_path = 'data_sets/cdip_download_urls.csv'#os.path.join(dirPath,'download_urls.csv')
         with open(csv_path) as f:
             download_urls = csv.reader(f)
-            self.download_urls = {name:url for name,url in download_urls}
+            self.download_urls = dict(download_urls)
 
         #check if any are downloaded:
-        status = self.getStatus()
+        if os.path.exists(self.status_path):
+            status = self.getStatus()
+        else:
+            status = []
+        queued_tars=set()
+        for s in status:
+            queued_tars.add(s['name'])
+        all_tars = set(self.download_urls.keys())
+        while len(status)<self.num_load_queue:
+            #pick next tar
+            left_tars = all_tars-queued_tars
+            todo_tar = random.choice(list(left_tars))
+            #update status
+            self.updateStatus(len(status),todo_tar,False,False,'',0)
+            status.append(      {'name': todo_tar,
+                                 'downloaded': False,
+                                 'untared': False,
+                                 'list_path': '',
+                                 'calls': 0
+                                 })
+            queued_tars.add(todo_tar)
         min_calls = 999999999999999
         list_path = None
         self.using = None
@@ -55,15 +86,20 @@ class CDIPQA(ParaQADataset):
                 self.calls = s['calls']
 
         if list_path is None:
-            if status[0]['downloaded']:
-                untar(self,status[0]['tar_name'])
-            elif downloaded1:
-                untar(self,tar_name1)
-            else:
-                download(self,tar_name0)
-            #how to stall?
-        else:
-            self.updateImages(list_path)
+            #do the download/untar in this thread to block
+            print('CDIP needs to get dataset ready, will stall...')
+            for i,s in enumerate(status):
+                if s['downloaded']:
+                    list_path = untar(self,status[i]['name'],i)
+                    self.calls = 0
+                    self.using = i
+            if list_path is None:
+                download(self,status[0]['name'],0)
+                list_path = untar(self,status[0]['name'],0)
+                self.calls = 0
+                self.using = 0
+
+        self.updateImages(list_path)
 
         self.startWorker()
 
@@ -74,6 +110,7 @@ class CDIPQA(ParaQADataset):
     def parseAnn(self,ocr,s):
         
         self.calls += 1
+        #print('calls {} / {}'.format(self.calls,len(self.images)*self.reuse_factor))
         if self.calls > len(self.images)*self.reuse_factor:
             self.switch()
         elif self.calls%100 == 0:
@@ -119,19 +156,23 @@ class CDIPQA(ParaQADataset):
 
         return qa_bbs, list(range(qa_bbs.shape[0])), None, {}, {}, qa
 
+    #switches to other downloaded chunk (if one is downloaded)
+    # and starts downloading new replacement
     def switch(self):
         use_next = None
 
         status = self.getStatus()
         status_tars=set()
-        for i,s in status:
+        for i,s in enumerate(status):
             status_tars.add(s['name'])
             if i!=self.using and s['downloaded'] and s['untared']:
-                    use_next=i
+                use_next=i
+                break
 
         if use_next is not None:
+            print('CDIP switching to '+status[use_next]['name'])
 
-            self.updateImages(status[next]['list_path'])
+            self.updateImages(status[use_next]['list_path'])
             
             #pick next tar
             all_tars = set(self.download_urls.keys())
@@ -145,9 +186,11 @@ class CDIPQA(ParaQADataset):
             
             assert len(status)==2
             self.startWorker()
+        #else:
+        #    print('cannot switch, not ready')
 
 
-
+    #read the status file and return
     def getStatus(self):
         ret = []
         with self._lock:
@@ -167,23 +210,31 @@ class CDIPQA(ParaQADataset):
         return ret
     def updateStatus(self,status_i,tar_name=None,downloaded=None,untared=None,list_path=None,calls=None):
         with self._lock:
-            with open(self.status_path) as f:
-                status = [s.strip() for s in f.readlines()]
+            try:
+                with open(self.status_path) as f:
+                    status = [s.strip() for s in f.readlines()]
+            except FileNotFoundError:
+                status=[]
 
-            status_i_data = status[status_i].split(',')
+            status_i_data = status[status_i].split(',') if len(status)>status_i else None
             if tar_name is None:
                 tar_name = status_i_data[0]
             if downloaded is None:
-                downloaded = status_i_data[0]
+                downloaded = status_i_data[1]
             if untared is None:
-                untared = status_i_data[0]
+                untared = status_i_data[2]
             if list_path is None:
-                list_path = status_i_data[0]
+                list_path = status_i_data[3]
             if calls is None:
-                calls = status_i_data[0]
+                calls = status_i_data[4]
 
 
-            status[status_i] = '{},{},{},{},{}'.format(tar_name,downloaded,untared,list_path,calls)
+            data = '{},{},{},{},{}'.format(tar_name,downloaded,untared,list_path,calls)
+            if len(status)>status_i:
+                status[status_i] = data
+            else:
+                assert status_i==len(status)
+                status.append(data)
 
             with open(self.status_path, 'w') as f:
                 f.write('\n'.join(status))
@@ -198,8 +249,8 @@ class CDIPQA(ParaQADataset):
                 name = path[path.rindex('/')+1:]
             except ValueError:
                 name = path
-            image_path = os.path.join(dirPath,path+'.png')
-            json_path = os.path.join(dirPath,path+'.layout.json')
+            image_path = os.path.join(self.cache_dir,path+'.png')
+            json_path = os.path.join(self.cache_dir,path+'.layout.json')
 
             self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':json_path, 'rescaled':1.0 })
 
@@ -214,18 +265,46 @@ def loader(dataset):
         while did_something:
             status=dataset.getStatus()
             did_something = False
-            for i,(tar_name,downloaded,untared,list_path,calls):
+            for i,s in enumerate(status):
+                tar_name = s['name']
+                downloaded = s['downloaded']
+                untared = s['untared']
                 if not downloaded:
-                    download(dataset,tar_name)
-                    downloaded=True
-                    dataset.updateStatus(i,downloaded=True)
+                    assert not untared
+                    download(dataset,tar_name,i)
                 if not untared:
-                    untar(dataset,tar_name)
-                    list_path = getListPath(dataset,tar_name)
-                    untared=True
-                    dataset.updateStatus(i,untared=True,list_path=list_path)
+                    list_path = untar(dataset,tar_name,i)
                     did_something = True
 
-def download(dataset,tar_name):
+def download(dataset,tar_name,i):
+    print('CDIP downloading '+tar_name)
     url = dataset.download_urls[tar_name]
+    outpath = os.path.join(dataset.cache_dir,tar_name)
     urllib.request.urlretrieve(url, outpath)
+    dataset.updateStatus(i,downloaded=True)
+
+def untar(dataset,tar_name,i):
+    print('CDIP untarring '+tar_name)
+    tar = tarfile.open(os.path.join(dataset.cache_dir,tar_name))
+    tar.extractall(dataset.cache_dir)
+    list_path = getListPath(dataset,tar_name)
+    dataset.updateStatus(i,untared=True,list_path=list_path)
+
+    print('CDIP ready '+tar_name)
+    return list_path
+
+def getListPath(dataset,tar_name):
+    name = tar_name[:4]
+    list_name = name+'list'
+    possible_paths=[
+            os.path.join(dataset.cache_dir,list_name),
+            os.path.join(dataset.cache_dir,'compute','out'+name[0],list_name),
+            os.path.join(dataset.cache_dir,'Data6/davis/CDIP_ready2/',list_name)
+            ]
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    
+    print('Could not find list for '+tar_name)
+    print(possible_paths)
+    exit(1)
