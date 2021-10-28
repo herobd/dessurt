@@ -558,13 +558,14 @@ class FormQA(QADataset):
             elif q_type=='read':
                 #finish reading entity
                 if self.train:
-                    if len(entities)==0:
+                    if len(entities)>0:
+                        for i in range(10):
+                            entity = random.choice(entities)
+                            text = entity.text
+                            if len(text)>2:
+                                break
+                    else:
                         continue
-                    for i in range(10):
-                        entity = random.choice(entities)
-                        text = entity.text
-                        if len(text)>2:
-                            break
                 else:
                     entity = instance
                     text = entity.text

@@ -17,6 +17,7 @@ from .synth_qadoc_dataset import SynthQADocDataset
 from .synth_para_qa import SynthParaQA
 from .funsd_qa import FUNSDQA
 from .cdip_qa import CDIPQA
+from .cdip_cloud_qa import CDIPCloudQA
 from .iam_qa import IAMQA
 
 
