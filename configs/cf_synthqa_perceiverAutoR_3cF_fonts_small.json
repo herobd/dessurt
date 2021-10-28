@@ -1,5 +1,5 @@
 {
-    "name": "synthqa_perceiverAutoR_3c_ocr_fonts_small",
+    "name": "synthqa_perceiverAutoR_3cF_fonts_small",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -20,7 +20,7 @@
                 "rot_degree_std_dev": 1
             },
 	"questions": 1,
-	"max_qa_len": 2044,
+	"max_qa_len": 2043,
         "min_entries": null,
         "max_entries": 2,
 	"use_read": 0.01,
@@ -71,7 +71,7 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 500000,
+        "iterations": 400000,
         "accum_grad_steps": 10,
         "#swa": true,
         "#swa_start": 200000,
@@ -86,7 +86,7 @@
         "monitor_mode": "none",
         "retry_count":0,
 
-	"do_ocr": "yes",
+	"do_ocr": "no",
 
 
         "#use_learning_schedule": "multi_rise then ramp_to_swa",
@@ -99,7 +99,7 @@
     "arch": "QAImDocPerceiver", 
     "model": {
 	    "grid_ocr": false,
-	    "ocr_tokens": true,
+	    "ocr_tokens": false,
 	    "autoregressive": true,
 	    "char_output": true,
 	    "char_tokens": true,
@@ -108,7 +108,7 @@
                 "patch_emb": "saved/synth_ocr_crnnskipforswin_new/checkpoint-iteration400000.pth"
             },
 	    "input_dim": 256,
-	    "perceiver_blocks": [[6,1],[6,1],[7,2]],
+	    "perceiver_blocks": [[6,1],[6,1],[12,1]],
 	    "num_latents": 256,
 	    "latent_dim": 800,
 	    "cross_heads": 8,
