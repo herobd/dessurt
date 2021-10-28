@@ -497,6 +497,7 @@ class QATrainer(BaseTrainer):
                     hit = ed/((len(answer)+len(pred))/2) < 0.1
                     log['E_{}_acc'.format(typ)].append(int(hit))
                     log['E_{}_ed'.format(typ)].append(ed)
+                    log['E_{}_CER'.format(typ)].append(ed/len(answer) if len(answer)>0 else ed)
                 elif question.startswith('ne~'):
                     pred_type = pred[1]
                     gt_type = answer[1]
