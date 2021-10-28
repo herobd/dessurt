@@ -35,9 +35,14 @@ class CDIPCloudQA(ParaQADataset):
         if config['super_computer']:
             self.cache_dir = '/tmp/cdip_cloud_cache'
             self.status_path = '/tmp/cdip_cloud_cache/status.csv'
+            self.tar_dir = '/fslhome/brianld/compute/uploaded'
+            self.rm_tar_when_done=False
         else:
             self.cache_dir = os.path.join(dirPath,'cache')
             self.status_path = os.path.join(dirPath,'status.csv')
+            self.tar_dir = self.cache_dir
+            self.rm_tar_when_done=True
+
         ensure_dir(self.cache_dir)
 
         self._lock = threading.Lock()
@@ -45,6 +50,7 @@ class CDIPCloudQA(ParaQADataset):
         self.reuse_factor = config['reuse_factor'] if 'reuse_factor' in config else 1.0
         self.calls = 0
         self.num_load_queue = 2
+        self.to_rm = []
 
         assert images is None
 
@@ -75,13 +81,13 @@ class CDIPCloudQA(ParaQADataset):
                                  'calls': 0
                                  })
             queued_tars.add(todo_tar)
-        min_calls = 999999999999999
+        max_calls = -1 #We left off on whatever one has the most calls
         list_path = None
         self.using = None
         for i,s in enumerate(status):
-            if s['downloaded'] and s['untared'] and s['calls']<min_calls:
+            if s['downloaded'] and s['untared'] and s['calls']>max_calls:
                 self.using = i
-                min_calls = s['calls']
+                max_calls = s['calls']
                 list_path = s['list_path']
                 self.calls = s['calls']
 
@@ -178,6 +184,9 @@ class CDIPCloudQA(ParaQADataset):
             all_tars = set(self.download_urls.keys())
             new_tars = all_tars-status_tars
             todo_tar = random.choice(list(new_tars))
+    
+            self.to_rm.append(status[self.using]['name'])
+
             #update status
             self.updateStatus(self.using,todo_tar,False,False,'',0)
 
@@ -261,6 +270,9 @@ class CDIPCloudQA(ParaQADataset):
 
 def loader(dataset):
     with dataset.loader_lock:
+        while len(dataset.to_rm)>0:
+            tar_name = dataset.to_rm.pop()
+            remove(dataset,tar_name)
         did_something=True
         while did_something:
             status=dataset.getStatus()
@@ -276,16 +288,26 @@ def loader(dataset):
                     list_path = untar(dataset,tar_name,i)
                     did_something = True
 
+def remove(dataset,tar_name):
+    print('CDIP removing '+tar_name)
+    if dataset.rm_tar_when_done:
+        tar_path = os.path.join(dataset.tar_dir,tar_name)
+        os.remove(tar_path)
+    name = tar_name[:3]
+    dir_path = os.path.join(dataset.cache_dir,name)
+    os.remove(dir_path)
+
 def download(dataset,tar_name,i):
-    print('CDIP downloading '+tar_name)
-    url = dataset.download_urls[tar_name]
-    outpath = os.path.join(dataset.cache_dir,tar_name)
-    urllib.request.urlretrieve(url, outpath)
-    dataset.updateStatus(i,downloaded=True)
+    outpath = os.path.join(dataset.tar_dir,tar_name)
+    if not os.path.exists(outpath):
+        print('CDIP downloading '+tar_name)
+        url = dataset.download_urls[tar_name]
+        urllib.request.urlretrieve(url, outpath)
+        dataset.updateStatus(i,downloaded=True)
 
 def untar(dataset,tar_name,i):
     print('CDIP untarring '+tar_name)
-    tar = tarfile.open(os.path.join(dataset.cache_dir,tar_name))
+    tar = tarfile.open(os.path.join(dataset.tar_dir,tar_name))
     tar.extractall(dataset.cache_dir)
     list_path = getListPath(dataset,tar_name)
     dataset.updateStatus(i,untared=True,list_path=list_path)
