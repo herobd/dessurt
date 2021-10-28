@@ -125,6 +125,7 @@ def getDataLoader(config,split,rank=None,world_size=None):
             return withCollate(FormsBoxPair,forms_box_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='MultipleDataset':
             config['data_loader']['super_computer']=config['super_computer']
+            config['validation']['super_computer']=config['super_computer']
             return withCollate(multiple_dataset.MultipleDataset,multiple_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='SynthQADataset':
             return withCollate(synth_qa_dataset.SynthQADataset,synth_qa_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
@@ -150,6 +151,7 @@ def getDataLoader(config,split,rank=None,world_size=None):
             return withCollate(cdip_qa.CDIPQA,cdip_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='CDIPCloudQA':
             config['data_loader']['super_computer']=config['super_computer']
+            config['validation']['super_computer']=config['super_computer']
             return withCollate(cdip_cloud_qa.CDIPCloudQA,cdip_cloud_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='IAMQA':
             return withCollate(iam_qa.IAMQA,iam_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
