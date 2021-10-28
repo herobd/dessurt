@@ -20,6 +20,15 @@ from utils.util import calcXYWH
 
 import timeit
 
+def checkMemory():
+    import gc
+    for obj in gc.get_objects():
+        try:
+            if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+                print(type(obj), obj.size())
+        except:
+            pass
+
 def normalize_bbox2(bbox, dwidth, dheight, twidth, theight, max_dist):
      return [
          max(min(int(max_dist * (bbox[0] / dwidth)),max_dist),0),
