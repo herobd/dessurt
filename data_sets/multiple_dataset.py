@@ -34,6 +34,7 @@ class MultipleDataset(Dataset):
             frequencies.append(dataset['freq'])
             total_freq += dataset['freq']
             d_config = dataset['config']
+            d_config['super_computer'] = config['super_computer'] #this is currently only needed by CDIPCloudQA
             self.data_sets.append(
                     eval(d_config['data_set_name'])(dirPath=d_config['data_dir'], split=split, config=d_config)
                     )

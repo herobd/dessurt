@@ -124,6 +124,7 @@ def getDataLoader(config,split,rank=None,world_size=None):
         elif data_set_name=='FormsBoxPair':
             return withCollate(FormsBoxPair,forms_box_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='MultipleDataset':
+            config['data_loader']['super_computer']=config['super_computer']
             return withCollate(multiple_dataset.MultipleDataset,multiple_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='SynthQADataset':
             return withCollate(synth_qa_dataset.SynthQADataset,synth_qa_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
