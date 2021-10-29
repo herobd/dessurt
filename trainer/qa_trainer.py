@@ -336,6 +336,7 @@ class QATrainer(BaseTrainer):
         ocrBoxes = instance['bb_gt']
         questions = instance['questions']
         answers = instance['answers']
+        print('Lengths '+' '.join([str(len(a[0])) for a in answers])+' .....................')
         gt_mask = instance['mask_label']
         if gt_mask is not None:
             gt_mask = gt_mask.to(device)
