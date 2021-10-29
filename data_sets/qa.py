@@ -82,7 +82,8 @@ class QADataset(torch.utils.data.Dataset):
             self.transform = None
         self.rescale_range = config['rescale_range']
         self.rescale_to_crop_size_first = config['rescale_to_crop_size_first'] if 'rescale_to_crop_size_first' in config else False
-        if self.rescale_to_crop_size_first:
+        self.rescale_to_crop_width_first = config['rescale_to_crop_width_first'] if 'rescale_to_crop_width_first' in config else False
+        if self.rescale_to_crop_size_first or self.rescale_to_crop_width_first:
             self.crop_size = config['crop_params']['crop_size']
         if type(self.rescale_range) is float:
             self.rescale_range = [self.rescale_range,self.rescale_range]
@@ -91,6 +92,8 @@ class QADataset(torch.utils.data.Dataset):
             if self.cache_resized:
                 if self.rescale_to_crop_size_first:
                     self.cache_path = os.path.join(dirPath,'cache_match{}x{}'.format(*config['crop_params']['crop_size']))
+                elif self.rescale_to_crop_width_first:
+                    self.cache_path = os.path.join(dirPath,'cache_matchHx{}'.format(config['crop_params']['crop_size'][1]))
                 else:
                     self.cache_path = os.path.join(dirPath,'cache_'+str(self.rescale_range[1]))
                 if not os.path.exists(self.cache_path):
@@ -193,6 +196,12 @@ class QADataset(torch.utils.data.Dataset):
             #        scale_width = self.crop_size[1]/np_img.shape[0]
 
             scale = min(scale_height, scale_width)
+            partial_rescale = s*scale
+            s=partial_rescale
+        elif self.rescale_to_crop_width_first:
+            if rescaled!=1:
+                raise NotImplementedError('havent implemented caching with match resizing')
+            scale = self.crop_size[1]/np_img.shape[1]
             partial_rescale = s*scale
             s=partial_rescale
         else:
