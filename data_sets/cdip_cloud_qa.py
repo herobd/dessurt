@@ -99,6 +99,7 @@ class CDIPCloudQA(ParaQADataset):
                     list_path = untar(self,status[i]['name'],i)
                     self.calls = 0
                     self.using = i
+                    break
             if list_path is None:
                 download(self,status[0]['name'],0)
                 list_path = untar(self,status[0]['name'],0)
