@@ -48,7 +48,7 @@
                     "do_masks": true,
                     "tables": 0.2,
                     "multiline": 0.6,
-                    "max_qa_len": 2043,
+                    "max_qa_len": 1020,
                     "header_dir": "../data/english4line_fonts",
                     "max_chars": 10,
                     "min_chars": 1,
@@ -80,7 +80,7 @@
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
-                    "max_qa_len": 2043,
+                    "max_qa_len": 1020,
                     "image_size": [
                         1000,
                         700
@@ -110,7 +110,7 @@
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
-                    "max_qa_len": 2043
+                    "max_qa_len": 1020
                 }
             }
         ]
@@ -134,10 +134,12 @@
     },
     "loss": {
 	"xanswer": "padded_seq_cross_entropy",
-	"answer": "label_smoothing"
+	"answer": "label_smoothing",
+	"mask": "focalLoss"
     },
     "loss_weights": {
-        "answer": 1
+        "answer": 1,
+	"mask": 1
     },
     "loss_params": 
         {
@@ -190,7 +192,7 @@
 	    "cross_heads": 8,
 	    "self_heads": 8,
 	    "output_dim": 256,
-	    "out_length": 2048
+	    "out_length": 1024
 	    
     }
 }
