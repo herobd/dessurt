@@ -1,4 +1,4 @@
-from datasets import load_dataset
+from datasets import load_dataset, load_from_disk
 import random
 import os
 from utils.util import ensure_dir
@@ -24,7 +24,11 @@ def getWikiDataset():
     global _text_data
     #Returns a list of text paragraphs from a randome wikipedia article
     if '_text_data' not in globals():
-        _text_data = load_dataset('wikipedia', '20200501.en', cache_dir=cache_path)['train']
+        if not os.path.exists(os.path.join(cache_path,'dataset_info.json')):
+            _text_data = load_dataset('wikipedia', '20200501.en', cache_dir=cache_path)['train']
+            _text_data.save_to_disk(cache_path)
+        else:
+            _text_data = load_from_disk(cache_path)
     return _text_data
 
 def getWikiArticle(all_newline=False,dataset=None):
@@ -33,7 +37,7 @@ def getWikiArticle(all_newline=False,dataset=None):
 
     if dataset is None:
         if '_text_data' not in globals():
-            _text_data = load_dataset('wikipedia', '20200501.en', cache_dir=cache_path)['train']
+            _text_data = getWikiDataset()
     else:
         _text_data = dataset
 
