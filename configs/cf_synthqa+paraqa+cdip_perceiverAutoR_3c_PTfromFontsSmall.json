@@ -28,8 +28,7 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1152,
-                            768
+                            768,768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
@@ -40,8 +39,7 @@
                     "text_height": 32,
                     "wider": 200,
                     "image_size": [
-                        1152,
-                        768
+                        768,768
                     ],
                     "change_size": true,
                     "word_questions": "simple",
@@ -74,7 +72,7 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1152,768
+                            768,768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
@@ -82,8 +80,7 @@
                     "questions": 1,
                     "max_qa_len": 1020,
                     "image_size": [
-                        1000,
-                        700
+                        760,760
                     ],
                     "prefetch_factor": 10,
                     "persistent_workers": true
@@ -103,8 +100,7 @@
 		    "rescale_to_crop_size_first": true,
                     "crop_params": {
                         "crop_size": [
-                            1152,
-                            768
+                            768,768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
@@ -181,7 +177,7 @@
 	    "autoregressive": true,
 	    "char_output": true,
 	    "char_tokens": true,
-            "image_size": [1152,768],
+            "image_size": [768,768],
             "pre_trained": {
                 "patch_emb": "saved/synth_ocr_crnnskipforswin_new/checkpoint-iteration400000.pth"
             },

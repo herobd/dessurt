@@ -312,11 +312,12 @@ class QAImDocPerceiver(BaseModel):
         hs=ocr_bbs[:,:,3]
         #ocr_pos = ocr_bbs[:,:,0:2] #just x,y?
 
+        q_padding_mask = q_t['attention_mask'].bool()#.to(device) 
         if q_tokens.size(1) > self.out_length:
             q_tokens = q_tokens[:,:self.out_length]
+            q_padding_mask = q_padding_mask[:,:self.out_length]
 
         q_tokens = self.q_pos_1d_enc(q_tokens)
-        q_padding_mask = q_t['attention_mask'].bool()#.to(device) 
         q_padding_mask = q_padding_mask.to(device)
 
 
