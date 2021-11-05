@@ -15,8 +15,7 @@ from collections import defaultdict
 import pickle
 #import requests
 import warnings
-from utils.saliency import SimpleFullGradMod
-from utils.debug_graph import GraphChecker
+from utils.saliency_qa import InputGradModel
 from utils import img_f
 from skimage import future
 try:
@@ -121,10 +120,14 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None):
     else:
         model = eval(config['arch'])(config['model'])
 
+
     model.eval()
     model.max_pred_len=40
     if gpu:
         model = model.cuda()
+
+    if do_saliency:
+        s_model = InputGradModel(model)
 
     if do_pad is not None:
         do_pad = do_pad.split(',')
@@ -221,8 +224,11 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None):
                 else:
                     mask = torch.zeros_like(img)
                 in_img = torch.cat((img,mask),dim=1)
-
-                answer,pred_mask = model(in_img,ocr,[[question]],RUN=run)
+                
+                if do_saliency:
+                    answer,pred_mask = s_model.saliency(in_img,ocr,[[question]])
+                else:
+                    answer,pred_mask = model(in_img,ocr,[[question]],RUN=run)
                 #pred_a, target_a, answer, pred_mask = model(img,ocr,[[question]],[['number']])
                 print('Answer: '+answer+'      max mask={}'.format(pred_mask.max()))
                 #show_mask = torch.cat((pred_mask,pred_mask>0.5).float()
