@@ -10,7 +10,7 @@
         "shuffle": true,
         "prefetch_factor": 5,
         "persistent_workers": true,
-        "batch_size": 3,
+        "batch_size": 2,
         "num_workers": 4,
         "datasets": [
             {
