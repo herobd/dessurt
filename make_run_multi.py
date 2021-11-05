@@ -1,10 +1,10 @@
 template= """#!/bin/bash
 
 #SBATCH --time=72:00:00   # walltime
-#SBATCH --ntasks={}
+#SBATCH --ntasks={0}
 #SBATCH --gpus-per-task=1
-#SBATCH  --cpus-per-task=4
-#SBATCH -J "{}"
+#SBATCH  --cpus-per-task=5
+#SBATCH -J "{2}"
 #SBATCH --mem-per-cpu=4G
 #SBATCH --mail-user=herobd@gmail.com   # email address
 #SBATCH --mail-type=END
@@ -20,10 +20,13 @@ export PBS_QUEUE=batch
 export OMP_NUM_THREADS=$SLURM_CPUS_ON_NODE
 
 module remove miniconda3
-module load cuda/10.1
-module load cudnn/7.6
+module load cuda/11.2
+#module load cudnn/7.6
+
+rm "/fslhome/brianld/job_comm/{2}"
+
 cd ~/pairing
-source activate /fslhome/brianld/miniconda3/envs/new
+source activate /fslhome/brianld/miniconda3/envs/p1.8
 
 
 export NCCL_DEBUG=INFO
@@ -32,9 +35,9 @@ export NCCL_SOCKET_IFNAME=eth,ib
 set -eu
 pids=()
 
-for rank in ~<0..{}~>
+for rank in ~<0..{1}~>
 do
-    srun -N 1 -n 1 --gpus 1 --exclusive  python  train.py --supercomputer -c configs/cf_{}.json -s saved/{}/checkpoint-latest.pth --rank $rank --worldsize 4 &
+    srun -N 1 -n 1 --gpus 1 --exclusive  python  train.py --supercomputer -c configs/cf_{2}.json -s saved/{2}/checkpoint-latest.pth --rank $rank --worldsize {0} &
     pids+=($!)
     if [ $rank==0 ]; then
         sleep 2.5
@@ -65,9 +68,9 @@ done
 """
 
 import sys
-N=4
+N=6
 def create(job_name):
-    script = template.format(N,job_name,N-1,job_name,job_name,job_name,job_name)
+    script = template.format(N,N-1,job_name)#,N-1,job_name,job_name,job_name,job_name)
     script=script.replace('~<','{')
     script=script.replace('~>','}')
 
