@@ -289,7 +289,7 @@ class BaseTrainer:
         if 'multiprocess' in config or 'distributed' in config:
             self.model = DistributedDataParallel(
                     self.model,
-                    find_unused_parameters=True)
+                    find_unused_parameters=True) #sometimes not used params... not sure why
 
     def finishSetup(self):
         """

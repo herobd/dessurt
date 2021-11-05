@@ -356,7 +356,7 @@ class QATrainer(BaseTrainer):
                 normal_img = (128*(image[:,0]+1)).cpu().numpy().astype(np.uint8)
                 for img in normal_img:
                     ocr_res.append( self.ocr_reader.readtext(img,decoder='greedy+softmax') )
-                print('len OCR: {}'.format([len(c) for c in ocr_res]))
+                #print('len OCR: {}'.format([len(c) for c in ocr_res]))
         else:
             if self.ocr_word_bbs:
                 gtTrans = [form_metadata['word_trans'] for form_metadata in instance['form_metadata']]
