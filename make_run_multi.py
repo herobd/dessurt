@@ -3,7 +3,7 @@ template= """#!/bin/bash
 #SBATCH --time=72:00:00   # walltime
 #SBATCH --ntasks={0}
 #SBATCH --gpus-per-task=1
-#SBATCH  --cpus-per-task=4
+#SBATCH  --cpus-per-task=5
 #SBATCH -J "{2}"
 #SBATCH --mem-per-cpu=4G
 #SBATCH --mail-user=herobd@gmail.com   # email address
@@ -20,10 +20,13 @@ export PBS_QUEUE=batch
 export OMP_NUM_THREADS=$SLURM_CPUS_ON_NODE
 
 module remove miniconda3
-module load cuda/10.1
-module load cudnn/7.6
+module load cuda/11.2
+#module load cudnn/7.6
+
+rm "/fslhome/brianld/job_comm/{2}"
+
 cd ~/pairing
-source activate /fslhome/brianld/miniconda3/envs/new
+source activate /fslhome/brianld/miniconda3/envs/p1.8
 
 
 export NCCL_DEBUG=INFO
@@ -65,7 +68,7 @@ done
 """
 
 import sys
-N=4
+N=6
 def create(job_name):
     script = template.format(N,N-1,job_name)#,N-1,job_name,job_name,job_name,job_name)
     script=script.replace('~<','{')
