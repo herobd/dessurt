@@ -83,7 +83,7 @@ class InputGradModel():
         self.easyocr_chars = "0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ €ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
 
-    def _getGradients(self, image,ocr_res,questions,answers):
+    def _getGradients(self, image,ocr_res,questions):
         """
         Compute intermediate gradients for an image
         """
@@ -92,8 +92,11 @@ class InputGradModel():
         with torch.enable_grad():
             image = image.requires_grad_()
             self.model.all_grad=True
-            pred_a, target_a, string_a, pred_mask,im_tokens,ocr_tokens = self.model(image,ocr_res,questions,RUN=True)
-            max_pred_a = pred_a.max(dim=-1)
+
+            pred_a, target_a, string_a, pred_mask,im_tokens,ocr_tokens = self.model(image,ocr_res,questions,RUN=True,get_tokens=True)
+
+            max_pred_a, pred_index = pred_a.max(dim=-1)
+
             a_output_scalar = -1. * F.binary_cross_entropy_with_logits(max_pred_a,torch.ones_like(max_pred_a),reduction='mean')
             a_1st_output_scalar = -1. * F.binary_cross_entropy_with_logits(max_pred_a[...,0],torch.ones_like(max_pred_a[...,0]),reduction='mean')
             mask_output_scalars = -1. * F.binary_cross_entropy_with_logits(pred_mask,torch.ones_like(pred_mask),reduction='mean')
@@ -104,21 +107,24 @@ class InputGradModel():
 
             for output_i,output_scalar in enumerate([a_output_scalar,a_1st_output_scalar,mask_output_scalars]):
                 #self.do_only='pix'
-                ocr_gradients.append( torch.autograd.grad(
-                    outputs = output_scalar, 
-                    inputs = ocr_tokens, 
-                    retain_graph=True,
-                    create_graph=False)[0].mean(dim=-1).cpu().detach() )
+                if len(ocr_res[0])>0:
+                    ocr_gradients.append( torch.autograd.grad(
+                        outputs = output_scalar, 
+                        inputs = ocr_tokens, 
+                        retain_graph=True,
+                        create_graph=False)[0].mean(dim=-1).cpu().detach() )
+                else:
+                    ocr_gradients.append(None)
                 image_gradients.append( torch.autograd.grad(
                     outputs = output_scalar, 
-                    inputs = image_tokens, 
-                    retain_graph=True if output_i<len(output_scalars)-1 else False,
+                    inputs = im_tokens, 
+                    retain_graph=True if output_i<2 else False,
                     create_graph=False)[0].mean(dim=-1).cpu().detach() )
 
                 
-                     
+        #import pdb;pdb.set_trace()                     
         #input_gradients = torch.cat(input_gradients,dim=0
-        return zip(image_gradients,ocr_gradients),string_a,pred_mask
+        return zip(ocr_gradients,image_gradients),string_a,pred_mask
 
 
     def saliency(self, image,ocr_res,questions,path_prefix=None):
@@ -138,7 +144,7 @@ class InputGradModel():
         assert(im_size[0]==1)
 
         image=image[0].cpu()
-        draw_image = np.uint8((1-image.numpy()) * 127).transpose(1,2,0)
+        draw_image = np.uint8((1-image[0:1,:,:].numpy()) * 127).transpose(1,2,0)
         if draw_image.shape[2]==1:
             draw_image = np.repeat(draw_image,3,2)
 
@@ -151,7 +157,8 @@ class InputGradModel():
             char_loc = char_pred!=0
             new_char_pred = char_pred[char_loc]
             all_char_pred.append(new_char_pred.cpu())
-        all_char_pred = torch.cat(all_char_pred,dim=0)
+        if len(all_char_pred)>0:
+            all_char_pred = torch.cat(all_char_pred,dim=0)
 
         ocr_chars=''
         for pred in all_char_pred:
@@ -164,55 +171,63 @@ class InputGradModel():
 
             # Input-gradient * image
             # = image_grad * image[0]
+            H,W = self.model.patches_resolution
+            image_grad = image_grad.view(H,W)
             saliency_image = image_grad.cpu().numpy()
+
+            print('min={}, max={}'.format(saliency_image.min(),saliency_image.max()))
 
             saliency_image = saliency_image - saliency_image.min()
             saliency_image = saliency_image / saliency_image.max()
             saliency_image = saliency_image.clip(0,1)
 
-            saliency_image = img_f.resize(...)
+            #test = np.uint8(saliency_image * 255)
+            #img_f.imshow('',test)
+            #img_f.show()
+
+            saliency_image = img_f.resize(saliency_image,draw_image.shape[0:2],order=0)
 
 
 
             draw_image_this = np.copy(draw_image)
             draw_image_this[:,:,1]=draw_image_this[:,:,1].astype(float)*saliency_image
             draw_image_this[:,:,2]=draw_image_this[:,:,2].astype(float)*(1-saliency_image)
-            saliency_image_e = np.uint8(saliency_image * 255).transpose(1, 2, 0)
-            draw_image_this[:,:,0]=saliency_image_e[:,:,0]
+            saliency_image_e = np.uint8(saliency_image * 255)
+            draw_image_this[:,:,0]=saliency_image_e
 
 
             #filename = path_prefix+'_{}_image.png'.format(name)
             #img_f.imwrite(filename, image)
+            if ocr_grad is not None:
+                saliency_ocr = ocr_grad[0].cpu().numpy()
+                saliency_ocr = saliency_ocr - saliency_ocr.min()
+                saliency_ocr = saliency_ocr / saliency_ocr.max()
+                saliency_ocr = saliency_ocr.clip(0,1)
 
-            saliency_ocr = ocr_grad.cpu().numpy()
-            saliency_ocr = saliency_ocr - saliency_ocr.min()
-            saliency_ocr = saliency_ocr / saliency_ocr.max()
-            saliency_ocr = saliency_ocr.clip(0,1)
+                assert len(ocr_chars) == saliency_ocr.shape[0]
+                CSI = "\x1B["
+                #Blue 0-0.2 Cyan 0.2-0.4  Green 0.4-0.6  Yellow 0.6-0.8  Red 0.8-1
+                char_sal=''
+                for char,score in zip(ocr_chars,saliency_ocr):
+                    if score<0.2:
+                        color = 34
+                    elif score<0.4:
+                        color = 36
+                    elif score<0.6:
+                        color=32
+                    elif score<0.8:
+                        color = 33
+                    else:
+                        color=31
 
-            assert len(ocr_chars) == saliency_ocr.shape[0]
-            CSI = "\x1B["
-            #Blue 0-0.2 Cyan 0.2-0.4  Green 0.4-0.6  Yellow 0.6-0.8  Red 0.8-1
-            char_sal=''
-            for char,score in zip(ocr_chars,saliency_ocr):
-                if score<0.2:
-                    color = 34
-                elif score<0.4:
-                    color = 36
-                elif score<0.6:
-                    color=32
-                elif score<0.8:
-                    color = 33
-                else:
-                    color=31
+                    if score<0.9:
+                        w=40
+                    else:
+                        w=10
 
-                if score<0.9:
-                    w=40
-                else:
-                    w=10
+                    char_sal += CSI+"{};{}m".format(color,w) + char + CSI + "0m"
 
-                char_sal += CSI+"{};{}m".format(color,w) + char + CSI + "0m"
-
-            print(char_sal)
+                print(char_sal)
             img_f.imshow('',draw_image_this)
             img_f.show()
 

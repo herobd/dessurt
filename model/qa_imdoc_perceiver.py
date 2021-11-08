@@ -327,6 +327,10 @@ class QAImDocPerceiver(BaseModel):
         else:
             ocr_tokens = torch.FloatTensor(new_batch_size,0,q_tokens.size(2)).to(device)
 
+        if get_tokens:
+            ocr_tokens = ocr_tokens.requires_grad_()
+            im_tokens = im_tokens.requires_grad_()
+
         num_all = num_im+num_ocr+num_q+num_a
 
         #make position (2d) masks. Controls whether relative position attention bias is applied
@@ -344,7 +348,7 @@ class QAImDocPerceiver(BaseModel):
         #Run through Perceiver
         latent = self.perciever(input_tokens,input_padding_mask)
 
-        im_tokens = self.decoder_image(latent,query_im_tokens)
+        im_feats = self.decoder_image(latent,query_im_tokens)
 
         if self.autoregressive:
             query_a_tokens = a_tokens
@@ -357,7 +361,7 @@ class QAImDocPerceiver(BaseModel):
         #Visual output
         H,W = self.patches_resolution
         #reshape and permute to convert to image
-        im_feats = im_tokens.view(batch_size,H,W,im_tokens.size(2)).permute(0,3,1,2)
+        im_feats = im_feats.view(batch_size,H,W,im_feats.size(2)).permute(0,3,1,2)
         out_mask = self.upsample_net(im_feats)
         
         #############
@@ -413,6 +417,7 @@ class QAImDocPerceiver(BaseModel):
         #import pdb;pdb.set_trace()
 
         if get_tokens:
+            #im_tokens = im_tokens.view(batch_size,H,W,im_tokens.size(2)).permute(0,3,1,2)
             return response_decoded, target_decoded.to(device), batch_string_response, out_mask,im_tokens,ocr_tokens
         elif RUN:
             return batch_string_response,out_mask
