@@ -24,7 +24,7 @@ except:
     pass
 
 
-def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None):
+def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do_saliency=False):
     np.random.seed(1234)
     torch.manual_seed(1234)
     no_mask_qs = ['fli:','fna:','re~','l~','v~']
@@ -230,7 +230,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None):
                 else:
                     answer,pred_mask = model(in_img,ocr,[[question]],RUN=run)
                 #pred_a, target_a, answer, pred_mask = model(img,ocr,[[question]],[['number']])
-                print('Answer: '+answer+'      max mask={}'.format(pred_mask.max()))
+                print('Answer: {}      max mask={}'.format(answer,pred_mask.max()))
                 #show_mask = torch.cat((pred_mask,pred_mask>0.5).float()
                 draw_img = 0.5*(1-img)
                 threshed = torch.where(pred_mask>0.5,1-draw_img,draw_img)
@@ -270,6 +270,8 @@ if __name__ == '__main__':
                         help='config override')
     parser.add_argument('-a', '--addtoconfig', default=None, type=str,
                         help='Arbitrary key-value pairs to add to config of the form "k1=v1,k2=v2,...kn=vn".  You can nest keys with k1=k2=k3=v')
+    parser.add_argument('-S', '--saliency', default=False, action='store_const', const=True,
+                        help='Run to get saliency map')
 
     args = parser.parse_args()
 
@@ -286,6 +288,6 @@ if __name__ == '__main__':
         exit()
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,scale=args.scale)
+            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,scale=args.scale,do_saliency=args.saliency)
     else:
-        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,scale=args.scale)
+        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,scale=args.scale,do_saliency=args.saliency)
