@@ -358,9 +358,9 @@ class QATrainer(BaseTrainer):
                     normal_img = (128*(image[:,0]+1)).cpu().numpy().astype(np.uint8)
                     for img in normal_img:
                         ocr_res.append( self.ocr_reader.readtext(img,decoder='greedy+softmax') )
-                    m=max([len(c) for c in ocr_res])+max([len(q[0]) for q in questions])
-                    self.DEBUG_max_ocr_len = max(self.DEBUG_max_ocr_len,m)
-                    print('len OCR: {}, len qeu: {}, sum: {},  max: {}'.format([len(c) for c in ocr_res],[len(q[0]) for q in questions],m,self.DEBUG_max_ocr_len))
+                    #m=max([len(c) for c in ocr_res])+max([len(q[0]) for q in questions])
+                    #self.DEBUG_max_ocr_len = max(self.DEBUG_max_ocr_len,m)
+                    #print('len OCR: {}, len qeu: {}, sum: {},  max: {}'.format([len(c) for c in ocr_res],[len(q[0]) for q in questions],m,self.DEBUG_max_ocr_len))
                 except Exception as e:
                     print("EasyOCR error:")
                     print(e)
