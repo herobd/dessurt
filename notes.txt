@@ -38,6 +38,9 @@ at 238,001: val_F_Measure_MACRO: 0.527
 at 200,000: val_F_Measure_MACRO: 0.542
 at 100,000: val_F_Measure_MACRO: 0.52
 
+for:ynthqa+paraqa+cdip_perceiverAutoR_3cF_PTfromFontsSmall
+        I upped the virtual batchsize to 100 (from 40) at 1254169
+
 =======
 =======
 FUNSD valid for non-grid

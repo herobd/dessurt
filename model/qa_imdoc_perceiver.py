@@ -373,13 +373,14 @@ class QAImDocPerceiver(BaseModel):
         if RUN:
             offset=1
             next_response_greedy_token=response_greedy_tokens
-            while response_greedy_token[0:-1] != self.SEP_TOKEN and offset<self.max_pred_len:
-                ans_emb = self.text_embedding(next_response_greedy_token]
+            while response_greedy_tokens[0,-1] != self.SEP_TOKEN and offset<self.max_pred_len:
+                ans_emb = self.text_embedding(next_response_greedy_token)
                 next_query_a_token = self.a_pos_1d_enc(ans_emb,offset=offset)
                 next_a_token = self.decoder_answer(latent,next_query_a_token)
                 response_decoded = self.answer_decode(next_a_token)
                 next_response_greedy_token = response_decoded.argmax(dim=2)
                 response_greedy_tokens = torch.cat((response_greedy_tokens,next_response_greedy_token),dim=1)
+                offset+=1
 
 
 
@@ -414,7 +415,7 @@ class QAImDocPerceiver(BaseModel):
         if get_tokens:
             return response_decoded, target_decoded.to(device), batch_string_response, out_mask,im_tokens,ocr_tokens
         elif RUN:
-            batch_string_response,out_mask
+            return batch_string_response,out_mask
         else:
             return response_decoded, target_decoded.to(device), batch_string_response, out_mask
 
