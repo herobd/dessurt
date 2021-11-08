@@ -377,6 +377,7 @@ class QAImDocPerceiver(BaseModel):
         if RUN:
             offset=1
             next_response_greedy_token=response_greedy_tokens
+
             while response_greedy_tokens[0,-1] != self.SEP_TOKEN and offset<self.max_pred_len:
                 ans_emb = self.text_embedding(next_response_greedy_token)
                 next_query_a_token = self.a_pos_1d_enc(ans_emb,offset=offset)
