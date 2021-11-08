@@ -340,7 +340,7 @@ class QAImDocGPT3(BaseModel):
 
 
     #we're building this for fixed images size
-    def forward(self,image,ocrRes,questions,answers=None,useCurvedBBs=False,RUN=False):
+    def forward(self,image,ocrRes,questions,answers=None,useCurvedBBs=False,RUN=False,get_tokens=False):
         ##DDD
         #image = torch.autograd.Variable(image,requires_grad=True)
         #self.image=image
@@ -679,6 +679,12 @@ class QAImDocGPT3(BaseModel):
             saved_a_tokens = []
             ##
 
+        if get_tokens:
+            im_tokens = im_tokens.requires_grad_()
+            init_im_tokens = im_tokens
+            ocr_tokens = ocr_tokens.requires_grad_()
+            init_ocr_tokens = ocr_tokens
+
         for i,(swin_layer, proj_d2i, layout_layer, proj_i2d, im_downsample, ocr_downsample, q_downsample) in enumerate(self.swin_layers):
 
             #could be run in parallel
@@ -773,6 +779,8 @@ class QAImDocGPT3(BaseModel):
 
             #response = all_tokens[:,-(num_a):]
             response_decoded = self.answer_decode(response)
+            if get_tokens:
+                response_decoded_all = response_decoded
             response_greedy_token = response_decoded.argmax(dim=2)
 
             output_tokens = [response_greedy_token[0,0].item()]
@@ -840,6 +848,8 @@ class QAImDocGPT3(BaseModel):
                 #Done Swin (RUN)
 
                 response_decoded = self.answer_decode(ans)
+                if get_tokens:
+                    response_decoded_all = torch.cat((response_decoded_all,response_decoded),dim=1)
                 response_greedy_token = response_decoded.argmax(dim=2)
                 assert response_greedy_token.size(1)==1
                 
@@ -853,7 +863,11 @@ class QAImDocGPT3(BaseModel):
             
             if PRINT_ATT:
                 attDisplay(image[0],full_ocr_string,'|'+questions[0],'|'+final_str[0]+'^',final_str)
-            return final_str, out_mask #torch.sigmoid(out_mask)
+
+            if get_tokens:
+                return response_decoded_all, None, final_str, out_mask, init_im_tokens, init_ocr_tokens
+            else:
+                return final_str, out_mask #torch.sigmoid(out_mask)
             ############
 
 
