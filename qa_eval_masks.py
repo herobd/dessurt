@@ -436,15 +436,15 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 i=len(col_headers)+len(row_headers)
                 for ci,ch in enumerate(col_headers):
                     for ri,rh in enumerate(col_headers):
-                        assert i == len(pred_cells)
+                        assert i+index_start == len(pred_cells)
                         if i in c_to_g:
                             g = c_to_g[i]
                             pred_cells.append(groups[g])
                         else:
                             pred_cells.append([-1])
                         pred_cell_classes.append(2)
-                        rel_tables.append((index_start+ci,i))
-                        rel_tables.append((index_start+ri+len(col_headers),i))
+                        rel_tables.append((index_start+ci,i+index_start))
+                        rel_tables.append((index_start+ri+len(col_headers),i+index_start))
                         i+=1
                 used.extend(c_to_g.values())
 
