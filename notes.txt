@@ -1,3 +1,6 @@
+crash at 1121
+
+
 IAM pretrianing results
 100k CER ~0.38
 At about 200k: CER (per line)=0.296
