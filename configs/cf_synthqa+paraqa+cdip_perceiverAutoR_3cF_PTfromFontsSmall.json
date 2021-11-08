@@ -108,7 +108,7 @@
                     },
                     "questions": 1,
                     "max_qa_len": 1018,
-                    "reuse_factor": 2.0
+                    "reuse_factor": 1.0
                 }
             }
         ]
@@ -148,7 +148,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 50000000,
-        "accum_grad_steps": 20,
+        "accum_grad_steps": 50,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
