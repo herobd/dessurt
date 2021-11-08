@@ -28,8 +28,7 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1152,
-                            768
+                            768,768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
@@ -40,15 +39,14 @@
                     "text_height": 32,
                     "wider": 200,
                     "image_size": [
-                        1152,
-                        768
+                        768,768
                     ],
                     "change_size": true,
                     "word_questions": "simple",
                     "do_masks": true,
                     "tables": 0.2,
                     "multiline": 0.6,
-                    "max_qa_len": 2043,
+                    "max_qa_len": 1018,
                     "header_dir": "../data/english4line_fonts",
                     "max_chars": 10,
                     "min_chars": 1,
@@ -74,16 +72,15 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1152,768
+                            768,768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
-                    "max_qa_len": 2043,
+                    "max_qa_len": 1018,
                     "image_size": [
-                        1000,
-                        700
+                        760,760
                     ],
                     "prefetch_factor": 10,
                     "persistent_workers": true
@@ -101,18 +98,17 @@
                         0.9,
                         1.1
                     ],
-		    "rescale_to_crop_size_first": true,
+		    "rescale_to_crop_width_first": true,
                     "crop_params": {
                         "crop_size": [
-                            1152,
-                            768
+                            768,768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
-                    "max_qa_len": 2043,
-                    "reuse_factor": 2.0
+                    "max_qa_len": 1018,
+                    "reuse_factor": 1.0
                 }
             }
         ]
@@ -136,10 +132,12 @@
     },
     "loss": {
 	"xanswer": "padded_seq_cross_entropy",
-	"answer": "label_smoothing"
+	"answer": "label_smoothing",
+        "mask": "focalLoss"
     },
     "loss_weights": {
-        "answer": 1
+        "answer": 1,
+        "mask": 1
     },
     "loss_params": 
         {
@@ -150,7 +148,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 50000000,
-        "accum_grad_steps": 30,
+        "accum_grad_steps": 50,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
@@ -181,7 +179,7 @@
 	    "autoregressive": true,
 	    "char_output": true,
 	    "char_tokens": true,
-            "image_size": [1152,768],
+            "image_size": [768,768],
             "pre_trained": {
                 "patch_emb": "saved/synth_ocr_crnnskipforswin_new/checkpoint-iteration400000.pth"
             },
@@ -192,7 +190,7 @@
 	    "cross_heads": 8,
 	    "self_heads": 8,
 	    "output_dim": 256,
-	    "out_length": 2048
+	    "out_length": 1024
 	    
     }
 }

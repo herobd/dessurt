@@ -244,7 +244,7 @@ class QAImDocPerceiver(BaseModel):
 
 
     #we're building this for fixed images size
-    def forward(self,image,ocr_results,questions,answers=None,RUN=False):
+    def forward(self,image,ocr_results,questions,answers=None,RUN=False,get_tokens=False):
         batch_size = image.size(0)
         assert batch_size == len(questions)
 
@@ -369,6 +369,22 @@ class QAImDocPerceiver(BaseModel):
         #t#tic=timeit.default_timer()#t#
 
         response_greedy_tokens = response_decoded.argmax(dim=2)
+        
+        if RUN:
+            offset=1
+            next_response_greedy_token=response_greedy_tokens
+            while response_greedy_tokens[0,-1] != self.SEP_TOKEN and offset<self.max_pred_len:
+                ans_emb = self.text_embedding(next_response_greedy_token)
+                next_query_a_token = self.a_pos_1d_enc(ans_emb,offset=offset)
+                next_a_token = self.decoder_answer(latent,next_query_a_token)
+                response_decoded = self.answer_decode(next_a_token)
+                next_response_greedy_token = response_decoded.argmax(dim=2)
+                response_greedy_tokens = torch.cat((response_greedy_tokens,next_response_greedy_token),dim=1)
+                offset+=1
+
+
+
+
         target_decoded = a_t['input_ids'][:,1:]# This has the SEP tokens (and padding), but not CLS (start) token
 
         #decode the prediction to string
@@ -396,8 +412,12 @@ class QAImDocPerceiver(BaseModel):
         #t#self.print_opt_times()#t#
         #import pdb;pdb.set_trace()
 
-
-        return response_decoded, target_decoded.to(device), batch_string_response, out_mask
+        if get_tokens:
+            return response_decoded, target_decoded.to(device), batch_string_response, out_mask,im_tokens,ocr_tokens
+        elif RUN:
+            return batch_string_response,out_mask
+        else:
+            return response_decoded, target_decoded.to(device), batch_string_response, out_mask
 
     #t#def print_opt_times(self):#t#
         #t#for name,times in self.opt_history.items():#t#
