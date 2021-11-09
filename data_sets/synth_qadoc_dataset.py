@@ -74,7 +74,7 @@ class SynthQADocDataset(FormQA):
         if self.ocr:
             raise NotImplementedError('ocr not implemented for new synth forms')
         self.corruption_p = config['text_corruption'] if 'text_corruption' in config else 0.15
-        self.text_height = config['text_height']
+        self.text_height = config['text_height'] if 'text_height' in config else None
         self.image_size = config['image_size'] if 'image_size' in config else None
         if type(self.image_size) is int:
             self.image_size = (self.image_size,self.image_size)
@@ -325,6 +325,7 @@ class SynthQADocDataset(FormQA):
             else:
                 rel_x = random.randrange(10)
             rel_y = random.randrange(-10,10)
+
             if not self.multiline or len(l)==1:
                 entries.append((label_img,[label_text],value_img,[value_text],rel_x,rel_y))
             else:
@@ -358,7 +359,6 @@ class SynthQADocDataset(FormQA):
         else:
             pad_v=1
             pad_h=30
-
 
         #Go and assign each pair a location
         removed = set()
