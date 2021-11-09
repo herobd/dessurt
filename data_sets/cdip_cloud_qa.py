@@ -304,7 +304,7 @@ def download(dataset,tar_name,i):
         print('CDIP downloading '+tar_name)
         url = dataset.download_urls[tar_name]
         urllib.request.urlretrieve(url, outpath)
-        dataset.updateStatus(i,downloaded=True)
+    dataset.updateStatus(i,downloaded=True)
 
 def untar(dataset,tar_name,i):
     print('CDIP untarring '+tar_name)
@@ -322,7 +322,8 @@ def getListPath(dataset,tar_name):
     possible_paths=[
             os.path.join(dataset.cache_dir,list_name),
             os.path.join(dataset.cache_dir,'compute','out'+name[0],list_name),
-            os.path.join(dataset.cache_dir,'Data6/davis/CDIP_ready2/',list_name)
+            os.path.join(dataset.cache_dir,'Data6/davis/CDIP_ready2/',list_name),
+            os.path.join(dataset.cache_dir,'/fslhome/brianld/compute/out'+list_name[0],list_name)
             ]
     for path in possible_paths:
         if os.path.exists(path):

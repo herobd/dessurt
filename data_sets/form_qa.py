@@ -230,10 +230,13 @@ class FormQA(QADataset):
                 switch=False
             if q_type == 'all':
                 if self.train:
-                    if random.random()<0.2:
-                        cls = random.choice(list(all_of_cls.keys()))
+                    if len(entities)>0:
+                        if random.random()<0.2:
+                            cls = random.choice(list(all_of_cls.keys()))
+                        else:
+                            cls = random.choice(entities).cls #pick class based on distrubition
                     else:
-                        cls = random.choice(entities).cls #pick class based on distrubition
+                        cls = 'question' if random.random()<0.5 else 'answer'
                 else:
                     cls=instance
                 question = 'al~'+cls
