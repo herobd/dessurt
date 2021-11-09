@@ -95,7 +95,7 @@ class QATrainer(BaseTrainer):
         if self.do_ocr and self.do_ocr!='no' and self.do_ocr!='json':
             self.ocr_reader = easyocr.Reader(['en'],gpu=config['cuda'])
 
-
+        self.DEBUG_max_ocr_len=0
 
     def _to_tensor(self, t):
         if self.with_cuda:
@@ -336,7 +336,8 @@ class QATrainer(BaseTrainer):
         ocrBoxes = instance['bb_gt']
         questions = instance['questions']
         answers = instance['answers']
-        #print('Lengths '+' '.join([str(len(a[0])) for a in answers])+' .....................')
+        #print('Q Lengths '+' '.join([str(len(a[0])) for a in questions])+' .....................')
+        #print('A Lengths '+' '.join([str(len(a[0])) for a in answers])+' .....................')
         gt_mask = instance['mask_label']
         if gt_mask is not None:
             gt_mask = gt_mask.to(device)
@@ -352,11 +353,30 @@ class QATrainer(BaseTrainer):
             elif self.do_ocr == 'json':
                 ocr_res = instance['pre-recognition']
             else:
-                ocr_res=[]
-                normal_img = (128*(image[:,0]+1)).cpu().numpy().astype(np.uint8)
-                for img in normal_img:
-                    ocr_res.append( self.ocr_reader.readtext(img,decoder='greedy+softmax') )
-                print('len OCR: {}'.format([len(c) for c in ocr_res]))
+                try:
+                    ocr_res=[]
+                    normal_img = (128*(image[:,0]+1)).cpu().numpy().astype(np.uint8)
+                    for img in normal_img:
+                        ocr_res.append( self.ocr_reader.readtext(img,decoder='greedy+softmax') )
+                    #m=max([len(c) for c in ocr_res])+max([len(q[0]) for q in questions])
+                    #self.DEBUG_max_ocr_len = max(self.DEBUG_max_ocr_len,m)
+                    #print('len OCR: {}, len qeu: {}, sum: {},  max: {}'.format([len(c) for c in ocr_res],[len(q[0]) for q in questions],m,self.DEBUG_max_ocr_len))
+                except Exception as e:
+                    print("EasyOCR error:")
+                    print(e)
+                    if 'CUDNN' in str(e):
+                        print('resetting cuda memory')
+                        image=image.cpu()
+                        self.model = self.model.cpu()
+                        if gt_mask is not None:
+                            gt_mask=gt_mask.cpu()
+                        torch.cuda.empty_cache()
+                        image = image.to(device)
+                        self.model = self.model.to(device)
+                        if gt_mask is not None:
+                            gt_mask=gt_mask.to(device)
+
+                    ocr_res=[[]]*image.size(0)
         else:
             if self.ocr_word_bbs:
                 gtTrans = [form_metadata['word_trans'] for form_metadata in instance['form_metadata']]

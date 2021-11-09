@@ -1,5 +1,5 @@
 {
-    "name": "synthqa+paraqa+cdip_perceiverAutoR_3cF_PTfromFontsSmall",
+    "name": "synthqa+paraqa+cdip_perceiverAutoR_3c_ocr_PTfromFontsSmall_3",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -46,7 +46,7 @@
                     "do_masks": true,
                     "tables": 0.2,
                     "multiline": 0.6,
-                    "max_qa_len": 1018,
+                    "max_qa_len": 720,
                     "header_dir": "../data/english4line_fonts",
                     "max_chars": 10,
                     "min_chars": 1,
@@ -78,7 +78,7 @@
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
-                    "max_qa_len": 1018,
+                    "max_qa_len": 720,
                     "image_size": [
                         760,760
                     ],
@@ -89,16 +89,15 @@
             {
                 "freq": 0.2,
                 "config": {
-                    "data_set_name": "CDIPCloudQA",
-                    "data_dir": "../data/CDIPCloud",
-                    "super_computer": false,
+                    "data_set_name": "CDIPQA",
+                    "data_dir": "../data/CDIP_ready2",
                     "batch_size": 1,
                     "num_workers": 4,
                     "rescale_range": [
                         0.9,
                         1.1
                     ],
-		    "rescale_to_crop_width_first": true,
+		    "rescale_to_crop_size_first": true,
                     "crop_params": {
                         "crop_size": [
                             768,768
@@ -107,8 +106,7 @@
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
-                    "max_qa_len": 1018,
-                    "reuse_factor": 1.0
+                    "max_qa_len": 720
                 }
             }
         ]
@@ -133,11 +131,11 @@
     "loss": {
 	"xanswer": "padded_seq_cross_entropy",
 	"answer": "label_smoothing",
-        "mask": "focalLoss"
+	"mask": "focalLoss"
     },
     "loss_weights": {
         "answer": 1,
-        "mask": 1
+	"mask": 1
     },
     "loss_params": 
         {
@@ -147,13 +145,13 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 50000000,
-        "accum_grad_steps": 50,
+        "iterations": 5000000,
+        "accum_grad_steps": 30,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
         "val_step": 999999999999999,
-        "save_step": 200000,
+        "save_step": 100000,
         "save_step_minor": 200,
         "log_step": 100,
         "print_pred_every": 100,
@@ -162,7 +160,7 @@
         "monitor_mode": "none",
         "retry_count":0,
 
-	"do_ocr": "no",
+	"do_ocr": "yes",
 
 
         "#use_learning_schedule": "multi_rise then ramp_to_swa",
@@ -175,22 +173,19 @@
     "arch": "QAImDocPerceiver", 
     "model": {
 	    "grid_ocr": false,
-	    "ocr_tokens": false,
+	    "ocr_tokens": true,
 	    "autoregressive": true,
 	    "char_output": true,
 	    "char_tokens": true,
             "image_size": [768,768],
-            "pre_trained": {
-                "patch_emb": "saved/synth_ocr_crnnskipforswin_new/checkpoint-iteration400000.pth"
-            },
 	    "input_dim": 256,
-	    "perceiver_blocks": [[6,1],[6,1],[12,1]],
+	    "perceiver_blocks": [[6,1],[6,1],[7,2]],
 	    "num_latents": 256,
 	    "latent_dim": 800,
 	    "cross_heads": 8,
 	    "self_heads": 8,
 	    "output_dim": 256,
-	    "out_length": 1024
+	    "out_length": 725
 	    
     }
 }
