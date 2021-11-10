@@ -180,12 +180,15 @@ class FormQA(QADataset):
          - entity_link: a list of (entity_id, entity_id) tuples where its (header,question)/(question,answer)
          - tables: a list of Table objects
          """
+        if len(entities)==0:
+             return []
 
         all_of_cls=defaultdict(list)
         for entity in entities:
             all_of_cls[entity.cls].append(entity)
 
         q_a_pairs = []
+
         if self.train:
             if len(tables)>0:
                 if len(entity_link)>0:

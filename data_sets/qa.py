@@ -52,6 +52,8 @@ def getMask(shape,boxes):
     mask = torch.FloatTensor(1,1,shape[2],shape[3]).fill_(0)
     for box in boxes:
         #tlX,tlY,trX,trY,brX,brY,blX,blY = box[0:8]
+        if isinstance(box,list):
+            box = np.array(box)
         points = box[0:8].reshape(4,2)
         #mask[0,0,round(t):round(b+1),round(l):round(r+1)]=1 
         #img_f.fillConvexPoly(img,((tlX,tlY),(trX,trY),(brX,brY),(blX,blY)),1)
