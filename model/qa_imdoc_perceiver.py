@@ -78,8 +78,11 @@ class QAImDocPerceiver(BaseModel):
         dropout = 0.0625
         lighter_conv_patch_emb = config['lighter_conv_patch_emb'] if 'lighter_conv_patch_emb' in config else False
 
+        self.no_image = config['blind_to_image'] if 'blind_to_image' in config else False
+
         #Perceiver parameters
         input_dim = config['input_dim'] if 'input_dim' in config else 768
+        self.input_dim = input_dim
         perceiver_blocks = config['perceiver_blocks'] if 'perceiver_blocks' in config else [(26,1)]
         num_latents = config['num_latents'] if 'num_latents' in config else 256
         latent_dim = config['latent_dim'] if 'latent_dim' in config else 1280
@@ -92,12 +95,12 @@ class QAImDocPerceiver(BaseModel):
 
         if isinstance(self.image_size,int):
             self.image_size = (self.image_size,self.image_size)
-        max_dist = math.sqrt(self.image_size[0]**2 + self.image_size[1]**2)
+        #max_dist = math.sqrt(self.image_size[0]**2 + self.image_size[1]**2)
         self.max_pred_len = 500
 
 
         if 'pre_trained' in config:
-            pre_trained_patch_emb = config['patch_emb'] if 'patch_emb' in config else None
+            pre_trained_patch_emb = config['pre_trained']['patch_emb'] if 'patch_emb' in config['pre_trained'] else None
         else:
             pre_trained_patch_emb = None
 
@@ -152,7 +155,6 @@ class QAImDocPerceiver(BaseModel):
             self.a_pos_1d_enc = PositionalEncoding(output_dim,dropout=dropout,max_len=out_length)
 
 
-
         self.patch_embed =  ConvPatchEmbed(
                 img_size=self.image_size, 
                 embed_dim=input_dim,
@@ -160,11 +162,33 @@ class QAImDocPerceiver(BaseModel):
                 lighter=lighter_conv_patch_emb,
                 in_chans=2) #now includes the mask channel
         if pre_trained_patch_emb is not None:
-            checkpoint = torch.load(pre_trained_patch_emb, map_location=lambda storage, location: storage)
+            checkpoint = torch.load(pre_trained_patch_emb, map_location=lambda storage, loc: storage)
             pe_state_dict=self.patch_embed.state_dict()
-            for name,value in checkpoint['state_dict']:
+            for name,load_value in checkpoint['state_dict'].items():
                 if name.startswith('cnn.'):
-                    pe_state_dict[name]=value
+                    init_value = pe_state_dict[name]
+                    init_size = init_value.size()
+                    load_size = load_value.size()
+					
+                    dims=-1
+                    for dim in range(len(load_size)):
+                        if init_size[dim]!=load_size[dim]:
+                            dims=dim
+                    if dims>-1:
+                        #brain surgery
+                        if dims==0:
+                            init_value[:load_size[0]] = load_value[:init_size[0]]
+                        elif dims==1:
+                            init_value[:load_size[0],:load_size[1]] = load_value[:init_size[0],:init_size[1]]
+                        elif dims==2:
+                            init_value[:load_size[0],:load_size[1],:load_size[2]] = load_value[:init_size[0],:init_size[1],:init_size[2]]
+                        elif dims==3:
+                            init_value[:load_size[0],:load_size[1],:load_size[2],:load_size[3]] = load_value[:init_size[0],:init_size[1],:init_size[2],:init_size[3]]
+                        else:
+                            raise NotImplementedError('no Brain Surgery above 4 dims')
+                        pe_state_dict[name]=init_value
+                    else:
+                        pe_state_dict[name]=load_value
 
             self.patch_embed.load_state_dict(pe_state_dict)
 
@@ -189,14 +213,15 @@ class QAImDocPerceiver(BaseModel):
                 latent_heads = self_heads,
                 latent_dim_head = qk_dim,
             )
-        self.decoder_image = DecoderO(
-                queries_dim = input_dim, #it reuses the image as query
+
+        self.decoder_answer = DecoderO(
+                queries_dim = output_dim,
                 latent_dim=latent_dim,
                 cross_heads = cross_heads,
                 cross_dim_head = qk_dim,
                 )
-        self.decoder_answer = DecoderO(
-                queries_dim = output_dim,
+        self.decoder_image = DecoderO(
+                queries_dim = input_dim, #it reuses the image as query
                 latent_dim=latent_dim,
                 cross_heads = cross_heads,
                 cross_dim_head = qk_dim,
@@ -254,6 +279,9 @@ class QAImDocPerceiver(BaseModel):
         im_tokens = self.patch_embed(image)
         im_tokens += self.absolute_2dpos_embed #Swin doesn't use this as it can rely on the biased attention. We need the image tokens to know where they are so they can interact with the document and question tokens
         query_im_tokens = im_tokens
+
+        if self.no_image: #clear input tokens
+            im_tokens = torch.FloatTensor(batch_size,0,self.input_dim).to(device)
         num_im = im_tokens.size(1)
         #Dropout?
 
