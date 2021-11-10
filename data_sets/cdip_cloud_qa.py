@@ -286,7 +286,7 @@ def loader(dataset):
                     assert not untared
                     download(dataset,tar_name,i)
                 if not untared:
-                    list_path = untar(dataset,tar_name,i)
+                    untar(dataset,tar_name,i)
                     did_something = True
 
 def remove(dataset,tar_name):
@@ -307,11 +307,29 @@ def download(dataset,tar_name,i):
     dataset.updateStatus(i,downloaded=True)
 
 def untar(dataset,tar_name,i):
-    print('CDIP untarring '+tar_name)
-    tar = tarfile.open(os.path.join(dataset.tar_dir,tar_name))
-    tar.extractall(dataset.cache_dir)
-    list_path = getListPath(dataset,tar_name)
-    dataset.updateStatus(i,untared=True,list_path=list_path)
+    try:
+        print('CDIP untarring '+tar_name)
+        tar = tarfile.open(os.path.join(dataset.tar_dir,tar_name))
+        tar.extractall(dataset.cache_dir)
+        list_path = getListPath(dataset,tar_name)
+        dataset.updateStatus(i,untared=True,list_path=list_path)
+    except tarfile.ReadError:
+        try:
+            download(dataset,tar_name,i)
+            print('CDIP untarring again '+tar_name)
+            tar = tarfile.open(os.path.join(dataset.tar_dir,tar_name))
+            tar.extractall(dataset.cache_dir)
+            list_path = getListPath(dataset,tar_name)
+            dataset.updateStatus(i,untared=True,list_path=list_path)
+        except:
+            print('ERROR CDIP could not load tar: '+tar_name)
+            remove(dataset,tar_name)
+            #pick next tar
+            all_tars = set(dataset.download_urls.keys())
+            todo_tar = random.choice(list(all_tars))
+            #update status
+            dataset.updateStatus(i,todo_tar,False,False,'',0)
+            return None
 
     print('CDIP ready '+tar_name)
     return list_path
