@@ -123,7 +123,8 @@ class PerceiverI(nn.Module):
         weight_tie_layers = False
     ):
         super().__init__()
-        self.latents = nn.Parameter(torch.randn(num_latents, latent_dim))
+        if num_latents>0:
+            self.latents = nn.Parameter(torch.randn(num_latents, latent_dim))
 
         #self.cross_attend_blocks = nn.ModuleList([
         #    PreNorm(latent_dim, Attention(latent_dim, dim, heads = cross_heads, dim_head = cross_dim_head, v_dim=latent_dim), context_dim = dim),
@@ -167,11 +168,13 @@ class PerceiverI(nn.Module):
     def forward(
         self,
         data,
-        mask = None
+        mask = None,
+        latents = None
     ):
         b, *_, device = *data.shape, data.device
-
-        x = repeat(self.latents, 'n d -> b n d', b = b)
+        if latents is None:
+            latents = self.latents
+        x = repeat(latents, 'n d -> b n d', b = b)
 
         #cross_attn, cross_ff = self.cross_attend_blocks
 
@@ -275,3 +278,35 @@ class PerceiverLM(nn.Module):
 
         logits = self.perceiver_io(x, mask = mask, queries = x)
         return logits
+
+
+class CrossAttention(nn.Module):
+    def __init__(
+        self,
+        *,
+        main_dim,
+        cross_dim,
+        cross_heads = 1,
+        main_dim_head = 64,
+        cross_dim_head = 64,
+    ):
+        super().__init__()
+
+        self.cross_att = PreNorm(main_dim, Attention(main_dim, cross_dim, heads = cross_heads, dim_head = cross_dim_head, v_dim=main_dim), context_dim = cross_dim)
+        self.cross_ff = PreNorm(main_dim, FeedForward(main_dim))
+
+            
+
+    def forward(
+        self,
+        data,
+        cross_data,
+        mask = None
+    ):
+        b, *_, device = *data.shape, data.device
+        x = repeat(data, 'n d -> b n d', b = b)
+
+        x = self.cross_att(x, context = cross_data, mask = mask) + x
+        x = self.cross_ff(x) + x
+
+        return x
