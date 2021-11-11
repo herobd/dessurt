@@ -290,10 +290,7 @@ def loader(dataset):
                     did_something = True
 
 def remove(dataset,tar_name):
-    print('CDIP removing '+tar_name)
-    if dataset.rm_tar_when_done:
-        tar_path = os.path.join(dataset.tar_dir,tar_name)
-        os.remove(tar_path)
+    print('CDIP removing dir for'+tar_name)
     name = tar_name[:3]
     dir_path = os.path.join(dataset.cache_dir,name)
     os.remove(dir_path)
@@ -313,6 +310,9 @@ def untar(dataset,tar_name,i):
         tar.extractall(dataset.cache_dir)
         list_path = getListPath(dataset,tar_name)
         dataset.updateStatus(i,untared=True,list_path=list_path)
+        if dataset.rm_tar_when_done:
+            tar_path = os.path.join(dataset.tar_dir,tar_name)
+            os.remove(tar_path)
     except tarfile.ReadError:
         try:
             download(dataset,tar_name,i)
