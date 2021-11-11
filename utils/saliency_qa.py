@@ -171,29 +171,30 @@ class InputGradModel():
 
             # Input-gradient * image
             # = image_grad * image[0]
-            H,W = self.model.patches_resolution
-            image_grad = image_grad.view(H,W)
-            saliency_image = image_grad.cpu().numpy()
+            if image_grad.size(1)>0:
+                H,W = self.model.patches_resolution
+                image_grad = image_grad.view(H,W)
+                saliency_image = image_grad.cpu().numpy()
 
-            print('min={}, max={}'.format(saliency_image.min(),saliency_image.max()))
+                print('min={}, max={}'.format(saliency_image.min(),saliency_image.max()))
 
-            saliency_image = saliency_image - saliency_image.min()
-            saliency_image = saliency_image / saliency_image.max()
-            saliency_image = saliency_image.clip(0,1)
+                saliency_image = saliency_image - saliency_image.min()
+                saliency_image = saliency_image / saliency_image.max()
+                saliency_image = saliency_image.clip(0,1)
 
-            #test = np.uint8(saliency_image * 255)
-            #img_f.imshow('',test)
-            #img_f.show()
+                #test = np.uint8(saliency_image * 255)
+                #img_f.imshow('',test)
+                #img_f.show()
 
-            saliency_image = img_f.resize(saliency_image,draw_image.shape[0:2],order=0)
+                saliency_image = img_f.resize(saliency_image,draw_image.shape[0:2],order=0)
 
 
 
-            draw_image_this = np.copy(draw_image)
-            draw_image_this[:,:,1]=draw_image_this[:,:,1].astype(float)*saliency_image
-            draw_image_this[:,:,2]=draw_image_this[:,:,2].astype(float)*(1-saliency_image)
-            saliency_image_e = np.uint8(saliency_image * 255)
-            draw_image_this[:,:,0]=saliency_image_e
+                draw_image_this = np.copy(draw_image)
+                draw_image_this[:,:,1]=draw_image_this[:,:,1].astype(float)*saliency_image
+                draw_image_this[:,:,2]=draw_image_this[:,:,2].astype(float)*(1-saliency_image)
+                saliency_image_e = np.uint8(saliency_image * 255)
+                draw_image_this[:,:,0]=saliency_image_e
 
 
             #filename = path_prefix+'_{}_image.png'.format(name)
@@ -221,14 +222,15 @@ class InputGradModel():
                         color=31
 
                     if score<0.9:
-                        w=40
-                    else:
                         w=10
+                    else:
+                        w=40
 
                     char_sal += CSI+"{};{}m".format(color,w) + char + CSI + "0m"
 
                 print(char_sal)
-            img_f.imshow('',draw_image_this)
-            img_f.show()
+            if image_grad.size(1)>0:
+                img_f.imshow('',draw_image_this)
+                img_f.show()
 
         return p_answer,p_mask
