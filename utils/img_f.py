@@ -155,11 +155,11 @@ def show(): #replaces cv2.waitKey()
 
 def resize(img,dim=None,fx=None,fy=None,order=3): #remove ",interpolation = cv2.INTER_CUBIC"
     hasColor = len(img.shape)==3
-    assert not hasColor
+    #assert not hasColor
     if dim is None or dim[0]==0:
         downsize = fx<1 and fy<1
         try:
-            return transform.rescale(img,(fy,fx),order,anti_aliasing=downsize,preserve_range=True)
+            return transform.rescale(img,(fy,fx),order,anti_aliasing=downsize,preserve_range=True,multichannel=hasColor)
         except OverflowError:
             h = max(1,round(img.shape[0]*fy))
             w = max(1,round(img.shape[1]*fx))

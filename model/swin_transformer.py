@@ -106,6 +106,8 @@ class WindowAttention(nn.Module):
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         if sees_docq:
             self.docq_kv = nn.Linear(dim, dim * 2, bias=qkv_bias) #only attends to 
+        else:
+            self.docq_kv = None
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
@@ -147,6 +149,8 @@ class WindowAttention(nn.Module):
             new_bias = torch.zeros(self.num_heads,N,all_N).to(relative_position_bias.device) #NOT EFFICIENT
             new_bias[:,:N,:N] = relative_position_bias
             relative_position_bias = new_bias
+        else:
+            all_N = N
 
         attn = attn + relative_position_bias.unsqueeze(0)
 
@@ -367,11 +371,15 @@ class PatchMerging(nn.Module):
         norm_layer (nn.Module, optional): Normalization layer.  Default: nn.LayerNorm
     """
 
-    def __init__(self, input_resolution, dim, norm_layer=nn.LayerNorm):
+    def __init__(self, input_resolution, dim, norm_layer=nn.LayerNorm,same_dim_out=False):
         super().__init__()
         self.input_resolution = input_resolution
         self.dim = dim
-        self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
+        if same_dim_out:
+            dim_out = dim
+        else:
+            dim_out = 2*dim
+        self.reduction = nn.Linear(4 * dim, dim_out, bias=False)
         self.norm = norm_layer(4 * dim)
 
     def forward(self, x):

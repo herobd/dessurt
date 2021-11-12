@@ -83,7 +83,7 @@ def main(rank,config, resume,world_size=None):
     #valid_data_loader = data_loader.split_validation()
 
     model = eval(config['arch'])(config['model'])
-    #model.summary()
+    model.summary()
 
     if type(config['loss'])==dict:
         loss={}#[eval(l) for l in config['loss']]
