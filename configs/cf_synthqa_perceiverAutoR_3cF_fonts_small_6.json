@@ -58,10 +58,12 @@
     },
     "loss": {
 	"xanswer": "padded_seq_cross_entropy",
-	"answer": "label_smoothing"
+	"answer": "label_smoothing",
+        "mask": "focalLoss"
     },
     "loss_weights": {
-        "answer": 1
+        "answer": 1,
+        "mask": 1
     },
     "loss_params": 
         {
