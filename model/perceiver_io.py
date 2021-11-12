@@ -173,21 +173,10 @@ class PerceiverI(nn.Module):
     ):
         b, *_, device = *data.shape, data.device
         if latents is None:
-            latents = self.latents
-        x = repeat(latents, 'n d -> b n d', b = b)
+            x = repeat(self.latents, 'n d -> b n d', b = b)
+        else:
+            x = latents
 
-        #cross_attn, cross_ff = self.cross_attend_blocks
-
-        ## cross attention only happens once for Perceiver IO
-
-        #x = cross_attn(x, context = data, mask = mask) + x
-        #x = cross_ff(x) + x
-
-        ## layers
-
-        #for self_attn, self_ff in self.layers:
-        #    x = self_attn(x) + x
-        #    x = self_ff(x) + x
 
         for (cross_att, cross_ff, self_att, self_ff),num_blocks in zip(self.cross_blocks,self.inner_block_count):
             x = cross_att(x, context = data, mask = mask) + x
@@ -304,7 +293,7 @@ class CrossAttention(nn.Module):
         mask = None
     ):
         b, *_, device = *data.shape, data.device
-        x = repeat(data, 'n d -> b n d', b = b)
+        x = data
 
         x = self.cross_att(x, context = cross_data, mask = mask) + x
         x = self.cross_ff(x) + x
