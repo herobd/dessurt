@@ -46,6 +46,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do
     config['trainer']['swa']=False
     if not gpu:
         config['cuda']=False
+        config['gpu']=None
     else:
         config['cuda']=True
         config['gpu']=gpu

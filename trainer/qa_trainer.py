@@ -361,6 +361,7 @@ class QATrainer(BaseTrainer):
                     #m=max([len(c) for c in ocr_res])+max([len(q[0]) for q in questions])
                     #self.DEBUG_max_ocr_len = max(self.DEBUG_max_ocr_len,m)
                     #print('len OCR: {}, len qeu: {}, sum: {},  max: {}'.format([len(c) for c in ocr_res],[len(q[0]) for q in questions],m,self.DEBUG_max_ocr_len))
+
                 except Exception as e:
                     print("EasyOCR error:")
                     print(e)
@@ -543,13 +544,16 @@ class QATrainer(BaseTrainer):
         if self.print_pred_every>0 and self.iteration%self.print_pred_every==0:
             self.logger.info('iteration {}'.format(self.iteration))
             for b,(b_question,b_answer,b_pred) in enumerate(zip(questions,answers,string_a)):
-                #if self.do_ocr:
-                #    if ocr_res[b] is not None:
-                #        self.logger.info('{} OCR: ')
-                #        for res in ocr_res[b]:
-                #            self.logger.info(res[1][0])
-                #    else:
-                #        self.logger.info('{} OCR: None')
+                if self.do_ocr:
+                    if ocr_res[b] is not None:
+                        all_ocr=[]
+                        self.logger.info('{} OCR: '.format(b))
+                        for res in ocr_res[b]:
+                            #self.logger.info(res[1][0])
+                            all_ocr.append(res[1][0])
+                        self.logger.info(' || '.join(all_ocr))
+                    else:
+                        self.logger.info('{} OCR: None'.format(b))
 
                 #elif ocr is not None and not self.model_ref.blank_ocr:
                 #    self.logger.info('{} OCR: {}'.format(b,ocr[b]))

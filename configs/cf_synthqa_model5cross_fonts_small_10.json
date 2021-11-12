@@ -1,5 +1,5 @@
 {
-    "name": "synthqa_perceiverAutoR_3cF_fonts_small",
+    "name": "synthqa_model5cross_fonts_small_10",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -11,7 +11,7 @@
         "textdir": "../data/",
         "data_dir": "../data/english4line_fonts",
         "include_ocr": false,
-        "batch_size": 6,
+        "batch_size": 12,
         "num_workers": 4,
         "rescale_range": [1.0,1.0],
         "crop_params": {
@@ -20,7 +20,7 @@
                 "rot_degree_std_dev": 1
             },
 	"questions": 1,
-	"max_qa_len": 2043,
+	"max_qa_len": 506,
         "min_entries": null,
         "max_entries": 2,
 	"use_read": 0.01,
@@ -74,12 +74,12 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 400000,
-        "accum_grad_steps": 10,
+        "accum_grad_steps": 5,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
         "val_step": 999999999999999,
-        "save_step": 50000,
+        "save_step": 100000,
         "save_step_minor": 200,
         "log_step": 100,
         "print_pred_every": 100,
@@ -98,25 +98,34 @@
         "#swa_lr_mul": 0.01
 
     },
-    "arch": "QAImDocPerceiver", 
+    "arch": "QAImDocModel5", 
     "model": {
 	    "grid_ocr": false,
 	    "ocr_tokens": false,
-	    "autoregressive": true,
 	    "char_output": true,
 	    "char_tokens": true,
             "image_size": [192,384],
             "pre_trained": {
                 "patch_emb": "saved/synth_ocr_crnnskipforswin_new/checkpoint-iteration400000.pth"
             },
+	    "im_embed_dim": 256,
+	    "swin_nheads": [4,8],
+	    "window_size": 12,
+	    "first_swin_layers": 2,
+	    "second_swin_layers": 2,
+
+	    "do_downsampled": false,
+	    "num_latent_to_im": 32,
+
 	    "input_dim": 256,
-	    "perceiver_blocks": [[6,1],[6,1],[12,1]],
+	    "first_perceiver_blocks": [[2,1]],
+	    "second_perceiver_blocks": [[2,1],[2,1]],
 	    "num_latents": 256,
 	    "latent_dim": 800,
 	    "cross_heads": 8,
 	    "self_heads": 8,
 	    "output_dim": 256,
-	    "out_length": 2048
+	    "out_length": 512
 	    
     }
 }
