@@ -64,9 +64,9 @@ def affineTransform(x,out_size,scalew=1, scaleh=1, rot=0):
     grid = F.affine_grid(theta, out_size, align_corners=False)
     return F.grid_sample(x, grid.to(x.device), align_corners=False,mode='nearest')
 
-class QAImDocPerceiver(BaseModel):
+class QAImDocModel5(BaseModel):
     def __init__(self,config):
-        super(QAImDocPerceiver, self).__init__(config)
+        super(QAImDocModel5, self).__init__(config)
         self.blank_ocr = config['blank_ocr'] if 'blank_ocr' in config else False
         self.ocr_in_image = config['grid_ocr'] if 'grid_ocr' in config else False
         self.ocr_seperate_tokens = config['ocr_tokens'] if 'ocr_tokens' in config else False
@@ -82,7 +82,7 @@ class QAImDocPerceiver(BaseModel):
         #Perceiver parameters
         input_dim = config['input_dim'] if 'input_dim' in config else 768
         self.input_dim = input_dim
-        perceiver_blocks = config['perceiver_blocks'] if 'perceiver_blocks' in config else [(26,1)]
+        first_perceiver_blocks = config['first_perceiver_blocks'] if 'first_perceiver_blocks' in config else [(2,1)]
         num_latents = config['num_latents'] if 'num_latents' in config else 256
         latent_dim = config['latent_dim'] if 'latent_dim' in config else 1280
         self_heads = config['self_heads'] if 'self_heads' in config else 8
@@ -97,8 +97,21 @@ class QAImDocPerceiver(BaseModel):
         swin_nhead = config['swin_nheads']
         window_size = config['window_size']
         first_blocks = config['first_swin_layers']
-        second_blocks = config['second_swin_layers']
-        third_blocks = config['third_swin_layers']
+
+        self.do_im_cross = config['do_im_cross'] if 'do_im_cross' in config else True
+        if self.do_im_cross:
+            second_perceiver_blocks = config['second_perceiver_blocks'] if 'second_perceiver_blocks' in config else [(2,1)]
+            second_blocks = config['second_swin_layers']
+        else:
+            second_blocks = 0
+
+        self.do_downsampled = config['do_downsampled']
+        if self.do_downsampled:
+            third_perceiver_blocks = config['third_perceiver_blocks'] if 'third_perceiver_blocks' in config else [(4,1),(8,1)]
+            third_blocks = config['third_swin_layers']
+            swin_change_dim = config['swin_change_dim']
+        else:
+            third_blocks=0
 
         if isinstance(self.image_size,int):
             self.image_size = (self.image_size,self.image_size)
@@ -205,7 +218,7 @@ class QAImDocPerceiver(BaseModel):
         self.patch_scale_y = 1/self.patch_embed.patch_size[0]
 
 
-        self.absolute_2dpos_embed = nn.Parameter(torch.zeros(1, num_patches, input_dim))
+        self.absolute_2dpos_embed = nn.Parameter(torch.zeros(1, num_patches, im_embed_dim))
         trunc_normal_(self.absolute_2dpos_embed, std=.02)
 
 
@@ -229,8 +242,8 @@ class QAImDocPerceiver(BaseModel):
                 SwinTransformerBlock(dim=d_im, 
                             input_resolution=cur_resolution,
                              num_heads=swin_nhead[level], 
-                             window_size=window_size[level],
-                             shift_size=0 if (total_swin_layers % 2 == 0) else window_size[level] // 2,
+                             window_size=window_size,
+                             shift_size=0 if (total_swin_layers % 2 == 0) else window_size // 2,
                              mlp_ratio=mlp_ratio,
                              qkv_bias=qkv_bias,
                              qk_scale=qk_scale,
@@ -244,86 +257,16 @@ class QAImDocPerceiver(BaseModel):
 
         self.first_im_change = nn.Linear(d_im,input_dim,bias=False) if input_dim!=d_im else nn.Identity()
 
-        self.second_swin_layers=nn.ModuleList()
-        for block in range(second_blocks):
-            self.first_swin_layers.append( 
-                SwinTransformerBlock(dim=d_im, 
-                            input_resolution=cur_resolution,
-                             num_heads=swin_nhead[level], 
-                             window_size=window_size[level],
-                             shift_size=0 if (total_swin_layers % 2 == 0) else window_size[level] // 2,
-                             mlp_ratio=mlp_ratio,
-                             qkv_bias=qkv_bias,
-                             qk_scale=qk_scale,
-                             drop=drop_rate, 
-                             attn_drop=attn_drop_rate,
-                             drop_path=dpr[total_swin_layers],
-                             norm_layer=nn.LayerNorm,
-                             sees_docq=False)
-                )
-            total_swin_layers+=1
+        
 
-        self.second_im_change = nn.Linear(d_im,input_dim,bias=False) if input_dim!=d_im else nn.Identity()
-
-        self.im_cross_att = CrossAttention( #brings latent input im tokens
-                main_dim=d_im,
-                cross_dim=latent_dim,
-                cross_heads = cross_heads,
-                cross_dim_head = qk_dim,
-                )
             
-        self.im_downsample =PatchMerging(cur_resolution, dim=d_im, norm_layer=nn.LayerNorm)
 
-        level=1
-        d_im = int(im_embed_dim * 2 ** level)
-        cur_resolution = (self.patches_resolution[0]//(2**level), self.patches_resolution[1]//(2**level))
-        patch_size = (self.image_size[0]/cur_resolution[0],self.image_size[1]/cur_resolution[1])
-        self.third_swin_layers=nn.ModuleList()
-        for block in range(third_blocks):
-            self.first_swin_layers.append( 
-                SwinTransformerBlock(dim=d_im, 
-                            input_resolution=cur_resolution,
-                             num_heads=swin_nhead[level], 
-                             window_size=window_size[level],
-                             shift_size=0 if (total_swin_layers % 2 == 0) else window_size[level] // 2,
-                             mlp_ratio=mlp_ratio,
-                             qkv_bias=qkv_bias,
-                             qk_scale=qk_scale,
-                             drop=drop_rate, 
-                             attn_drop=attn_drop_rate,
-                             drop_path=dpr[total_swin_layers],
-                             norm_layer=nn.LayerNorm,
-                             sees_docq=False)
-                )
-            total_swin_layers+=1
-
-        self.third_im_change = nn.Linear(d_im,input_dim,bias=False) if input_dim!=d_im else nn.Identity()
 
         #dim=32?
         #logits dim=100
         self.perciever_first = PerceiverI(
                 block_specification = first_perceiver_blocks,
                 num_latents = num_latents,
-                latent_dim=latent_dim,
-                dim = input_dim, #input dim
-                cross_heads = cross_heads,
-                cross_dim_head = qk_dim,
-                latent_heads = self_heads,
-                latent_dim_head = qk_dim,
-            )
-        self.perciever_second = PerceiverI(
-                block_specification = second_perceiver_blocks,
-                num_latents = 0,
-                latent_dim=latent_dim,
-                dim = input_dim, #input dim
-                cross_heads = cross_heads,
-                cross_dim_head = qk_dim,
-                latent_heads = self_heads,
-                latent_dim_head = qk_dim,
-            )
-        self.perciever_third = PerceiverI(
-                block_specification = third_perceiver_blocks,
-                num_latents = 0,
                 latent_dim=latent_dim,
                 dim = input_dim, #input dim
                 cross_heads = cross_heads,
@@ -339,7 +282,7 @@ class QAImDocPerceiver(BaseModel):
                 cross_dim_head = qk_dim,
                 )
         self.decoder_image = DecoderO(
-                queries_dim = input_dim, #it reuses the image as query
+                queries_dim = im_embed_dim, 
                 latent_dim=latent_dim,
                 cross_heads = cross_heads,
                 cross_dim_head = qk_dim,
@@ -349,7 +292,7 @@ class QAImDocPerceiver(BaseModel):
 
         self.final_resolution = self.patches_resolution
         d_im = 128
-        upsample_net = [nn.ConvTranspose2d(input_dim,d_im,4,2,1),
+        upsample_net = [nn.ConvTranspose2d(im_embed_dim,d_im,4,2,1),
                         nn.InstanceNorm2d(d_im),
                         nn.Dropout2d(p=dropout,inplace=True),
                         nn.ReLU(inplace=True),
@@ -381,6 +324,85 @@ class QAImDocPerceiver(BaseModel):
             self.query_a_tokens = nn.Parameter(torch.FloatTensor(1,out_length,output_dim).normal_())
 
 
+        if self.do_im_cross:
+            self.im_cross_att = CrossAttention( #brings latent input im tokens
+                    main_dim=d_im,
+                    cross_dim=latent_dim,
+                    cross_heads = cross_heads,
+                    cross_dim_head = qk_dim,
+            )
+            self.num_latent_to_im = config['num_latent_to_im'] if 'num_latent_to_im' in config else num_latents
+
+            self.second_swin_layers=nn.ModuleList()
+            for block in range(second_blocks):
+                self.second_swin_layers.append( 
+                    SwinTransformerBlock(dim=d_im, 
+                                input_resolution=cur_resolution,
+                                 num_heads=swin_nhead[level], 
+                                 window_size=window_size,
+                                 shift_size=0 if (total_swin_layers % 2 == 0) else window_size // 2,
+                                 mlp_ratio=mlp_ratio,
+                                 qkv_bias=qkv_bias,
+                                 qk_scale=qk_scale,
+                                 drop=drop_rate, 
+                                 attn_drop=attn_drop_rate,
+                                 drop_path=dpr[total_swin_layers],
+                                 norm_layer=nn.LayerNorm,
+                                 sees_docq=False)
+                    )
+                total_swin_layers+=1
+
+            self.second_im_change = nn.Linear(d_im,input_dim,bias=False) if input_dim!=d_im else nn.Identity()
+            self.perciever_second = PerceiverI(
+                    block_specification = second_perceiver_blocks,
+                    num_latents = 0,
+                    latent_dim=latent_dim,
+                    dim = input_dim, #input dim
+                    cross_heads = cross_heads,
+                    cross_dim_head = qk_dim,
+                    latent_heads = self_heads,
+                    latent_dim_head = qk_dim,
+                )
+
+        if self.do_downsampled:
+            level=1
+            if swin_change_dim:
+                d_im = int(im_embed_dim * 2 ** level)
+            cur_resolution = (self.patches_resolution[0]//(2**level), self.patches_resolution[1]//(2**level))
+            patch_size = (self.image_size[0]/cur_resolution[0],self.image_size[1]/cur_resolution[1])
+            self.third_swin_layers=nn.ModuleList()
+            for block in range(third_blocks):
+                self.third_swin_layers.append( 
+                    SwinTransformerBlock(dim=d_im, 
+                                input_resolution=cur_resolution,
+                                 num_heads=swin_nhead[level], 
+                                 window_size=window_size,
+                                 shift_size=0 if (total_swin_layers % 2 == 0) else window_size // 2,
+                                 mlp_ratio=mlp_ratio,
+                                 qkv_bias=qkv_bias,
+                                 qk_scale=qk_scale,
+                                 drop=drop_rate, 
+                                 attn_drop=attn_drop_rate,
+                                 drop_path=dpr[total_swin_layers],
+                                 norm_layer=nn.LayerNorm,
+                                 sees_docq=False)
+                    )
+                total_swin_layers+=1
+
+            self.third_im_change = nn.Linear(d_im,input_dim,bias=False) if input_dim!=d_im else nn.Identity()
+
+            self.im_downsample =PatchMerging(cur_resolution, dim=d_im, norm_layer=nn.LayerNorm,same_dim_out=not swin_change_dim)
+
+            self.perciever_third = PerceiverI(
+                    block_specification = third_perceiver_blocks,
+                    num_latents = 0,
+                    latent_dim=latent_dim,
+                    dim = input_dim, #input dim
+                    cross_heads = cross_heads,
+                    cross_dim_head = qk_dim,
+                    latent_heads = self_heads,
+                    latent_dim_head = qk_dim,
+                )
         #t#self.opt_history=defaultdict(list)#t#
 
 
@@ -490,41 +512,50 @@ class QAImDocPerceiver(BaseModel):
         #Put full input together. im, ocr,question
 
         
-
+        #First Swin layers
         for swin_layer in self.first_swin_layers:
             im_tokens = swin_layer(im_tokens)
 
-        #Run through Perceiver
+        #Run through Perceiver 1
         input_tokens = torch.cat( (self.first_im_change(im_tokens),ocr_tokens,q_tokens), dim=1)
         input_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask), dim=1)
         latent = self.perciever_first(input_tokens,input_padding_mask)
 
-        im_tokens = self.im_cross_att(im_tokens,latent)
+        if self.do_im_cross:
+        
+            #input latent into image tokens
+            im_tokens = self.im_cross_att(im_tokens,latent[:,:self.num_latent_to_im])
 
-        for swin_layer in self.second_swin_layers:
-            im_tokens = swin_layer(im_tokens)
+            #Second Swin layers
+            for swin_layer in self.second_swin_layers:
+                im_tokens = swin_layer(im_tokens)
 
-        #Run through Perceiver
-        input_tokens = torch.cat( (self.second_im_change(im_tokens),ocr_tokens,q_tokens), dim=1)
-        input_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask), dim=1)
-        latent = self.perciever_second(input_tokens,input_padding_mask,latents=latent)
+            #Run through Perceiver 2
+            input_tokens = torch.cat( (self.second_im_change(im_tokens),ocr_tokens,q_tokens), dim=1)
+            input_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask), dim=1)
+            latent = self.perciever_second(input_tokens,input_padding_mask,latents=latent)
 
-        query_im_tokens = im_tokens
-        im_tokens = self.im_downsample(im_tokens)
-        num_im = im_tokens.size(1)
-        im_padding_mask = im_padding_mask[:,:num_im]
+        query_im_tokens = im_tokens #save "full res" im tokens for output query
 
-        for swin_layer in self.third_swin_layers:
-            im_tokens = swin_layer(im_tokens)
+        if self.do_downsampled:
+            #Downsample image
+            im_tokens = self.im_downsample(im_tokens)
+            num_im = im_tokens.size(1)
+            im_padding_mask = im_padding_mask[:,:num_im]
 
-        #Run through final Perceiver
-        input_tokens = torch.cat( (self.third_im_change(im_tokens),ocr_tokens,q_tokens), dim=1)
-        input_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask), dim=1)
-        latent = self.perciever_third(input_tokens,input_padding_mask,latents=latent)
+            #Third Swin layers
+            for swin_layer in self.third_swin_layers:
+                im_tokens = swin_layer(im_tokens)
 
+            #Run through final Perceiver
+            input_tokens = torch.cat( (self.third_im_change(im_tokens),ocr_tokens,q_tokens), dim=1)
+            input_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask), dim=1)
+            latent = self.perciever_third(input_tokens,input_padding_mask,latents=latent)
 
+        #Get im tokens output
         im_tokens = self.decoder_image(latent,query_im_tokens)
 
+        #Get text output
         if self.autoregressive:
             query_a_tokens = a_tokens
         else:        
