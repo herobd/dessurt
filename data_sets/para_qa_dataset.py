@@ -533,18 +533,49 @@ class ParaQADataset(QADataset):
                 else:
                     min_read_start = self.min_read_start_no_mask
                 start_word_idx = random.randrange(len(wordmap))
+                start_word = wordmap[start_word_idx]
+                start_block = start_word[0]
 
-                #next_word_idx = start_word_idx+(1 if forward else -1)
-                #para_left = 0
-
-                goal_prompt_len = random.randrange(min_read_start,self.max_qa_len_in+1)
+                #first, get length of paragraph
+                last_line_id = start_word[0:3]
+                prompt = ocr[start_word[0]]['paragraphs'][start_word[1]]['lines'][start_word[2]]['words'][start_word[3]]['text']
+                next_word_idx = start_word_idx+(1 if forward else -1)
+                if next_word_idx>=len(wordmap) or next_word_idx<0:
+                    next_word=(None,None,None,None)
+                else:
+                    next_word = wordmap[next_word_idx]
+                    next_text = ocr[next_word[0]]['paragraphs'][next_word[1]]['lines'][next_word[2]]['words'][next_word[3]]['text']
+                    if not forward:
+                        next_text = next_text[::-1]
+                    next_line_id = next_word[0:3]
+                while next_word[0]==start_block and len(prompt)+1+len(next_text)<self.max_qa_len_in:
+                    if last_line_id==next_line_id:
+                        prompt+=' '+next_text
+                    else:
+                        prompt+='\\'+next_text
+                    next_word_idx = next_word_idx+(1 if forward else -1)
+                    last_line_id=next_line_id
+                    if next_word_idx>=len(wordmap) or next_word_idx<0:
+                        next_word=(None,None,None,None)
+                    else:
+                        next_word = wordmap[next_word_idx]
+                        next_text = ocr[next_word[0]]['paragraphs'][next_word[1]]['lines'][next_word[2]]['words'][next_word[3]]['text']
+                        if not forward:
+                            next_text = next_text[::-1]
+                        next_line_id = next_word[0:3]
+                #length of paragraph
+                para_len = min(self.max_qa_len_in,len(prompt))
+                
+                if para_len>min_read_start:
+                    goal_prompt_len = random.randrange(min_read_start,para_len)
+                else:
+                    goal_prompt_len = min_read_start
                 
                 words_in_prompt=[start_word_idx]
                 start_word = wordmap[start_word_idx]
                 prompt = ocr[start_word[0]]['paragraphs'][start_word[1]]['lines'][start_word[2]]['words'][start_word[3]]['text']
                 if not forward:
                     prompt=prompt[::-1]
-                start_block = start_word[0]
                 last_line_id = start_word[0:3]
                 next_word_idx = start_word_idx+(1 if forward else -1)
                 if next_word_idx>=len(wordmap) or next_word_idx<0:
@@ -633,6 +664,7 @@ class ParaQADataset(QADataset):
                 #outmask = allBoxes(ocr,indexes)
 
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
+                #print('para len:{}, goal len:{}, actual len:{}'.format(para_len,goal_prompt_len,len(prompt)))
 
 
             #elif question_type == 10:
