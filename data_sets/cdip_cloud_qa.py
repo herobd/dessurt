@@ -33,8 +33,8 @@ class CDIPCloudQA(ParaQADataset):
         self.block_score_thresh = 0.73 #eye-balled this one
 
         if config['super_computer']:
-            self.cache_dir = '/tmp/cdip_cloud_cache'
-            self.status_path = '/tmp/cdip_cloud_cache/status.csv'
+            self.cache_dir = '/tmp/cache_'+config['super_computer']
+            self.status_path = os.path.join(self.cache_dir,'status.csv')
             self.tar_dir = '/fslhome/brianld/compute/uploaded'
             self.rm_tar_when_done=False
         else:
@@ -259,6 +259,8 @@ class CDIPCloudQA(ParaQADataset):
                 name = path[path.rindex('/')+1:]
             except ValueError:
                 name = path
+            #if path.endswith('.layout.json':
+            #        print('ERROR 
             image_path = os.path.join(self.cache_dir,path+'.png')
             json_path = os.path.join(self.cache_dir,path+'.layout.json')
 
@@ -338,10 +340,10 @@ def getListPath(dataset,tar_name):
     name = tar_name[:4]
     list_name = name+'list'
     possible_paths=[
-            os.path.join(dataset.cache_dir,list_name),
             os.path.join(dataset.cache_dir,'compute','out'+name[0],list_name),
             os.path.join(dataset.cache_dir,'Data6/davis/CDIP_ready2/',list_name),
-            os.path.join(dataset.cache_dir,'/fslhome/brianld/compute/out'+list_name[0],list_name)
+            os.path.join(dataset.cache_dir,'/fslhome/brianld/compute/out'+list_name[0],list_name),
+            os.path.join(dataset.cache_dir,list_name),
             ]
     for path in possible_paths:
         if os.path.exists(path):

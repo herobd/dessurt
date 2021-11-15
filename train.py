@@ -73,8 +73,11 @@ def main(rank,config, resume,world_size=None):
                             timeout=datetime.timedelta(0, 3600))
                             #timeout=datetime.timedelta(0, 22000))
             logger.info('{} finished dist.init_process_group() <<<<'.format(rank))
+
         else:
             dist.init_process_group("gloo", rank=rank, world_size=world_size)
+    if config['super_computer']:
+        config['super_computer'] = '{}_{}'.format(config['name'],rank)
 
     #np.random.seed(1234) I don't have a way of restarting the DataLoader at the same place, so this makes it totaly random
 

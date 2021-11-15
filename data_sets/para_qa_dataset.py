@@ -48,19 +48,19 @@ class ParaQADataset(QADataset):
                     #'read_replaced':1,
                     #'read_with_masked':1,
                     'read_line':0.75,
-                    'highlight_text':0.5,
+                    'highlight_text':0.1,
                     #'read_highlighted':1,
                     #'masked_lm':4.0,
                     #'put_in_place':1.0,
                     'read_on':0.5,
                     'read_backwards':0.5,
-                    'highlight_block':0.25}
+                    'highlight_block':0.1}
             self.q_types_noblock = {
                     'read_blanked':1,
                     #'read_replaced':1,
                     #'read_with_masked':1.0,
                     'read_line':0.76,
-                    'highlight_text':0.5,
+                    'highlight_text':0.1,
                     #'read_highlighted':1,
                     #'masked_lm':4.0,
                     #'put_in_place':1.0
@@ -216,7 +216,8 @@ class ParaQADataset(QADataset):
                     while prompt==no_punc_response:
                         prompt=random.choice(vocab)
                 words_in_prompt=[blank_word_idx]
-                while len(prompt)<self.max_qa_len-1: #-1 to account for adding a space
+                max_prompt_len = self.max_qa_len_in if not read_with_masked else self.max_qa_len_out
+                while len(prompt)<max_prompt_len-1: #-1 to account for adding a space
                     if not at_front_end and not at_back_end:
                         step_front = random.random()<0.5
                     elif at_front_end and not at_back_end:
@@ -237,7 +238,7 @@ class ParaQADataset(QADataset):
                             at_front_end=True
                         else:
                             text = ocr[start_word_map[0]]['paragraphs'][start_word_map[1]]['lines'][start_word_map[2]]['words'][start_word_map[3]]['text']
-                            if len(text)+len(prompt)+1<=self.max_qa_len:
+                            if len(text)+len(prompt)+1<=max_prompt_len:
                                 last_start_block = start_word_map[0]
                                 last_start_line = start_word_map[0:3]
 
@@ -259,7 +260,7 @@ class ParaQADataset(QADataset):
                             at_back_end=True
                         else:
                             text = ocr[end_word_map[0]]['paragraphs'][end_word_map[1]]['lines'][end_word_map[2]]['words'][end_word_map[3]]['text']
-                            if len(text)+len(prompt)+1<=self.max_qa_len:
+                            if len(text)+len(prompt)+1<=max_prompt_len:
                                 last_end_block = end_word_map[0]
                                 last_end_line = end_word_map[0:3]
 
@@ -334,11 +335,11 @@ class ParaQADataset(QADataset):
                     response= '№'
                     outmask = []
 
-                if len(prompt)>self.max_qa_len:
-                    prompt = prompt[:self.max_qa_len-2] +'>>'
-                if len(response)>self.max_qa_len:
-                    response = response[:self.max_qa_len]
-                elif len(response)+1 < self.max_qa_len and response!='№':
+                if len(prompt)>self.max_qa_len_in:
+                    prompt = prompt[:self.max_qa_len_in-2] +'>>'
+                if len(response)>self.max_qa_len_out:
+                    response = response[:self.max_qa_len_out]
+                elif len(response)+1 < self.max_qa_len_out and response!='№':
                     response = response+'‡'
 
 
@@ -378,14 +379,14 @@ class ParaQADataset(QADataset):
                     #build prompt forwards
                     prompt = line['words'][start_word_idx]['text']
                     word_idx =start_word_idx+1
-                    while word_idx<=end_word_idx and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len:
+                    while word_idx<=end_word_idx and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len_in:
                         prompt+= ' '+line['words'][word_idx]['text']
                         word_idx+=1
                 else:
                     #build prompt backwards
                     prompt = line['words'][end_word_idx]['text']
                     word_idx =end_word_idx-1
-                    while word_idx>=0 and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len:
+                    while word_idx>=0 and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len_in:
                         prompt= line['words'][word_idx]['text']+' '+prompt
                         word_idx-=1
                 response = ''
@@ -413,9 +414,9 @@ class ParaQADataset(QADataset):
                 if whole_line:
                     assert not do_draw
                     response = line['text']
-                    if len(response)>self.max_qa_len:
-                        response = response[:self.max_qa_len]
-                    elif len(response)+1 <= self.max_qa_len:
+                    if len(response)>self.max_qa_len_out:
+                        response = response[:self.max_qa_len_out]
+                    elif len(response)+1 <= self.max_qa_len_out:
                         response += '‡'
                     prompt = ''
                     question = ';0>'
@@ -440,7 +441,7 @@ class ParaQADataset(QADataset):
                         word_idxs=[start_word_idx]
 
                         word_idx =start_word_idx+1
-                        while word_idx<=end_word_idx and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len:
+                        while word_idx<=end_word_idx and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len_in:
                             prompt+= ' '+line['words'][word_idx]['text']
                             word_idxs.append(word_idx)
                             word_idx+=1
@@ -451,7 +452,7 @@ class ParaQADataset(QADataset):
                         word_idxs = [end_word_idx]
 
                         word_idx =end_word_idx-1
-                        while word_idx>=0 and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len:
+                        while word_idx>=0 and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len_in:
                             prompt= line['words'][word_idx]['text']+' '+prompt
                             word_idxs.append(word_idx)
                             word_idx-=1
@@ -532,14 +533,49 @@ class ParaQADataset(QADataset):
                 else:
                     min_read_start = self.min_read_start_no_mask
                 start_word_idx = random.randrange(len(wordmap))
-                goal_prompt_len = random.randrange(min_read_start,self.max_qa_len+1)
+                start_word = wordmap[start_word_idx]
+                start_block = start_word[0]
+
+                #first, get length of paragraph
+                last_line_id = start_word[0:3]
+                prompt = ocr[start_word[0]]['paragraphs'][start_word[1]]['lines'][start_word[2]]['words'][start_word[3]]['text']
+                next_word_idx = start_word_idx+(1 if forward else -1)
+                if next_word_idx>=len(wordmap) or next_word_idx<0:
+                    next_word=(None,None,None,None)
+                else:
+                    next_word = wordmap[next_word_idx]
+                    next_text = ocr[next_word[0]]['paragraphs'][next_word[1]]['lines'][next_word[2]]['words'][next_word[3]]['text']
+                    if not forward:
+                        next_text = next_text[::-1]
+                    next_line_id = next_word[0:3]
+                while next_word[0]==start_block and len(prompt)+1+len(next_text)<self.max_qa_len_in:
+                    if last_line_id==next_line_id:
+                        prompt+=' '+next_text
+                    else:
+                        prompt+='\\'+next_text
+                    next_word_idx = next_word_idx+(1 if forward else -1)
+                    last_line_id=next_line_id
+                    if next_word_idx>=len(wordmap) or next_word_idx<0:
+                        next_word=(None,None,None,None)
+                    else:
+                        next_word = wordmap[next_word_idx]
+                        next_text = ocr[next_word[0]]['paragraphs'][next_word[1]]['lines'][next_word[2]]['words'][next_word[3]]['text']
+                        if not forward:
+                            next_text = next_text[::-1]
+                        next_line_id = next_word[0:3]
+                #length of paragraph
+                para_len = min(self.max_qa_len_in,len(prompt))
+                
+                if para_len>min_read_start:
+                    goal_prompt_len = random.randrange(min_read_start,para_len)
+                else:
+                    goal_prompt_len = min_read_start
                 
                 words_in_prompt=[start_word_idx]
                 start_word = wordmap[start_word_idx]
                 prompt = ocr[start_word[0]]['paragraphs'][start_word[1]]['lines'][start_word[2]]['words'][start_word[3]]['text']
                 if not forward:
                     prompt=prompt[::-1]
-                start_block = start_word[0]
                 last_line_id = start_word[0:3]
                 next_word_idx = start_word_idx+(1 if forward else -1)
                 if next_word_idx>=len(wordmap) or next_word_idx<0:
@@ -550,7 +586,7 @@ class ParaQADataset(QADataset):
                     if not forward:
                         next_text = next_text[::-1]
                     next_line_id = next_word[0:3]
-                while next_word[0]==start_block and len(prompt)+1+len(next_text)<self.max_qa_len:
+                while next_word[0]==start_block and len(prompt)+1+len(next_text)<self.max_qa_len_in:
                     if last_line_id==next_line_id:
                         prompt+=' '+next_text
                     else:
@@ -568,14 +604,14 @@ class ParaQADataset(QADataset):
                         next_line_id = next_word[0:3]
                     if len(prompt)>=goal_prompt_len:
                         break
-                if len(prompt)>self.max_qa_len:
-                    prompt = prompt[-self.max_qa_len:]
+                if len(prompt)>self.max_qa_len_in:
+                    prompt = prompt[-self.max_qa_len_in:]
 
                 if next_word[0]!=start_block:
                     response='‡'
                     words_in_response=[]
                 else:
-                    goal_response_len = self.max_qa_len
+                    goal_response_len = self.max_qa_len_out
                     if last_line_id==next_line_id:
                         response=next_text
                     else:
@@ -591,7 +627,7 @@ class ParaQADataset(QADataset):
                         if not forward:
                             next_text = next_text[::-1]
                         next_line_id = next_word[0:3]
-                    while len(response)+1+len(next_text)<self.max_qa_len and next_word[0]==start_block:
+                    while len(response)+1+len(next_text)<self.max_qa_len_out and next_word[0]==start_block:
                         if last_line_id==next_line_id:
                             response+=' '+next_text
                         else:
@@ -610,9 +646,9 @@ class ParaQADataset(QADataset):
 
                         if len(response)>=goal_response_len:
                             break
-                    if len(response)>self.max_qa_len:
-                        response = response[:self.max_qa_len]
-                    if next_word[0]!=start_block and len(response)<self.max_qa_len:
+                    if len(response)>self.max_qa_len_out:
+                        response = response[:self.max_qa_len_out]
+                    if next_word[0]!=start_block and len(response)<self.max_qa_len_out:
                         response+='‡'#if we can, add an end-of-block sign
                 if use_highlight:
                     question = 'r0~' if forward else 'b0~'
@@ -628,6 +664,7 @@ class ParaQADataset(QADataset):
                 #outmask = allBoxes(ocr,indexes)
 
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
+                #print('para len:{}, goal len:{}, actual len:{}'.format(para_len,goal_prompt_len,len(prompt)))
 
 
             #elif question_type == 10:
@@ -654,7 +691,7 @@ class ParaQADataset(QADataset):
                     prompt = line['words'][start_word_idx]['text']
                     word_idxs = [start_word_idx]
                     word_idx =start_word_idx+1
-                    while word_idx<=end_word_idx and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len:
+                    while word_idx<=end_word_idx and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len_in:
                         prompt+= ' '+line['words'][word_idx]['text']
                         word_idxs.append(word_idx)
                         word_idx+=1
@@ -663,7 +700,7 @@ class ParaQADataset(QADataset):
                     prompt = line['words'][end_word_idx]['text']
                     word_idxs = [end_word_idx]
                     word_idx =end_word_idx-1
-                    while word_idx>=0 and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len:
+                    while word_idx>=0 and len(prompt)+len(line['words'][word_idx]['text'])<self.max_qa_len_in:
                         prompt= line['words'][word_idx]['text']+' '+prompt
                         word_idxs.append(word_idx)
                         word_idx-=1

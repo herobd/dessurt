@@ -1,5 +1,5 @@
 {
-    "name": "synthqa+paraqa+cdip_perceiverAutoR_3cF_ocr_PTfromFontsSmall_5",
+    "name": "synthqa+paraqa+cdip_model5cross_PTfrom10",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -44,9 +44,9 @@
                     "change_size": true,
                     "word_questions": "simple",
                     "do_masks": true,
-                    "tables": 0.2,
+                    "tables": 1,
                     "multiline": 0.6,
-                    "max_qa_len": 1020,
+                    "max_qa_len": 506,
                     "header_dir": "../data/english4line_fonts",
                     "max_chars": 10,
                     "min_chars": 1,
@@ -78,7 +78,7 @@
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
-                    "max_qa_len": 1020,
+                    "max_qa_len": 506,
                     "image_size": [
                         760,760
                     ],
@@ -90,14 +90,15 @@
                 "freq": 0.2,
                 "config": {
                     "data_set_name": "CDIPCloudQA",
-                    "data_dir": "../data/CDIPCloud2",
+                    "data_dir": "../data/CDIPCloud",
+                    "super_computer": false,
                     "batch_size": 1,
                     "num_workers": 4,
                     "rescale_range": [
                         0.9,
                         1.1
                     ],
-		    "rescale_to_crop_size_first": true,
+		    "rescale_to_crop_width_first": true,
                     "crop_params": {
                         "crop_size": [
                             768,768
@@ -106,7 +107,7 @@
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
-                    "max_qa_len": 1020,
+                    "max_qa_len": 506,
                     "reuse_factor": 1.0
                 }
             }
@@ -147,7 +148,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 50000000,
-        "accum_grad_steps": 5,
+        "accum_grad_steps": 50,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
@@ -161,7 +162,7 @@
         "monitor_mode": "none",
         "retry_count":0,
 
-	"do_ocr": "yes",
+	"do_ocr": "no",
 
 
         "#use_learning_schedule": "multi_rise then ramp_to_swa",
@@ -171,25 +172,31 @@
         "#swa_lr_mul": 0.01
 
     },
-    "arch": "QAImDocPerceiver", 
+    "arch": "QAImDocModel5", 
     "model": {
 	    "grid_ocr": false,
-	    "ocr_tokens": true,
-	    "autoregressive": true,
+	    "ocr_tokens": false,
 	    "char_output": true,
 	    "char_tokens": true,
             "image_size": [768,768],
-            "pre_trained": {
-                "patch_emb": "saved/synth_ocr_crnnskipforswin_new/checkpoint-iteration400000.pth"
-            },
+	    "im_embed_dim": 128,
+	    "swin_nheads": [4,8],
+	    "window_size": 12,
+	    "first_swin_layers": 2,
+	    "second_swin_layers": 2,
+
+	    "do_downsampled": false,
+	    "num_latent_to_im": 32,
+
 	    "input_dim": 256,
-	    "perceiver_blocks": [[6,1],[6,1],[12,1]],
+	    "first_perceiver_blocks": [[2,1]],
+	    "second_perceiver_blocks": [[2,1],[2,1]],
 	    "num_latents": 256,
 	    "latent_dim": 800,
 	    "cross_heads": 8,
 	    "self_heads": 8,
 	    "output_dim": 256,
-	    "out_length": 1024
+	    "out_length": 512
 	    
     }
 }

@@ -97,7 +97,7 @@ class RecordQA(QADataset):
                         break
 
                 response = entries[step][name_id]
-                prompt = self.getFrontText(prompt)
+                prompt = self.getFrontText(prompt,query=True)
                 if response is not None:
                     response = self.getFrontText(response)
                 else:
@@ -123,7 +123,7 @@ class RecordQA(QADataset):
                 value = entry[target_field]
 
                 question = 'f{}:{}~{}'.format(id_field[:2],target_field,id_prompt)
-                question = self.getFrontText(question)
+                question = self.getFrontText(question,query=True)
                 if value is not None:
                     value = self.getFrontText(value)
                 else:
@@ -156,7 +156,7 @@ class RecordQA(QADataset):
                     target_field = random.choice(tuple(self.all_fields-set([id_field])))
 
                     question = 'f:{}~{}'.format(target_field,prompt_text)
-                    question = self.getFrontText(question)
+                    question = self.getFrontText(question,query=True)
                 self.qaAdd(q_a_pairs,question+prompt_text,self.np_token) #Normally this has a blank out mask GT, but during training, we don't want this as it never is encrouraged to predict
 
             else:
@@ -171,7 +171,7 @@ class RecordQA(QADataset):
         #Randomly select part of the text less than or equal to max_qa_len,
         #breaking on spaces (and newlines)
         if length is None:
-            length = self.max_qa_len
+            length = self.max_qa_len_in
         if len(text)>length:
             start = random.randrange(len(text)-length)
             end=start+length
@@ -205,7 +205,7 @@ class RecordQA(QADataset):
             len_a_b = before_end-after_start if before_end is not None and after_start is not None else -1
             len_a_a = after_end-after_start if after_start is not None else -1
 
-            best_len = max(len_b_b if len_b_b<=self.max_qa_len else -1, len_a_b if len_a_b<=self.max_qa_len else -1, len_a_a if len_a_a<=self.max_qa_len else -1)
+            best_len = max(len_b_b if len_b_b<=length else -1, len_a_b if len_a_b<=length else -1, len_a_a if len_a_a<=length else -1)
 
             if best_len==-1:
                 ret = text[start:start+length] #failed to break on words
@@ -237,42 +237,25 @@ class RecordQA(QADataset):
         else:
             return ret
 
-    def getFrontText(self,text,list_split=False,term=None):
+    def getFrontText(self,text,list_split=False,term=None,query=False):
         #get the front part of the text, breaking on words
-        if len(text)>self.max_qa_len:
-            end = self.max_qa_len
+        if query:
+            length = self.max_qa_len_in
+        else:
+            length = self.max_qa_len_out
+        if len(text)>length:
+            end = length
             while end>1 and text[end]!=' ' and text[end]!='\\' and (not list_split or (text[end]!='|' and text[end-1]!='|')):
                 end-=1
             if end==1:
                 #couldn't break
-                return text[:self.max_qa_len]
+                return text[:length]
             else:
                 return text[:end]
         else:
-            if term is not None and len(text)+len(term)<=self.max_qa_len:
+            if term is not None and len(text)+len(term)<=length:
                 text+=term
             return text
-    def getBackText(self,text,ret_start):
-        #get the back part of the text, breaking on words
-        if len(text)>self.max_qa_len:
-            start = -self.max_qa_len
-            while start<-1 and text[start-1]!=' ' and text[start-1]!='\\':
-                start+=1
-            if start==-1:
-                #couldn't break
-                ret = text[-self.max_qa_len:]
-                start = len(text)-self.max_qa_len
-            else:
-                ret = text[start:]
-                start = len(text)+start
-
-        else:
-            ret = text
-            start=0
-        if ret_start:
-            return ret,start
-        else:
-            return ret
 
     def convertBB(self,s,box):
         lX,tY,rX,bY = box
@@ -284,7 +267,7 @@ class RecordQA(QADataset):
 
     def sampleText(self,length=None):
         if length is None:
-            length = self.max_qa_len
+            length = self.max_qa_len_in
 
         para = random.choice(getWikiArticle()) #select random paragraph
 
@@ -303,15 +286,15 @@ class RecordQA(QADataset):
         
         last_text=None
         text = words[idx]
-        while len(text)<self.max_qa_len and idx<start+num_words:
+        while len(text)<self.max_qa_len_in and idx<start+num_words:
             last_text = text
             text += ' '+words[idx]
             idx+=1
             
         assert text!=''
-        if len(text)>self.max_qa_len and last_text is not None:
+        if len(text)>self.max_qa_len_in and last_text is not None:
             text = last_text
-        elif len(text)>self.max_qa_len:
+        elif len(text)>self.max_qa_len_in:
             text = self.selectPartText(text)
         if len(text)==0:
             return self.sampleText()
