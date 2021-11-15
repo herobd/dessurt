@@ -28,6 +28,7 @@ from model.qa_imdoc_gpt import QAImDocGPT
 from model.qa_imdoc_gpt2 import QAImDocGPT2
 from model.qa_imdoc_gpt3 import QAImDocGPT3
 from model.qa_imdoc_perceiver import QAImDocPerceiver
+from model.qa_imdoc_model5 import QAImDocModel5
 #from model.test import TEST
 #from .roi_align import ROIAlign
 #from .roi_align import roi_align
