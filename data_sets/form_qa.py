@@ -206,7 +206,7 @@ class FormQA(QADataset):
                 q_types.append(('class-link', ei,True))
                 q_types.append(('class-link', ei,False))
             for entity in entities:
-                if len(entity.text)>=self.max_qa_len or len(entity.lines)>1:
+                if len(entity.text)>=self.max_qa_len_out or len(entity.lines)>1:
                     q_types.append(('read',entity,True))
                     q_types.append(('read',entity,False))
 
@@ -276,12 +276,12 @@ class FormQA(QADataset):
 
                 if random.random()<0.333 or not self.train: #full info for eval
                     question+='0'
-                    prompt_text = self.selectPartText(entity.text)
+                    prompt_text = self.selectPartTextForInput(entity.text)
                     inmask = [self.convertBB(s,line.box) for line in entity.lines]
                     mask=True
                 elif random.random()<0.5:
                     question+='s'
-                    prompt_text = self.selectPartText(entity.text)
+                    prompt_text = self.selectPartTextForInput(entity.text)
                     inmask = []
                     mask=False
                 else:
@@ -328,15 +328,15 @@ class FormQA(QADataset):
                         if i==0:
                             question+='~'
                             response_text = '{}>'.format(num)+response_text
-                            if len(response_text)<self.max_qa_len:
-                                response_text = response_text[:self.max_qa_len]
+                            if len(response_text)<self.max_qa_len_out:
+                                response_text = response_text[:self.max_qa_len_out]
                             ids = [line.bbid for line in entity.lines+next_entity.lines]
                         else:
                             prev_entity = full_entities[full_entity_dict[ei][i-1]]
-                            if len(prompt_text)>-1+self.max_qa_len//2:
-                                prompt_text = self.selectPartText(prompt_text,length=-1+self.max_qa_len//2)
-                            next_part_len = self.max_qa_len-(1+len(prompt_text))
-                            prompt_text = prompt_text+'>'+self.selectPartText(prev_entity.text,next_part_len)
+                            if len(prompt_text)>-1+self.max_qa_len_in//2:
+                                prompt_text = self.selectPartTextForInput(prompt_text,length=-1+self.max_qa_len_in//2)
+                            next_part_len = self.max_qa_len_in-(1+len(prompt_text))
+                            prompt_text = prompt_text+'>'+self.selectPartTextForInput(prev_entity.text,next_part_len)
                             question+='>'
                             ids = [line.bbid for line in prev_entity.lines]
                             if next_entity is not None:
@@ -358,11 +358,11 @@ class FormQA(QADataset):
                 class_answer = '[ '+cls+' ]'
                 line = random.choice(entity.lines)
                 text=line.text
-                if self.max_qa_len is not None and len(text)>self.max_qa_len:
+                if self.max_qa_len_in is not None and len(text)>self.max_qa_len_in:
                     if random.random()<0.1:
-                        text = text[:self.max_qa_len]
+                        text = text[:self.max_qa_len_in]
                     else:
-                        text = self.selectPartText(text)
+                        text = self.selectPartTextForInput(text)
 
                 inmask=[]
                 if random.random() <0.5 or line.ambiguous:
@@ -417,7 +417,7 @@ class FormQA(QADataset):
                             char='>'
                             prompt_id = response_id[i-1]
                             #prev_text = entities[i-1].text
-                            #prompt_text = self.selectPartText(prev_text)
+                            #prompt_text = self.selectPartTextForInput(prev_text)
                         response_id = response_id[i]
                     else:
                         i = 0
@@ -428,9 +428,9 @@ class FormQA(QADataset):
                     response_text = entities[response_id].text
                     if not down:
                         response_text = response_text[::-1]
-                    if len(response_text)>self.max_qa_len:
-                        response_text = response_text[:self.max_qa_len]
-                    elif len(response_text)+1<=self.max_qa_len:
+                    if len(response_text)>self.max_qa_len_out:
+                        response_text = response_text[:self.max_qa_len_out]
+                    elif len(response_text)+1<=self.max_qa_len_out:
                         response_text += self.end_token if i==num_resp-1 else '|'
                 else:
                     response_text = self.blank_token
@@ -447,7 +447,7 @@ class FormQA(QADataset):
                 #            prompt_text = prompt_text[:self.max_qa_len]
                 #    else:
                 #        #random
-                prompt_text = self.selectPartText(prompt_text)
+                prompt_text = self.selectPartTextForInput(prompt_text)
 
                 inmask = []
                 ambiguous = len(entities[prompt_id].lines)==1 and entities[prompt_id].lines[0].ambiguous
@@ -520,9 +520,9 @@ class FormQA(QADataset):
                                 break
                         if header is None:
                             continue
-                        header_text = self.selectPartText(header.text,length=-1+self.max_qa_len//2)
+                        header_text = self.selectPartTextForInput(header.text,length=-1+self.max_qa_len_in//2)
                     else:
-                        header_text = self.sampleText(-1+self.max_qa_len//2)
+                        header_text = self.sampleText(-1+self.max_qa_len_in//2)
                     if random.random()>0.5:
                         question = 't~'+header_text+'~~{}'
                     else:
@@ -591,7 +591,7 @@ class FormQA(QADataset):
                     if last_space==-1: #no space
                         last_space = random.randrange(1,len(text)-1)
                     query_part = text[:last_space] #so there's at least one word to predict
-                    query,q_start = self.selectPartText(query_part,ret_start=True)
+                    query,q_start = self.selectPartTextForInput(query_part,ret_start=True)
                 else:
                     first_newline = text.find('\\')
                     if first_newline>-1:
@@ -601,7 +601,7 @@ class FormQA(QADataset):
                         if last_space==-1: #no space
                             last_space = random.randrange(1,len(text)-1)
                         query_part = text[:last_space] #so there's at least one word to predict
-                        query = self.getFrontText(query_part)
+                        query = self.getFrontText(query_part,query=True)
                         q_start = 0
                 if len(query)==0:
                     continue
@@ -660,15 +660,15 @@ class FormQA(QADataset):
                 r_h_text = r_header.text if r_header is not None else self.blank_token
                 c_h_text = c_header.text if c_header is not None else self.blank_token
 
-                r_h_text = self.selectPartText(r_h_text,-1+self.max_qa_len//2)
-                c_h_text = self.selectPartText(c_h_text,-1+self.max_qa_len//2)
+                r_h_text = self.selectPartTextForInput(r_h_text,-1+self.max_qa_len_in//2)
+                c_h_text = self.selectPartTextForInput(c_h_text,-1+self.max_qa_len_in//2)
 
                 cell = table.cells[r][c]
                 if cell is not None:
                     cell_text = cell.text
                     if len(cell_text) > 0:
                         cell_text = self.getFrontText(cell_text)
-                    elif len(cell_text)+1<=self.max_qa_len:
+                    elif len(cell_text)+1<=self.max_qa_len_out:
                         cell_text += self.end_token
                     outmask = [self.convertBB(s,line.box) for line in cell.lines]
                     cell_lines = cell.lines
@@ -721,7 +721,7 @@ class FormQA(QADataset):
                     continue
                 cell = random.choice(non_none_cells)
 
-                cell_text = self.selectPartText(cell.text)
+                cell_text = self.selectPartTextForInput(cell.text)
 
                 if header is not None:
                     header_text = header.text
@@ -783,7 +783,7 @@ class FormQA(QADataset):
                 if random.random()<0.5:
                     #just highligh the row/col
                     ids=[line.bbid for line in header.lines]
-                    header_text = self.selectPartText(header.text)
+                    header_text = self.selectPartTextForInput(header.text)
                     for cell in all_cells:
                         if cell is not None:
                             ids += [line.bbid for line in cell.lines]
@@ -826,7 +826,7 @@ class FormQA(QADataset):
                         response_start = '{}>'.format(len(all_cells))
                     ids=[line.bbid for line in header.lines]
 
-                    header_text = self.selectPartText(header.text)
+                    header_text = self.selectPartTextForInput(header.text)
                     if random.random()<0.5 or ambiguous:
                         inmask = [self.convertBB(s,line.box) for line in header.lines]
                         question = '%r{}' if row else '%c{}'
@@ -891,7 +891,7 @@ class FormQA(QADataset):
 
                     if init>0:
                         prev_header = headers[init-1]
-                        prev_text = self.selectPartText(prev_header.text)
+                        prev_text = self.selectPartTextForInput(prev_header.text)
                         ids=[line.bbid for line in prev_header.lines]
                         char = '>'
                         ambiguous = all([line.ambiguous for line in prev_header.lines])
@@ -971,11 +971,12 @@ class FormQA(QADataset):
         
         return q_a_pairs
 
-    def selectPartText(self,text,length=None,ret_start=False):
+    def selectPartTextForInput(self,text,length=None,ret_start=False):
         #Randomly select part of the text less than or equal to max_qa_len,
         #breaking on spaces (and newlines)
+        
         if length is None:
-            length = self.max_qa_len
+            length = self.max_qa_len_in
         if len(text)>length:
             start = random.randrange(len(text)-length)
             end=start+length
@@ -1009,7 +1010,7 @@ class FormQA(QADataset):
             len_a_b = before_end-after_start if before_end is not None and after_start is not None else -1
             len_a_a = after_end-after_start if after_start is not None else -1
 
-            best_len = max(len_b_b if len_b_b<=self.max_qa_len else -1, len_a_b if len_a_b<=self.max_qa_len else -1, len_a_a if len_a_a<=self.max_qa_len else -1)
+            best_len = max(len_b_b if len_b_b<=length else -1, len_a_b if len_a_b<=length else -1, len_a_a if len_a_a<=length else -1)
 
             if best_len==-1:
                 ret = text[start:start+length] #failed to break on words
@@ -1041,31 +1042,36 @@ class FormQA(QADataset):
         else:
             return ret
 
-    def getFrontText(self,text,list_split=False,term=None):
+    def getFrontText(self,text,list_split=False,term=None,query=False):
         #get the front part of the text, breaking on words
-        if len(text)>self.max_qa_len:
-            end = self.max_qa_len
+        if not query:
+            length = self.max_qa_len_out
+        else:
+            length = self.max_qa_len_in
+        if len(text)>length:
+            end = length
             while end>1 and text[end]!=' ' and text[end]!='\\' and (not list_split or (text[end]!='|' and text[end-1]!='|')):
                 end-=1
             if end==1:
                 #couldn't break
-                return text[:self.max_qa_len]
+                return text[:length]
             else:
                 return text[:end]
         else:
-            if term is not None and len(text)+len(term)<=self.max_qa_len:
+            if term is not None and len(text)+len(term)<=length:
                 text+=term
             return text
     def getBackText(self,text,ret_start):
         #get the back part of the text, breaking on words
-        if len(text)>self.max_qa_len:
-            start = -self.max_qa_len
+        length = self.max_qa_len_in
+        if len(text)>length:
+            start = -length
             while start<-1 and text[start-1]!=' ' and text[start-1]!='\\':
                 start+=1
             if start==-1:
                 #couldn't break
-                ret = text[-self.max_qa_len:]
-                start = len(text)-self.max_qa_len
+                ret = text[-length:]
+                start = len(text)-length
             else:
                 ret = text[start:]
                 start = len(text)+start
@@ -1088,7 +1094,7 @@ class FormQA(QADataset):
 
     def sampleText(self,length=None):
         if length is None:
-            length = self.max_qa_len
+            length = self.max_qa_len_in
 
         para = random.choice(getWikiArticle(dataset=self.wiki_dataset)) #select random paragraph
 
@@ -1107,16 +1113,16 @@ class FormQA(QADataset):
         
         last_text=None
         text = words[idx]
-        while len(text)<self.max_qa_len and idx<start+num_words:
+        while len(text)<self.max_qa_len_in and idx<start+num_words:
             last_text = text
             text += ' '+words[idx]
             idx+=1
             
         assert text!=''
-        if len(text)>self.max_qa_len and last_text is not None:
+        if len(text)>self.max_qa_len_in and last_text is not None:
             text = last_text
-        elif len(text)>self.max_qa_len:
-            text = self.selectPartText(text)
+        elif len(text)>self.max_qa_len_in:
+            text = self.selectPartTextForInput(text)
         if len(text)==0:
             return self.sampleText()
         return text

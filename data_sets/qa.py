@@ -74,7 +74,12 @@ class QADataset(torch.utils.data.Dataset):
         #    self.augmentation_params=None
         self.train = split=='train'
         self.questions = config['questions']
-        self.max_qa_len = config['max_qa_len'] if 'max_qa_len' in config else None
+        self.max_qa_len_in = config['max_qa_len_in'] if 'max_qa_len_in' in config else None
+        self.max_qa_len_out = config['max_qa_len_out'] if 'max_qa_len_out' in config else None
+        if self.max_qa_len_in is None and self.max_qa_len_out is None and 'max_qa_len' in config:
+            self.max_qa_len_in = config['max_qa_len']
+            self.max_qa_len_out = config['max_qa_len']
+
         self.color = config['color'] if 'color' in config else False
         self.rotate = config['rotation'] if 'rotation' in config else False
         #patchSize=config['patch_size']
