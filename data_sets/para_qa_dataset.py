@@ -48,19 +48,19 @@ class ParaQADataset(QADataset):
                     #'read_replaced':1,
                     #'read_with_masked':1,
                     'read_line':0.75,
-                    'highlight_text':0.5,
+                    'highlight_text':0.1,
                     #'read_highlighted':1,
                     #'masked_lm':4.0,
                     #'put_in_place':1.0,
                     'read_on':0.5,
                     'read_backwards':0.5,
-                    'highlight_block':0.25}
+                    'highlight_block':0.1}
             self.q_types_noblock = {
                     'read_blanked':1,
                     #'read_replaced':1,
                     #'read_with_masked':1.0,
                     'read_line':0.76,
-                    'highlight_text':0.5,
+                    'highlight_text':0.1,
                     #'read_highlighted':1,
                     #'masked_lm':4.0,
                     #'put_in_place':1.0
