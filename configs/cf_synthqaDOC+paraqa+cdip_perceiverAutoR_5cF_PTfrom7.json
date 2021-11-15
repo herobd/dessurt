@@ -1,0 +1,193 @@
+{
+    "name": "synthqaDOC+paraqa+cdip_perceiverAutoR_5cF_PTfrom7",
+    "cuda": true,
+    "gpu": 0,
+    "save_mode": "state_dict",
+    "override": true,
+    "data_loader": {
+        "data_set_name": "MultipleDataset",
+        "data_dir": "",
+        "shuffle": true,
+        "prefetch_factor": 5,
+        "persistent_workers": true,
+        "batch_size": 2,
+        "num_workers": 4,
+        "datasets": [
+            {
+                "freq": 0.3,
+                "config": {
+                    "data_set_name": "SynthQADocDataset",
+                    "fontdir": "../data/fonts/",
+                    "textdir": "../data/",
+                    "data_dir": "../data/english4line_fontslonger2",
+                    "batch_size": 1,
+                    "num_workers": 4,
+                    "rescale_range": [
+                        1.0,
+                        1.0
+                    ],
+                    "crop_params": {
+                        "crop_size": [
+                            768,768
+                        ],
+                        "pad": 0,
+                        "rot_degree_std_dev": 1
+                    },
+                    "questions": 1,
+                    "min_entries": null,
+                    "max_entries": 160,
+                    "text_height": 32,
+                    "wider": 200,
+                    "image_size": [
+                        768,768
+                    ],
+                    "change_size": true,
+                    "word_questions": "simple",
+                    "do_masks": true,
+                    "tables": 0.2,
+                    "multiline": 0.6,
+                    "max_qa_len": 506,
+                    "header_dir": "../data/english4line_fonts",
+                    "max_chars": 10,
+                    "min_chars": 1,
+                    "use_before_refresh": 99999999999999999999,
+                    "set_size": 1000000,
+                    "num_processes": -1,
+                    "gen_type": "veryclean",
+                    "char_file": "../data/english_char_set.json",
+                    "shuffle": true
+                }
+            },
+            {
+                "freq": 0.5,
+                "config": {
+                    "data_set_name": "SynthParaQA",
+                    "data_dir": "../data/fonts",
+		    "easy": true,
+                    "batch_size": 1,
+                    "num_workers": 4,
+                    "rescale_range": [
+                        0.9,
+                        1.1
+                    ],
+                    "crop_params": {
+                        "crop_size": [
+                            768,768
+                        ],
+                        "pad": 0,
+                        "rot_degree_std_dev": 1
+                    },
+                    "questions": 1,
+                    "max_qa_len": 506,
+                    "image_size": [
+                        760,760
+                    ],
+                    "prefetch_factor": 10,
+                    "persistent_workers": true
+                }
+            },
+            {
+                "freq": 0.2,
+                "config": {
+                    "data_set_name": "CDIPCloudQA",
+                    "data_dir": "../data/CDIPCloud",
+                    "super_computer": false,
+                    "batch_size": 1,
+                    "num_workers": 4,
+                    "rescale_range": [
+                        0.9,
+                        1.1
+                    ],
+		    "rescale_to_crop_width_first": true,
+                    "crop_params": {
+                        "crop_size": [
+                            768,768
+                        ],
+                        "pad": 0,
+                        "rot_degree_std_dev": 1
+                    },
+                    "questions": 1,
+                    "max_qa_len": 506,
+                    "reuse_factor": 1.0
+                }
+            }
+        ]
+
+
+    },
+    "validation": {
+        "shuffle": false,
+        "rescale_range": [1,1],
+        "crop_params": null,
+        "batch_size": 1
+    },
+
+    
+    "lr_scheduler_type": "none",
+ 
+    "optimizer_type": "AdamW",
+    "optimizer": {
+        "lr": 0.0001,
+        "weight_decay": 0.01
+    },
+    "loss": {
+	"xanswer": "padded_seq_cross_entropy",
+	"answer": "label_smoothing",
+        "mask": "focalLoss"
+    },
+    "loss_weights": {
+        "answer": 1,
+        "mask": 1
+    },
+    "loss_params": 
+        {
+            "xanswer": {},
+	    "answer": {"smoothing":0.1}
+        },
+    "metrics": [],
+    "trainer": {
+        "class": "QATrainer",
+        "iterations": 50000000,
+        "accum_grad_steps": 50,
+        "#swa": true,
+        "#swa_start": 200000,
+        "save_dir": "saved/",
+        "val_step": 999999999999999,
+        "save_step": 200000,
+        "save_step_minor": 200,
+        "log_step": 100,
+        "print_pred_every": 100,
+        "verbosity": 1,
+        "monitor": "loss",
+        "monitor_mode": "none",
+        "retry_count":0,
+
+	"do_ocr": "no",
+
+
+        "#use_learning_schedule": "multi_rise then ramp_to_swa",
+        "use_learning_schedule": "multi_rise",
+        "warmup_steps": [1000],
+	"#ramp_down_steps": 10000,
+        "#swa_lr_mul": 0.01
+
+    },
+    "arch": "QAImDocPerceiver", 
+    "model": {
+	    "grid_ocr": false,
+	    "ocr_tokens": false,
+	    "autoregressive": true,
+	    "char_output": true,
+	    "char_tokens": true,
+            "image_size": [768,768],
+	    "input_dim": 256,
+	    "perceiver_blocks": [[2,1],[2,1],[2,1],[2,1],[12,1]],
+	    "num_latents": 256,
+	    "latent_dim": 800,
+	    "cross_heads": 8,
+	    "self_heads": 8,
+	    "output_dim": 256,
+	    "out_length": 512
+	    
+    }
+}
