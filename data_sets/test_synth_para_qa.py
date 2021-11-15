@@ -51,7 +51,7 @@ def display(data):
 
         #widths.append(img.size(1))
         
-        draw='0w' in q or 'w0' in q or 'l0' in q
+        draw=True#'0w' in q or 'w0' in q or 'l0' in q
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -95,13 +95,14 @@ if __name__ == "__main__":
     data=synth_para_qa.SynthParaQA(dirPath=dirPath,split='train',config={
         'batch_size':1,
         'rescale_range':[0.9,1.1],
+        'mode': 'blind',
         'crop_params': {
             "crop_size":[1152,768],
             "pad":0,
             "rot_degree_std_dev": 1
             },
         'questions':1,
-        'max_qa_len': 26,
+        'max_qa_len': 506,
         "image_size":[1000,700],
         "prefetch_factor": 10,
         "persistent_workers": True
