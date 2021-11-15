@@ -91,7 +91,6 @@
                 "config": {
                     "data_set_name": "CDIPCloudQA",
                     "data_dir": "../data/CDIPCloud2",
-                    "super_computer": false,
                     "batch_size": 1,
                     "num_workers": 4,
                     "rescale_range": [
