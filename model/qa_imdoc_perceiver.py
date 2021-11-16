@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from model.pairing_g_graph_layoutlm import  runLayoutLM
-from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding
+from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding,ReturnPositionalEncodingSeq
 from model.perceiver_io import PerceiverI, DecoderO
 from model.swin_transformer import ConvPatchEmbed
 try:
@@ -74,7 +74,12 @@ class QAImDocPerceiver(BaseModel):
 
         self.autoregressive = config['autoregressive'] if 'autoregressive' in config else False
 
+        self.layoutlm_emb = config['layoutlm_emb'] if 'layoutlm_emb' in config else False
+        if self.layoutlm_emb and 'final_image_size' not in config:
+            print('WARNING: did you forget to specify final images size (for embedding)?') 
+
         self.image_size = config['image_size'] #start at 512?
+        self.final_image_size = config['final_image_size'] if 'final_image_size' in config else self.image_size
         dropout = 0.0625
         lighter_conv_patch_emb = config['lighter_conv_patch_emb'] if 'lighter_conv_patch_emb' in config else False
 
@@ -134,18 +139,34 @@ class QAImDocPerceiver(BaseModel):
         self.zero_hot_conf = (1-self.one_hot_conf)/(self.ocr_out_dim-1)
 
         if self.ocr_seperate_tokens:
-            self.ocr_emb = nn.Sequential(
-                    nn.Conv1d(self.ocr_out_dim,input_dim,3,padding=1), #this will mix neighboring instances....
-                    nn.ReLU(True),
-                    nn.Conv1d(input_dim,input_dim,3,padding=1),
-                    )
-                    #nn.Linear(97,input_dim,bias=False)
-            self.ocr_1dpos_enc = ReturnPositionalEncoding(input_dim,dropout=dropout,max_len=out_length)
-            self.ocr_seqid_enc = ReturnPositionalEncoding(input_dim,dropout=dropout,max_len=out_length,offset_start=out_length)
-            self.ocr_pos_emb_x = UniformRealEmbedding(input_dim,0,self.image_size[1],100)
-            self.ocr_pos_emb_y = UniformRealEmbedding(input_dim,0,self.image_size[0],100)
-            self.ocr_pos_emb_w = PositiveRealEmbedding(input_dim,0,int(0.5*self.image_size[1]),30)
-            self.ocr_pos_emb_h = PositiveRealEmbedding(input_dim,0,int(0.3*self.image_size[0]),30)
+            if self.layoutlm_emb:
+                self.ocr_emb = nn.Linear(self.ocr_out_dim,input_dim,bias=False)
+                self.emb_x_resolution = 1000
+                self.emb_y_resolution = 1000
+                self.emb_hw_resolution = 40
+                self.emb_max_hw = 60 #if we're doing characters, this should be enough
+                self.ocr_abspos_enc = ReturnPositionalEncodingSeq(input_dim,dropout=dropout,max_len=10000)
+                assert input_dim%16==0
+                self.ocr_pos_emb_x = nn.Embedding(self.emb_x_resolution,4*(input_dim//16))
+                self.ocr_pos_emb_y = nn.Embedding(self.emb_y_resolution,4*(input_dim//16))
+                self.ocr_pos_emb_w = nn.Embedding(self.emb_max_hw,(input_dim//16))
+                self.ocr_pos_emb_h = nn.Embedding(self.emb_max_hw,(input_dim//16))
+                self.ocr_diff_emb_x = nn.Embedding(self.emb_x_resolution,3*(input_dim//16))
+                self.ocr_diff_emb_y = nn.Embedding(self.emb_y_resolution,3*(input_dim//16))
+
+            else:
+                self.ocr_emb = nn.Sequential(
+                        nn.Conv1d(self.ocr_out_dim,input_dim,3,padding=1), #this will mix neighboring instances....
+                        nn.ReLU(True),
+                        nn.Conv1d(input_dim,input_dim,3,padding=1),
+                        )
+                        #nn.Linear(97,input_dim,bias=False)
+                self.ocr_1dpos_enc = ReturnPositionalEncoding(input_dim,dropout=dropout,max_len=out_length)
+                self.ocr_seqid_enc = ReturnPositionalEncoding(input_dim,dropout=dropout,max_len=out_length,offset_start=out_length)
+                self.ocr_pos_emb_x = UniformRealEmbedding(input_dim,0,self.image_size[1],100)
+                self.ocr_pos_emb_y = UniformRealEmbedding(input_dim,0,self.image_size[0],100)
+                self.ocr_pos_emb_w = PositiveRealEmbedding(input_dim,0,int(0.5*self.image_size[1]),30)
+                self.ocr_pos_emb_h = PositiveRealEmbedding(input_dim,0,int(0.3*self.image_size[0]),30)
 
         if self.ocr_in_image:
             self.embed_ocr_grid = nn.Linear(self.ocr_out_dim,input_dim)
@@ -264,6 +285,7 @@ class QAImDocPerceiver(BaseModel):
 
 
         #t#self.opt_history=defaultdict(list)#t#
+        self.overwrite_char_prob=False
 
 
 
@@ -351,7 +373,33 @@ class QAImDocPerceiver(BaseModel):
 
         
         if num_ocr>0:
-            ocr_tokens += self.ocr_pos_emb_x(xs) + self.ocr_pos_emb_y(ys) + self.ocr_pos_emb_w(ws) + self.ocr_pos_emb_h(hs) + self.ocr_1dpos_enc(ocr_1dpos) + self.ocr_seqid_enc(ocr_seqid)
+            if self.layoutlm_emb:
+                x_diff = xs - torch.roll(xs,1,dims=1)
+                y_diff = ys - torch.roll(ys,1,dims=1)
+                #normalize
+                xs = self.emb_x_resolution*xs/self.final_image_size[1]
+                ys = self.emb_y_resolution*ys/self.final_image_size[0]
+                hs = self.emb_hw_resolution*hs/self.emb_max_hw
+                hs[hs>self.emb_hw_resolution]=self.emb_hw_resolution
+                ws = self.emb_hw_resolution*ws/self.emb_max_hw
+                ws[ws>self.emb_hw_resolution]=self.emb_hw_resolution
+                x_diff = self.emb_x_resolution*(x_diff+self.final_image_size[1])/(2*self.final_image_size[1])
+                y_diff = self.emb_y_resolution*(y_diff+self.final_image_size[0])/(2*self.final_image_size[0])
+
+                xs,ys,hs,ws,x_diff,y_diff = [var.long() for var in (xs,ys,hs,ws,x_diff,y_diff)]
+
+                #embed
+                pos_emb = torch.cat([
+                    self.ocr_pos_emb_x(xs),
+                    self.ocr_pos_emb_y(ys),
+                    self.ocr_pos_emb_w(ws),
+                    self.ocr_pos_emb_h(hs),
+                    self.ocr_diff_emb_x(x_diff),
+                    self.ocr_diff_emb_y(y_diff)
+                    ],dim=2)
+                ocr_tokens += pos_emb + self.ocr_abspos_enc(pos_emb.size(1))
+            else:
+                ocr_tokens += self.ocr_pos_emb_x(xs) + self.ocr_pos_emb_y(ys) + self.ocr_pos_emb_w(ws) + self.ocr_pos_emb_h(hs) + self.ocr_1dpos_enc(ocr_1dpos) + self.ocr_seqid_enc(ocr_seqid)
         else:
             ocr_tokens = torch.FloatTensor(new_batch_size,0,q_tokens.size(2)).to(device)
 
@@ -368,7 +416,6 @@ class QAImDocPerceiver(BaseModel):
 
 
         #Put full input together. im, ocr,question
-
         input_tokens = torch.cat( (im_tokens,ocr_tokens,q_tokens), dim=1)
         input_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask), dim=1)
         
@@ -476,8 +523,22 @@ class QAImDocPerceiver(BaseModel):
             ocr_1dpos = []#[0]
             ocr_seqid = []#[0]
             for i,(bb,(string,char_prob),score) in enumerate(res_im):
-                if len(string)==0 or (self.blank_ocr and self.train and random.random()<self.blank_ocr):
+                if len(string)==0  or len(char_prob)==0 or (self.blank_ocr and self.train and random.random()<self.blank_ocr):
                     continue
+
+                if self.overwrite_char_prob:
+                    easyocr = "0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ €ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+                    to_index = {char:i+1 for i,char in enumerate(easyocr)}
+                    char_prob = [to_index[c] for c in string]
+                if isinstance(char_prob,list): #incase GT/precomputed OCR is used
+                    tensor = torch.FloatTensor(len(char_prob),self.ocr_out_dim).fill_(self.zero_hot_conf)
+                    tensor[range(len(char_prob)),char_prob]=self.one_hot_conf
+                    char_prob=tensor.to(device)
+                
+
+
+
+
                 #spread x,y location along span
                 tlX,tlY = bb[0]
                 trX,trY = bb[1]
@@ -487,21 +548,27 @@ class QAImDocPerceiver(BaseModel):
                 #cX = (lX+rX)/2
                 cY = (lY+rY)/2
                 #we'll use the entire height for each part
-                start_point = torch.FloatTensor([lX,cY])
-                end_point = torch.FloatTensor([rX,cY])
-                step = 1/(char_prob.size(0)-1)
-                forward = torch.arange(1,-(step-0.00001),-step)[:,None] #add xy dim
-                backward = torch.arange(0,1+(step-0.00001),step)[:,None]
-                assert forward.size(0)==char_prob.size(0) and backward.size(0)==char_prob.size(0)
-                all_xy = forward*start_point + backward*end_point
+                if char_prob.size(0)>1:
+                    start_point = torch.FloatTensor([lX,cY])
+                    end_point = torch.FloatTensor([rX,cY])
+                    step = 1/(char_prob.size(0)-1)
+                    forward = torch.arange(1,-(step-0.00001),-step)[:,None] #add xy dim
+                    backward = torch.arange(0,1+(step-0.00001),step)[:,None]
+                    assert forward.size(0)==char_prob.size(0) and backward.size(0)==char_prob.size(0)
+                    all_xy = forward*start_point + backward*end_point
+
+                    char_pred = char_prob.argmax(dim=1)
+                    char_loc = char_pred!=0
+                    new_char_prob = char_prob[char_loc] #this will be on the GPU
+                    new_xy = all_xy[char_loc]
+                else:
+                    new_char_prob = char_prob
+                    new_xy = torch.FloatTensor([[(lX+rX)/2,cY]])
+
 
 
 
                 #rather than taking the whol sequence, we'll just take the probabilities at character predictions (nonblank)
-                char_pred = char_prob.argmax(dim=1)
-                char_loc = char_pred!=0
-                new_char_prob = char_prob[char_loc] #this will be on the GPU
-                new_xy = all_xy[char_loc]
                 wh = torch.FloatTensor([width,height])[None,:].expand(new_xy.size(0),-1)
 
                 bbs = torch.cat( (new_xy,wh), dim=1)
@@ -543,7 +610,10 @@ class QAImDocPerceiver(BaseModel):
                 all_ocr_seqid[i] += [0]*diff
                 ocr_padding_mask[i,-diff:]=0
         if max_len!=0:
-            ocr_tokens = self.ocr_emb(torch.stack(all_ocr_res,dim=0).permute(0,2,1)).permute(0,2,1)
+            if self.layoutlm_emb:
+                ocr_tokens = self.ocr_emb(torch.stack(all_ocr_res,dim=0))
+            else:
+                ocr_tokens = self.ocr_emb(torch.stack(all_ocr_res,dim=0).permute(0,2,1)).permute(0,2,1)
         else:
             ocr_tokens =None
         ocr_bbs = torch.stack(all_ocr_bbs,dim=0)

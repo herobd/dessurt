@@ -28,6 +28,8 @@ class SynthParaQA(ParaQADataset):
         self.gen_daemon = GenDaemon(font_dir)
         self.prev_words = None
 
+        self.gt_ocr = config['gt_ocr'] if 'gt_ocr' in config else False
+
         self.image_size = config['image_size']
         self.min_text_height = config['min_text_height'] if 'min_text_height' in config else 8
         self.max_text_height = config['max_text_height'] if 'max_text_height' in config else 32
@@ -64,7 +66,31 @@ class SynthParaQA(ParaQADataset):
             
 
         qa, qa_bbs = self.makeQuestions(ocr,image_h,image_w,s)
-        return qa_bbs, list(range(qa_bbs.shape[0])), None, {'image':255-image}, {}, qa
+
+        if self.gt_ocr:
+            recog_strings=[]
+            recog_bbs=[]
+            for block in ocr:
+                for para in block['paragraphs']:
+                    for line in para['lines']:
+                        text = line['text']
+                        recog_strings.append(text)
+                        lX,tY,rX,bY = line['box']
+                        lX*=s
+                        tY*=s
+                        rX*=s
+                        bY*=s
+                        tlX=blX=lX
+                        trX=brX=rX
+                        tlY=trY=tY
+                        blY=brY=bY
+                        lY=rY = (tY+bY)/2
+                        tX=bX = (lX+rX)/2
+                        recog_bbs.append([tlX,tlY,trX,trY,brX,brY,blX,blY,lX,lY,rX,rY,tX,tY,bX,bY])
+            metadata = {'pre-recognition_bbs': recog_bbs, 'pre-recognition': recog_strings}
+        else:
+            metadata = {}
+        return qa_bbs, list(range(qa_bbs.shape[0])), None, {'image':255-image}, metadata, qa
 
 
     def addBlock(self,ocr,image):
