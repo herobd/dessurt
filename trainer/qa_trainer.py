@@ -350,7 +350,7 @@ class QATrainer(BaseTrainer):
         if self.do_ocr:
             if self.do_ocr == 'no':
                 ocr_res=[[]]*image.size(0)
-            elif self.do_ocr == 'json':
+            elif self.do_ocr == 'json' or self.do_ocr == 'gt':
                 ocr_res = instance['pre-recognition']
             else:
                 try:
