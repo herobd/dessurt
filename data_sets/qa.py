@@ -114,7 +114,8 @@ class QADataset(torch.utils.data.Dataset):
         self.do_masks=False    
 
         self.ocr_out_dim = 97 #EasyOCR
-        self.char_to_ocr = "0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÀÁÂÃÄÅÆÇÈÉÊËÍÎÑÒÓÔÕÖØÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿąęĮįıŁłŒœŠšųŽž"
+        #self.char_to_ocr = "0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÀÁÂÃÄÅÆÇÈÉÊËÍÎÑÒÓÔÕÖØÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿąęĮįıŁłŒœŠšųŽž"
+        self.char_to_ocr = "0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ €ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
         self.char_to_ocr = {char:i+1 for i,char in enumerate(self.char_to_ocr)} #+1 as 0 is the blank token
         self.one_hot_conf = 0.9
 
@@ -467,7 +468,7 @@ class QADataset(torch.utils.data.Dataset):
                 #char_prob = torch.FloatTensor(len(string),self.ocr_out_dim).fill_((1-self.one_hot_conf)/(self.ocr_out_dim-1)) #fill with 5% distributed to all non-char places
                 #for pos,char in enumerate(string):
                 #    char_prob[pos,self.char_to_ocr[char]]=self.one_hot_conf
-                char_prob = [self.char_to_ocr[char] for char in string]
+                char_prob = [self.char_to_ocr[char] for char in string if char in self.char_to_ocr]
                 pre_recog.append( (bb[0:8].reshape(4,2),(string,char_prob),None) )
         else:
             pre_recog = None
