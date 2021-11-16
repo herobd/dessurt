@@ -44,6 +44,25 @@ class ReturnPositionalEncoding(nn.Module):
         x=self.pe[x]
         return self.dropout(x)
 
+class ReturnPositionalEncodingSeq(nn.Module):
+    "Implement the PE function."
+    def __init__(self, d_model, dropout, max_len=5000,offset_start=0):
+        super(ReturnPositionalEncodingSeq, self).__init__()
+        self.dropout = nn.Dropout(p=dropout)
+        
+        # Compute the positional encodings once in log space.
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(offset_start, offset_start+max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) *
+                             -(math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+        
+    def forward(self,length):
+        x=self.pe[:length]
+        return self.dropout(x)[None,...] #add batch dim
+
 class PositiveRealEmbedding(nn.Module):
     "Embeds a real-value, with higher resolution on smaller values"
     def __init__(self,dim,min_v,max_v,resolution):
