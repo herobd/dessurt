@@ -543,6 +543,7 @@ class QAImDocPerceiver(BaseModel):
                 all_ocr_seqid[i] += [0]*diff
                 ocr_padding_mask[i,-diff:]=0
         if max_len!=0:
+            import pdb;pdb.set_trace()
             ocr_tokens = self.ocr_emb(torch.stack(all_ocr_res,dim=0).permute(0,2,1)).permute(0,2,1)
         else:
             ocr_tokens =None
