@@ -38,9 +38,15 @@ def display(data):
         #    print('ocr: {} {}'.format(text,bb))
         #print('questions: {}'.format(data['questions'][b]))
         #print('answers: {}'.format(data['answers'][b]))
+        if 'pre-recognition' in data and data['pre-recognition'] is not None:
+            res_im = data['pre-recognition'][b]
+            print('OCR {}'.format(b))
+            for bb,(string,char_prob),score in res_im:
+                print(string)
+            print('-------')
         print('questions and answers')
         for q,a in zip(data['questions'][b],data['answers'][b]):
-            print(q+' : '+a)
+            print(q+' [:] '+a)
             
             loc = q.find('~')
             if loc ==-1:
@@ -61,10 +67,11 @@ def display(data):
             #cv2.imwrite('out/changed_img{}.png'.format(b),changed_img.numpy()*255)
             #plt.imshow(img.numpy()[:,:,0], cmap='gray')
             #plt.show()
-            cv2.imshow('x',(img*255).numpy().astype(np.uint8))
+            img = (img*255).numpy().astype(np.uint8)
+            cv2.imwrite('test_768x768.png',img)
+            cv2.imshow('x',img)
             cv2.show()
 
-            #cv2.imwrite('testsinglesize_1024.png',img.numpy()[:,:,0])
 
         #fig = plt.figure()
 
@@ -94,10 +101,11 @@ if __name__ == "__main__":
         repeat=1
     data=synth_para_qa.SynthParaQA(dirPath=dirPath,split='train',config={
         'batch_size':1,
+        'gt_ocr': True,
         'rescale_range':[0.9,1.1],
         'mode': 'blind',
         'crop_params': {
-            "crop_size":[1152,768],
+            "crop_size":[768,768],
             "pad":0,
             "rot_degree_std_dev": 1
             },

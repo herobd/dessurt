@@ -1,0 +1,152 @@
+{
+    "name": "synthqa+paraqa+cdip_perceiverAutoR_5cF_ocr_blind_9",
+    "cuda": true,
+    "gpu": 0,
+    "save_mode": "state_dict",
+    "override": true,
+    "data_loader": {
+        "data_set_name": "MultipleDataset",
+        "data_dir": "",
+        "shuffle": true,
+        "prefetch_factor": 5,
+        "persistent_workers": true,
+        "batch_size": 2,
+        "num_workers": 4,
+        "datasets": [
+            {
+                "freq": 0.8,
+                "config": {
+                    "data_set_name": "SynthParaQA",
+                    "data_dir": "../data/fonts",
+		    "mode": "blind",
+                    "batch_size": 1,
+                    "num_workers": 4,
+                    "rescale_range": [
+                        0.9,
+                        1.1
+                    ],
+                    "crop_params": {
+                        "crop_size": [
+                            768,768
+                        ],
+                        "pad": 0,
+                        "rot_degree_std_dev": 1
+                    },
+                    "questions": 1,
+                    "max_qa_len": 595,
+                    "image_size": [
+                        760,760
+                    ],
+                    "prefetch_factor": 10,
+                    "persistent_workers": true
+                }
+            },
+            {
+                "freq": 0.2,
+                "config": {
+                    "data_set_name": "CDIPCloudQA",
+                    "data_dir": "../data/CDIPCloud3",
+		    "mode": "blind",
+                    "batch_size": 1,
+                    "num_workers": 4,
+                    "rescale_range": [
+                        0.9,
+                        1.1
+                    ],
+		    "rescale_to_crop_size_first": true,
+                    "crop_params": {
+                        "crop_size": [
+                            768,768
+                        ],
+                        "pad": 0,
+                        "rot_degree_std_dev": 1
+                    },
+                    "questions": 1,
+                    "max_qa_len": 595,
+                    "reuse_factor": 1.0
+                }
+            }
+        ]
+
+
+    },
+    "validation": {
+        "shuffle": false,
+        "rescale_range": [1,1],
+        "crop_params": null,
+        "batch_size": 1
+    },
+
+    
+    "lr_scheduler_type": "none",
+ 
+    "optimizer_type": "AdamW",
+    "optimizer": {
+        "lr": 0.0001,
+        "weight_decay": 0.01
+    },
+    "loss": {
+	"xanswer": "padded_seq_cross_entropy",
+	"answer": "label_smoothing",
+        "mask": "focalLoss"
+    },
+    "loss_weights": {
+        "answer": 1,
+        "mask": 1
+    },
+    "loss_params": 
+        {
+            "xanswer": {},
+	    "answer": {"smoothing":0.1}
+        },
+    "metrics": [],
+    "trainer": {
+        "class": "QATrainer",
+        "iterations": 50000000,
+        "accum_grad_steps": 60,
+        "#swa": true,
+        "#swa_start": 200000,
+        "save_dir": "saved/",
+        "val_step": 999999999999999,
+        "save_step": 200000,
+        "save_step_minor": 200,
+        "log_step": 100,
+        "print_pred_every": 50,
+        "verbosity": 1,
+        "monitor": "loss",
+        "monitor_mode": "none",
+        "retry_count":0,
+
+	"do_ocr": "yes",
+
+
+        "#use_learning_schedule": "multi_rise then ramp_to_swa",
+        "use_learning_schedule": "multi_rise",
+        "warmup_steps": [1000],
+	"#ramp_down_steps": 10000,
+        "#swa_lr_mul": 0.01
+
+    },
+    "arch": "QAImDocPerceiver", 
+    "model": {
+	    "grid_ocr": false,
+	    "ocr_tokens": true,
+	    "blind_to_image": true,
+	    "autoregressive": true,
+	    "char_output": true,
+	    "char_tokens": true,
+            "image_size": [768,768],
+            "pre_trained": {
+                "patch_emb": "saved/synth_ocr_crnnskipforswin_new/checkpoint-iteration400000.pth"
+            },
+	    "input_dim": 256,
+	    "perceiver_blocks": [[2,1],[2,1],[2,1],[2,1],[12,1]],
+	    "num_latents": 256,
+	    "latent_dim": 800,
+	    "cross_heads": 8,
+	    "self_heads": 8,
+	    "output_dim": 256,
+	    "out_length": 600
+	    
+    }
+}
