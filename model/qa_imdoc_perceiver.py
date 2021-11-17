@@ -439,6 +439,7 @@ class QAImDocPerceiver(BaseModel):
         
 
         #Run through Perceiver
+        #print('input tokens: {}'.format(input_tokens.size()))
         latent, data_tokesn = self.perciever(input_tokens,input_padding_mask)
 
         if self.decoder_image is not None:
