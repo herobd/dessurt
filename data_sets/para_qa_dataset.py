@@ -65,6 +65,13 @@ class ParaQADataset(QADataset):
                     #'masked_lm':4.0,
                     #'put_in_place':1.0
                     }
+        elif mode == 'echo':
+            self.q_types = {
+                    'echo':1,
+                    }
+            self.q_types_noblock = {
+                    'echo':1,
+                    }
         elif mode == 'simple':
             self.q_types = {
                     'read_blanked':1,
@@ -725,6 +732,14 @@ class ParaQADataset(QADataset):
                     inmask=[]
                     question = '0p~'
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
+
+
+            elif question_type == 'echo':
+                words = []
+                for b,p,l,w in wordmap:
+                    words.append(ocr[b]['paragraphs'][p]['lines'][l]['words'][w]['text'])
+                response = ' '.join(words)
+                qa.append(['>',response,[],None,None,None])
 
             if len(qa)>=self.questions*10:
                 break
