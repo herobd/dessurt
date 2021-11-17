@@ -157,7 +157,7 @@ class PerceiverI(nn.Module):
             cross_ff = PreNorm(latent_dim, FeedForward(latent_dim))
 
             if rev_cross:
-                rev_cross_att = PreNorm(dim, Attention(dim, latest_dim, heads = cross_heads, dim_head = cross_dim_head, v_dim=dim), context_dim = latent_dim)
+                rev_cross_att = PreNorm(dim, Attention(dim, latent_dim, heads = cross_heads, dim_head = cross_dim_head, v_dim=dim), context_dim = latent_dim)
                 rev_cross_ff = PreNorm(dim, FeedForward(dim))
             else:
                 rev_cross_att = rev_cross_ff = None
@@ -202,8 +202,8 @@ class PerceiverI(nn.Module):
                     x = ff(x) + x
 
             if rev_cross_att is not None:
-                data = cross_att(data, context = x) + data #no masking, as it doesn't matter if we write to padded data locations
-                data = cross_ff(data) + data
+                data = rev_cross_att(data, context = x) + data #no masking, as it doesn't matter if we write to padded data locations
+                data = rev_cross_ff(data) + data
 
         return x,data
 
