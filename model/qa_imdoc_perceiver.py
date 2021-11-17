@@ -143,14 +143,16 @@ class QAImDocPerceiver(BaseModel):
                 self.ocr_emb = nn.Linear(self.ocr_out_dim,input_dim,bias=False)
                 self.emb_x_resolution = 1000
                 self.emb_y_resolution = 1000
-                self.emb_hw_resolution = 40
-                self.emb_max_hw = 60 #if we're doing characters, this should be enough
+                self.emb_h_resolution = 40
+                self.emb_w_resolution = 40
+                self.emb_max_h = 60 #if we're doing characters, this should be enough
+                self.emb_max_w = 60 #if we're doing characters, this should be enough
                 self.ocr_abspos_enc = ReturnPositionalEncodingSeq(input_dim,dropout=dropout,max_len=10000)
                 assert input_dim%16==0
                 self.ocr_pos_emb_x = nn.Embedding(self.emb_x_resolution,4*(input_dim//16))
                 self.ocr_pos_emb_y = nn.Embedding(self.emb_y_resolution,4*(input_dim//16))
-                self.ocr_pos_emb_w = nn.Embedding(self.emb_max_hw,(input_dim//16))
-                self.ocr_pos_emb_h = nn.Embedding(self.emb_max_hw,(input_dim//16))
+                self.ocr_pos_emb_w = nn.Embedding(self.emb_max_w,(input_dim//16))
+                self.ocr_pos_emb_h = nn.Embedding(self.emb_max_h,(input_dim//16))
                 self.ocr_diff_emb_x = nn.Embedding(self.emb_x_resolution,3*(input_dim//16))
                 self.ocr_diff_emb_y = nn.Embedding(self.emb_y_resolution,3*(input_dim//16))
 
@@ -379,12 +381,18 @@ class QAImDocPerceiver(BaseModel):
                 #normalize
                 xs = self.emb_x_resolution*xs/self.final_image_size[1]
                 ys = self.emb_y_resolution*ys/self.final_image_size[0]
-                hs = self.emb_hw_resolution*hs/self.emb_max_hw
-                hs[hs>self.emb_hw_resolution]=self.emb_hw_resolution
-                ws = self.emb_hw_resolution*ws/self.emb_max_hw
-                ws[ws>self.emb_hw_resolution]=self.emb_hw_resolution
+                hs = self.emb_h_resolution*hs/self.emb_max_h
+                ws = self.emb_w_resolution*ws/self.emb_max_w
                 x_diff = self.emb_x_resolution*(x_diff+self.final_image_size[1])/(2*self.final_image_size[1])
                 y_diff = self.emb_y_resolution*(y_diff+self.final_image_size[0])/(2*self.final_image_size[0])
+
+                #import pdb;pdb.set_trace()
+                xs[xs>=self.emb_x_resolution]=self.emb_x_resolution-1
+                ys[ys>=self.emb_y_resolution]=self.emb_y_resolution-1
+                hs[hs>=self.emb_h_resolution]=self.emb_h_resolution-1
+                ws[ws>=self.emb_w_resolution]=self.emb_w_resolution-1
+                x_diff[x_diff>=self.emb_x_resolution]=self.emb_x_resolution-1
+                y_diff[y_diff>=self.emb_y_resolution]=self.emb_y_resolution-1
 
                 xs,ys,hs,ws,x_diff,y_diff = [var.long() for var in (xs,ys,hs,ws,x_diff,y_diff)]
 
@@ -569,6 +577,8 @@ class QAImDocPerceiver(BaseModel):
 
 
                 #rather than taking the whol sequence, we'll just take the probabilities at character predictions (nonblank)
+                if self.layoutlm_emb:
+                    width = width/new_char_prob.size(0)
                 wh = torch.FloatTensor([width,height])[None,:].expand(new_xy.size(0),-1)
 
                 bbs = torch.cat( (new_xy,wh), dim=1)
