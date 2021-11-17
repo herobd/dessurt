@@ -519,7 +519,7 @@ class QAImDocModel5(BaseModel):
         #Run through Perceiver 1
         input_tokens = torch.cat( (self.first_im_change(im_tokens),ocr_tokens,q_tokens), dim=1)
         input_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask), dim=1)
-        latent = self.perciever_first(input_tokens,input_padding_mask)
+        latent,input_tokens = self.perciever_first(input_tokens,input_padding_mask)
 
         if self.do_im_cross:
         
@@ -533,7 +533,7 @@ class QAImDocModel5(BaseModel):
             #Run through Perceiver 2
             input_tokens = torch.cat( (self.second_im_change(im_tokens),ocr_tokens,q_tokens), dim=1)
             input_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask), dim=1)
-            latent = self.perciever_second(input_tokens,input_padding_mask,latents=latent)
+            latent,input_tokens = self.perciever_second(input_tokens,input_padding_mask,latents=latent)
 
         query_im_tokens = im_tokens #save "full res" im tokens for output query
 
@@ -550,7 +550,7 @@ class QAImDocModel5(BaseModel):
             #Run through final Perceiver
             input_tokens = torch.cat( (self.third_im_change(im_tokens),ocr_tokens,q_tokens), dim=1)
             input_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask), dim=1)
-            latent = self.perciever_third(input_tokens,input_padding_mask,latents=latent)
+            latent,input_tokens = self.perciever_third(input_tokens,input_padding_mask,latents=latent)
 
         #Get im tokens output
         im_tokens = self.decoder_image(latent,query_im_tokens)
