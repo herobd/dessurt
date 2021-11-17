@@ -33,12 +33,13 @@ def threadFunction(self,nums):
         #print('{} finished gen pass'.format(nums))
 
 class GenDaemon:
-    def __init__(self,font_dir,out_dir=None,num_held=0):
+    def __init__(self,font_dir,out_dir=None,num_held=0,simple=False):
         self.gen = SyntheticWord(font_dir)
         self.wiki_dataset = getWikiDataset()
         self.used_thresh=-1
         self.multi_para = 0.1
         self.num_held = num_held
+        self.simple = simple #for debugging purposese
 
         self.locks = []
         self.dir_paths = []
@@ -215,7 +216,17 @@ class GenDaemon:
         return img
 
     def getTextSample(self):
-        paras = getWikiArticle(dataset=self.wiki_dataset)
+        if self.simple:
+            words = []
+            word_count = random.randint(3,10)
+            for w in range(word_count):
+                word=''
+                for i in range(random.randrange(1,6)):
+                    word += random.choice('abcde')
+                words.append(word)
+            paras = [' '.join(words)]
+        else:
+            paras = getWikiArticle(dataset=self.wiki_dataset)
 
         #select para or paras
         if self.multi_para<random.random():

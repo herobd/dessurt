@@ -141,10 +141,16 @@ class QAImDocPerceiver(BaseModel):
         if self.ocr_seperate_tokens:
             if self.layoutlm_emb:
                 self.ocr_emb = nn.Linear(self.ocr_out_dim,input_dim,bias=False)
-                self.emb_x_resolution = 1000
-                self.emb_y_resolution = 1000
-                self.emb_h_resolution = 40
-                self.emb_w_resolution = 40
+                if config.get('low_emb_res'):
+                    self.emb_x_resolution = 100
+                    self.emb_y_resolution = 200
+                    self.emb_h_resolution = 10
+                    self.emb_w_resolution = 10
+                else:
+                    self.emb_x_resolution = 1000
+                    self.emb_y_resolution = 1000
+                    self.emb_h_resolution = 40
+                    self.emb_w_resolution = 40
                 self.emb_max_h = 60 #if we're doing characters, this should be enough
                 self.emb_max_w = 60 #if we're doing characters, this should be enough
                 self.ocr_abspos_enc = ReturnPositionalEncodingSeq(input_dim,dropout=dropout,max_len=10000)
@@ -243,12 +249,16 @@ class QAImDocPerceiver(BaseModel):
                 cross_heads = cross_heads,
                 cross_dim_head = qk_dim,
                 )
-        self.decoder_image = DecoderO(
-                queries_dim = input_dim, #it reuses the image as query
-                latent_dim=latent_dim,
-                cross_heads = cross_heads,
-                cross_dim_head = qk_dim,
-                )
+
+        if len(perceiver_blocks[-1])==3 and perceiver_blocks[-1][2]:
+            self.decoder_image = None
+        else:
+            self.decoder_image = DecoderO(
+                    queries_dim = input_dim, #it reuses the image as query
+                    latent_dim=latent_dim,
+                    cross_heads = cross_heads,
+                    cross_dim_head = qk_dim,
+                    )
 
 
 
@@ -404,6 +414,7 @@ class QAImDocPerceiver(BaseModel):
                     self.ocr_diff_emb_x(x_diff),
                     self.ocr_diff_emb_y(y_diff)
                     ],dim=2)
+
                 ocr_tokens += pos_emb + self.ocr_abspos_enc(pos_emb.size(1))
             else:
                 ocr_tokens += self.ocr_pos_emb_x(xs) + self.ocr_pos_emb_y(ys) + self.ocr_pos_emb_w(ws) + self.ocr_pos_emb_h(hs) + self.ocr_1dpos_enc(ocr_1dpos) + self.ocr_seqid_enc(ocr_seqid)
@@ -428,9 +439,12 @@ class QAImDocPerceiver(BaseModel):
         
 
         #Run through Perceiver
-        latent = self.perciever(input_tokens,input_padding_mask)
+        latent, data_tokesn = self.perciever(input_tokens,input_padding_mask)
 
-        im_feats = self.decoder_image(latent,query_im_tokens)
+        if self.decoder_image is not None:
+            im_feats = self.decoder_image(latent,query_im_tokens)
+        else:
+            im_feats = data_tokesn[:,:num_im]
 
         if self.autoregressive:
             query_a_tokens = a_tokens

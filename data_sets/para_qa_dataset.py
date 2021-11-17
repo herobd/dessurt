@@ -65,6 +65,15 @@ class ParaQADataset(QADataset):
                     #'masked_lm':4.0,
                     #'put_in_place':1.0
                     }
+        elif mode == 'simple':
+            self.q_types = {
+                    'read_blanked':1,
+                    'read_on':1,
+                    }
+            self.q_types_noblock = {
+                    'read_blanked':1,
+                    'read_on':1,
+                    }
         elif mode == 'easy':
             self.q_types = {
                     'read_blanked':1,

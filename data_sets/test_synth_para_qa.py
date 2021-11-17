@@ -57,7 +57,7 @@ def display(data):
 
         #widths.append(img.size(1))
         
-        draw=True#'0w' in q or 'w0' in q or 'l0' in q
+        draw=False#'0w' in q or 'w0' in q or 'l0' in q
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -68,7 +68,7 @@ def display(data):
             #plt.imshow(img.numpy()[:,:,0], cmap='gray')
             #plt.show()
             img = (img*255).numpy().astype(np.uint8)
-            cv2.imwrite('test_768x768.png',img)
+            #cv2.imwrite('test_768x768.png',img)
             cv2.imshow('x',img)
             cv2.show()
 
@@ -103,15 +103,16 @@ if __name__ == "__main__":
         'batch_size':1,
         'gt_ocr': True,
         'rescale_range':[0.9,1.1],
-        'mode': 'blind',
+        'mode': 'simple',
+        'simple_vocab': True,
         'crop_params': {
-            "crop_size":[768,768],
+            "crop_size":[256,256],
             "pad":0,
             "rot_degree_std_dev": 1
             },
         'questions':1,
         'max_qa_len': 506,
-        "image_size":[1000,700],
+        "image_size":[250,250],
         "prefetch_factor": 10,
         "persistent_workers": True
 

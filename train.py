@@ -164,7 +164,7 @@ if __name__ == '__main__':
     if args.resume is not None and (config is None or 'override' not in config or not config['override']):
         if args.config is not None:
             logger.warning('Warning: --config overridden by --resume')
-        config = torch.load(args.resume)['config']
+        config = torch.load(args.resume,map_location=torch.device('cpu'))['config']
     elif args.config is not None and args.resume is None:
         path = os.path.join(config['trainer']['save_dir'], config['name'])
         if os.path.exists(path):

@@ -146,10 +146,21 @@ class PerceiverI(nn.Module):
 
         self.cross_blocks = nn.ModuleList([])
         self.inner_block_count = []
-        for num_self_att_per_block, num_blocks in block_specification:
+        for blk_spec in block_specification:
+            if len(blk_spec) == 2:
+                num_self_att_per_block, num_blocks = blk_spec
+                rev_cross=False
+            else:
+                num_self_att_per_block, num_blocks, rev_cross = blk_spec
 
             cross_att = PreNorm(latent_dim, Attention(latent_dim, dim, heads = cross_heads, dim_head = cross_dim_head, v_dim=latent_dim), context_dim = dim)
             cross_ff = PreNorm(latent_dim, FeedForward(latent_dim))
+
+            if rev_cross:
+                rev_cross_att = PreNorm(dim, Attention(dim, latest_dim, heads = cross_heads, dim_head = cross_dim_head, v_dim=dim), context_dim = latent_dim)
+                rev_cross_ff = PreNorm(dim, FeedForward(dim))
+            else:
+                rev_cross_att = rev_cross_ff = None
 
             self_att = nn.ModuleList([])
             self_ff = nn.ModuleList([])
@@ -159,6 +170,8 @@ class PerceiverI(nn.Module):
             self.cross_blocks.append(nn.ModuleList([
                 cross_att,
                 cross_ff,
+                rev_cross_att,
+                rev_cross_ff,
                 self_att,
                 self_ff]))
             self.inner_block_count.append(num_blocks)
@@ -178,16 +191,21 @@ class PerceiverI(nn.Module):
             x = latents
 
 
-        for (cross_att, cross_ff, self_att, self_ff),num_blocks in zip(self.cross_blocks,self.inner_block_count):
+        for (cross_att, cross_ff, rev_cross_att, rev_cross_ff, self_att, self_ff),num_blocks in zip(self.cross_blocks,self.inner_block_count):
             x = cross_att(x, context = data, mask = mask) + x
             x = cross_ff(x) + x
+
 
             for i in range(num_blocks):
                 for att,ff in zip(self_att, self_ff):
                     x = att(x) + x
                     x = ff(x) + x
 
-        return x
+            if rev_cross_att is not None:
+                data = cross_att(data, context = x) + data #no masking, as it doesn't matter if we write to padded data locations
+                data = cross_ff(data) + data
+
+        return x,data
 
 class DecoderO(nn.Module):
     def __init__(
