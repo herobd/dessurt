@@ -386,13 +386,12 @@ class QAImDocPerceiver(BaseModel):
                 x_diff = self.emb_x_resolution*(x_diff+self.final_image_size[1])/(2*self.final_image_size[1])
                 y_diff = self.emb_y_resolution*(y_diff+self.final_image_size[0])/(2*self.final_image_size[0])
 
-                #import pdb;pdb.set_trace()
-                xs[xs>=self.emb_x_resolution]=self.emb_x_resolution-1
-                ys[ys>=self.emb_y_resolution]=self.emb_y_resolution-1
-                hs[hs>=self.emb_h_resolution]=self.emb_h_resolution-1
-                ws[ws>=self.emb_w_resolution]=self.emb_w_resolution-1
-                x_diff[x_diff>=self.emb_x_resolution]=self.emb_x_resolution-1
-                y_diff[y_diff>=self.emb_y_resolution]=self.emb_y_resolution-1
+                xs = torch.clamp(xs,0,self.emb_x_resolution-1)
+                ys = torch.clamp(ys,0,self.emb_y_resolution-1)
+                ws = torch.clamp(ws,0,self.emb_w_resolution-1)
+                hs = torch.clamp(hs,0,self.emb_h_resolution-1)
+                x_diff = torch.clamp(x_diff,0,self.emb_x_resolution-1)
+                y_diff = torch.clamp(y_diff,0,self.emb_y_resolution-1)
 
                 xs,ys,hs,ws,x_diff,y_diff = [var.long() for var in (xs,ys,hs,ws,x_diff,y_diff)]
 
