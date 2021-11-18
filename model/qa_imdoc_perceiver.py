@@ -77,6 +77,8 @@ class QAImDocPerceiver(BaseModel):
         self.layoutlm_emb = config['layoutlm_emb'] if 'layoutlm_emb' in config else False
         if self.layoutlm_emb and 'final_image_size' not in config:
             print('WARNING: did you forget to specify final images size (for embedding)?') 
+        
+        fix_pos_enc = config.get('fix_pos_enc')
 
         self.image_size = config['image_size'] #start at 512?
         self.final_image_size = config['final_image_size'] if 'final_image_size' in config else self.image_size
@@ -153,7 +155,11 @@ class QAImDocPerceiver(BaseModel):
                     self.emb_w_resolution = 40
                 self.emb_max_h = 60 #if we're doing characters, this should be enough
                 self.emb_max_w = 60 #if we're doing characters, this should be enough
-                self.ocr_abspos_enc = ReturnPositionalEncodingSeq(input_dim,dropout=dropout,max_len=10000)
+                if fix_pos_enc:
+                    offset_start = out_length*3
+                else:
+                    offset_start = 0
+                self.ocr_abspos_enc = ReturnPositionalEncodingSeq(input_dim,dropout=dropout,max_len=10000,offset_start=offset_start)
                 assert input_dim%16==0
                 self.ocr_pos_emb_x = nn.Embedding(self.emb_x_resolution,4*(input_dim//16))
                 self.ocr_pos_emb_y = nn.Embedding(self.emb_y_resolution,4*(input_dim//16))
@@ -181,7 +187,11 @@ class QAImDocPerceiver(BaseModel):
 
         self.q_pos_1d_enc = PositionalEncoding(input_dim,dropout=dropout,max_len=out_length)
         if self.autoregressive:
-            self.a_pos_1d_enc = PositionalEncoding(output_dim,dropout=dropout,max_len=out_length)
+            if fix_pos_enc:
+                offset_start = out_length
+            else:
+                offset_start = 0
+            self.a_pos_1d_enc = PositionalEncoding(output_dim,dropout=dropout,max_len=out_length,offset_start=offset_start)
 
 
         self.patch_embed =  ConvPatchEmbed(
