@@ -72,6 +72,13 @@ class ParaQADataset(QADataset):
             self.q_types_noblock = {
                     'echo':1,
                     }
+        elif mode == 'echo2':
+            self.q_types = {
+                    'echo2':1,
+                    }
+            self.q_types_noblock = {
+                    'echo2':1,
+                    }
         elif mode == 'simple':
             self.q_types = {
                     'read_blanked':1,
@@ -740,6 +747,20 @@ class ParaQADataset(QADataset):
                     words.append(ocr[b]['paragraphs'][p]['lines'][l]['words'][w]['text'])
                 response = ' '.join(words)
                 qa.append(['>',response,[],None,None,None])
+            elif question_type == 'echo2':
+                words = []
+                firstb=None
+                firstl=None
+                for b,p,l,w in wordmap:
+                    if firstb is None or (b==firstb and l==firstl):
+                        firstb = b
+                        firstl = l
+                        continue
+                    words.append(ocr[b]['paragraphs'][p]['lines'][l]['words'][w]['text'])
+                response = ' '.join(words) + '‡'
+                qa.append(['>',response,[],None,None,None])
+            else:
+                raise NotImplementedError('Unknown question type: {}'.format(question_type))
 
             if len(qa)>=self.questions*10:
                 break
