@@ -106,6 +106,60 @@ class Attention(nn.Module):
         out = rearrange(out, '(b h) n d -> b n (h d)', h = h)
         return self.to_out(out)
 
+class Attention2Context(nn.Module):
+    def __init__(self, query_dim, context_dim1, context_dim2, heads = 8, dim_head = 64, v_dim=None):
+        super().__init__()
+        inner_dim = dim_head * heads
+        #context_dim = default(context_dim, query_dim)
+        if v_dim is None:
+            v_dim = query_dim
+        self.scale = dim_head ** -0.5
+        self.heads = heads
+
+        self.to_q = nn.Linear(query_dim, inner_dim, bias = True) #Official implementation uses bias (defaults to True)
+        self.to_k1 = nn.Linear(context_dim1, inner_dim, bias = True)
+        self.to_v1 = nn.Linear(context_dim1, v_dim, bias = True)
+        self.to_k2 = nn.Linear(context_dim2, inner_dim, bias = True)
+        self.to_v2 = nn.Linear(context_dim2, v_dim, bias = True)
+        self.to_out = nn.Linear(v_dim, v_dim, bias=True)
+
+    def forward(self, x, context1, context2, mask1 = None, mask2 = None):
+        h = self.heads
+
+        q = self.to_q(x)
+        #context = default(context, x)
+        k1 = self.to_k1(context1)
+        v1 = self.to_v1(context1)
+        k2 = self.to_k2(context2)
+        v2 = self.to_v2(context2)
+
+        k = torch.cat((k1,k2),dim=1)
+        v = torch.cat((v1,v2),dim=1)
+
+        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h = h), (q, k, v))
+
+        sim = einsum('b i d, b j d -> b i j', q, k) * self.scale
+
+        if mask1 is not None or mask2 is not None:
+            batch_size = context1.size(0)
+            device = context1.device
+            if mask1 is None:
+                mask1 = torch.BoolTensor(batch_size,context1.size(1)).fill_(1).to(device)
+            if mask2 is None:
+                mask2 = torch.BoolTensor(batch_size,context2.size(1)).fill_(1).to(device)
+            mask = torch.cat((mask1,mask2),dim=1)
+            mask = rearrange(mask, 'b ... -> b (...)')
+            max_neg_value = -torch.finfo(sim.dtype).max
+            mask = repeat(mask, 'b j -> (b h) () j', h = h)
+            sim.masked_fill_(~mask, max_neg_value)
+
+        # attention, what we cannot get enough of
+        attn = sim.softmax(dim = -1)
+
+        out = einsum('b i j, b j d -> b i d', attn, v)
+        out = rearrange(out, '(b h) n d -> b n (h d)', h = h)
+        return self.to_out(out)
+
 # main class
 
 class PerceiverI(nn.Module):
