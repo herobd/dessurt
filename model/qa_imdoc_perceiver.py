@@ -242,13 +242,22 @@ class QAImDocPerceiver(BaseModel):
                 latent_heads = self_heads,
                 latent_dim_head = qk_dim,
             )
-
-        self.decoder_answer = DecoderO(
-                queries_dim = output_dim,
-                latent_dim=latent_dim,
-                cross_heads = cross_heads,
-                cross_dim_head = qk_dim,
-                )
+        
+        if self.predict_from_input:
+            self.decoder_answer = DoubleDecoderO(
+                    queries_dim = output_dim,
+                    latent_dim=latent_dim,
+                    input_dim=input_dim,
+                    cross_heads = cross_heads,
+                    cross_dim_head = qk_dim,
+                    )
+        else:
+            self.decoder_answer = DecoderO(
+                    queries_dim = output_dim,
+                    latent_dim=latent_dim,
+                    cross_heads = cross_heads,
+                    cross_dim_head = qk_dim,
+                    )
 
         if len(perceiver_blocks[-1])==3 and perceiver_blocks[-1][2]:
             self.decoder_image = None
@@ -440,18 +449,22 @@ class QAImDocPerceiver(BaseModel):
 
         #Run through Perceiver
         #print('input tokens: {}'.format(input_tokens.size()))
-        latent, data_tokesn = self.perciever(input_tokens,input_padding_mask)
+        latent, data_tokens = self.perciever(input_tokens,input_padding_mask)
 
         if self.decoder_image is not None:
             im_feats = self.decoder_image(latent,query_im_tokens)
         else:
-            im_feats = data_tokesn[:,:num_im]
+            im_feats = data_tokens[:,:num_im]
 
         if self.autoregressive:
             query_a_tokens = a_tokens
         else:        
             query_a_tokens = self.query_a_tokens.expand(batch_size,-1,-  1)
-        a_tokens = self.decoder_answer(latent,query_a_tokens)
+
+        if self.predict_from_input:
+            a_tokens = self.decoder_answer(latent,data_tokens,query_a_tokens)
+        else:
+            a_tokens = self.decoder_answer(latent,query_a_tokens)
 
 
         ##############
@@ -478,7 +491,10 @@ class QAImDocPerceiver(BaseModel):
             while response_greedy_tokens[0,-1] != self.SEP_TOKEN and offset<self.max_pred_len:
                 ans_emb = self.text_embedding(next_response_greedy_token)
                 next_query_a_token = self.a_pos_1d_enc(ans_emb,offset=offset)
-                next_a_token = self.decoder_answer(latent,next_query_a_token)
+                if self.predict_from_input:
+                    next_a_token = self.decoder_answer(latent,data_tokens,next_query_a_token)
+                else:
+                    next_a_token = self.decoder_answer(latent,next_query_a_token)
                 response_decoded = self.answer_decode(next_a_token)
                 next_response_greedy_token = response_decoded.argmax(dim=2)
                 response_greedy_tokens = torch.cat((response_greedy_tokens,next_response_greedy_token),dim=1)
