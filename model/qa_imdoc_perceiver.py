@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import numpy as np
 from model.pairing_g_graph_layoutlm import  runLayoutLM
 from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding,ReturnPositionalEncodingSeq
-from model.perceiver_io import PerceiverI, DecoderO
+from model.perceiver_io import PerceiverI, DecoderO, DoubleDecoderO
 from model.swin_transformer import ConvPatchEmbed
 try:
     from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
@@ -73,6 +73,7 @@ class QAImDocPerceiver(BaseModel):
         self.ocr_seperate_tokens = config['ocr_tokens'] if 'ocr_tokens' in config else False
 
         self.autoregressive = config['autoregressive'] if 'autoregressive' in config else False
+        self.predict_from_input = config.get('predict_from_input',False)
 
         self.layoutlm_emb = config['layoutlm_emb'] if 'layoutlm_emb' in config else False
         if self.layoutlm_emb and 'final_image_size' not in config:
@@ -269,7 +270,7 @@ class QAImDocPerceiver(BaseModel):
                     cross_dim_head = qk_dim,
                     )
 
-        if len(perceiver_blocks[-1])==3 and perceiver_blocks[-1][2]:
+        if len(perceiver_blocks[-1])==3 and perceiver_blocks[-1][2] and not self.no_image:
             self.decoder_image = None
         else:
             self.decoder_image = DecoderO(
@@ -461,7 +462,7 @@ class QAImDocPerceiver(BaseModel):
         #print('input tokens: {}'.format(input_tokens.size()))
         latent, data_tokens = self.perciever(input_tokens,input_padding_mask)
 
-        if self.decoder_image is not None:
+        if self.decoder_image is not None or self.no_image:
             im_feats = self.decoder_image(latent,query_im_tokens)
         else:
             im_feats = data_tokens[:,:num_im]

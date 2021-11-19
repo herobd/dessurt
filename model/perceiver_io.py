@@ -33,11 +33,12 @@ def cache_fn(f):
 # helper classes
 
 class PreNorm(nn.Module):
-    def __init__(self, dim, fn, context_dim = None):
+    def __init__(self, dim, fn, context_dim = None, context_dim2 = None):
         super().__init__()
         self.fn = fn
         self.norm = nn.LayerNorm(dim)
         self.norm_context = nn.LayerNorm(context_dim) if exists(context_dim) else None
+        self.norm_context2 = nn.LayerNorm(context_dim2) if exists(context_dim2) else None
 
     def forward(self, x, **kwargs):
         x = self.norm(x)
@@ -46,6 +47,10 @@ class PreNorm(nn.Module):
             context = kwargs['context']
             normed_context = self.norm_context(context)
             kwargs.update(context = normed_context)
+        if exists(self.norm_context2):
+            context2 = kwargs['context2']
+            normed_context2 = self.norm_context2(context2)
+            kwargs.update(context2 = normed_context2)
 
         return self.fn(x, **kwargs)
 
@@ -123,13 +128,13 @@ class Attention2Context(nn.Module):
         self.to_v2 = nn.Linear(context_dim2, v_dim, bias = True)
         self.to_out = nn.Linear(v_dim, v_dim, bias=True)
 
-    def forward(self, x, context1, context2, mask1 = None, mask2 = None):
+    def forward(self, x, context, context2, mask1 = None, mask2 = None):
         h = self.heads
 
         q = self.to_q(x)
         #context = default(context, x)
-        k1 = self.to_k1(context1)
-        v1 = self.to_v1(context1)
+        k1 = self.to_k1(context)
+        v1 = self.to_v1(context)
         k2 = self.to_k2(context2)
         v2 = self.to_v2(context2)
 
@@ -141,10 +146,10 @@ class Attention2Context(nn.Module):
         sim = einsum('b i d, b j d -> b i j', q, k) * self.scale
 
         if mask1 is not None or mask2 is not None:
-            batch_size = context1.size(0)
-            device = context1.device
+            batch_size = context.size(0)
+            device = context.device
             if mask1 is None:
-                mask1 = torch.BoolTensor(batch_size,context1.size(1)).fill_(1).to(device)
+                mask1 = torch.BoolTensor(batch_size,context.size(1)).fill_(1).to(device)
             if mask2 is None:
                 mask2 = torch.BoolTensor(batch_size,context2.size(1)).fill_(1).to(device)
             mask = torch.cat((mask1,mask2),dim=1)
@@ -302,6 +307,50 @@ class DecoderO(nn.Module):
         # final linear out
 
         return self.to_logits(latents)
+
+class DoubleDecoderO(nn.Module):
+    def __init__(
+        self,
+        *,
+        queries_dim,
+        logits_dim = None,
+        latent_dim = 512,
+        input_dim =256,
+        cross_heads = 1,
+        cross_dim_head = 64,
+        decoder_ff = True
+    ):
+        super().__init__()
+        self.decoder_cross_attn = PreNorm(queries_dim, Attention2Context(queries_dim, latent_dim, input_dim, heads = cross_heads, dim_head = cross_dim_head, v_dim = queries_dim), context_dim = latent_dim, context_dim2=input_dim)
+        self.decoder_ff = PreNorm(queries_dim, FeedForward(queries_dim)) if decoder_ff else None
+
+        self.to_logits = nn.Linear(queries_dim, logits_dim) if exists(logits_dim) else nn.Identity()
+
+    def forward(
+        self,
+        latent_tokens,
+        input_tokens,
+        queries
+    ):
+        b = latent_tokens.shape[0]
+
+        # make sure queries contains batch dimension
+
+        if queries.ndim == 2:
+            queries = repeat(queries, 'n d -> b n d', b = b)
+
+        # cross attend from decoder queries to latents
+        
+        output = self.decoder_cross_attn(queries, context = latent_tokens, context2 = input_tokens)
+
+        # optional decoder feedforward
+
+        if exists(self.decoder_ff):
+            output = output + self.decoder_ff(output)
+
+        # final linear out
+
+        return self.to_logits(output)
 
 # Perceiver LM example
 
