@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import numpy as np
 from model.pairing_g_graph_layoutlm import  runLayoutLM
 from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding,ReturnPositionalEncodingSeq
-from model.perceiver_io import PerceiverI, DecoderO
+from model.perceiver_io import PerceiverI, DecoderO, DoubleDecoderO
 from model.swin_transformer import ConvPatchEmbed
 try:
     from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
@@ -73,10 +73,13 @@ class QAImDocPerceiver(BaseModel):
         self.ocr_seperate_tokens = config['ocr_tokens'] if 'ocr_tokens' in config else False
 
         self.autoregressive = config['autoregressive'] if 'autoregressive' in config else False
+        self.predict_from_input = config.get('predict_from_input',False)
 
         self.layoutlm_emb = config['layoutlm_emb'] if 'layoutlm_emb' in config else False
         if self.layoutlm_emb and 'final_image_size' not in config:
             print('WARNING: did you forget to specify final images size (for embedding)?') 
+        
+        fix_pos_enc = config.get('fix_pos_enc')
 
         self.image_size = config['image_size'] #start at 512?
         self.final_image_size = config['final_image_size'] if 'final_image_size' in config else self.image_size
@@ -153,7 +156,11 @@ class QAImDocPerceiver(BaseModel):
                     self.emb_w_resolution = 40
                 self.emb_max_h = 60 #if we're doing characters, this should be enough
                 self.emb_max_w = 60 #if we're doing characters, this should be enough
-                self.ocr_abspos_enc = ReturnPositionalEncodingSeq(input_dim,dropout=dropout,max_len=10000)
+                if fix_pos_enc:
+                    offset_start = out_length*3
+                else:
+                    offset_start = 0
+                self.ocr_abspos_enc = ReturnPositionalEncodingSeq(input_dim,dropout=dropout,max_len=10000,offset_start=offset_start)
                 assert input_dim%16==0
                 self.ocr_pos_emb_x = nn.Embedding(self.emb_x_resolution,4*(input_dim//16))
                 self.ocr_pos_emb_y = nn.Embedding(self.emb_y_resolution,4*(input_dim//16))
@@ -181,7 +188,11 @@ class QAImDocPerceiver(BaseModel):
 
         self.q_pos_1d_enc = PositionalEncoding(input_dim,dropout=dropout,max_len=out_length)
         if self.autoregressive:
-            self.a_pos_1d_enc = PositionalEncoding(output_dim,dropout=dropout,max_len=out_length)
+            if fix_pos_enc:
+                offset_start = out_length
+            else:
+                offset_start = 0
+            self.a_pos_1d_enc = PositionalEncoding(output_dim,dropout=dropout,max_len=out_length,offset_start=offset_start)
 
 
         self.patch_embed =  ConvPatchEmbed(
@@ -242,15 +253,24 @@ class QAImDocPerceiver(BaseModel):
                 latent_heads = self_heads,
                 latent_dim_head = qk_dim,
             )
+        
+        if self.predict_from_input:
+            self.decoder_answer = DoubleDecoderO(
+                    queries_dim = output_dim,
+                    latent_dim=latent_dim,
+                    input_dim=input_dim,
+                    cross_heads = cross_heads,
+                    cross_dim_head = qk_dim,
+                    )
+        else:
+            self.decoder_answer = DecoderO(
+                    queries_dim = output_dim,
+                    latent_dim=latent_dim,
+                    cross_heads = cross_heads,
+                    cross_dim_head = qk_dim,
+                    )
 
-        self.decoder_answer = DecoderO(
-                queries_dim = output_dim,
-                latent_dim=latent_dim,
-                cross_heads = cross_heads,
-                cross_dim_head = qk_dim,
-                )
-
-        if len(perceiver_blocks[-1])==3 and perceiver_blocks[-1][2]:
+        if len(perceiver_blocks[-1])==3 and perceiver_blocks[-1][2] and not self.no_image:
             self.decoder_image = None
         else:
             self.decoder_image = DecoderO(
@@ -440,18 +460,22 @@ class QAImDocPerceiver(BaseModel):
 
         #Run through Perceiver
         #print('input tokens: {}'.format(input_tokens.size()))
-        latent, data_tokesn = self.perciever(input_tokens,input_padding_mask)
+        latent, data_tokens = self.perciever(input_tokens,input_padding_mask)
 
-        if self.decoder_image is not None:
+        if self.decoder_image is not None or self.no_image:
             im_feats = self.decoder_image(latent,query_im_tokens)
         else:
-            im_feats = data_tokesn[:,:num_im]
+            im_feats = data_tokens[:,:num_im]
 
         if self.autoregressive:
             query_a_tokens = a_tokens
         else:        
             query_a_tokens = self.query_a_tokens.expand(batch_size,-1,-  1)
-        a_tokens = self.decoder_answer(latent,query_a_tokens)
+
+        if self.predict_from_input:
+            a_tokens = self.decoder_answer(latent,data_tokens,query_a_tokens)
+        else:
+            a_tokens = self.decoder_answer(latent,query_a_tokens)
 
 
         ##############
@@ -478,7 +502,10 @@ class QAImDocPerceiver(BaseModel):
             while response_greedy_tokens[0,-1] != self.SEP_TOKEN and offset<self.max_pred_len:
                 ans_emb = self.text_embedding(next_response_greedy_token)
                 next_query_a_token = self.a_pos_1d_enc(ans_emb,offset=offset)
-                next_a_token = self.decoder_answer(latent,next_query_a_token)
+                if self.predict_from_input:
+                    next_a_token = self.decoder_answer(latent,data_tokens,next_query_a_token)
+                else:
+                    next_a_token = self.decoder_answer(latent,next_query_a_token)
                 response_decoded = self.answer_decode(next_a_token)
                 next_response_greedy_token = response_decoded.argmax(dim=2)
                 response_greedy_tokens = torch.cat((response_greedy_tokens,next_response_greedy_token),dim=1)
