@@ -92,10 +92,10 @@ class HWRWithEmb(BaseModel):
         self.embedder = ResConvPatchEmbed(32,embed_dim=0)
         #self.pool = nn.AvgPool2d((4,1))
         self.pool = nn.Sequential(
-                nn.Conv1d(512,512,(4,3),1,(0,1)),
+                nn.Conv2d(512,512,(4,3),1,(0,1)),
                 nn.GroupNorm(getGroupSize2(512),512),
                 #nn.Dropout2d(p=0.0625,inplace=True),
-                nn.ReLU(True),
+                nn.ReLU(True)
                 )
         self.conv1d = nn.Sequential(
                 #nn.Conv1d(512,512,3,1,1),
@@ -110,7 +110,8 @@ class HWRWithEmb(BaseModel):
                 )
         self.pred = nn.Sequential(
                 nn.ReLU(True),
-                nn.Conv1d(512,n_class,1,1,0),
+                #nn.Conv1d(512,n_class,1,1,0),
+                nn.ConvTranspose1d(512,n_class,2,2,0),
                 nn.LogSoftmax(dim=1)
                 )
 
@@ -121,4 +122,4 @@ class HWRWithEmb(BaseModel):
         x = self.pool(x).view(b,dim,w)
         x = self.conv1d(x) + x
         x = self.pred(x)
-        return x.permute(0,2,1) #to batch,width,dim as recurrent output
+        return x.permute(2,0,1) #batch,dim,witdh to width,batch,dim as recurrent output
