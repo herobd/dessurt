@@ -107,23 +107,11 @@ class HWRTrainer(BaseTrainer):
         #print("WARNING EVAL")
 
         ##tic=timeit.default_timer()
-        if self.curriculum:
-            lesson =  self.curriculum.getLesson(iteration)
-        if self.curriculum and 'synth' in lesson:
-            if self.synth_data_loader_iter is None:
-                self.synth_data_loader_iter = self.refresh_synth_data()
-            try:
-                instance = self.synth_data_loader_iter.next()
-            except StopIteration:
-                #self.synth_data_loader.dataset.refresh()
-                self.synth_data_loader_iter = self.refresh_synth_data()
-                instance = self.synth_data_loader_iter.next()
-        else:
-            try:
-                instance = self.data_loader_iter.next()
-            except StopIteration:
-                self.data_loader_iter = iter(self.data_loader)
-                instance = self.data_loader_iter.next()
+        try:
+            instance = self.data_loader_iter.next()
+        except StopIteration:
+            self.data_loader_iter = iter(self.data_loader)
+            instance = self.data_loader_iter.next()
         ##toc=timeit.default_timer()
         ##print('data: '+str(toc-tic))
         
