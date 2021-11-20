@@ -1,0 +1,65 @@
+{
+    "name": "synth_ocr_emb_pretrain",
+    "cuda": true,
+    "gpu": 0,
+    "save_mode": "state_dict",
+    "override": true,
+    "super_computer":true,
+    "data_loader": {
+        "data_set_name": "SynthOCRDataset",
+
+        "data_dir": "../data/fonts/",
+        "batch_size": 128,
+        "shuffle": true,
+        "#num_workers": 6,
+        "num_workers": 0,
+
+        "img_height": 32,
+	"min_text_height": 10,
+	"max_width": 800,
+        "char_file": "IAM_char_set.json"
+    },
+    "validation": {
+        "shuffle": false,
+        "batch_size": 32
+    },
+
+    
+    "lr_scheduler_type": "none",
+ 
+    "optimizer_type": "Adam",
+    "optimizer": {
+        "lr": 0.001,
+        "weight_decay": 0
+    },
+    "loss": {
+        "recog": "CTCLoss"
+    },
+    "loss_weights": {
+        "recog": 1
+    },
+    "loss_params": 
+        {
+        },
+    "metrics": [],
+    "trainer": {
+        "class": "HWRTrainer",
+        "iterations": 200000,
+        "save_dir": "../saved/",
+        "val_step": 5000,
+        "save_step": 25000,
+        "save_step_minor": 250,
+        "log_step": 100,
+        "verbosity": 1,
+        "monitor": "loss",
+        "monitor_mode": "none",
+        "skip_auto": true,
+
+
+        "use_learning_schedule": false
+    },
+    "arch": "HWRWithEmb", 
+    "model": {
+        "num_class": 80
+    }
+}

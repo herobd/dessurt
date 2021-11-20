@@ -286,6 +286,8 @@ class HWRTrainer(BaseTrainer):
 
         losses = {}
 
+        gt = instance['gt']
+
         pred = self.model(image)
         if type(pred) is not list:
             batch_size = pred.size(1)
@@ -295,7 +297,7 @@ class HWRTrainer(BaseTrainer):
             
             pred_strs=[]
             for i,gt_line in enumerate(gt):
-                logits = pred[:,i]
+                logits = pred[:,i].cpu().detach().numpy()
                 pred_str, raw_pred = string_utils.naive_decode(logits)
                 pred_str = string_utils.label2str_single(pred_str, self.idx_to_char, False)
                 pred_strs.append(pred_str)
