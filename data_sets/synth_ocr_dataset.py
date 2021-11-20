@@ -98,11 +98,11 @@ class SynthOCRDataset(Dataset):
             if len(self.generated_words)==0:
                 self.generated_words = self.generator.generate()
             text,word_img = self.generated_words[0]
-            if word_img.shape[0]<6 or word_img.shape[1]<6:
-                self.generated_words = self.generated_words[1:]
-                continue
             scale = word_height/word_img.shape[0]
             new_width = round(scale*word_img.shape[1])
+            if word_img.shape[0]<6 or word_img.shape[1]<6 or new_width<4:
+                self.generated_words = self.generated_words[1:]
+                continue
             if x+new_width > self.max_width:
                 break #end here
             word_img = img_f.resize(word_img,(word_height,new_width))
