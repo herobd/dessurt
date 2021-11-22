@@ -417,6 +417,7 @@ class QAImDocPerceiver(BaseModel):
                 pos_emb = torch.zeros_like(ocr_tokens)
                 pos_emb[is_first_line]=0.5
                 pos_emb[~is_first_line]=-0.5
+                import pdb;pdb.set_trace()
                 ocr_tokens += pos_emb + self.ocr_abspos_enc(pos_emb.size(1))
             elif self.layoutlm_emb:
                 x_diff = xs - torch.roll(xs,1,dims=1)
