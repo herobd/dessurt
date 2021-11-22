@@ -24,7 +24,8 @@ from data_sets import nobrain_graph_pair
 from data_sets import forms_graph_pair
 from data_sets import forms_box_pair
 from data_sets import funsd_graph_pair
-from data_sets import funsd_box_detect
+from data_sets import synth_ocr_dataset
+from data_sets import synth_ocr_dataset
 from data_sets import adobe_graph_pair
 from data_sets import adobe_box_detect
 from data_sets.forms_box_pair import FormsBoxPair
@@ -142,7 +143,7 @@ def getDataLoader(config,split,rank=None,world_size=None):
         elif data_set_name=='FormsGraphPair':
             return withCollate(forms_graph_pair.FormsGraphPair,forms_graph_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='FUNSDBoxDetect':
-            return withCollate(funsd_box_detect.FUNSDBoxDetect,funsd_box_detect.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+            return withCollate(synth_ocr_dataset.FUNSDBoxDetect,synth_ocr_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='FUNSDGraphPair':
             return withCollate(funsd_graph_pair.FUNSDGraphPair,funsd_graph_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='FUNSDQA':
@@ -157,6 +158,8 @@ def getDataLoader(config,split,rank=None,world_size=None):
             return withCollate(iam_qa.IAMQA,iam_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='IAMNER':
             return withCollate(iam_ner.IAMNER,iam_ner.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='SynthOCRDataset':
+            return withCollate(synth_ocr_dataset.SynthOCRDataset,synth_ocr_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='CensusQA':
             return withCollate(census_qa.CensusQA,census_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='AdobeBoxDetect':

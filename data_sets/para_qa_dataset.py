@@ -759,8 +759,8 @@ class ParaQADataset(QADataset):
                     words.append(ocr[b]['paragraphs'][p]['lines'][l]['words'][w]['text'])
                 response = ' '.join(words) + '‡'
                 qa.append(['>',response,[],None,None,None])
-            else:
-                raise NotImplementedError('Unknown question type: {}'.format(question_type))
+            #else:
+            #    raise NotImplementedError('Unknown question type: {}'.format(question_type))
 
             if len(qa)>=self.questions*10:
                 break

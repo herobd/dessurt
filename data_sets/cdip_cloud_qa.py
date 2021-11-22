@@ -2,6 +2,7 @@
 #Dowloads a chunk to use and starts downloading another
 import numpy as np
 import os
+import shutil
 import math, random, string, re
 from collections import defaultdict, OrderedDict
 from utils.funsd_annotations import createLines
@@ -292,10 +293,10 @@ def loader(dataset):
                     did_something = True
 
 def remove(dataset,tar_name):
-    print('CDIP removing dir for'+tar_name)
+    print('CDIP removing dir for '+tar_name)
     name = tar_name[:3]
     dir_path = os.path.join(dataset.cache_dir,name)
-    os.remove(dir_path)
+    shutil.rmtree(dir_path)
 
 def download(dataset,tar_name,i):
     outpath = os.path.join(dataset.tar_dir,tar_name)
