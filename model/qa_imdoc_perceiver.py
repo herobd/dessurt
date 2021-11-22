@@ -168,7 +168,6 @@ class QAImDocPerceiver(BaseModel):
                 self.ocr_pos_emb_h = nn.Embedding(self.emb_max_h,(input_dim//16))
                 self.ocr_diff_emb_x = nn.Embedding(self.emb_x_resolution,3*(input_dim//16))
                 self.ocr_diff_emb_y = nn.Embedding(self.emb_y_resolution,3*(input_dim//16))
-
             else:
                 self.ocr_emb = nn.Sequential(
                         nn.Conv1d(self.ocr_out_dim,input_dim,3,padding=1), #this will mix neighboring instances....
