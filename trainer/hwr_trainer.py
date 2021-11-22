@@ -107,23 +107,11 @@ class HWRTrainer(BaseTrainer):
         #print("WARNING EVAL")
 
         ##tic=timeit.default_timer()
-        if self.curriculum:
-            lesson =  self.curriculum.getLesson(iteration)
-        if self.curriculum and 'synth' in lesson:
-            if self.synth_data_loader_iter is None:
-                self.synth_data_loader_iter = self.refresh_synth_data()
-            try:
-                instance = self.synth_data_loader_iter.next()
-            except StopIteration:
-                #self.synth_data_loader.dataset.refresh()
-                self.synth_data_loader_iter = self.refresh_synth_data()
-                instance = self.synth_data_loader_iter.next()
-        else:
-            try:
-                instance = self.data_loader_iter.next()
-            except StopIteration:
-                self.data_loader_iter = iter(self.data_loader)
-                instance = self.data_loader_iter.next()
+        try:
+            instance = self.data_loader_iter.next()
+        except StopIteration:
+            self.data_loader_iter = iter(self.data_loader)
+            instance = self.data_loader_iter.next()
         ##toc=timeit.default_timer()
         ##print('data: '+str(toc-tic))
         
@@ -298,6 +286,8 @@ class HWRTrainer(BaseTrainer):
 
         losses = {}
 
+        gt = instance['gt']
+
         pred = self.model(image)
         if type(pred) is not list:
             batch_size = pred.size(1)
@@ -307,7 +297,7 @@ class HWRTrainer(BaseTrainer):
             
             pred_strs=[]
             for i,gt_line in enumerate(gt):
-                logits = pred[:,i]
+                logits = pred[:,i].cpu().detach().numpy()
                 pred_str, raw_pred = string_utils.naive_decode(logits)
                 pred_str = string_utils.label2str_single(pred_str, self.idx_to_char, False)
                 pred_strs.append(pred_str)
