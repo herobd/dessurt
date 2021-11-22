@@ -149,6 +149,9 @@ class QAImDocPerceiver(BaseModel):
                     offset_start = 0
                 self.ocr_emb = nn.Linear(self.ocr_out_dim,input_dim,bias=False)
                 self.ocr_abspos_enc = ReturnPositionalEncodingSeq(input_dim,dropout=dropout,max_len=10000,offset_start=offset_start)
+            elif self.layoutlm_emb=='debug2':
+                self.ocr_emb = nn.Linear(self.ocr_out_dim,input_dim,bias=False)
+                self.ocr_abspos_enc = nn.Embedding(1000,input_dim)
             elif self.layoutlm_emb:
                 self.ocr_emb = nn.Linear(self.ocr_out_dim,input_dim,bias=False)
                 if config.get('low_emb_res'):
@@ -418,6 +421,8 @@ class QAImDocPerceiver(BaseModel):
                 pos_emb[~is_first_line]=-0.5
                 import pdb;pdb.set_trace()
                 ocr_tokens += pos_emb + self.ocr_abspos_enc(pos_emb.size(1))
+            elif self.layoutlm_emb=='debug2':
+                ocr_tokens +=  self.ocr_abspos_enc(torch.arange(ocr_tokens.size(1))[None,...].to(device))
             elif self.layoutlm_emb:
                 x_diff = xs - torch.roll(xs,1,dims=1)
                 y_diff = ys - torch.roll(ys,1,dims=1)
