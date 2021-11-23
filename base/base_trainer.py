@@ -9,6 +9,7 @@ import time
 from utils.util import ensure_dir
 from collections import defaultdict
 from model import *
+import re
 try:
     from torch.optim.swa_utils import AveragedModel
 except ModuleNotFoundError:
@@ -541,6 +542,39 @@ class BaseTrainer:
             did_brain_surgery=False
             remove_keys=[]
             checkpoint['state_dict'] = {(k if not k.startswith('module') else k[7:]):v for k,v in checkpoint['state_dict'].items() if 'relative_position_index' not in k}
+
+            ##FIX
+            needs_fix=False
+            max_found_ele = defaultdict(int)
+            for key in checkpoint['state_dict'].keys():
+                r=re.match(r'perciever(.*)\.cross_blocks\.(\d+)\.(\d+)',key)
+                if r is not None:
+                    name = (r[1],r[2])
+                    max_found_ele[name] = max(max_found_ele[name],int(r[3]))
+            to_move={}
+            for name,max_ele in max_found_ele.items():
+                if max_ele<4: #pre-adding rev cross attention, needs fixed
+                    name,level = name
+                    for key in checkpoint['state_dict'].keys():
+                        r=re.match('perciever{}.cross_blocks\.{}\.(\d+)\.(.+)'.format(name,level),key)
+                        if r is not None:
+                            place = r[1]
+                            remainder = r[2]
+                            if place=='2':
+                                newplace=4
+                            elif place=='3':
+                                newplace=5
+                            else:
+                                continue #doesn't need adjusted
+                            to_move[key]='perciever{}.cross_blocks.{}.{}.{}'.format(name,level,newplace,remainder)
+            for old,new in to_move.items():
+                print('renaming {} to {}'.format(old,new))
+                checkpoint['state_dict'][new]=checkpoint['state_dict'][old]
+                del checkpoint['state_dict'][old]
+
+            ##END FIX
+
+
             keys=checkpoint['state_dict'].keys()
             init_state_dict = self.model.state_dict()
             for key in keys:
