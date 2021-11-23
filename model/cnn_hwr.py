@@ -89,7 +89,7 @@ class HWRWithEmb(BaseModel):
     def __init__(self,config):
         super().__init__(config)
         n_class = config['num_class']
-        self.embedder = ResConvPatchEmbed(32,embed_dim=0)
+        self.embedder = ResConvPatchEmbed(32,embed_dim=1)
         #self.pool = nn.AvgPool2d((4,1))
         self.pool = nn.Sequential(
                 nn.Conv2d(512,512,(4,3),1,(0,1)),
