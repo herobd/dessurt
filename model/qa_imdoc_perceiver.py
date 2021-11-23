@@ -417,8 +417,8 @@ class QAImDocPerceiver(BaseModel):
             if self.layoutlm_emb=='debug':
                 is_first_line = torch.abs(ys-ys[:,0:1])<2
                 pos_emb = torch.zeros_like(ocr_tokens)
-                pos_emb[is_first_line]=0.5
-                pos_emb[~is_first_line]=-0.5
+                pos_emb[is_first_line,:10]=0.5
+                pos_emb[~is_first_line,10:20]=0.5
                 import pdb;pdb.set_trace()
                 ocr_tokens += pos_emb + self.ocr_abspos_enc(pos_emb.size(1))
             elif self.layoutlm_emb=='debug2':
