@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import numpy as np
 from model.pairing_g_graph_layoutlm import  runLayoutLM
 from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding,ReturnPositionalEncodingSeq
-from model.perceiver_io import PerceiverI, DecoderO, DoubleDecoderO
+from model.perceiver_io import PerceiverI, DecoderO, DoubleDecoderO, AutoRegressiveAttention
 from model.swin_transformer import ConvPatchEmbed
 try:
     from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
@@ -101,6 +101,8 @@ class QAImDocPerceiver(BaseModel):
         qk_dim = 32 #per collab example
         self.out_length = out_length
 
+        num_answer_att = config.get('num_answer_att')
+
         if isinstance(self.image_size,int):
             self.image_size = (self.image_size,self.image_size)
         #max_dist = math.sqrt(self.image_size[0]**2 + self.image_size[1]**2)
@@ -142,7 +144,7 @@ class QAImDocPerceiver(BaseModel):
         self.zero_hot_conf = (1-self.one_hot_conf)/(self.ocr_out_dim-1)
 
         if self.ocr_seperate_tokens:
-            if self.layoutlm_emb=='debug':
+            if self.layoutlm_emb=='debug' or self.layoutlm_emb=='debug3':
                 if fix_pos_enc:
                     offset_start = out_length*3
                 else:
@@ -324,6 +326,9 @@ class QAImDocPerceiver(BaseModel):
             #We'll precompute the query tokens for the text answer
             self.query_a_tokens = nn.Parameter(torch.FloatTensor(1,out_length,output_dim).normal_())
 
+        if num_answer_att is not None:
+            self.answer_autor_att = nn.Sequential(*[AutoRegressiveAttention(output_dim,out_length,main_heads=cross_heads,main_dim_head=qk_dim) for i in range(num_answer_att)])
+
 
         #t#self.opt_history=defaultdict(list)#t#
         self.overwrite_char_prob=False
@@ -416,13 +421,15 @@ class QAImDocPerceiver(BaseModel):
         if num_ocr>0:
             if self.layoutlm_emb=='debug':
                 is_first_line = torch.abs(ys-ys[:,0:1])<2
-                pos_emb = torch.zeros_like(ocr_tokens)
-                pos_emb[is_first_line,:10]=0.5
-                pos_emb[~is_first_line,10:20]=0.5
-                import pdb;pdb.set_trace()
-                ocr_tokens += pos_emb + self.ocr_abspos_enc(pos_emb.size(1))
+                ocr_tokens[is_first_line][:,:10]+=0.5
+                ocr_tokens[~is_first_line][:,:10]+=-0.5
+                ocr_tokens[~is_first_line][:,10:20]+=0.5
+                ocr_tokens[is_first_line][:,10:20]+=-0.5
+                ocr_tokens += self.ocr_abspos_enc(ocr_tokens.size(1))
             elif self.layoutlm_emb=='debug2':
                 ocr_tokens +=  self.ocr_abspos_enc(torch.arange(ocr_tokens.size(1))[None,...].to(device))
+            elif self.layoutlm_emb=='debug3':
+                ocr_tokens += self.ocr_abspos_enc(ocr_tokens.size(1))
             elif self.layoutlm_emb:
                 x_diff = xs - torch.roll(xs,1,dims=1)
                 y_diff = ys - torch.roll(ys,1,dims=1)
@@ -492,8 +499,16 @@ class QAImDocPerceiver(BaseModel):
 
         if self.predict_from_input:
             a_tokens = self.decoder_answer(latent,data_tokens,query_a_tokens)
+
         else:
             a_tokens = self.decoder_answer(latent,query_a_tokens)
+
+        if self.answer_autor_att is not None:
+            a_tokens = self.answer_autor_att(a_tokens)
+            if self.predict_from_input:
+                a_tokens = self.decoder_answer(latent,data_tokens,query_a_tokens)
+            else:
+                a_tokens = self.decoder_answer(latent,query_a_tokens)
 
 
         ##############
