@@ -1,48 +1,44 @@
 {
-    "name": "test",
+    "name": "synthqa_perceiverAutoR_doublecross2predict_fonts_small_15",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
-        "data_set_name": "MultipleDataset",
-        "data_dir": "",
-        "shuffle": true,
-        "prefetch_factor": 5,
-        "persistent_workers": true,
-        "batch_size": 1,
+        "data_set_name": "SynthQADocDataset",
+	"pretrain": true,
+        "fontdir": "../data/fonts",
+        "textdir": "../data/",
+        "data_dir": "../data/english4line_fonts",
+        "include_ocr": false,
+        "batch_size": 5,
         "num_workers": 4,
-        "datasets": [
-            {
-                "freq": 0.8,
-                "config": {
-                    "data_set_name": "SynthParaQA",
-                    "data_dir": "../data/fonts",
-		    "mode": "blind",
-                    "batch_size": 1,
-                    "num_workers": 4,
-                    "rescale_range": [
-                        0.9,
-                        1.1
-                    ],
-                    "crop_params": {
-                        "crop_size": [
-                            768,768
-                        ],
-                        "pad": 0,
-                        "rot_degree_std_dev": 1
-                    },
-                    "questions": 1,
-                    "max_qa_len_in": 60,
-                    "max_qa_len_out": 250,
-                    "image_size": [
-                        760,760
-                    ],
-                    "prefetch_factor": 10,
-                    "persistent_workers": true
-                }
-            }
-        ]
+        "rescale_range": [1.0,1.0],
+        "crop_params": {
+                "crop_size":[192,384],
+                "pad":0,
+                "rot_degree_std_dev": 1
+            },
+	"questions": 1,
+	"max_qa_len_in": 70,
+	"max_qa_len_out": 250,
+        "min_entries": null,
+        "max_entries": 2,
+	"use_read": 0.01,
+	"multiline": 0.000001,
+        "change_size": true,
+	"word_questions": "simple",
+	"do_masks": true,
+        "text_height": 32,
+        "image_size": [192,384],
+        "max_chars": 10,
+        "min_chars": 1,
+        "use_before_refresh": 99999999999999999999,
+        "set_size": 500000,
+        "num_processes": -1,
+        "gen_type": "veryclean",
+        "char_file": "../data/english_char_set.json",
+        "shuffle": true
 
 
     },
@@ -79,7 +75,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 400000,
-        "accum_grad_steps": 0,
+        "accum_grad_steps": 2,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
@@ -107,12 +103,15 @@
     "model": {
 	    "grid_ocr": false,
 	    "ocr_tokens": false,
+	    "fix_pos_enc": true,
+
 	    "autoregressive": true,
 	    "predict_from_input": true,
 	    "num_answer_att": 2,
+
 	    "char_output": true,
 	    "char_tokens": true,
-            "image_size": [768,768],
+            "image_size": [192,384],
 	    "use_res_cnn_embed": true,
             "pre_trained": {
                 "patch_emb": "saved/synth_ocr_emb_pretrain_slow/checkpoint-latest.pth"

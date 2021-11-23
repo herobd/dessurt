@@ -49,6 +49,7 @@ class ResConvPatchEmbed(nn.Module):
 
         self.proj = nn.Conv2d(512, embed_dim, kernel_size=1, stride=1)
 
+        self.norm = nn.GroupNorm(getGroupSize2(embed_dim),embed_dim)
 
         self.cnn = nn.Sequential(
                 nn.Conv2d(in_chans, 64, kernel_size=5, stride=1, padding=2),
@@ -80,10 +81,10 @@ class ResConvPatchEmbed(nn.Module):
     def forward(self, x):
         B, C, H, W = x.shape
         x = self.cnn(x)
-        x = self.proj(x).flatten(2).transpose(1, 2)  # B Ph*Pw C
+        x = self.proj(x).flatten(2)# B C h*w #.transpose(1, 2)  # B Ph*Pw C
         if self.norm is not None:
             x = self.norm(x)
-        return x
+        return x.transpose(1,2)#B h*w C
 
 class HWRWithEmb(BaseModel):
     def __init__(self,config):
