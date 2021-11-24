@@ -70,7 +70,7 @@ def main(rank,config, resume,world_size=None):
                             init_method='file:///fslhome/brianld/job_comm/{}'.format(config['name']),
                             rank=rank,
                             world_size=world_size,
-                            timeout=datetime.timedelta(0, 3600))
+                            timeout=datetime.timedelta(0, 5600))
                             #timeout=datetime.timedelta(0, 22000))
             logger.info('{} finished dist.init_process_group() <<<<'.format(rank))
 
@@ -86,7 +86,7 @@ def main(rank,config, resume,world_size=None):
     #valid_data_loader = data_loader.split_validation()
 
     model = eval(config['arch'])(config['model'])
-    model.summary()
+    #model.summary()
 
     if type(config['loss'])==dict:
         loss={}#[eval(l) for l in config['loss']]

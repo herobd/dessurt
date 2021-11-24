@@ -112,6 +112,9 @@ class HWRTrainer(BaseTrainer):
         except StopIteration:
             self.data_loader_iter = iter(self.data_loader)
             instance = self.data_loader_iter.next()
+
+        if instance is None:
+            return {}
         ##toc=timeit.default_timer()
         ##print('data: '+str(toc-tic))
         
@@ -145,7 +148,7 @@ class HWRTrainer(BaseTrainer):
                     p.grad[torch.isnan(p.grad)]=0
 
 
-            torch.nn.utils.clip_grad_value_(self.model.parameters(),2)
+            torch.nn.utils.clip_grad_value_(self.model.parameters(),1)
             meangrad=0
             count=0
             for m in self.model.parameters():
