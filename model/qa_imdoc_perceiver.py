@@ -7,6 +7,7 @@ from model.pairing_g_graph_layoutlm import  runLayoutLM
 from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding,ReturnPositionalEncodingSeq
 from model.perceiver_io import PerceiverI, DecoderO, DoubleDecoderO, AutoRegressiveAttention
 from model.swin_transformer import ConvPatchEmbed
+from model.cnn_hwr import ResConvPatchEmbed
 try:
     from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
     from transformers import LayoutLMTokenizer, LayoutLMModel
@@ -205,13 +206,18 @@ class QAImDocPerceiver(BaseModel):
                 offset_start = 0
             self.a_pos_1d_enc = PositionalEncoding(output_dim,dropout=dropout,max_len=out_length,offset_start=offset_start)
 
-
-        self.patch_embed =  ConvPatchEmbed(
-                img_size=self.image_size, 
-                embed_dim=input_dim,
-                norm_layer=nn.LayerNorm,
-                lighter=lighter_conv_patch_emb,
-                in_chans=2) #now includes the mask channel
+        if config.get('use_res_cnn_embed'):
+            self.patch_embed = ResConvPatchEmbed(
+                    img_size=self.image_size,
+                    embed_dim=input_dim,
+                    in_chans=2)
+        else:
+            self.patch_embed =  ConvPatchEmbed(
+                    img_size=self.image_size, 
+                    embed_dim=input_dim,
+                    norm_layer=nn.LayerNorm,
+                    lighter=lighter_conv_patch_emb,
+                    in_chans=2) #now includes the mask channel
         if pre_trained_patch_emb is not None:
             checkpoint = torch.load(pre_trained_patch_emb, map_location=lambda storage, loc: storage)
             pe_state_dict=self.patch_embed.state_dict()
