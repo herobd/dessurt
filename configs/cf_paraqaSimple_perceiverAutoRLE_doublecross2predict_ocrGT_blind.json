@@ -1,5 +1,5 @@
 {
-    "name": "paraqaSimple_perceiverAutoRLE_doublecross2predict_ocrGT_blind",
+    "name": "paraqa_perceiverAutoRLE_doublecross2predict_ocrGT_blind",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -9,7 +9,6 @@
         "shuffle": true,
 	"gt_ocr": true,
 	    "data_dir": "../data/fonts",
-	    "mode": "simple",
 	    "batch_size": 3,
 	    "num_workers": 4,
 	    "rescale_range": [
