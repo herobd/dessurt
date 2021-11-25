@@ -176,7 +176,11 @@ class QAImDocPerceiver(BaseModel):
                     offset_start = out_length*3
                 else:
                     offset_start = 0
-                self.ocr_abspos_enc = ReturnPositionalEncodingSeq(input_dim,dropout=dropout,max_len=10000,offset_start=offset_start)
+                if self.layoutlm_emb == 'full_learned':
+                    self.ocr_abspos_enc = nn.Parameter(torch.zeros(1, 1000, input_dim))
+                    trunc_normal_(self.ocr_abspos_enc, std=.02)
+                else:
+                    self.ocr_abspos_enc = ReturnPositionalEncodingSeq(input_dim,dropout=dropout,max_len=10000,offset_start=offset_start)
                 assert input_dim%16==0
                 self.ocr_pos_emb_x = nn.Embedding(self.emb_x_resolution,4*(input_dim//16))
                 self.ocr_pos_emb_y = nn.Embedding(self.emb_y_resolution,4*(input_dim//16))
@@ -207,7 +211,12 @@ class QAImDocPerceiver(BaseModel):
                 offset_start = out_length
             else:
                 offset_start = 0
-            self.a_pos_1d_enc = PositionalEncoding(output_dim,dropout=dropout,max_len=out_length,offset_start=offset_start)
+
+            if self.layoutlm_emb == 'full_learned':
+                self.a_pos_1d_enc = nn.Parameter(torch.zeros(1, out_length, input_dim))
+                trunc_normal_(self.a_pos_1d_enc, std=.02)
+            else:
+                self.a_pos_1d_enc = PositionalEncoding(output_dim,dropout=dropout,max_len=out_length,offset_start=offset_start)
 
         if config.get('use_res_cnn_embed'):
             self.patch_embed = ResConvPatchEmbed(
@@ -414,7 +423,10 @@ class QAImDocPerceiver(BaseModel):
             a_tokens = qa_tokens[:,num_q:] 
             if a_tokens.size(1) > self.out_length:
                 a_tokens = a_tokens[:,:self.out_length]
-            a_tokens = self.a_pos_1d_enc(a_tokens)
+            if self.layoutlm_emb == 'full_learned':
+                a_tokens += self.a_pos_1d_enc[:,a_tokens.size(1)]
+            else:
+                a_tokens = self.a_pos_1d_enc(a_tokens)
         else:
             #just embed question
             q_tokens = self.text_embedding(q_t['input_ids'].to(device))
@@ -479,8 +491,10 @@ class QAImDocPerceiver(BaseModel):
                     self.ocr_diff_emb_x(x_diff),
                     self.ocr_diff_emb_y(y_diff)
                     ],dim=2)
-
-                ocr_tokens += pos_emb + self.ocr_abspos_enc(pos_emb.size(1))
+                if self.layoutlm_emb=='full_learned':
+                    ocr_tokens += pos_emb + self.ocr_abspos_enc[:,pos_emb.size(1)]
+                else:
+                    ocr_tokens += pos_emb + self.ocr_abspos_enc(pos_emb.size(1))
             else:
                 ocr_tokens += self.ocr_pos_emb_x(xs) + self.ocr_pos_emb_y(ys) + self.ocr_pos_emb_w(ws) + self.ocr_pos_emb_h(hs) + self.ocr_1dpos_enc(ocr_1dpos) + self.ocr_seqid_enc(ocr_seqid)
         else:
