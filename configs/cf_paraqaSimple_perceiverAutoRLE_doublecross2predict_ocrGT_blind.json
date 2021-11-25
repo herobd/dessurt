@@ -1,11 +1,12 @@
 {
-    "name": "paraqa_perceiverAutoRLE_doublecross2predict_ocrGT_blind",
+    "name": "paraqaSimple_perceiverAutoRLE_doublecross2predict_ocrGT_blind",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
     	"data_set_name": "SynthParaQA",
+	"mode": "simple",
         "shuffle": true,
 	"gt_ocr": true,
 	    "data_dir": "../data/fonts",

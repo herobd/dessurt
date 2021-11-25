@@ -158,7 +158,6 @@ class CDIPCloudQA(ParaQADataset):
 
         self.calls += 1
         #print('calls {} / {}'.format(self.calls,len(self.images)*self.reuse_factor))
-        self.refresh_status()
         if self.calls > len(self.images)*self.reuse_factor:
             self.switch()
         elif self.calls%100 == 0:
