@@ -157,7 +157,12 @@ class QAImDocPerceiver(BaseModel):
                 self.ocr_abspos_enc = nn.Embedding(1000,input_dim)
             elif self.layoutlm_emb:
                 self.ocr_emb = nn.Linear(self.ocr_out_dim,input_dim,bias=False)
-                if config.get('low_emb_res'):
+                if config.get('low_emb_res')=='perfect':
+                    self.emb_x_resolution = self.final_image_size[1]
+                    self.emb_y_resolution = self.final_image_size[0]
+                    self.emb_h_resolution = 10
+                    self.emb_w_resolution = 10
+                elif config.get('low_emb_res'):
                     self.emb_x_resolution = 100
                     self.emb_y_resolution = 200
                     self.emb_h_resolution = 10
