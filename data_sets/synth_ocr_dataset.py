@@ -21,6 +21,11 @@ PADDING_CONSTANT = -1
 def collate(batch):
     batch = [b for b in batch if b is not None]
     #These all should be the same size or error
+    if len(set([b['image'].shape[0] for b in batch])) != 1:
+        print('Error in images sizes:')
+        for b in batch:
+            print(b['image'].shape)
+        return None
     assert len(set([b['image'].shape[0] for b in batch])) == 1
     assert len(set([b['image'].shape[2] for b in batch])) == 1
 

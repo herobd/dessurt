@@ -10,13 +10,13 @@
         "shuffle": true,
         "prefetch_factor": 5,
         "persistent_workers": true,
-        "batch_size": 1,
+        "batch_size": 3,
         "num_workers": 4,
         "datasets": [
             {
                 "freq": 0.8,
                 "config": {
-                    "data_set_name": "SynthParaQA",
+                    "data_set_name": "TestQA",
                     "data_dir": "../data/fonts",
 		    "mode": "blind",
                     "batch_size": 1,
@@ -27,7 +27,7 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            768,768
+                            256,256
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
@@ -36,7 +36,7 @@
                     "max_qa_len_in": 60,
                     "max_qa_len_out": 250,
                     "image_size": [
-                        760,760
+                        250,250
                     ],
                     "prefetch_factor": 10,
                     "persistent_workers": true
@@ -109,14 +109,16 @@
 	    "ocr_tokens": false,
 	    "autoregressive": true,
 	    "predict_from_input": true,
+	    "num_answer_att": 2,
 	    "char_output": true,
 	    "char_tokens": true,
-            "image_size": [768,768],
+            "image_size": [256,256],
+	    "use_res_cnn_embed": true,
             "pre_trained": {
-                "patch_emb": "saved/synth_ocr_crnnskipforswin_new/checkpoint-iteration400000.pth"
+                "patch_emb": "saved/synth_ocr_emb_pretrain_slow/checkpoint-latest.pth"
             },
 	    "input_dim": 256,
-	    "perceiver_blocks": [[3,1,true],[3,1,true],[3,1,true],[3,1,true],[3,1,true],[6,1,true]],
+	    "perceiver_blocks": [[3,1,false]],
 	    "num_latents": 256,
 	    "latent_dim": 800,
 	    "cross_heads": 8,

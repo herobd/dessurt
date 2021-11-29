@@ -99,9 +99,12 @@ class Attention(nn.Module):
         sim = einsum('b i d, b j d -> b i j', q, k) * self.scale
 
         if exists(mask):
-            mask = rearrange(mask, 'b ... -> b (...)')
             max_neg_value = -torch.finfo(sim.dtype).max
-            mask = repeat(mask, 'b j -> (b h) () j', h = h)
+            if len(mask.size())==2:
+                #mask = rearrange(mask, 'b ... -> b (...)')
+                mask = repeat(mask, 'b j -> (b h) () j', h = h)
+            else:
+                mask = repeat(mask, 'b i j -> (b h) i j', h =h)
             sim.masked_fill_(~mask, max_neg_value)
 
         # attention, what we cannot get enough of
@@ -418,5 +421,33 @@ class CrossAttention(nn.Module):
 
         x = self.cross_att(x, context = cross_data, mask = mask) + x
         x = self.cross_ff(x) + x
+
+        return x
+
+class AutoRegressiveAttention(nn.Module):
+    def __init__(
+        self,
+        main_dim,
+        input_len,
+        main_heads=1,
+        main_dim_head = 64,
+    ):
+        super().__init__()
+
+        self.main_att = PreNorm(main_dim, Attention(main_dim, main_dim, heads = main_heads, dim_head = main_dim_head, v_dim=main_dim))
+        self.main_ff = PreNorm(main_dim, FeedForward(main_dim))
+
+        self.register_buffer("mask", torch.tril(torch.BoolTensor(1,input_len,input_len).fill_(1)))
+        
+
+    def forward(
+        self,
+        data
+    ):
+        b, *_, device = *data.shape, data.device
+        x = data
+
+        x = self.main_att(x, mask = self.mask[:,:x.size(1),:x.size(1)].expand(x.size(0),-1,-1)) + x
+        x = self.main_ff(x) + x
 
         return x
