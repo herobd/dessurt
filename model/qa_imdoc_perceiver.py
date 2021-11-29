@@ -157,7 +157,7 @@ class QAImDocPerceiver(BaseModel):
                 self.ocr_abspos_enc = ReturnPositionalEncodingSeq(input_dim,dropout=dropout,max_len=10000,offset_start=offset_start)
             elif self.layoutlm_emb=='debug2':
                 self.ocr_emb = nn.Linear(self.ocr_out_dim,input_dim,bias=False)
-                self.ocr_abspos_enc = nn.Embedding(1000,input_dim)
+                self.ocr_abspos_enc = nn.Embedding(3000,input_dim)
             elif self.layoutlm_emb:
                 self.ocr_emb = nn.Linear(self.ocr_out_dim,input_dim,bias=False)
                 if config.get('low_emb_res'):
@@ -177,7 +177,7 @@ class QAImDocPerceiver(BaseModel):
                 else:
                     offset_start = 0
                 if self.layoutlm_emb == 'full_learned':
-                    self.ocr_abspos_enc = nn.Parameter(torch.zeros(1, 1000, input_dim))
+                    self.ocr_abspos_enc = nn.Parameter(torch.zeros(1, 3000, input_dim))
                     trunc_normal_(self.ocr_abspos_enc, std=.02)
                 else:
                     self.ocr_abspos_enc = ReturnPositionalEncodingSeq(input_dim,dropout=dropout,max_len=10000,offset_start=offset_start)
