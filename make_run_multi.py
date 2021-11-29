@@ -68,8 +68,13 @@ done
 """
 
 import sys
+import os
 N=6
 def create(job_name):
+    try:
+        os.mkdir(os.path.join('saved',job_name))
+    except FileExistsError:
+        pass
     script = template.format(N,N-1,job_name)#,N-1,job_name,job_name,job_name,job_name)
     script=script.replace('~<','{')
     script=script.replace('~>','}')
