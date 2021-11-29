@@ -113,7 +113,7 @@ class SynthParaQA(ParaQADataset):
         scale = word_height / words[0][1].shape[0]
 
         #layout the Paragraph to find it's height
-        para_width = random.randrange(image_w/5,image_w-10)
+        para_width = random.randrange(image_w//5,image_w-10)
         em_approx = word_height*1.6 #https://en.wikipedia.org/wiki/Em_(typography)
         min_space = 0.2*em_approx #https://docs.microsoft.com/en-us/typography/develop/character-design-standards/whitespace
         max_space = 0.5*em_approx
