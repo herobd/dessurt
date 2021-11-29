@@ -106,7 +106,9 @@ class SynthParaQA(ParaQADataset):
             words = self.prev_words
             self.prev_words = None
         else:
-            words = self.gen_daemon.generate()
+            words = []
+            while len(words)==0:
+                words = self.gen_daemon.generate()
         word_height = random.randrange(self.min_text_height,self.max_text_height)
         scale = word_height / words[0][1].shape[0]
 
