@@ -356,6 +356,8 @@ class QAImDocPerceiver(BaseModel):
             if will_distil:
                 #This makes the logits not predicted directly from the first cross-attention
                 self.distil_buffer_layer = nn.Sequential(nn.LayerNorm(output_dim),nn.Linear(output_dim,output_dim))
+        else:
+            self.answer_autor_att = None
 
 
         #t#self.opt_history=defaultdict(list)#t#
