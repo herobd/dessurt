@@ -1,5 +1,5 @@
 {
-    "name": "synthqa_perceiverAutoR_doublecross_fonts_small_13",
+    "name": "synthqa_perceiverAutoR_doublecross2predict_fonts_small_15",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -11,7 +11,7 @@
         "textdir": "../data/",
         "data_dir": "../data/english4line_fonts",
         "include_ocr": false,
-        "batch_size": 4,
+        "batch_size": 5,
         "num_workers": 4,
         "rescale_range": [1.0,1.0],
         "crop_params": {
@@ -21,7 +21,7 @@
             },
 	"questions": 1,
 	"max_qa_len_in": 70,
-	"max_qa_len_out": 506,
+	"max_qa_len_out": 250,
         "min_entries": null,
         "max_entries": 2,
 	"use_read": 0.01,
@@ -75,7 +75,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 400000,
-        "accum_grad_steps": 3,
+        "accum_grad_steps": 2,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
@@ -103,21 +103,27 @@
     "model": {
 	    "grid_ocr": false,
 	    "ocr_tokens": false,
+	    "fix_pos_enc": true,
+
 	    "autoregressive": true,
+	    "predict_from_input": true,
+	    "num_answer_att": 2,
+
 	    "char_output": true,
 	    "char_tokens": true,
             "image_size": [192,384],
+	    "use_res_cnn_embed": true,
             "pre_trained": {
-                "patch_emb": "saved/synth_ocr_crnnskipforswin_new/checkpoint-iteration400000.pth"
+                "patch_emb": "saved/synth_ocr_emb_pretrain_slow/checkpoint-latest.pth"
             },
 	    "input_dim": 256,
-	    "perceiver_blocks": [[3,1,true],[3,1,true],[3,1,true],[3,1,true],[3,1,true],[3,1,true],[3,1,true]],
+	    "perceiver_blocks": [[3,1,true],[3,1,true],[3,1,true],[6,1,true],[6,1,true]],
 	    "num_latents": 256,
 	    "latent_dim": 800,
 	    "cross_heads": 8,
 	    "self_heads": 8,
 	    "output_dim": 256,
-	    "out_length": 512
+	    "out_length": 256
 	    
     }
 }

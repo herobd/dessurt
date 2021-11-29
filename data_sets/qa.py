@@ -153,8 +153,12 @@ class QADataset(torch.utils.data.Dataset):
         if type(annotationPath) is int:
             annotations = annotationPath
         elif annotationPath.endswith('.json'):
-            with open(annotationPath) as annFile:
-                annotations = json.loads(annFile.read())
+            try: 
+                with open(annotationPath) as annFile:
+                    annotations = json.loads(annFile.read())
+            except FileNotFoundError:
+                print("ERROR, could not open "+annotationPath)
+                return self.__getitem__((index+1)%self.__len__())
         else:
             annotations=annotationPath
 
