@@ -81,6 +81,7 @@ class QAImDocPerceiver(BaseModel):
             print('WARNING: did you forget to specify final images size (for embedding)?') 
         
         fix_pos_enc = config.get('fix_pos_enc')
+        log_softmax = config.get('log_softmax',True)
 
         self.image_size = config['image_size'] #start at 512?
         self.final_image_size = config['final_image_size'] if 'final_image_size' in config else self.image_size
@@ -103,6 +104,8 @@ class QAImDocPerceiver(BaseModel):
         self.out_length = out_length
 
         num_answer_att = config.get('num_answer_att')
+
+        will_distil = config.get('will_distil')
 
         if isinstance(self.image_size,int):
             self.image_size = (self.image_size,self.image_size)
@@ -154,7 +157,7 @@ class QAImDocPerceiver(BaseModel):
                 self.ocr_abspos_enc = ReturnPositionalEncodingSeq(input_dim,dropout=dropout,max_len=10000,offset_start=offset_start)
             elif self.layoutlm_emb=='debug2':
                 self.ocr_emb = nn.Linear(self.ocr_out_dim,input_dim,bias=False)
-                self.ocr_abspos_enc = nn.Embedding(1000,input_dim)
+                self.ocr_abspos_enc = nn.Embedding(3000,input_dim)
             elif self.layoutlm_emb:
                 self.ocr_emb = nn.Linear(self.ocr_out_dim,input_dim,bias=False)
                 if config.get('low_emb_res')=='perfect':
@@ -178,7 +181,11 @@ class QAImDocPerceiver(BaseModel):
                     offset_start = out_length*3
                 else:
                     offset_start = 0
-                self.ocr_abspos_enc = ReturnPositionalEncodingSeq(input_dim,dropout=dropout,max_len=10000,offset_start=offset_start)
+                if self.layoutlm_emb == 'full_learned':
+                    self.ocr_abspos_enc = nn.Parameter(torch.zeros(1, 3000, input_dim))
+                    trunc_normal_(self.ocr_abspos_enc, std=.02)
+                else:
+                    self.ocr_abspos_enc = ReturnPositionalEncodingSeq(input_dim,dropout=dropout,max_len=10000,offset_start=offset_start)
                 assert input_dim%16==0
                 self.ocr_pos_emb_x = nn.Embedding(self.emb_x_resolution,4*(input_dim//16))
                 self.ocr_pos_emb_y = nn.Embedding(self.emb_y_resolution,4*(input_dim//16))
@@ -209,7 +216,12 @@ class QAImDocPerceiver(BaseModel):
                 offset_start = out_length
             else:
                 offset_start = 0
-            self.a_pos_1d_enc = PositionalEncoding(output_dim,dropout=dropout,max_len=out_length,offset_start=offset_start)
+
+            if self.layoutlm_emb == 'full_learned':
+                self.a_pos_1d_enc = nn.Parameter(torch.zeros(1, out_length, input_dim))
+                trunc_normal_(self.a_pos_1d_enc, std=.02)
+            else:
+                self.a_pos_1d_enc = PositionalEncoding(output_dim,dropout=dropout,max_len=out_length,offset_start=offset_start)
 
         if config.get('use_res_cnn_embed'):
             self.patch_embed = ResConvPatchEmbed(
@@ -330,15 +342,20 @@ class QAImDocPerceiver(BaseModel):
 
         self.answer_decode = nn.Sequential(
                 nn.Linear(output_dim,self.decode_tokenizer.vocab_size),
-                nn.LogSoftmax(dim=-1) #except
+                nn.LogSoftmax(dim=-1) if log_softmax else nn.Softmax(dim=-1)
                 )
 
-        if not self.autoregressive:
+        if not self.autoregressive or will_distil:
             #We'll precompute the query tokens for the text answer
-            self.query_a_tokens = nn.Parameter(torch.FloatTensor(1,out_length,output_dim).normal_())
+            self.query_a_tokens = nn.Parameter(torch.FloatTensor(1,out_length,output_dim).trunc_normal_(std=0.1)) #These are the learnable position encodings
+
 
         if num_answer_att is not None:
             self.answer_autor_att = nn.Sequential(*[AutoRegressiveAttention(output_dim,out_length,main_heads=cross_heads,main_dim_head=qk_dim) for i in range(num_answer_att)])
+
+            if will_distil:
+                #This makes the logits not predicted directly from the first cross-attention
+                self.distil_buffer_layer = nn.Sequential(nn.LayerNorm(output_dim),nn.Linear(output_dim,output_dim))
 
 
         #t#self.opt_history=defaultdict(list)#t#
@@ -393,19 +410,28 @@ class QAImDocPerceiver(BaseModel):
         else:
             answers=['']*new_batch_size
 
+        distill = False
+        if questions[0].startswith('ml'):
+            distill = True
+        for q in questions[1:]:
+            assert distill == q.startswith('ml')
+
         #run question+answer through decoder
         q_t = self.tokenizer(questions,return_tensors="pt",padding=True)
         num_q = q_t['input_ids'].size(1)
         a_t = self.tokenizer(answers,return_tensors="pt",padding=True)
         num_a = a_t['input_ids'].size(1)-1 #remove last SEP token
 
-        if self.autoregressive:
+        if self.autoregressive and not distill:
             qa_tokens = self.text_embedding(torch.cat((q_t['input_ids'],a_t['input_ids'][:,:-1]),dim=1).to(device))
             q_tokens = qa_tokens[:,:num_q] 
             a_tokens = qa_tokens[:,num_q:] 
             if a_tokens.size(1) > self.out_length:
                 a_tokens = a_tokens[:,:self.out_length]
-            a_tokens = self.a_pos_1d_enc(a_tokens)
+            if self.layoutlm_emb == 'full_learned':
+                a_tokens += self.a_pos_1d_enc[:,a_tokens.size(1)]
+            else:
+                a_tokens = self.a_pos_1d_enc(a_tokens)
         else:
             #just embed question
             q_tokens = self.text_embedding(q_t['input_ids'].to(device))
@@ -470,8 +496,10 @@ class QAImDocPerceiver(BaseModel):
                     self.ocr_diff_emb_x(x_diff),
                     self.ocr_diff_emb_y(y_diff)
                     ],dim=2)
-
-                ocr_tokens += pos_emb + self.ocr_abspos_enc(pos_emb.size(1))
+                if self.layoutlm_emb=='full_learned':
+                    ocr_tokens += pos_emb + self.ocr_abspos_enc[:,pos_emb.size(1)]
+                else:
+                    ocr_tokens += pos_emb + self.ocr_abspos_enc(pos_emb.size(1))
             else:
                 ocr_tokens += self.ocr_pos_emb_x(xs) + self.ocr_pos_emb_y(ys) + self.ocr_pos_emb_w(ws) + self.ocr_pos_emb_h(hs) + self.ocr_1dpos_enc(ocr_1dpos) + self.ocr_seqid_enc(ocr_seqid)
         else:
@@ -503,7 +531,7 @@ class QAImDocPerceiver(BaseModel):
         else:
             im_feats = data_tokens[:,:num_im]
 
-        if self.autoregressive:
+        if self.autoregressive and not distill:
             query_a_tokens = a_tokens
         else:        
             query_a_tokens = self.query_a_tokens.expand(batch_size,-1,-  1)
@@ -515,11 +543,14 @@ class QAImDocPerceiver(BaseModel):
             a_tokens = self.decoder_answer(latent,query_a_tokens)
 
         if self.answer_autor_att is not None:
-            a_tokens = self.answer_autor_att(a_tokens)
-            if self.predict_from_input:
-                a_tokens = self.decoder_answer(latent,data_tokens,query_a_tokens)
+            if distill:
+                a_tokens = self.distil_buffer_layer(a_tokens) #to provide space seperation for prediction when doing distillation (as the normal model has more layers).
             else:
-                a_tokens = self.decoder_answer(latent,query_a_tokens)
+                a_tokens = self.answer_autor_att(a_tokens)
+                if self.predict_from_input:
+                    a_tokens = self.decoder_answer(latent,data_tokens,query_a_tokens)
+                else:
+                    a_tokens = self.decoder_answer(latent,query_a_tokens)
 
 
         ##############
@@ -585,7 +616,9 @@ class QAImDocPerceiver(BaseModel):
         #t#self.print_opt_times()#t#
         #import pdb;pdb.set_trace()
 
-        if get_tokens:
+        if distill:
+            return response_decoded, target_decoded.to(device), batch_string_response, out_mask, a_tokens
+        elif get_tokens:
             #im_tokens = im_tokens.view(batch_size,H,W,im_tokens.size(2)).permute(0,3,1,2)
             return response_decoded, target_decoded.to(device), batch_string_response, out_mask,im_tokens,ocr_tokens
         elif RUN:
