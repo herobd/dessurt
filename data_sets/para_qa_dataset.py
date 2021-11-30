@@ -158,7 +158,7 @@ class ParaQADataset(QADataset):
                     #'masked_lm':1.0,
                     #'put_in_place':1.0
                     }
-        else:
+        elif mode == 'hard':
             self.q_types = {
                     'read_blanked':0.5,
                     'read_replaced':0.5,
@@ -180,6 +180,8 @@ class ParaQADataset(QADataset):
                     'read_highlighted':0.5,
                     'masked_lm':4.0,
                     'put_in_place':1.0}
+        else:
+            raise ValueError('Unknown para qa mode: {}'.format(mode))
 
 
         #self.num_question_types_all=11 #15
