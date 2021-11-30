@@ -124,10 +124,10 @@ class SynthOCRDataset(Dataset):
             if skip_some_words:
                 if len(skipped)>=skip_first:
                     gt.append(text)
-                    mask[y:y+word_height,x:x+new_width] = 1
+                    mask[y:y+word_height,x:x+new_width+space_width] = 1
                     last_x_start=x
                 else:
-                    skipped.append((text,x,new_width))
+                    skipped.append((text,x,new_width+space_width))
             else:
                 gt.append(text)
             x+=space_width+new_width
