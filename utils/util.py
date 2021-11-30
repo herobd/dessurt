@@ -195,6 +195,28 @@ def inv_tanh(y):
     return 0.5*(math.log((1+y)/(1-y)))
 
 
+def primeFactors(n):
+    ret = [1]
+    # Print the number of two's that divide n 
+    while n % 2 == 0:
+        if len(ret)==0:
+            ret.append(2)
+        n = n / 2
+
+    # n must be odd at this point 
+    # so a skip of 2 ( i = i + 2) can be used 
+    for i in range(3,int(math.sqrt(n))+1,2):
+
+        # while i divides n , print i ad divide n 
+        while n % i== 0:
+            ret.append(i)
+            n = n / i
+
+    # Condition if n is a prime 
+    # number greater than 2 
+    if n > 2:
+        ret.append(n)
+    return ret
 def getGroupSize2(channels,goalSize=None):
     if goalSize is None:
         if channels>=128:
