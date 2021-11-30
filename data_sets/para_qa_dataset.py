@@ -23,6 +23,7 @@ class ParaQADataset(QADataset):
         super(ParaQADataset, self).__init__(dirPath,split,config,images)
         assert self.questions==1 #current set up (with masks being appended to image) requires only 1 qa pair per image
         self.do_masks=True
+        self.use_highlight = config.get('use_highlight',True)
 
         self.corruption_p = config['text_corruption'] if 'text_corruption' in config else 0
 
@@ -247,7 +248,7 @@ class ParaQADataset(QADataset):
                 #5. Read highlighted section filling in masked word
 
                 read_with_masked = question_type == 'read_with_masked'
-                use_highlight = random.random()<0.5 or read_with_masked
+                use_highlight = (random.random()<0.5 and self.use_highlight) or read_with_masked
                 blank = question_type == 'read_blanked'
                 for i in range(10):
                     blank_word_idx = random.randrange(len(wordmap))
@@ -372,7 +373,7 @@ class ParaQADataset(QADataset):
                 # . Read line above (with highlight) and draw where it is. based on para/block
                 # . Read line below (no highlight)and draw where it is. based on  para/block
                 # . Read line below (with highlight) and draw where it is. based on  para/block
-                use_highlight = random.random()<0.5
+                use_highlight = random.random()<0.5 and self.use_highlight
                 above = random.random()<0.5
                 beyond_block = random.random()<0.5 if use_blocks else True
 
@@ -600,7 +601,7 @@ class ParaQADataset(QADataset):
                 #9. Read backwards from prompt (no highlight) including new lines (stops at block end) and draw where you read
                 # . Read backwards from prompt (with highlight) including new lines (stops at block end) and draw where you read
                 forward = question_type =='read_on'
-                use_highlight = random.random()<0.5
+                use_highlight = random.random()<0.5 and self.use_highlight
                 if use_highlight:
                     min_read_start = self.min_read_start_with_mask
                 else:
@@ -743,7 +744,7 @@ class ParaQADataset(QADataset):
             #elif question_type == 10:
             elif question_type == 'highlight_block':
                 #10. draw the block this is in
-                use_highlight = random.random()<0.5
+                use_highlight = random.random()<0.5 and self.use_highlight
                 block_idx = random.randrange(len(ocr))
                 lines = ocr[block_idx]['paragraphs'][0]['lines']
                 line_idx = random.randrange(len(lines))
