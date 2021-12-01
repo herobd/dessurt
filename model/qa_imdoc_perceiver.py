@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import numpy as np
 from model.pairing_g_graph_layoutlm import  runLayoutLM
 from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding,ReturnPositionalEncodingSeq
-from model.perceiver_io import PerceiverI, DecoderO, DoubleDecoderO, AutoRegressiveAttention
+from model.perceiver_io import PerceiverI, DecoderO, DoubleDecoderO, AutoRegressiveAttention, LatentAutoRegressiveAttention
 from model.swin_transformer import ConvPatchEmbed
 from model.cnn_hwr import ResConvPatchEmbed
 try:
@@ -14,6 +14,8 @@ try:
 except:
     pass
 from utils.character_tokenizer import CharacterTokenizer
+from utils.bytepair_tokenizer import BytePairTokenizer
+
 from collections import defaultdict
 from timm.models.layers import trunc_normal_
 import math, random
@@ -105,6 +107,8 @@ class QAImDocPerceiver(BaseModel):
         self.out_length = out_length
 
         num_answer_att = config.get('num_answer_att')
+        if self.autoregressive=='latent':
+            assert num_answer_att>0
 
         will_distil = config.get('will_distil')
 
@@ -119,31 +123,38 @@ class QAImDocPerceiver(BaseModel):
         else:
             pre_trained_patch_emb = None
 
-        char_output = config['char_output']
-        char_tokens = config['char_tokens']
-        if char_tokens:
-            char_output=False
+        out_token_type = 'char' if config.get('char_output',False) else 'word'
+        in_token_type = 'char' if config.get('char_tokens',False) else 'word'
 
-        if char_tokens:
+        out_token_type = config.get('out_token_type',out_token_type)
+        in_token_type = config.get('in_token_type',in_token_type)
+
+        if in_token_type == 'char':
             self.tokenizer = CharacterTokenizer()
             self.SEP_TOKEN=self.tokenizer.SEP_index
             self.CLS_TOKEN=self.tokenizer.CLS_index
-        else:
+        elif in_token_type == 'word':
             self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
             self.SEP_TOKEN= 102
             self.CLS_TOKEN= 101
+        elif in_token_type == 'bp':
+            self.tokenizer = BytePairTokenizer()
+            self.SEP_TOKEN=self.tokenizer.SEP_index
+            self.CLS_TOKEN=self.tokenizer.CLS_index
 
-        if char_output:
-            self.decode_tokenizer = CharacterTokenizer()
-            self.DECODE_SEP_TOKEN=self.decode_tokenizer.SEP_index
-            self.DECODE_CLS_TOKEN=self.decode_tokenizer.CLS_index
-        else:
+        if in_token_type == out_token_type:
             self.decode_tokenizer = self.tokenizer
             self.DECODE_SEP_TOKEN=self.SEP_TOKEN
             self.DECODE_CLS_TOKEN=self.CLS_TOKEN
+        elif out_token_type == 'char':
+            self.decode_tokenizer = CharacterTokenizer()
+            self.DECODE_SEP_TOKEN=self.decode_tokenizer.SEP_index
+            self.DECODE_CLS_TOKEN=self.decode_tokenizer.CLS_index
 
 
         self.text_embedding = nn.Embedding(self.tokenizer.vocab_size, input_dim)
+        if in_token_type == 'bp': #we'll use the pre-trained embedding
+            self.text_embedding.weight.data[:,:self.tokenizer.pretrained_dim()] = torch.FloatTensor(self.tokenizer.get_pretrained())
         self.ocr_out_dim = 97
         self.one_hot_conf = 0.9
         self.zero_hot_conf = (1-self.one_hot_conf)/(self.ocr_out_dim-1)
@@ -352,7 +363,18 @@ class QAImDocPerceiver(BaseModel):
 
 
         if num_answer_att is not None:
-            self.answer_autor_att = nn.Sequential(*[AutoRegressiveAttention(output_dim,out_length,main_heads=cross_heads,main_dim_head=qk_dim) for i in range(num_answer_att)])
+            if self.autoregressive=='latent':
+                self.answer_autor_att = nn.ModuleList([LatentAutoRegressiveAttention(
+                    output_dim,
+                    out_length,
+                    latent_dim,
+                    main_heads=cross_heads,
+                    main_dim_head=qk_dim,
+                    cross_heads = cross_heads,
+                    cross_dim_head = qk_dim
+                    ) for i in range(num_answer_att)])
+            else:
+                self.answer_autor_att = nn.Sequential(*[AutoRegressiveAttention(output_dim,out_length,main_heads=cross_heads,main_dim_head=qk_dim) for i in range(num_answer_att)])
 
             if will_distil:
                 #This makes the logits not predicted directly from the first cross-attention
@@ -552,11 +574,15 @@ class QAImDocPerceiver(BaseModel):
             if distill:
                 a_tokens = self.distil_buffer_layer(a_tokens) #to provide space seperation for prediction when doing distillation (as the normal model has more layers).
             else:
-                a_tokens = self.answer_autor_att(a_tokens)
-                if self.predict_from_input:
-                    a_tokens = self.decoder_answer(latent,data_tokens,query_a_tokens)
+                if self.autoregressive == 'latent':
+                    for attention_module in self.answer_autor_att:
+                        a_tokens = attention_module(a_tokens,latent)
                 else:
-                    a_tokens = self.decoder_answer(latent,query_a_tokens)
+                    a_tokens = self.answer_autor_att(a_tokens)
+                if self.predict_from_input:
+                    a_tokens = self.decoder_answer(latent,data_tokens,a_tokens)
+                else:
+                    a_tokens = self.decoder_answer(latent,a_tokens)
 
 
         ##############
