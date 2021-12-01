@@ -554,9 +554,9 @@ class QAImDocPerceiver(BaseModel):
             else:
                 a_tokens = self.answer_autor_att(a_tokens)
                 if self.predict_from_input:
-                    a_tokens = self.decoder_answer(latent,data_tokens,query_a_tokens)
+                    a_tokens = self.decoder_answer(latent,data_tokens,a_tokens)
                 else:
-                    a_tokens = self.decoder_answer(latent,query_a_tokens)
+                    a_tokens = self.decoder_answer(latent,a_tokens)
 
 
         ##############
