@@ -1,5 +1,5 @@
 {
-    "name": "paraqaSimple_perceiverAutoRLE_doublecross2latentpredict_ocrGT_blind",
+    "name": "paraqaSimple_perceiverAutoRLE_doublecross4latentpredict_ocrGT_blind",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -102,7 +102,7 @@
 
 	    "autoregressive": "latent",
 	    "predict_from_input": true,
-            "num_answer_att": 2,
+            "num_answer_att": 4,
 
 	    "char_output": true,
 	    "char_tokens": true,
