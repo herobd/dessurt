@@ -72,6 +72,7 @@ class QAImDocPerceiver(BaseModel):
         self.blank_ocr = config['blank_ocr'] if 'blank_ocr' in config else False
         self.ocr_in_image = config['grid_ocr'] if 'grid_ocr' in config else False
         self.ocr_seperate_tokens = config['ocr_tokens'] if 'ocr_tokens' in config else False
+        self.ocr_append_image = False
 
         self.autoregressive = config['autoregressive'] if 'autoregressive' in config else False
         self.predict_from_input = config.get('predict_from_input',False)
