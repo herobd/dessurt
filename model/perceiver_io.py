@@ -149,16 +149,26 @@ class Attention2Context(nn.Module):
         sim = einsum('b i d, b j d -> b i j', q, k) * self.scale
 
         if mask1 is not None or mask2 is not None:
-            batch_size = context.size(0)
             device = context.device
             if mask1 is None:
-                mask1 = torch.BoolTensor(batch_size,context.size(1)).fill_(1).to(device)
+                batch_size = mask2.size(0)
+                if len(mask2.size())==2:
+                    mask1 = torch.BoolTensor(batch_size,context.size(1)).fill_(1).to(device)
+                else:
+                    mask1 = torch.BoolTensor(batch_size,x.size(1),context.size(1)).fill_(1).to(device)
             if mask2 is None:
-                mask2 = torch.BoolTensor(batch_size,context2.size(1)).fill_(1).to(device)
-            mask = torch.cat((mask1,mask2),dim=1)
-            mask = rearrange(mask, 'b ... -> b (...)')
+                batch_size = mask1.size(0)
+                if len(mask1.size())==2:
+                    mask2 = torch.BoolTensor(batch_size,context2.size(1)).fill_(1).to(device)
+                else:
+                    mask2 = torch.BoolTensor(batch_size,x.size(1),context2.size(1)).fill_(1).to(device)
+            mask = torch.cat((mask1,mask2),dim=2)
+            #mask = rearrange(mask, 'b ... -> b (...)')
             max_neg_value = -torch.finfo(sim.dtype).max
-            mask = repeat(mask, 'b j -> (b h) () j', h = h)
+            if len(mask.size())==2:
+                mask = repeat(mask, 'b j -> (b h) () j', h = h)
+            else:
+                mask = repeat(mask, 'b i j -> (b h) i j', h =h)
             sim.masked_fill_(~mask, max_neg_value)
 
         # attention, what we cannot get enough of
@@ -448,6 +458,39 @@ class AutoRegressiveAttention(nn.Module):
         x = data
 
         x = self.main_att(x, mask = self.mask[:,:x.size(1),:x.size(1)].expand(x.size(0),-1,-1)) + x
+        x = self.main_ff(x) + x
+
+        return x
+
+class LatentAutoRegressiveAttention(nn.Module):
+    def __init__(
+        self,
+        main_dim,
+        input_len,
+        latent_dim,
+        main_heads=1,
+        main_dim_head = 64,
+        cross_heads =1,
+        cross_dim_head = 64
+    ):
+        super().__init__()
+
+        self.main_att = PreNorm(main_dim, Attention2Context(main_dim, latent_dim, main_dim, heads = cross_heads, dim_head = cross_dim_head, v_dim = main_dim), context_dim = latent_dim, context_dim2=main_dim)
+        self.main_ff = PreNorm(main_dim, FeedForward(main_dim))
+
+        self.register_buffer("mask", torch.tril(torch.BoolTensor(1,input_len,input_len).fill_(1)))
+        #self.register_buffer("latent_mask", torch.BoolTensor(1,latent_len,latent_len).fill_(1))
+        
+
+    def forward(
+        self,
+        data,
+        latent,
+    ):
+        b, *_, device = *data.shape, data.device
+        x = data
+
+        x = self.main_att(x, context=latent, context2=x, mask2 = self.mask[:,:x.size(1),:x.size(1)].expand(x.size(0),-1,-1)) + x
         x = self.main_ff(x) + x
 
         return x
