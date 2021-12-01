@@ -141,7 +141,7 @@ class SynthOCRDataset(Dataset):
                 gt.append(text)
                 mask[y:y+word_height,x:x+width] = 1
 
-        if skip_some_words and skip_last:
+        if skip_some_words and skip_last and len(gt)>1:
             mask[y:y+word_height,last_x_start:] = 0 #clear mask
             gt = gt[:-1] #remove last
 
