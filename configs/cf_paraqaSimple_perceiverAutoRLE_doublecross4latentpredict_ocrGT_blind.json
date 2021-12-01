@@ -10,7 +10,7 @@
         "shuffle": true,
 	"gt_ocr": true,
 	    "data_dir": "../data/fonts",
-	    "batch_size": 8,
+	    "batch_size": 7,
 	    "num_workers": 4,
 	    "rescale_range": [
 		0.9,
@@ -66,7 +66,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 50000000,
-        "accum_grad_steps": 7,
+        "accum_grad_steps": 8,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
