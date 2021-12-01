@@ -1,5 +1,5 @@
 {
-    "name": "synthqaTab+paraqa+cdip_perceiverAutoR_doublecross3latentpredict_PTfromFrom14_25",
+    "name": "synthqaTab+paraqa+cdip_perceiverAutoR_doublecross2latentpredict_PTfromFrom14_25",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
