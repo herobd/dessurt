@@ -424,14 +424,29 @@ class QATrainer(BaseTrainer):
 
         #t#tic=timeit.default_timer()#t#
         score_ed = []
-        for b_answers,b_pred in zip(answers,string_a):
-            for answer,pred in zip(b_answers,b_pred):
+        q_type_scores = defaultdict(list)
+        for b_answers,b_pred,b_questions in zip(answers,string_a,questions):
+            for answer,pred,question in zip(b_answers,b_pred,b_questions):
                 if len(answer)>0 or len(pred)>0:
                     score_ed.append( editdistance.eval(answer,pred)/((len(answer)+len(pred))/2) )
                 else:
                     score_ed.append( 0 )
+
+                if len(answer)>0:
+                    #get question start
+                    q_end = question.find('~')
+                    if q_end < 0:
+                        q_end = question.find('>')
+                    if q_end <0:
+                        print('WARNING, logging sees unhandeled question: '+question)
+                    else:
+                        q_type = question[0:q_end+1]
+                        q_type_scores[q_type].append(score_ed[-1])
+
                 
         log['score_ed'] = np.mean(score_ed)
+        for q_type,scores in q_type_scores.items():
+            log['{}_ED'.format(q_type)] = np.mean(scores)
 
         if valid:
             if gt_mask is not None:

@@ -17,14 +17,20 @@ def display(data):
     batchSize = data['image'].size(0)
     for b in range(batchSize):
         #print (data['img'].size())
-        img = 1 - (data['image'][b].permute(1,2,0)+1)/2.0
+        img = 1 - (data['image'][b,0]+1)/2.0
+        if data['image'].size(1)==2:
+            mask = 1-data['image'][b,1]
+            img = torch.stack((img,img,mask),dim=2)
         label = data['label']
         gt = data['gt'][b]
         gts.append(gt)
         #print(label[:data['label_lengths'][b],b])
         print(gt)
-
-        cv2.imshow('line',(img*256).numpy().astype(np.uint8))
+        
+        img[0,0]=0
+        print((img*255).numpy().astype(np.uint8).max())
+        #import pdb;pdb.set_trace()
+        cv2.imshow('line',(img*255).numpy().astype(np.uint8))
         cv2.show()
 
         #fig = plt.figure()
@@ -62,6 +68,7 @@ if __name__ == "__main__":
         'img_height': 32,
         'min_text_height': 10,
         'max_width': 800,
+        'use_mask': True,
         'char_file' : 'IAM_char_set.json',
 })
     #data.cluster(start,repeat,'anchors_rot_{}.json')

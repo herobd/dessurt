@@ -71,6 +71,7 @@ class SynthOCRDataset(Dataset):
         self.img_height = config['img_height']
         self.min_text_height = config['min_text_height']
         self.max_width = config['max_width']
+        self.use_mask = config.get('use_mask',False)
 
         self.generator = GenDaemon(dirPath)
 
@@ -95,9 +96,17 @@ class SynthOCRDataset(Dataset):
         space = np.zeros((self.img_height,space_width),dtype=np.uint8)
 
         image = np.zeros((self.img_height,self.max_width),dtype=np.uint8)
+        mask = np.zeros((self.img_height,self.max_width,1), dtype=np.float32)
+
+        skip_some_words = random.random()<0.5 and self.use_mask
+        if skip_some_words:
+            skip_first = random.randrange(0,4)
+            skip_last = random.random()<0.5
+
         x=random.randrange(0,space_width)
         y=random.randrange(0,1+self.img_height-word_height) if word_height!=self.img_height else 0
         gt=[]
+        skipped=[]
         while True:
             #import pdb;pdb.set_trace()
             if len(self.generated_words)==0:
@@ -112,10 +121,30 @@ class SynthOCRDataset(Dataset):
                 break #end here
             word_img = img_f.resize(word_img,(word_height,new_width))
             image[y:y+word_height,x:x+new_width] = word_img
-            gt.append(text)
+            if skip_some_words:
+                if len(skipped)>=skip_first:
+                    gt.append(text)
+                    mask[y:y+word_height,x:x+new_width+space_width] = 1
+                    last_x_start=x
+                else:
+                    skipped.append((text,x,new_width+space_width))
+            else:
+                gt.append(text)
             x+=space_width+new_width
 
             self.generated_words = self.generated_words[1:]
+        if len(skipped)>0 and len(gt)==0:
+            skip_last=False
+            #unskip the last words
+            unskip = random.randrange(1,len(skipped)+1)
+            for text,x,width in skipped[-unskip:]:
+                gt.append(text)
+                mask[y:y+word_height,x:x+width] = 1
+
+        if skip_some_words and skip_last:
+            mask[y:y+word_height,last_x_start:] = 0 #clear mask
+            gt = gt[:-1] #remove last
+
         gt = ' '.join(gt)
         gt = gt.replace('¶','')
 
@@ -131,6 +160,7 @@ class SynthOCRDataset(Dataset):
                     if len(img.shape)==3:
                         img = img[:,:,0]
                     img = grid_distortion.warp_image(img,w_mesh_std=0.7,h_mesh_std=0.7)
+                
             else:
                 img = augmentation.apply_tensmeyer_brightness(img)
                 img = grid_distortion.warp_image(img)
@@ -139,11 +169,15 @@ class SynthOCRDataset(Dataset):
 
         img = img.astype(np.float32)
         img = (img / 128)-1 #already has 0 as background
+        #permuting channel to front is done in collate
 
         if len(gt) == 0:
             return None
         gt_label = string_utils.str2label_single(gt, self.char_to_idx)
 
+        #import pdb;pdb.set_trace()
+        if self.use_mask:
+            img = np.concatenate((img,mask),axis=2)
 
         return {
             "image": img,
