@@ -8,7 +8,7 @@
         "data_set_name": "SynthParaQA",
 	"mode": "pretrain2",
         "data_dir": "../data/fonts",
-        "batch_size": 5,
+        "batch_size": 7,
         "num_workers": 4,
         "rescale_range": [0.9,1.1],
         "crop_params": {
@@ -58,7 +58,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 400000,
-        "accum_grad_steps": 2,
+        "accum_grad_steps": 4,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
@@ -100,7 +100,7 @@
                 "patch_emb": "saved/synth_ocr_emb_pretrain_slow/checkpoint-latest.pth"
             },
 	    "input_dim": 256,
-	    "perceiver_blocks": [[3,1,true],[3,1,true],[3,1,true],[3,1,true],[3,1,true],[3,1,true],[3,1,true]],
+	    "perceiver_blocks": [[3,1,true],[3,1,true],[3,1,true],[3,1,true],[3,1,true],[6,1,true]],
 	    "num_latents": 256,
 	    "latent_dim": 800,
 	    "cross_heads": 8,

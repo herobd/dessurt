@@ -5,44 +5,22 @@
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
-        "data_set_name": "MultipleDataset",
-        "data_dir": "",
-        "shuffle": true,
-        "prefetch_factor": 5,
-        "persistent_workers": true,
-        "batch_size": 3,
+        "data_set_name": "SynthParaQA",
+        "data_dir": "../data/fonts",
+        "batch_size": 1,
         "num_workers": 4,
-        "datasets": [
-            {
-                "freq": 0.8,
-                "config": {
-                    "data_set_name": "TestQA",
-                    "data_dir": "../data/fonts",
-		    "mode": "blind",
-                    "batch_size": 1,
-                    "num_workers": 4,
-                    "rescale_range": [
-                        0.9,
-                        1.1
-                    ],
-                    "crop_params": {
-                        "crop_size": [
-                            256,256
-                        ],
-                        "pad": 0,
-                        "rot_degree_std_dev": 1
-                    },
-                    "questions": 1,
-                    "max_qa_len_in": 60,
-                    "max_qa_len_out": 250,
-                    "image_size": [
-                        250,250
-                    ],
-                    "prefetch_factor": 10,
-                    "persistent_workers": true
-                }
-            }
-        ]
+        "rescale_range": [0.9,1.1],
+        "crop_params": {
+                "crop_size":[768,768],
+                "pad":0,
+                "rot_degree_std_dev": 1
+            },
+	"questions": 1,
+	"max_qa_len_in": 15,
+	"max_qa_len_out": 20,
+        "image_size": [768,768],
+	"prefetch_factor": 2,
+        "shuffle": true
 
 
     },
@@ -79,7 +57,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 400000,
-        "accum_grad_steps": 0,
+        "accum_grad_steps": 2,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
@@ -107,18 +85,21 @@
     "model": {
 	    "grid_ocr": false,
 	    "ocr_tokens": false,
-	    "autoregressive": true,
+	    "fix_pos_enc": true,
+
+	    "autoregressive": "latent",
 	    "predict_from_input": true,
-	    "num_answer_att": 2,
+            "num_answer_att": 3,
+
 	    "char_output": true,
 	    "char_tokens": true,
-            "image_size": [256,256],
+            "image_size": [768,768],
 	    "use_res_cnn_embed": true,
             "pre_trained": {
                 "patch_emb": "saved/synth_ocr_emb_pretrain_slow/checkpoint-latest.pth"
             },
 	    "input_dim": 256,
-	    "perceiver_blocks": [[3,1,false]],
+	    "perceiver_blocks": [[3,1,true],[3,1,true],[3,1,true],[3,1,true],[3,1,true],[6,1,true]],
 	    "num_latents": 256,
 	    "latent_dim": 800,
 	    "cross_heads": 8,
