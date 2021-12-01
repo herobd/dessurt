@@ -5,6 +5,7 @@ from utils.util import getGroupSize2
 from model.swin_transformer import to_2tuple
 
 
+
 class ResLayer(nn.Module):
     def __init__(self, indim):
         super().__init__()
@@ -90,7 +91,7 @@ class HWRWithEmb(BaseModel):
     def __init__(self,config):
         super().__init__(config)
         n_class = config['num_class']
-        self.embedder = ResConvPatchEmbed(32,embed_dim=1)
+        self.embedder = ResConvPatchEmbed(32,embed_dim=1,in_chans=config.get('in_dim',1))
         #self.pool = nn.AvgPool2d((4,1))
         self.pool = nn.Sequential(
                 nn.Conv2d(512,512,(4,3),1,(0,1)),
@@ -116,7 +117,7 @@ class HWRWithEmb(BaseModel):
                 nn.LogSoftmax(dim=1)
                 )
 
-    def forward(self, x):
+    def forward(self, x,ocr_res=None):
         x = self.embedder.cnn(x) #skip the extra things used in Transformer
         b,dim,h,w = x.size()
         assert h==4
@@ -124,3 +125,4 @@ class HWRWithEmb(BaseModel):
         x = self.conv1d(x) + x
         x = self.pred(x)
         return x.permute(2,0,1) #batch,dim,witdh to width,batch,dim as recurrent output
+

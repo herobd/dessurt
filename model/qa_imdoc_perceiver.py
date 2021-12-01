@@ -74,6 +74,7 @@ class QAImDocPerceiver(BaseModel):
         self.blank_ocr = config['blank_ocr'] if 'blank_ocr' in config else False
         self.ocr_in_image = config['grid_ocr'] if 'grid_ocr' in config else False
         self.ocr_seperate_tokens = config['ocr_tokens'] if 'ocr_tokens' in config else False
+        self.ocr_append_image = False
 
         self.autoregressive = config['autoregressive'] if 'autoregressive' in config else False
         self.predict_from_input = config.get('predict_from_input',False)
@@ -382,6 +383,9 @@ class QAImDocPerceiver(BaseModel):
 
         #t#ticA=timeit.default_timer()#t#
         device = image.device
+        if self.ocr_append_image:
+            grid_ocr = self.appendOCRToVisual(ocr_results,device)
+            image = torch.cat((image,grid_ocr),dim=1)
 
         im_tokens = self.patch_embed(image)
         im_tokens += self.absolute_2dpos_embed #Swin doesn't use this as it can rely on the biased attention. We need the image tokens to know where they are so they can interact with the document and question tokens
@@ -839,5 +843,8 @@ class QAImDocPerceiver(BaseModel):
                 #to_y = [round(lY+i*y_step) for i in range(char_prob.size(0))]
                 #ocr_grid[b,:,to_y,to_x] = char_prob
         
-        ocr_grid = ocr_grid.permute(0,2,3,1).view(batch_size,-1,self.ocr_out_dim) #flatten
-        return self.embed_ocr_grid(ocr_grid)
+        if self.ocr_append_image:
+            return ocr_grid
+        else:
+            ocr_grid = ocr_grid.permute(0,2,3,1).view(batch_size,-1,self.ocr_out_dim) #flatten
+            return self.embed_ocr_grid(ocr_grid)
