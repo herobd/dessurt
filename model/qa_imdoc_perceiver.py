@@ -14,6 +14,8 @@ try:
 except:
     pass
 from utils.character_tokenizer import CharacterTokenizer
+from utils.bytepair_tokenizer import BytePairTokenizer
+
 from collections import defaultdict
 from timm.models.layers import trunc_normal_
 import math, random
@@ -119,31 +121,38 @@ class QAImDocPerceiver(BaseModel):
         else:
             pre_trained_patch_emb = None
 
-        char_output = config['char_output']
-        char_tokens = config['char_tokens']
-        if char_tokens:
-            char_output=False
+        out_token_type = 'char' if config.get('char_output',False) else 'word'
+        in_token_type = 'char' if config.get('char_tokens',False) else 'word'
 
-        if char_tokens:
+        out_token_type = config.get('out_token_type',out_token_type)
+        in_token_type = config.get('in_token_type',in_token_type)
+
+        if in_token_type == 'char':
             self.tokenizer = CharacterTokenizer()
             self.SEP_TOKEN=self.tokenizer.SEP_index
             self.CLS_TOKEN=self.tokenizer.CLS_index
-        else:
+        elif in_token_type == 'word':
             self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
             self.SEP_TOKEN= 102
             self.CLS_TOKEN= 101
+        elif in_token_type == 'bp':
+            self.tokenizer = BytePairTokenizer()
+            self.SEP_TOKEN=self.tokenizer.SEP_index
+            self.CLS_TOKEN=self.tokenizer.CLS_index
 
-        if char_output:
-            self.decode_tokenizer = CharacterTokenizer()
-            self.DECODE_SEP_TOKEN=self.decode_tokenizer.SEP_index
-            self.DECODE_CLS_TOKEN=self.decode_tokenizer.CLS_index
-        else:
+        if in_token_type == out_token_type:
             self.decode_tokenizer = self.tokenizer
             self.DECODE_SEP_TOKEN=self.SEP_TOKEN
             self.DECODE_CLS_TOKEN=self.CLS_TOKEN
+        elif out_token_type == 'char':
+            self.decode_tokenizer = CharacterTokenizer()
+            self.DECODE_SEP_TOKEN=self.decode_tokenizer.SEP_index
+            self.DECODE_CLS_TOKEN=self.decode_tokenizer.CLS_index
 
 
         self.text_embedding = nn.Embedding(self.tokenizer.vocab_size, input_dim)
+        if in_token_type == 'bp': #we'll use the pre-trained embedding
+            self.text_embedding.weight.data[:,:self.tokenizer.pretrained_dim()] = torch.FloatTensor(self.tokenizer.get_pretrained())
         self.ocr_out_dim = 97
         self.one_hot_conf = 0.9
         self.zero_hot_conf = (1-self.one_hot_conf)/(self.ocr_out_dim-1)
