@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import numpy as np
 from model.pairing_g_graph_layoutlm import  runLayoutLM
 from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding,ReturnPositionalEncodingSeq
-from model.perceiver_io import PerceiverI, DecoderO, DoubleDecoderO, AutoRegressiveAttention
+from model.perceiver_io import PerceiverI, DecoderO, DoubleDecoderO, AutoRegressiveAttention, LatentAutoRegressiveAttention
 from model.swin_transformer import ConvPatchEmbed
 from model.cnn_hwr import ResConvPatchEmbed
 try:
@@ -107,6 +107,8 @@ class QAImDocPerceiver(BaseModel):
         self.out_length = out_length
 
         num_answer_att = config.get('num_answer_att')
+        if self.autoregressive=='latent':
+            assert num_answer_att>0
 
         will_distil = config.get('will_distil')
 
@@ -361,7 +363,18 @@ class QAImDocPerceiver(BaseModel):
 
 
         if num_answer_att is not None:
-            self.answer_autor_att = nn.Sequential(*[AutoRegressiveAttention(output_dim,out_length,main_heads=cross_heads,main_dim_head=qk_dim) for i in range(num_answer_att)])
+            if self.autoregressive=='latent':
+                self.answer_autor_att = nn.ModuleList([LatentAutoRegressiveAttention(
+                    output_dim,
+                    out_length,
+                    latent_dim,
+                    main_heads=cross_heads,
+                    main_dim_head=qk_dim,
+                    cross_heads = cross_heads,
+                    cross_dim_head = qk_dim
+                    ) for i in range(num_answer_att)])
+            else:
+                self.answer_autor_att = nn.Sequential(*[AutoRegressiveAttention(output_dim,out_length,main_heads=cross_heads,main_dim_head=qk_dim) for i in range(num_answer_att)])
 
             if will_distil:
                 #This makes the logits not predicted directly from the first cross-attention
@@ -561,7 +574,11 @@ class QAImDocPerceiver(BaseModel):
             if distill:
                 a_tokens = self.distil_buffer_layer(a_tokens) #to provide space seperation for prediction when doing distillation (as the normal model has more layers).
             else:
-                a_tokens = self.answer_autor_att(a_tokens)
+                if self.autoregressive == 'latent':
+                    for attention_module in self.answer_autor_att:
+                        a_tokens = attention_module(a_tokens,latent)
+                else:
+                    a_tokens = self.answer_autor_att(a_tokens)
                 if self.predict_from_input:
                     a_tokens = self.decoder_answer(latent,data_tokens,a_tokens)
                 else:
