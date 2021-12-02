@@ -5,22 +5,44 @@
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
-        "data_set_name": "SynthParaQA",
-        "data_dir": "../data/fonts",
+        "data_set_name": "MultipleDataset",
+        "data_dir": "",
+        "shuffle": true,
+        "prefetch_factor": 5,
+        "persistent_workers": true,
         "batch_size": 1,
         "num_workers": 4,
-        "rescale_range": [0.9,1.1],
-        "crop_params": {
-                "crop_size":[768,768],
-                "pad":0,
-                "rot_degree_std_dev": 1
-            },
-	"questions": 1,
-	"max_qa_len_in": 15,
-	"max_qa_len_out": 20,
-        "image_size": [768,768],
-	"prefetch_factor": 2,
-        "shuffle": true
+        "datasets": [
+            {
+                "freq": 0.8,
+                "config": {
+                    "data_set_name": "SynthParaQA",
+                    "data_dir": "../data/fonts",
+		    "easy": true,
+                    "batch_size": 1,
+                    "num_workers": 4,
+                    "rescale_range": [
+                        0.9,
+                        1.1
+                    ],
+                    "crop_params": {
+                        "crop_size": [
+                            768,768
+                        ],
+                        "pad": 0,
+                        "rot_degree_std_dev": 1
+                    },
+                    "questions": 1,
+                    "max_qa_len_in": 70,
+                    "max_qa_len_out": 250,
+                    "image_size": [
+                        760,760
+                    ],
+                    "prefetch_factor": 10,
+                    "persistent_workers": true
+                }
+            }
+        ]
 
 
     },
@@ -56,13 +78,13 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 400000,
-        "accum_grad_steps": 2,
+        "iterations": 50000000,
+        "accum_grad_steps": 1,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
         "val_step": 999999999999999,
-        "save_step": 100000,
+        "save_step": 200000,
         "save_step_minor": 200,
         "log_step": 100,
         "print_pred_every": 100,
@@ -85,19 +107,13 @@
     "model": {
 	    "grid_ocr": false,
 	    "ocr_tokens": false,
-	    "fix_pos_enc": true,
 
-	    "autoregressive": "latent",
-	    "predict_from_input": true,
-            "num_answer_att": 3,
+	    "autoregressive": "all",
+            "num_answer_att": [true,false,true,false],
 
 	    "char_output": true,
 	    "char_tokens": true,
             "image_size": [768,768],
-	    "use_res_cnn_embed": true,
-            "pre_trained": {
-                "patch_emb": "saved/synth_ocr_emb_pretrain_slow/checkpoint-latest.pth"
-            },
 	    "input_dim": 256,
 	    "perceiver_blocks": [[3,1,true],[3,1,true],[3,1,true],[3,1,true],[3,1,true],[6,1,true]],
 	    "num_latents": 256,
