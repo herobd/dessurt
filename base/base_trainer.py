@@ -10,6 +10,7 @@ from utils.util import ensure_dir
 from collections import defaultdict
 from model import *
 import re
+import numpy as np
 try:
     from torch.optim.swa_utils import AveragedModel
 except ModuleNotFoundError:
@@ -304,7 +305,7 @@ class BaseTrainer:
         """
         Full training logic
         """
-        sumLog=defaultdict(lambda:0.0)
+        sumLog=defaultdict(list)
         sumTime=0
         #for metric in self.metrics:
         #    sumLog['avg_'+metric.__name__]=0
@@ -334,7 +335,7 @@ class BaseTrainer:
                 #raise lastErr
 
             elapsed_time = timeit.default_timer() - t
-            sumLog['sec_per_iter'] += elapsed_time
+            sumLog['sec_per_iter'].append( elapsed_time )
             #print('iter: '+str(elapsed_time))
 
             #Stochastic Weight Averaging    https://github.com/timgaripov/swa/blob/master/train.py
@@ -353,9 +354,9 @@ class BaseTrainer:
             for key, value in result.items():
                 if key == 'metrics':
                     for i, metric in enumerate(self.metrics):
-                        sumLog['avg_'+metric.__name__] += result['metrics'][i]
+                        sumLog['avg_'+metric.__name__].append(result['metrics'][i])
                 else:
-                    sumLog['avg_'+key] += value
+                    sumLog['avg_'+key].append(value)
             
             #log prep
             if (    self.iteration%self.log_step==0 or 
@@ -378,12 +379,12 @@ class BaseTrainer:
                 print('                   ', end='\r')
                 if self.iteration-self.start_iteration>=self.log_step: #skip avg if started in odd spot
                     for key in sumLog:
-                        sumLog[key] /= self.log_step
+                        sumLog[key] = np.mean(sumLog[key])
                     #self._minor_log(sumLog)
                     log = {**log, **sumLog}
                 self._minor_log(log)
                 for key in sumLog:
-                    sumLog[key] =0.0
+                    sumLog[key] = []
                 if self.iteration%self.val_step!=0: #we'll do it later if we have a validation pass
                     self.train_logger.add_entry(log)
 
@@ -409,7 +410,6 @@ class BaseTrainer:
                                 log['val_' + metric.__name__] = val_result[key][i]
                         else:
                             log[key] = value
-                            #sumLog['avg_'+key] += value
 
                 if self.train_logger is not None:
                     if self.iteration%self.log_step!=0:
