@@ -109,7 +109,7 @@ class SynthOCRDataset(Dataset):
         skipped=[]
         while True:
             #import pdb;pdb.set_trace()
-            if len(self.generated_words)==0:
+            while len(self.generated_words)==0:
                 self.generated_words = self.generator.generate()
             text,word_img = self.generated_words[0]
             scale = word_height/word_img.shape[0]
