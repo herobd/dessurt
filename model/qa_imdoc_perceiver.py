@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import numpy as np
 from model.pairing_g_graph_layoutlm import  runLayoutLM
 from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding,ReturnPositionalEncodingSeq
-from model.perceiver_io import PerceiverI, DecoderO, DoubleDecoderO, AutoRegressiveAttention, LatentAutoRegressiveAttention
+from model.perceiver_io import PerceiverI, DecoderO, DoubleDecoderO, AutoRegressiveAttention, LatentAutoRegressiveAttention, AllAutoRegressiveAttention
 from model.swin_transformer import ConvPatchEmbed
 from model.cnn_hwr import ResConvPatchEmbed
 try:
@@ -300,21 +300,22 @@ class QAImDocPerceiver(BaseModel):
                 latent_dim_head = qk_dim,
             )
         
-        if self.predict_from_input:
-            self.decoder_answer = DoubleDecoderO(
-                    queries_dim = output_dim,
-                    latent_dim=latent_dim,
-                    input_dim=input_dim,
-                    cross_heads = cross_heads,
-                    cross_dim_head = qk_dim,
-                    )
-        else:
-            self.decoder_answer = DecoderO(
-                    queries_dim = output_dim,
-                    latent_dim=latent_dim,
-                    cross_heads = cross_heads,
-                    cross_dim_head = qk_dim,
-                    )
+        if self.autoregressive!='all':
+            if self.predict_from_input:
+                self.decoder_answer = DoubleDecoderO(
+                        queries_dim = output_dim,
+                        latent_dim=latent_dim,
+                        input_dim=input_dim,
+                        cross_heads = cross_heads,
+                        cross_dim_head = qk_dim,
+                        )
+            else:
+                self.decoder_answer = DecoderO(
+                        queries_dim = output_dim,
+                        latent_dim=latent_dim,
+                        cross_heads = cross_heads,
+                        cross_dim_head = qk_dim,
+                        )
 
         if len(perceiver_blocks[-1])==3 and perceiver_blocks[-1][2] and not self.no_image:
             self.decoder_image = None
@@ -373,6 +374,29 @@ class QAImDocPerceiver(BaseModel):
                     cross_heads = cross_heads,
                     cross_dim_head = qk_dim
                     ) for i in range(num_answer_att)])
+            elif self.autoregressive=='all':
+                self.answer_autor_att = nn.ModuleList()
+                assert isinstance(num_answer_att,list)
+                for use_in in num_answer_att:
+                    if use_in:
+                        self.answer_autor_att.append( AllAutoRegressiveAttention(
+                                output_dim,
+                                out_length,
+                                latent_dim,
+                                input_dim,
+                                main_heads=cross_heads,
+                                main_dim_head=qk_dim,
+                                cross_heads = cross_heads,
+                                cross_dim_head = qk_dim ) )
+                    else:
+                        self.answer_autor_att.append( LatentAutoRegressiveAttention(
+                                output_dim,
+                                out_length,
+                                latent_dim,
+                                main_heads=cross_heads,
+                                main_dim_head=qk_dim,
+                                cross_heads = cross_heads,
+                                cross_dim_head = qk_dim ) )
             else:
                 self.answer_autor_att = nn.Sequential(*[AutoRegressiveAttention(output_dim,out_length,main_heads=cross_heads,main_dim_head=qk_dim) for i in range(num_answer_att)])
 
@@ -564,25 +588,33 @@ class QAImDocPerceiver(BaseModel):
         else:        
             query_a_tokens = self.query_a_tokens.expand(batch_size,-1,-  1)
 
-        if self.predict_from_input:
-            a_tokens = self.decoder_answer(latent,data_tokens,query_a_tokens)
-
-        else:
-            a_tokens = self.decoder_answer(latent,query_a_tokens)
-
-        if self.answer_autor_att is not None:
+        if self.autoregressive == 'all' and not distill:
             if distill:
-                a_tokens = self.distil_buffer_layer(a_tokens) #to provide space seperation for prediction when doing distillation (as the normal model has more layers).
+                a_tokens = self.decoder_answer(latent,data_tokens,query_a_tokens)
             else:
-                if self.autoregressive == 'latent':
-                    for attention_module in self.answer_autor_att:
-                        a_tokens = attention_module(a_tokens,latent)
+                for attention_module in self.answer_autor_att:
+                    a_tokens = attention_module(a_tokens,latent,input_tokens,input_padding_mask)
+        else:
+            if self.predict_from_input:
+                a_tokens = self.decoder_answer(latent,data_tokens,query_a_tokens)
+
+            else:
+                assert not distill
+                a_tokens = self.decoder_answer(latent,query_a_tokens)
+
+            if self.answer_autor_att is not None:
+                if distill:
+                    a_tokens = self.distil_buffer_layer(a_tokens) #to provide space seperation for prediction when doing distillation (as the normal model has more layers).
                 else:
-                    a_tokens = self.answer_autor_att(a_tokens)
-                if self.predict_from_input:
-                    a_tokens = self.decoder_answer(latent,data_tokens,a_tokens)
-                else:
-                    a_tokens = self.decoder_answer(latent,a_tokens)
+                    if self.autoregressive == 'latent':
+                        for attention_module in self.answer_autor_att:
+                            a_tokens = attention_module(a_tokens,latent)
+                    else:
+                        a_tokens = self.answer_autor_att(a_tokens)
+                    if self.predict_from_input:
+                        a_tokens = self.decoder_answer(latent,data_tokens,a_tokens)
+                    else:
+                        a_tokens = self.decoder_answer(latent,a_tokens)
 
 
         ##############
@@ -603,6 +635,7 @@ class QAImDocPerceiver(BaseModel):
         response_greedy_tokens = response_decoded.argmax(dim=2)
         
         if RUN:
+            assert isinstance(self.autoregressive,bool)
             offset=1
             next_response_greedy_token=response_greedy_tokens
 
