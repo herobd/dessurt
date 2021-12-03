@@ -592,11 +592,15 @@ class QAImDocPerceiver(BaseModel):
         else:        
             query_a_tokens = self.query_a_tokens.expand(batch_size,-1,-  1)
 
-        if self.autoregressive == 'all' and not distill:
+        if self.autoregressive == 'all':
             if distill:
                 a_tokens = self.decoder_answer(latent,data_tokens,query_a_tokens)
             else:
+                if RUN:
+                    saved_a_tokens = []
                 for attention_module in self.answer_autor_att:
+                    if RUN:
+                        saved_a_tokens.append(a_tokens)
                     a_tokens = attention_module(a_tokens,latent,input_tokens,input_padding_mask)
         else:
             if self.predict_from_input:
@@ -639,17 +643,25 @@ class QAImDocPerceiver(BaseModel):
         response_greedy_tokens = response_decoded.argmax(dim=2)
         
         if RUN:
-            assert isinstance(self.autoregressive,bool)
+            assert isinstance(self.autoregressive,bool) or self.autoregressive=='all'
             offset=1
             next_response_greedy_token=response_greedy_tokens
 
             while response_greedy_tokens[0,-1] != self.SEP_TOKEN and offset<self.max_pred_len:
                 ans_emb = self.text_embedding(next_response_greedy_token)
                 next_query_a_token = self.a_pos_1d_enc(ans_emb,offset=offset)
-                if self.predict_from_input:
+
+                if self.autoregressive == 'all':
+                    for i,attention_module in enumerate(self.answer_autor_att):
+                        saved_a_tokens[i] = torch.cat((saved_a_tokens[i],next_query_a_token),dim=1)
+                        next_query_a_token = attention_module(saved_a_tokens[i],latent,input_tokens,input_padding_mask,last_token=next_query_a_token)
+                    next_a_token = next_query_a_token
+
+                elif self.predict_from_input:
                     next_a_token = self.decoder_answer(latent,data_tokens,next_query_a_token)
                 else:
                     next_a_token = self.decoder_answer(latent,next_query_a_token)
+
                 response_decoded = self.answer_decode(next_a_token)
                 next_response_greedy_token = response_decoded.argmax(dim=2)
                 response_greedy_tokens = torch.cat((response_greedy_tokens,next_response_greedy_token),dim=1)

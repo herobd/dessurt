@@ -562,12 +562,17 @@ class LatentAutoRegressiveAttention(nn.Module):
         data,
         latent,
         in_tokens=None,
-        in_mask=None
+        in_mask=None,
+        last_token=None
     ):
         b, *_, device = *data.shape, data.device
-        x = data
+        if last_token is None:
+            x = data
+        else:
+            x = last_token #for runnning auto_regressive prediction
+            #only predicts one next token
 
-        x = self.main_att(x, context=latent, context2=x, mask2 = self.mask[:,:x.size(1),:x.size(1)].expand(x.size(0),-1,-1)) + x
+        x = self.main_att(x, context=latent, context2=data, mask2 = self.mask[:,:x.size(1),:data.size(1)].expand(x.size(0),-1,-1)) + x
         x = self.main_ff(x) + x
 
         return x
@@ -598,12 +603,17 @@ class AllAutoRegressiveAttention(nn.Module):
         data,
         latent,
         in_tokens,
-        in_mask
+        in_mask,
+        last_token=None
     ):
         b, *_, device = *data.shape, data.device
-        x = data
+        if last_token is None:
+            x = data
+        else:
+            x = last_token #for runnning auto_regressive prediction
+            #only predicts one next token
 
-        x = self.main_att(x, context=latent, context2=x, context3=in_tokens, mask2 = self.autoR_mask[:,:x.size(1),:x.size(1)].expand(x.size(0),-1,-1), mask3 = in_mask) + x
+        x = self.main_att(x, context=latent, context2=data, context3=in_tokens, mask2 = self.autoR_mask[:,:x.size(1),:data.size(1)].expand(x.size(0),-1,-1), mask3 = in_mask) + x
         x = self.main_ff(x) + x
 
         return x
