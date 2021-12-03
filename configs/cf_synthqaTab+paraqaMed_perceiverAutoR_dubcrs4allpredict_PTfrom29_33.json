@@ -1,5 +1,5 @@
 {
-    "name": "synthqaTab+paraqaMed_perceiverAutoR_dubcrs4allpredict_PTfrom28_32",
+    "name": "synthqaTab+paraqaMed_perceiverAutoR_dubcrs4allpredict_PTfrom29_33",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -124,7 +124,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 400000,
-        "accum_grad_steps": 7,
+        "accum_grad_steps": 1,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
