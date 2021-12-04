@@ -8,6 +8,7 @@ from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRe
 from model.perceiver_io import PerceiverI, DecoderO, DoubleDecoderO, AutoRegressiveAttention, LatentAutoRegressiveAttention, AllAutoRegressiveAttention
 from model.swin_transformer import ConvPatchEmbed
 from model.cnn_hwr import ResConvPatchEmbed
+from model.part_frozen_embedding import PartFrozenEmbedding
 try:
     from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
     from transformers import LayoutLMTokenizer, LayoutLMModel
@@ -152,9 +153,12 @@ class QAImDocPerceiver(BaseModel):
             self.DECODE_CLS_TOKEN=self.decode_tokenizer.CLS_index
 
 
-        self.text_embedding = nn.Embedding(self.tokenizer.vocab_size, input_dim)
         if in_token_type == 'bp': #we'll use the pre-trained embedding
-            self.text_embedding.weight.data[:,:self.tokenizer.pretrained_dim()] = torch.FloatTensor(self.tokenizer.get_pretrained())
+            #self.text_embedding.weight.data[:,:self.tokenizer.pretrained_dim()] = torch.FloatTensor(self.tokenizer.get_pretrained())
+            self.text_embedding = PartFrozenEmbedding(self.tokenizer.vocab_size,self.tokenizer.pretrained_dim(),input_dim-self.tokenizer.pretrained_dim(),torch.FloatTensor(self.tokenizer.get_pretrained()))
+        else:
+            self.text_embedding = nn.Embedding(self.tokenizer.vocab_size, input_dim)
+
         self.ocr_out_dim = 97
         self.one_hot_conf = 0.9
         self.zero_hot_conf = (1-self.one_hot_conf)/(self.ocr_out_dim-1)
