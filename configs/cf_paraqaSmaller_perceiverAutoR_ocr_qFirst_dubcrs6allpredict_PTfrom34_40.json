@@ -1,5 +1,5 @@
 {
-    "name": "paraqaSmaller_perceiverAutoR_ocr_dubcrs4allpredict_34",
+    "name": "paraqaSmaller_perceiverAutoR_ocr_qFirst_dubcrs6allpredict_PTfrom34_40",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -17,8 +17,8 @@
                 "rot_degree_std_dev": 1
             },
 	"questions": 1,
-	"max_qa_len_in": 15,
-	"max_qa_len_out": 20,
+	"max_qa_len_in": 60,
+	"max_qa_len_out": 128,
         "image_size": [94,380],
 	"prefetch_factor": 2,
         "shuffle": true
