@@ -419,20 +419,23 @@ class QAImDocPerceiver(BaseModel):
 
     #we're building this for fixed images size
     def forward(self,image,ocr_results,questions,answers=None,RUN=False,get_tokens=False):
-        batch_size = image.size(0)
+        batch_size = image.size(0) if image is not None else len(ocr_results)
         assert batch_size == len(questions)
 
         #t#ticA=timeit.default_timer()#t#
-        device = image.device
+        device = image.device if image is not None else self.answer_decode[0].weight.device
         if self.ocr_append_image:
             grid_ocr = self.appendOCRToVisual(ocr_results,device)
             image = torch.cat((image,grid_ocr),dim=1)
 
-        im_tokens = self.patch_embed(image)
-        im_tokens += self.absolute_2dpos_embed #Swin doesn't use this as it can rely on the biased attention. We need the image tokens to know where they are so they can interact with the document and question tokens
-        query_im_tokens = im_tokens
+        if image is not None:
+            im_tokens = self.patch_embed(image)
+            im_tokens += self.absolute_2dpos_embed #Swin doesn't use this as it can rely on the biased attention. We need the image tokens to know where they are so they can interact with the document and question tokens
+            query_im_tokens = im_tokens
+        else:
+            query_im_tokens = None
 
-        if self.no_image: #clear input tokens
+        if self.no_image or image is None: #clear input tokens
             im_tokens = torch.FloatTensor(batch_size,0,self.input_dim).to(device)
         num_im = im_tokens.size(1)
         #Dropout?
@@ -581,11 +584,14 @@ class QAImDocPerceiver(BaseModel):
         #Run through Perceiver
         #print('input tokens: {}'.format(input_tokens.size()))
         latent, data_tokens = self.perciever(input_tokens,input_padding_mask)
-
-        if self.decoder_image is not None or self.no_image:
-            im_feats = self.decoder_image(latent,query_im_tokens)
+        
+        if query_im_tokens is not None:
+            if self.decoder_image is not None or self.no_image:
+                im_feats = self.decoder_image(latent,query_im_tokens)
+            else:
+                im_feats = data_tokens[:,:num_im]
         else:
-            im_feats = data_tokens[:,:num_im]
+            im_feats = None
 
         if self.autoregressive and not distill:
             query_a_tokens = a_tokens
@@ -624,13 +630,16 @@ class QAImDocPerceiver(BaseModel):
                     else:
                         a_tokens = self.decoder_answer(latent,a_tokens)
 
-
-        ##############
-        #Visual output
-        H,W = self.patches_resolution
-        #reshape and permute to convert to image
-        im_feats = im_feats.view(batch_size,H,W,im_feats.size(2)).permute(0,3,1,2)
-        out_mask = self.upsample_net(im_feats)
+        
+        if im_feats is not None:
+            ##############
+            #Visual output
+            H,W = self.patches_resolution
+            #reshape and permute to convert to image
+            im_feats = im_feats.view(batch_size,H,W,im_feats.size(2)).permute(0,3,1,2)
+            out_mask = self.upsample_net(im_feats)
+        else:
+            out_mask = None
         
         #############
         #Text output
