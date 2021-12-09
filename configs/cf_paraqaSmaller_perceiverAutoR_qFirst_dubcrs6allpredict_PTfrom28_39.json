@@ -1,5 +1,5 @@
 {
-    "name": "test",
+    "name": "paraqaSmaller_perceiverAutoR_qFirst_dubcrs6allpredict_PTfrom28_39",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -8,18 +8,18 @@
         "data_set_name": "SynthParaQA",
 	"mode": "pretrain2",
         "data_dir": "../data/fonts",
-        "batch_size": 1,
+        "batch_size": 7,
         "num_workers": 4,
         "rescale_range": [0.9,1.1],
         "crop_params": {
-                "crop_size":[768,768],
+                "crop_size":[96,384],
                 "pad":0,
                 "rot_degree_std_dev": 1
             },
 	"questions": 1,
 	"max_qa_len_in": 15,
 	"max_qa_len_out": 20,
-        "image_size": [768,768],
+        "image_size": [94,380],
 	"prefetch_factor": 2,
         "shuffle": true
 
@@ -93,7 +93,7 @@
 
 	    "char_output": true,
 	    "char_tokens": true,
-            "image_size": [768,768],
+            "image_size": [96,384],
 	    "use_res_cnn_embed": true,
             "pre_trained": {
                 "patch_emb": "saved/synth_ocr_emb_pretrain_slow/checkpoint-latest.pth"
