@@ -1,5 +1,5 @@
 {
-    "name": "test",
+    "name": "synthqaTab+paraqa+cdip_perceiverAutoR_4allpredict_PTfrom36_38",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -87,6 +87,32 @@
                     "prefetch_factor": 10,
                     "persistent_workers": true
                 }
+            },
+            {
+                "freq": 0.2,
+                "config": {
+                    "data_set_name": "CDIPCloudQA",
+                    "data_dir": "../data/CDIPCloud",
+                    "super_computer": true,
+                    "batch_size": 1,
+                    "num_workers": 4,
+                    "rescale_range": [
+                        0.9,
+                        1.1
+                    ],
+		    "rescale_to_crop_size_first": true,
+                    "crop_params": {
+                        "crop_size": [
+                            768,768
+                        ],
+                        "pad": 0,
+                        "rot_degree_std_dev": 1
+                    },
+                    "questions": 1,
+                    "max_qa_len_in": 70,
+                    "max_qa_len_out": 250,
+                    "reuse_factor": 1.0
+                }
             }
         ]
 
@@ -138,7 +164,7 @@
         "monitor_mode": "none",
         "retry_count":0,
 
-	"do_ocr": "yes",
+	"do_ocr": "no",
 
 
         "#use_learning_schedule": "multi_rise then ramp_to_swa",
@@ -151,12 +177,11 @@
     "arch": "QAImDocPerceiver", 
     "model": {
 	    "grid_ocr": false,
-	    "ocr_tokens": true,
+	    "ocr_tokens": false,
 	    "fix_pos_enc": true,
-	    "layoutlm_emb": true,
 
 	    "autoregressive": "all",
-            "num_answer_att": [true,false,true,false],
+            "num_answer_att": [true,true,false,false],
 
 	    "char_output": true,
 	    "char_tokens": true,
@@ -166,7 +191,7 @@
                 "patch_emb": "saved/synth_ocr_emb_pretrain_slow/checkpoint-latest.pth"
             },
 	    "input_dim": 256,
-	    "perceiver_blocks": [[3,1,true],[6,1,true],[6,1,true],[6,1,true]],
+	    "perceiver_blocks": [[6,1,false],[6,1,false],[12,1,false]],
 	    "num_latents": 256,
 	    "latent_dim": 800,
 	    "cross_heads": 8,
