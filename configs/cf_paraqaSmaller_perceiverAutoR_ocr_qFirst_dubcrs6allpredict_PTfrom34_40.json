@@ -1,5 +1,5 @@
 {
-    "name": "test",
+    "name": "paraqaSmaller_perceiverAutoR_ocr_qFirst_dubcrs6allpredict_PTfrom34_40",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -8,18 +8,18 @@
         "data_set_name": "SynthParaQA",
 	"mode": "pretrain2",
         "data_dir": "../data/fonts",
-        "batch_size": 1,
+        "batch_size": 7,
         "num_workers": 4,
         "rescale_range": [0.9,1.1],
         "crop_params": {
-                "crop_size":[768,768],
+                "crop_size":[96,384],
                 "pad":0,
                 "rot_degree_std_dev": 1
             },
 	"questions": 1,
-	"max_qa_len_in": 15,
-	"max_qa_len_out": 20,
-        "image_size": [768,768],
+	"max_qa_len_in": 60,
+	"max_qa_len_out": 128,
+        "image_size": [94,380],
 	"prefetch_factor": 2,
         "shuffle": true
 
@@ -57,7 +57,7 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 500000,
+        "iterations": 800000,
         "accum_grad_steps": 6,
         "#swa": true,
         "#swa_start": 200000,
@@ -88,20 +88,22 @@
 	    "grid_ocr": false,
 	    "ocr_tokens": true,
 	    "fix_pos_enc": true,
+	    "layoutlm_emb": true,
+	    "final_image_size": [1152,768],
 
 	    "autoregressive": "all",
             "num_answer_att": [true,false,false,true,false,false],
 
 	    "char_output": true,
 	    "char_tokens": true,
-            "image_size": [768,768],
+            "image_size": [96,384],
 	    "use_res_cnn_embed": true,
             "pre_trained": {
                 "patch_emb": "saved/synth_ocr_embWithMask_pretrain/checkpoint-latest.pth"
             },
 	    "input_dim": 256,
 	    "question_only_perceiver_blocks": [[3,1,false]],
-	    "perceiver_blocks": [[3,1,true],[3,1,true],[6,1,true],[8,1,true]],
+	    "perceiver_blocks": [[3,1,true],[3,1,true],[6,1,true],[7,1,true]],
 	    "num_latents": 256,
 	    "latent_dim": 800,
 	    "cross_heads": 8,
