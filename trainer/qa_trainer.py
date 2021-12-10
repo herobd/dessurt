@@ -352,6 +352,9 @@ class QATrainer(BaseTrainer):
                 ocr_res=[[]]*image.size(0)
             elif self.do_ocr == 'json' or self.do_ocr == 'gt':
                 ocr_res = instance['pre-recognition']
+                #print('O Lengths '+' '.join([str(len(a[0])) for a in ocr_res])+' .....................')
+                #print()
+                
             else:
                 try:
                     ocr_res=[]
