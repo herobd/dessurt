@@ -493,7 +493,9 @@ class BaseTrainer:
                                     .format(iteration))
         else:
             filename = os.path.join(self.checkpoint_dir, 'checkpoint-latest.pth')
-                            
+            if os.path.exists(filename):
+                os.rename(filename,os.path.join(self.checkpoint_dir, 'checkpoint-prev.pth'))
+                                
         #print(self.module.state_dict().keys())
         torch.save(state, filename)
         if not minor:
