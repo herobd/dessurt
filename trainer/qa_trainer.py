@@ -401,7 +401,7 @@ class QATrainer(BaseTrainer):
             ocr_res = (ocrBoxes,ocr)
 
         #import pdb;pdb.set_trace()
-        if min(len(ocr_b) for ocr_b in ocr_res)>0 and self.randomly_blank_image>random.random():
+        if ocr_res is not None and max(len(ocr_b) if ocr_b is not None else -1 for ocr_b in ocr_res)>0 and self.randomly_blank_image>random.random():
             image = None
         pred_a, target_a, string_a, pred_mask = self.model(image,ocr_res,questions,answers)
 

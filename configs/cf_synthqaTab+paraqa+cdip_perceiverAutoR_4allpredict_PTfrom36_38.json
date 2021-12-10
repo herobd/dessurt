@@ -1,5 +1,5 @@
 {
-    "name": "synthqaTab+paraqaMed_perceiverAutoR_dubcrs4allpredict_PTfrom29_33",
+    "name": "synthqaTab+paraqa+cdip_perceiverAutoR_4allpredict_PTfrom36_38",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -28,7 +28,7 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            576,576
+                            768,768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
@@ -39,7 +39,7 @@
                     "text_height": 32,
                     "wider": 200,
                     "image_size": [
-                        576,576
+                        768,768
                     ],
                     "change_size": true,
                     "word_questions": "simple",
@@ -73,7 +73,7 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            576,576
+                            768,768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
@@ -82,10 +82,36 @@
                     "max_qa_len_in": 70,
                     "max_qa_len_out": 250,
                     "image_size": [
-                        572,572
+                        760,760
                     ],
-                    "prefetch_factor": 5,
+                    "prefetch_factor": 10,
                     "persistent_workers": true
+                }
+            },
+            {
+                "freq": 0.2,
+                "config": {
+                    "data_set_name": "CDIPCloudQA",
+                    "data_dir": "../data/CDIPCloud",
+                    "super_computer": true,
+                    "batch_size": 1,
+                    "num_workers": 4,
+                    "rescale_range": [
+                        0.9,
+                        1.1
+                    ],
+		    "rescale_to_crop_size_first": true,
+                    "crop_params": {
+                        "crop_size": [
+                            768,768
+                        ],
+                        "pad": 0,
+                        "rot_degree_std_dev": 1
+                    },
+                    "questions": 1,
+                    "max_qa_len_in": 70,
+                    "max_qa_len_out": 250,
+                    "reuse_factor": 1.0
                 }
             }
         ]
@@ -124,7 +150,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 400000,
-        "accum_grad_steps": 7,
+        "accum_grad_steps": 6,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
@@ -155,17 +181,17 @@
 	    "fix_pos_enc": true,
 
 	    "autoregressive": "all",
-            "num_answer_att": [true,false,true,false],
+            "num_answer_att": [true,true,false,false],
 
 	    "char_output": true,
 	    "char_tokens": true,
-            "image_size": [576,576],
+            "image_size": [768,768],
 	    "use_res_cnn_embed": true,
             "pre_trained": {
                 "patch_emb": "saved/synth_ocr_emb_pretrain_slow/checkpoint-latest.pth"
             },
 	    "input_dim": 256,
-	    "perceiver_blocks": [[3,1,true],[3,1,true],[3,1,true],[3,1,true],[3,1,true],[6,1,true]],
+	    "perceiver_blocks": [[6,1,false],[6,1,false],[12,1,false]],
 	    "num_latents": 256,
 	    "latent_dim": 800,
 	    "cross_heads": 8,

@@ -5,90 +5,24 @@
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
-        "data_set_name": "MultipleDataset",
-        "data_dir": "",
-        "shuffle": true,
-        "prefetch_factor": 5,
-        "persistent_workers": true,
+        "data_set_name": "SynthParaQA",
+	"mode": "pretrain2",
+        "data_dir": "../data/fonts",
         "batch_size": 1,
         "num_workers": 4,
-        "datasets": [
-            {
-                "freq": 0.01,
-                "config": {
-                    "data_set_name": "SynthQADocDataset",
-                    "fontdir": "../data/fonts/",
-                    "textdir": "../data/",
-                    "data_dir": "../data/english4line_fontslonger2",
-                    "batch_size": 1,
-                    "num_workers": 4,
-                    "rescale_range": [
-                        1.0,
-                        1.0
-                    ],
-                    "crop_params": {
-                        "crop_size": [
-                            768,768
-                        ],
-                        "pad": 0,
-                        "rot_degree_std_dev": 1
-                    },
-                    "questions": 1,
-                    "min_entries": null,
-                    "max_entries": 160,
-                    "text_height": 32,
-                    "wider": 200,
-                    "image_size": [
-                        768,768
-                    ],
-                    "change_size": true,
-                    "word_questions": "simple",
-                    "do_masks": true,
-                    "tables": 1,
-                    "multiline": 0.6,
-                    "max_qa_len_in": 70,
-                    "max_qa_len_out": 250,
-                    "header_dir": "../data/english4line_fonts",
-                    "max_chars": 10,
-                    "min_chars": 1,
-                    "use_before_refresh": 99999999999999999999,
-                    "set_size": 1000000,
-                    "num_processes": -1,
-                    "gen_type": "veryclean",
-                    "char_file": "../data/english_char_set.json",
-                    "shuffle": true
-                }
+        "rescale_range": [0.9,1.1],
+        "crop_params": {
+                "crop_size":[768,768],
+                "pad":0,
+                "rot_degree_std_dev": 1
             },
-            {
-                "freq": 0.8,
-                "config": {
-                    "data_set_name": "SynthParaQA",
-                    "data_dir": "../data/fonts",
-		    "easy": true,
-                    "batch_size": 1,
-                    "num_workers": 4,
-                    "rescale_range": [
-                        0.9,
-                        1.1
-                    ],
-                    "crop_params": {
-                        "crop_size": [
-                            768,768
-                        ],
-                        "pad": 0,
-                        "rot_degree_std_dev": 1
-                    },
-                    "questions": 1,
-                    "max_qa_len_in": 70,
-                    "max_qa_len_out": 250,
-                    "image_size": [
-                        760,760
-                    ],
-                    "prefetch_factor": 10,
-                    "persistent_workers": true
-                }
-            }
-        ]
+	"questions": 1,
+	"max_qa_len_in": 15,
+	"max_qa_len_out": 20,
+        "image_size": [768,768],
+	"prefetch_factor": 2,
+        "shuffle": true
+
 
     },
     "validation": {
@@ -123,8 +57,8 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 400000,
-        "accum_grad_steps": 1,
+        "iterations": 500000,
+        "accum_grad_steps": 6,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
@@ -138,7 +72,8 @@
         "monitor_mode": "none",
         "retry_count":0,
 
-	"do_ocr": "yes",
+	"do_ocr": "random",
+	"randomly_blank_image": 0.5,
 
 
         "#use_learning_schedule": "multi_rise then ramp_to_swa",
@@ -153,20 +88,20 @@
 	    "grid_ocr": false,
 	    "ocr_tokens": true,
 	    "fix_pos_enc": true,
-	    "layoutlm_emb": true,
 
 	    "autoregressive": "all",
-            "num_answer_att": [true,false,true,false],
+            "num_answer_att": [true,false,false,true,false,false],
 
 	    "char_output": true,
 	    "char_tokens": true,
             "image_size": [768,768],
 	    "use_res_cnn_embed": true,
             "pre_trained": {
-                "patch_emb": "saved/synth_ocr_emb_pretrain_slow/checkpoint-latest.pth"
+                "patch_emb": "saved/synth_ocr_embWithMask_pretrain/checkpoint-latest.pth"
             },
 	    "input_dim": 256,
-	    "perceiver_blocks": [[3,1,true],[6,1,true],[6,1,true],[6,1,true]],
+	    "question_only_perceiver_blocks": [[3,1,false]],
+	    "perceiver_blocks": [[3,1,true],[3,1,true],[6,1,true],[8,1,true]],
 	    "num_latents": 256,
 	    "latent_dim": 800,
 	    "cross_heads": 8,
