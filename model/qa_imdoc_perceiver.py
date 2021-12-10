@@ -107,6 +107,9 @@ class QAImDocPerceiver(BaseModel):
         qk_dim = 32 #per collab example
         self.out_length = out_length
 
+
+        question_only_perceiver_blocks = config.get('question_only_perceiver_blocks')
+
         num_answer_att = config.get('num_answer_att')
         if self.autoregressive=='latent':
             assert num_answer_att>0
@@ -293,9 +296,23 @@ class QAImDocPerceiver(BaseModel):
 
         #dim=32?
         #logits dim=100
+        if question_only_perceiver_blocks is not None:
+            self.q_perciever = PerceiverI(
+                    block_specification = question_only_perceiver_blocks,
+                    num_latents = num_latents,
+                    latent_dim=latent_dim,
+                    dim = input_dim, #input dim
+                    cross_heads = cross_heads,
+                    cross_dim_head = qk_dim,
+                    latent_heads = self_heads,
+                    latent_dim_head = qk_dim,
+                )
+        else:
+            self.q_perciever = None
+
         self.perciever = PerceiverI(
                 block_specification = perceiver_blocks,
-                num_latents = num_latents,
+                num_latents = num_latents if self.q_perciever is None else 0,
                 latent_dim=latent_dim,
                 dim = input_dim, #input dim
                 cross_heads = cross_heads,
@@ -303,6 +320,7 @@ class QAImDocPerceiver(BaseModel):
                 latent_heads = self_heads,
                 latent_dim_head = qk_dim,
             )
+
         
         if self.autoregressive!='all':
             if self.predict_from_input:
@@ -575,15 +593,22 @@ class QAImDocPerceiver(BaseModel):
 
         im_padding_mask = torch.BoolTensor(batch_size,num_im).fill_(1).to(device)
 
+        if self.q_perciever is not None:
+            latent,q_tokens = self.q_perciever(q_tokens,q_padding_mask)
+            input_tokens = torch.cat( (im_tokens,ocr_tokens), dim=1)
+            input_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask), dim=1)
 
-        #Put full input together. im, ocr,question
-        input_tokens = torch.cat( (im_tokens,ocr_tokens,q_tokens), dim=1)
-        input_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask), dim=1)
+        else:
+
+            #Put full input together. im, ocr,question
+            input_tokens = torch.cat( (im_tokens,ocr_tokens,q_tokens), dim=1)
+            input_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask), dim=1)
+            latent = None
         
 
         #Run through Perceiver
         #print('input tokens: {}'.format(input_tokens.size()))
-        latent, data_tokens = self.perciever(input_tokens,input_padding_mask)
+        latent, data_tokens = self.perciever(input_tokens,input_padding_mask,latents=latent)
         
         if query_im_tokens is not None:
             if self.decoder_image is not None or self.no_image:
@@ -596,7 +621,7 @@ class QAImDocPerceiver(BaseModel):
         if self.autoregressive and not distill:
             query_a_tokens = a_tokens
         else:        
-            query_a_tokens = self.query_a_tokens.expand(batch_size,-1,-  1)
+            query_a_tokens = self.query_a_tokens.expand(batch_size,-1,-1)
 
         if self.autoregressive == 'all':
             if distill:

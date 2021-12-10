@@ -110,7 +110,7 @@ def label_smoothing(x, target, padding_idx=0, smoothing=0.0): #huggingface padds
     except RuntimeError as e:
         print('scatter FAILED')
         print('target.data.size = {}'.format(target.data.size()))
-        print('confidence.size = {}'.format(confifence.size()))
+        print('true_dist.size = {}'.format(true_dist.size()))
         raise e
     true_dist[:, padding_idx] = 0
     mask = torch.nonzero(target.data == padding_idx)

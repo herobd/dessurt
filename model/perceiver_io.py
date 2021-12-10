@@ -329,7 +329,8 @@ class PerceiverI(nn.Module):
         self,
         data,
         mask = None,
-        latents = None
+        latents = None,
+        autor = None,
     ):
         b, *_, device = *data.shape, data.device
         if latents is None:
