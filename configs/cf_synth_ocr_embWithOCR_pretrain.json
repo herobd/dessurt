@@ -44,7 +44,7 @@
     "metrics": [],
     "trainer": {
         "class": "HWRTrainer",
-        "iterations": 200000,
+        "iterations": 50000,
         "save_dir": "saved/",
         "val_step": 999999999999999,
         "save_step": 25000,
@@ -54,6 +54,7 @@
         "monitor": "loss",
         "monitor_mode": "none",
         "skip_auto": true,
+        "do_ocr": "random",
 
 
         "use_learning_schedule": false

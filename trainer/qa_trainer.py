@@ -95,6 +95,8 @@ class QATrainer(BaseTrainer):
         if self.do_ocr and self.do_ocr!='no' and self.do_ocr!='json':
             self.ocr_reader = easyocr.Reader(['en'],gpu=config['cuda'])
 
+        self.randomly_blank_image  =config['trainer'].get('randomly_blank_image',0)
+
         self.DEBUG_max_ocr_len=0
 
     def _to_tensor(self, t):
@@ -346,9 +348,9 @@ class QATrainer(BaseTrainer):
         #-All correct
         #-partail corrupt, partail missing
         #-all missing (none)
-
+        
         if self.do_ocr:
-            if self.do_ocr == 'no':
+            if self.do_ocr == 'no' or (self.do_ocr=='random' and random.random()<0.5):
                 ocr_res=[[]]*image.size(0)
             elif self.do_ocr == 'json' or self.do_ocr == 'gt':
                 ocr_res = instance['pre-recognition']
@@ -402,6 +404,8 @@ class QATrainer(BaseTrainer):
             ocr_res = (ocrBoxes,ocr)
 
         #import pdb;pdb.set_trace()
+        if ocr_res is not None and max(len(ocr_b) if ocr_b is not None else -1 for ocr_b in ocr_res)>0 and self.randomly_blank_image>random.random():
+            image = None
         pred_a, target_a, string_a, pred_mask = self.model(image,ocr_res,questions,answers)
 
         #pred_a[:,0].sum().backward()
@@ -420,7 +424,7 @@ class QATrainer(BaseTrainer):
         
         losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
         #losses['answerLoss'] = pred_a.sum()
-        if 'mask' in self.loss and gt_mask is not None: #we allow gt_mask to be none to not supervise
+        if 'mask' in self.loss and gt_mask is not None and pred_mask is not None: #we allow gt_mask to be none to not supervise
             mask_labels_batch_mask = instance['mask_labels_batch_mask'].to(device)
             losses['maskLoss'] = self.loss['mask'](pred_mask*mask_labels_batch_mask[:,None,None,None],gt_mask)
 
@@ -452,7 +456,7 @@ class QATrainer(BaseTrainer):
             log['{}_ED'.format(q_type)] = np.mean(scores)
 
         if valid:
-            if gt_mask is not None:
+            if gt_mask is not None and pred_mask is not None:
                 #compute pixel IoU
                 pred_binary_mask = pred_mask>0
                 intersection = (pred_binary_mask*gt_mask).sum(dim=3).sum(dim=2)
