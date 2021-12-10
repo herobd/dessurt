@@ -33,12 +33,13 @@ def cache_fn(f):
 # helper classes
 
 class PreNorm(nn.Module):
-    def __init__(self, dim, fn, context_dim = None, context_dim2 = None):
+    def __init__(self, dim, fn, context_dim = None, context_dim2 = None, context_dim3 = None):
         super().__init__()
         self.fn = fn
         self.norm = nn.LayerNorm(dim)
         self.norm_context = nn.LayerNorm(context_dim) if exists(context_dim) else None
         self.norm_context2 = nn.LayerNorm(context_dim2) if exists(context_dim2) else None
+        self.norm_context3 = nn.LayerNorm(context_dim3) if exists(context_dim3) else None
 
     def forward(self, x, **kwargs):
         x = self.norm(x)
@@ -178,6 +179,80 @@ class Attention2Context(nn.Module):
         out = rearrange(out, '(b h) n d -> b n (h d)', h = h)
         return self.to_out(out)
 
+class Attention3Context(nn.Module):
+    def __init__(self, query_dim, context_dim1, context_dim2, context_dim3, heads = 8, dim_head = 64, v_dim=None):
+        super().__init__()
+        inner_dim = dim_head * heads
+        #context_dim = default(context_dim, query_dim)
+        if v_dim is None:
+            v_dim = query_dim
+        self.scale = dim_head ** -0.5
+        self.heads = heads
+
+        self.to_q = nn.Linear(query_dim, inner_dim, bias = True) #Official implementation uses bias (defaults to True)
+        self.to_k1 = nn.Linear(context_dim1, inner_dim, bias = True)
+        self.to_v1 = nn.Linear(context_dim1, v_dim, bias = True)
+        self.to_k2 = nn.Linear(context_dim2, inner_dim, bias = True)
+        self.to_v2 = nn.Linear(context_dim2, v_dim, bias = True)
+        self.to_k3 = nn.Linear(context_dim3, inner_dim, bias = True)
+        self.to_v3 = nn.Linear(context_dim3, v_dim, bias = True)
+        self.to_out = nn.Linear(v_dim, v_dim, bias=True)
+
+    def forward(self, x, context, context2, context3, mask1 = None, mask2 = None, mask3 = None):
+        h = self.heads
+
+        q = self.to_q(x)
+        #context = default(context, x)
+        k1 = self.to_k1(context)
+        v1 = self.to_v1(context)
+        k2 = self.to_k2(context2)
+        v2 = self.to_v2(context2)
+        k3 = self.to_k3(context3)
+        v3 = self.to_v3(context3)
+
+        k = torch.cat((k1,k2,k3),dim=1)
+        v = torch.cat((v1,v2,v3),dim=1)
+
+        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h = h), (q, k, v))
+
+        sim = einsum('b i d, b j d -> b i j', q, k) * self.scale
+
+        if mask1 is not None or mask2 is not None or mask3 is not None:
+            batch_size = x.size(0)
+            device = context.device
+            if mask1 is None:
+                if len(mask2.size())==2 if mask2 is not None else len(mask3.size())==2:
+                    mask1 = torch.BoolTensor(batch_size,context.size(1)).fill_(1).to(device)
+                else:
+                    mask1 = torch.BoolTensor(batch_size,x.size(1),context.size(1)).fill_(1).to(device)
+            if mask2 is None:
+                if len(mask1.size())==2:
+                    mask2 = torch.BoolTensor(batch_size,context2.size(1)).fill_(1).to(device)
+                else:
+                    mask2 = torch.BoolTensor(batch_size,x.size(1),context2.size(1)).fill_(1).to(device)
+            if mask3 is None:
+                if len(mask1.size())==2:
+                    mask3 = torch.BoolTensor(batch_size,context3.size(1)).fill_(1).to(device)
+                else:
+                    mask3 = torch.BoolTensor(batch_size,x.size(1),context3.size(1)).fill_(1).to(device)
+            elif len(mask3.size())==2 and len(mask2.size())==3:
+                mask3 = mask3[:,None,:].expand(-1,x.size(1),-1)
+
+            mask = torch.cat((mask1,mask2,mask3),dim=2)
+            max_neg_value = -torch.finfo(sim.dtype).max
+            if len(mask.size())==2:
+                mask = repeat(mask, 'b j -> (b h) () j', h = h)
+            else:
+                mask = repeat(mask, 'b i j -> (b h) i j', h =h)
+            sim.masked_fill_(~mask, max_neg_value)
+
+        # attention, what we cannot get enough of
+        attn = sim.softmax(dim = -1)
+
+        out = einsum('b i j, b j d -> b i d', attn, v)
+        out = rearrange(out, '(b h) n d -> b n (h d)', h = h)
+        return self.to_out(out)
+
 # main class
 
 class PerceiverI(nn.Module):
@@ -254,7 +329,8 @@ class PerceiverI(nn.Module):
         self,
         data,
         mask = None,
-        latents = None
+        latents = None,
+        autor = None,
     ):
         b, *_, device = *data.shape, data.device
         if latents is None:
@@ -466,7 +542,7 @@ class LatentAutoRegressiveAttention(nn.Module):
     def __init__(
         self,
         main_dim,
-        input_len,
+        output_len,
         latent_dim,
         main_heads=1,
         main_dim_head = 64,
@@ -478,7 +554,7 @@ class LatentAutoRegressiveAttention(nn.Module):
         self.main_att = PreNorm(main_dim, Attention2Context(main_dim, latent_dim, main_dim, heads = cross_heads, dim_head = cross_dim_head, v_dim = main_dim), context_dim = latent_dim, context_dim2=main_dim)
         self.main_ff = PreNorm(main_dim, FeedForward(main_dim))
 
-        self.register_buffer("mask", torch.tril(torch.BoolTensor(1,input_len,input_len).fill_(1)))
+        self.register_buffer("mask", torch.tril(torch.BoolTensor(1,output_len,output_len).fill_(1)))
         #self.register_buffer("latent_mask", torch.BoolTensor(1,latent_len,latent_len).fill_(1))
         
 
@@ -486,11 +562,59 @@ class LatentAutoRegressiveAttention(nn.Module):
         self,
         data,
         latent,
+        in_tokens=None,
+        in_mask=None,
+        last_token=None
     ):
         b, *_, device = *data.shape, data.device
-        x = data
+        if last_token is None:
+            x = data
+        else:
+            x = last_token #for runnning auto_regressive prediction
+            #only predicts one next token
 
-        x = self.main_att(x, context=latent, context2=x, mask2 = self.mask[:,:x.size(1),:x.size(1)].expand(x.size(0),-1,-1)) + x
+        x = self.main_att(x, context=latent, context2=data, mask2 = self.mask[:,:x.size(1),:data.size(1)].expand(x.size(0),-1,-1)) + x
+        x = self.main_ff(x) + x
+
+        return x
+
+class AllAutoRegressiveAttention(nn.Module):
+    def __init__(
+        self,
+        main_dim, 
+        output_len,
+        latent_dim,
+        input_dim,
+        main_heads=1,
+        main_dim_head = 64,
+        cross_heads =1,
+        cross_dim_head = 64
+    ):
+        super().__init__()
+
+        self.main_att = PreNorm(main_dim, Attention3Context(main_dim, latent_dim, main_dim, input_dim, heads = cross_heads, dim_head = cross_dim_head, v_dim = main_dim), context_dim = latent_dim, context_dim2=main_dim, context_dim3=input_dim)
+        self.main_ff = PreNorm(main_dim, FeedForward(main_dim))
+
+        self.register_buffer("autoR_mask", torch.tril(torch.BoolTensor(1,output_len,output_len).fill_(1)))
+        #self.register_buffer("latent_mask", torch.BoolTensor(1,latent_len,latent_len).fill_(1))
+        
+
+    def forward(
+        self,
+        data,
+        latent,
+        in_tokens,
+        in_mask,
+        last_token=None
+    ):
+        b, *_, device = *data.shape, data.device
+        if last_token is None:
+            x = data
+        else:
+            x = last_token #for runnning auto_regressive prediction
+            #only predicts one next token
+
+        x = self.main_att(x, context=latent, context2=data, context3=in_tokens, mask2 = self.autoR_mask[:,:x.size(1),:data.size(1)].expand(x.size(0),-1,-1), mask3 = in_mask) + x
         x = self.main_ff(x) + x
 
         return x

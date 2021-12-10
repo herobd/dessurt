@@ -40,10 +40,11 @@ def display(data):
         #print('answers: {}'.format(data['answers'][b]))
         if 'pre-recognition' in data and data['pre-recognition'] is not None:
             res_im = data['pre-recognition'][b]
-            print('OCR {}'.format(b))
-            for bb,(string,char_prob),score in res_im:
-                print(string)
-            print('-------')
+            if res_im is not None:
+                print('OCR {}'.format(b))
+                for bb,(string,char_prob),score in res_im:
+                    print(string)
+                print('-------')
         print('questions and answers')
         for q,a in zip(data['questions'][b],data['answers'][b]):
             print(q+' [:] '+a)
@@ -57,7 +58,7 @@ def display(data):
 
         #widths.append(img.size(1))
         
-        draw=False#'0w' in q or 'w0' in q or 'l0' in q
+        draw=True#'0w' in q or 'w0' in q or 'l0' in q
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -68,7 +69,7 @@ def display(data):
             #plt.imshow(img.numpy()[:,:,0], cmap='gray')
             #plt.show()
             img = (img*255).numpy().astype(np.uint8)
-            #cv2.imwrite('test_768x768.png',img)
+            cv2.imwrite('test_paraSmaller.png',img)
             cv2.imshow('x',img)
             cv2.show()
 
@@ -101,18 +102,18 @@ if __name__ == "__main__":
         repeat=1
     data=synth_para_qa.SynthParaQA(dirPath=dirPath,split='train',config={
         'batch_size':1,
-        'gt_ocr': True,
+        #'gt_ocr': True,
         'rescale_range':[0.9,1.1],
-        'mode': 'simple',
+        'mode': 'pretrain2',
         'simple_vocab': True,
         'crop_params': {
-            "crop_size":[256,256],
+            "crop_size":[96,384],
             "pad":0,
             "rot_degree_std_dev": 1
             },
         'questions':1,
         'max_qa_len': 506,
-        "image_size":[250,250],
+        "image_size":[96,384],
         "prefetch_factor": 10,
         "persistent_workers": True
 
