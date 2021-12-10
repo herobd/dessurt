@@ -88,6 +88,8 @@
 	    "grid_ocr": false,
 	    "ocr_tokens": true,
 	    "fix_pos_enc": true,
+            "layoutlm_emb": true,
+            "final_image_size": [1152,768],
 
 	    "autoregressive": "all",
             "num_answer_att": [true,false,true,false],

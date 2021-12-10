@@ -348,7 +348,7 @@ class QATrainer(BaseTrainer):
         #-All correct
         #-partail corrupt, partail missing
         #-all missing (none)
-
+        
         if self.do_ocr:
             if self.do_ocr == 'no' or (self.do_ocr=='random' and random.random()<0.5):
                 ocr_res=[[]]*image.size(0)
@@ -401,7 +401,7 @@ class QATrainer(BaseTrainer):
             ocr_res = (ocrBoxes,ocr)
 
         #import pdb;pdb.set_trace()
-        if max(len(ocr_b) for ocr_b in ocr_res)>0 and self.randomly_blank_image>random.random():
+        if min(len(ocr_b) for ocr_b in ocr_res)>0 and self.randomly_blank_image>random.random():
             image = None
         pred_a, target_a, string_a, pred_mask = self.model(image,ocr_res,questions,answers)
 
