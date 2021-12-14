@@ -8,7 +8,7 @@
         "data_set_name": "SynthParaQA",
 	"mode": "pretrain2",
         "data_dir": "../data/fonts",
-        "batch_size": 7,
+        "batch_size": 6,
         "num_workers": 4,
         "rescale_range": [0.9,1.1],
         "crop_params": {
