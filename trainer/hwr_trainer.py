@@ -151,14 +151,14 @@ class HWRTrainer(BaseTrainer):
 
 
             torch.nn.utils.clip_grad_value_(self.model.parameters(),1)
-            meangrad=0
-            count=0
-            for m in self.model.parameters():
-                if m.grad is None:
-                    continue
-                count+=1
-                meangrad+=m.grad.data.mean()
-            meangrad/=count
+            #meangrad=0
+            #count=0
+            #for m in self.model.parameters():
+            #    if m.grad is None:
+            #        continue
+            #    count+=1
+            #    meangrad+=m.grad.data.mean()
+            #meangrad/=count
 
             self.optimizer.step()
             loss = loss_item
@@ -182,7 +182,7 @@ class HWRTrainer(BaseTrainer):
                 #'pred_str': pred_str
 
                 'CER': cer,
-                'meangrad': meangrad,
+                #'meangrad': meangrad,
 
                 **metrics,
             }
