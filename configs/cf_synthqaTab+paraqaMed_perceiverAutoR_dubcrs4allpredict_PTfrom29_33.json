@@ -124,7 +124,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 400000,
-        "accum_grad_steps": 1,
+        "accum_grad_steps": 7,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
