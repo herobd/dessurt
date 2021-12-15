@@ -32,6 +32,8 @@ class ParaQADataset(QADataset):
         self.min_read_start_no_mask=5
         self.min_read_start_with_mask=1
 
+        self.end_token = '‡'
+
 
         self.punc_regex = re.compile('[%s]' % re.escape(string.punctuation))
         sub_vocab_file = config['sub_vocab_file'] if 'sub_vocab_file' in config else '../data/wordsEn.txt'
@@ -111,6 +113,29 @@ class ParaQADataset(QADataset):
                     'read_highlighted':1,
                     'masked_lm':1.0,
                     'put_in_place':1.0}
+        elif mode == 'easy_bart':
+            self.q_types = {
+                    #'read_blanked':1,
+                    'text_infilling_read':1,
+                    'proper_read_replaced':1,
+                    'read_line':1,
+                    #'highlight_text':1.0,
+                    'read_highlighted':1,
+                    'masked_lm':1.0,
+                    #'put_in_place':1.0,
+                    'read_on':1.0,
+                    #'read_backwards':0.5,
+                    #'highlight_block':1.0
+                    }
+            self.q_types_noblock = {
+                    'text_infilling_read':1,
+                    'proper_read_replaced':1,
+                    'read_line':1,
+                    #'highlight_text':1.0,
+                    'read_highlighted':1,
+                    'masked_lm':1.0,
+                    #'put_in_place':1.0
+                    }
         elif mode == 'pretrain':
             self.q_types = {
                     'read_blanked':1,
@@ -152,6 +177,29 @@ class ParaQADataset(QADataset):
             self.q_types_noblock = {
                     'read_blanked':1,
                     'read_replaced':1,
+                    #'read_with_masked':1.0,
+                    #'read_line':1,
+                    'highlight_text':1.0,
+                    'read_highlighted':1,
+                    #'masked_lm':1.0,
+                    #'put_in_place':1.0
+                    }
+        elif mode == 'pretrain_bart':
+            self.q_types = {
+                    'text_infilling_read':1,
+                    'proper_read_replaced':1,
+                    #'read_with_masked':1,
+                    #'read_line':1,
+                    #'highlight_text':1.0,
+                    'read_highlighted':1,
+                    #'masked_lm':1.0,
+                    #'put_in_place':1.0,
+                    'read_on':1,
+                    #'highlight_block':1.0
+                    }
+            self.q_types_noblock = {
+                    'text_infilling_read':1,
+                    'proper_read_replaced':1,
                     #'read_with_masked':1.0,
                     #'read_line':1,
                     'highlight_text':1.0,
@@ -263,7 +311,7 @@ class ParaQADataset(QADataset):
             #else:
             #    question_type = random.randrange(self.num_question_types_noblock)
             #if question_type == 0 or question_type == 1 or question_type == 5:
-            if question_type == 'read_blanked' or question_type == 'read_replaced' or question_type == 'read_with_masked':
+            if question_type == 'read_blanked' or question_type == 'read_replaced' or question_type == 'read_with_masked' or question_type == 'proper_read_replaced':
 
                 #0. Return blanked words (no highlight) and draw where it is "the [blank] chased the cat" > "dog"
                 # . Return blanked words (with highlight) and draw where it is "the [blank] chased the cat" > "dog"
@@ -274,6 +322,7 @@ class ParaQADataset(QADataset):
                 read_with_masked = question_type == 'read_with_masked'
                 use_highlight = (random.random()<0.5 and self.use_highlight) or read_with_masked
                 blank = question_type == 'read_blanked'
+                proper = question_type.startswith('proper')
                 for i in range(10):
                     blank_word_idx = random.randrange(len(wordmap))
                     outmask = [wordmap[blank_word_idx]]
@@ -315,6 +364,8 @@ class ParaQADataset(QADataset):
                         prompt=random.choice(vocab)
                 words_in_prompt=[blank_word_idx]
                 max_prompt_len = self.max_qa_len_in if not read_with_masked else self.max_qa_len_out
+
+                proper_response=response
                 while len(prompt)<max_prompt_len-1: #-1 to account for adding a space
                     if not at_front_end and not at_back_end:
                         step_front = random.random()<0.5
@@ -342,8 +393,10 @@ class ParaQADataset(QADataset):
 
                                 if changed_line:
                                     prompt = text+'\\'+prompt
+                                    proper_response = text+'\\'+proper_response
                                 else:
                                     prompt = text+' '+prompt
+                                    proper_response = text+' '+proper_response
                                 words_in_prompt.append(start_word_idx)
                             else:
                                 at_front_end=True #force check back if a word will fit
@@ -364,12 +417,13 @@ class ParaQADataset(QADataset):
 
                                 if changed_line:
                                     prompt += '\\'+text
+                                    proper_response += '\\'+text
                                 else:
                                     prompt += ' '+text
+                                    proper_response += ' '+text
                                 words_in_prompt.append(end_word_idx)
                             else:
                                 at_back_end=True #force check front if a word will fit
-                    
                 if read_with_masked:
                     question = 'rm>'
                     inmask =  [wordmap[i] for i in words_in_prompt]
@@ -385,6 +439,9 @@ class ParaQADataset(QADataset):
                     question = 'kb~' if blank else 'su~'
                     inmask = []
                     maskmask = None
+                if proper:
+                    question = 'proper_'+question
+                    response = proper_response
                 qa.append([question+prompt,response,[wordmap[i] for i in words_in_prompt+[blank_word_idx]],inmask,outmask,maskmask])
 
             #elif question_type == 2:
@@ -438,7 +495,7 @@ class ParaQADataset(QADataset):
                 if len(response)>self.max_qa_len_out:
                     response = response[:self.max_qa_len_out]
                 elif len(response)+1 < self.max_qa_len_out and response!='№':
-                    response = response+'‡'
+                    response = response+self.end_token
 
 
                 if use_highlight:
@@ -515,7 +572,7 @@ class ParaQADataset(QADataset):
                     if len(response)>self.max_qa_len_out:
                         response = response[:self.max_qa_len_out]
                     elif len(response)+1 <= self.max_qa_len_out:
-                        response += '‡'
+                        response += self.end_token
                     prompt = ''
                     question = ';0>'
                     inmask = [line_map+(None,)]
@@ -706,7 +763,7 @@ class ParaQADataset(QADataset):
                     prompt = prompt[-self.max_qa_len_in:]
 
                 if next_word[0]!=start_block:
-                    response='‡'
+                    response=self.end_token
                     words_in_response=[]
                 else:
                     goal_response_len = self.max_qa_len_out
@@ -747,7 +804,7 @@ class ParaQADataset(QADataset):
                     if len(response)>self.max_qa_len_out:
                         response = response[:self.max_qa_len_out]
                     if next_word[0]!=start_block and len(response)<self.max_qa_len_out:
-                        response+='‡'#if we can, add an end-of-block sign
+                        response+=self.end_token#if we can, add an end-of-block sign
                 if use_highlight:
                     question = 'r0~' if forward else 'b0~'
                     inmask =  [wordmap[i] for i in words_in_prompt]
@@ -832,8 +889,75 @@ class ParaQADataset(QADataset):
                         firstl = l
                         continue
                     words.append(ocr[b]['paragraphs'][p]['lines'][l]['words'][w]['text'])
-                response = ' '.join(words) + '‡'
+                response = ' '.join(words) + self.end_token
                 qa.append(['>',response,[],None,None,None])
+
+
+            elif question_type == 'text_infilling_read':
+                block_idx = random.randrange(len(ocr))
+                words = []
+                allwords = []
+                
+                response=''
+                for p,para in enumerate(ocr[block_idx]['paragraphs']):
+                    for l,line in enumerate(para['lines']):
+                        for w,word in enumerate(line['words']):
+                            words.append((word,p,l,w))
+                            allwords.append((block_idx,p,l,w))
+                            response+=word['text']+' '
+                        response=response[:-1]+'\\' #change space to newline
+                response=response[:-1]+self.end_token #remove newline
+                
+                to_mask=[]
+                num_spans=random.randrange(1,max(len(words)//8,2))
+                for i in range(num_spans):
+                    num = np.random.poisson(3)
+                    if num>= len(words):
+                        if len(words)>1:
+                            num=1
+                        else:
+                            continue
+                    loc = random.randrange(0,len(words)-num)
+                    to_mask.append((loc,num))
+
+
+                to_mask.sort(key=lambda a:a[0],reverse=True)
+                new_words = words
+                for loc,num in to_mask:
+                    new_words = new_words[:loc]+[None]+new_words[loc+num:]
+
+                prompt = ''
+                last_paraline = None
+                last_blank=False
+                for word_info in new_words:
+                    if word_info is not None:
+                        last_blank = False
+                        word,p,l,w=word_info
+                        text = word['text']
+                        if last_paraline is None:
+                            space=''
+                        elif last_paraline==(p,l):
+                            space=' '
+                        else:
+                            space='\\'
+                        last_paraline=(p,l)
+                    else:
+                        if last_blank:
+                            continue #merge blank
+                        text='<blank> '
+                        space = ' '
+                        last_paraline = None
+
+                    prompt+=space+text
+
+                if random.random()<0.5: 
+                    question = 'infillread~'
+                    inmask =  []
+                else:
+                    question = 'infillread0~'
+                    inmask = [(block_idx,None,None,None)]
+                qa.append([question+prompt,response,allwords,inmask,None,None])
+
             #else:
             #    raise NotImplementedError('Unknown question type: {}'.format(question_type))
 
