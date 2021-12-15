@@ -348,7 +348,7 @@ class QATrainer(BaseTrainer):
         #-All correct
         #-partail corrupt, partail missing
         #-all missing (none)
-
+        
         if self.do_ocr:
             if self.do_ocr == 'no' or (self.do_ocr=='random' and random.random()<0.5):
                 ocr_res=[[]]*image.size(0)
