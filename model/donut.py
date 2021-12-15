@@ -7,11 +7,12 @@ from model.pairing_g_graph_layoutlm import  runLayoutLM
 from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding
 from model.swin_transformer import ConvPatchEmbed, SwinTransformerBlock, PatchMerging
 from model.perceiver_io import BARTAttentionLayer
-try:
-    from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
-    from transformers import LayoutLMTokenizer, LayoutLMModel
-except:
-    pass
+#try:
+from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
+from transformers import BartTokenizer, BartModel
+from transformers import LayoutLMTokenizer, LayoutLMModel
+#except:
+#    pass
 from model.special_token_embedder import SpecialTokenEmbedder
 from model.cnn_hwr import ResConvPatchEmbed
 from model.part_frozen_embedding import PartFrozenEmbedding
@@ -75,6 +76,8 @@ class Donut(BaseModel):
         bart_layers = config['bart_layers']
         d_model = config['decoder_dim']
 
+        init_from_pretrained = config.get('init_from_pretrained')
+
         window_size = config['window_size'] #7
         if type(window_size) is int:
             window_size = [window_size]*len(blocks_per_level)
@@ -103,7 +106,10 @@ class Donut(BaseModel):
             self.SEP_TOKEN=self.tokenizer.SEP_index
             self.CLS_TOKEN=self.tokenizer.CLS_index
         elif in_token_type == 'word':
-            self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+            if init_from_pretrained=='bart':
+                self.tokenizer = BartTokenizer.from_pretrained('facebook/bart-base')
+            else:
+                self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
             self.SEP_TOKEN= 102
             self.CLS_TOKEN= 101
         elif in_token_type == 'bp':
@@ -120,15 +126,23 @@ class Donut(BaseModel):
             self.DECODE_SEP_TOKEN=self.decode_tokenizer.SEP_index
             self.DECODE_CLS_TOKEN=self.decode_tokenizer.CLS_index
 
+        if init_from_pretrained=='distilbert':
+            init_model = DistilBertModel.from_pretrained('distilbert-base-uncased')
+            init_emb = init_model.embeddings.word_embeddings
+        elif init_from_pretrained=='bart':
+            init_model = BartModel.from_pretrained('facebook/bart-base')
+            init_emb = init_model.shared
+        else:
+            init_model = None
+            init_emb = None
 
         if in_token_type == 'bp': #we'll use the pre-trained embedding
             self.text_embedding = PartFrozenEmbedding(self.tokenizer.vocab_size,self.tokenizer.pretrained_dim(),d_model-self.tokenizer.pretrained_dim(),torch.FloatTensor(self.tokenizer.get_pretrained()))
         else:
             self.text_embedding = nn.Embedding(self.tokenizer.vocab_size, d_model)
             if in_token_type == 'word': #we'll use the pre-trained embedding to initialize
-                distilbert_emb = DistilBertModel.from_pretrained('distilbert-base-uncased').embeddings.word_embeddings
-                distil_size = distilbert_emb.weight.size(1)
-                self.text_embedding.weight.data[:,:d_model] = distilbert_emb.weight.data[:,:d_model]
+                
+                self.text_embedding.weight.data[:,:d_model] = init_emb.weight.data[:,:d_model]
 
 
         self.q_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000)
@@ -224,9 +238,37 @@ class Donut(BaseModel):
         for x in range(bart_layers):
             self.decoder_transformer.append( BARTAttentionLayer(
                 main_dim = d_model,
-                encoder_dim = d_im) )
+                encoder_dim = d_im,
+                main_heads = config.get('self_nheads',8),
+                main_dim_head = config.get('self_head_dim',32)) )
 
-        self.final_resolution = cur_resolution
+        if init_from_pretrained=='bart':
+            #copy weights from pretrained model (huggingface)
+            #We DON'T copy the cross attention (encoder attn) weights as I'm assuming the modality shift means they wouldn't be helpful
+            assert len(self.decoder_transformer) == len(init_model.decoder.layers)
+            for i,layer in enumerate(self.decoder_transformer):
+                init_layer = init_model.decoder.layers[i]
+                layer.self_att.fn.to_q.weight.data = init_layer.self_attn.q_proj.weight.data
+                layer.self_att.fn.to_q.bias.data = init_layer.self_attn.q_proj.bias.data
+                layer.self_att.fn.to_k.weight.data = init_layer.self_attn.k_proj.weight.data
+                layer.self_att.fn.to_k.bias.data = init_layer.self_attn.k_proj.bias.data
+                layer.self_att.fn.to_v.weight.data = init_layer.self_attn.v_proj.weight.data
+                layer.self_att.fn.to_v.bias.data = init_layer.self_attn.v_proj.bias.data
+                layer.self_att.fn.to_out.weight.data = init_layer.self_attn.out_proj.weight.data
+                layer.self_att.fn.to_out.bias.data = init_layer.self_attn.out_proj.bias.data
+
+                layer.self_att.norm.weight.data = init_layer.self_attn_layer_norm.weight.data
+                layer.self_att.norm.bias.data = init_layer.self_attn_layer_norm.bias.data
+
+                layer.ff.fn.net[0].weight.data = init_layer.fc1.weight.data
+                layer.ff.fn.net[0].bias.data = init_layer.fc1.bias.data
+                layer.ff.fn.net[2].weight.data = init_layer.fc2.weight.data
+                layer.ff.fn.net[2].bias.data = init_layer.fc2.bias.data
+
+                layer.ff.norm.weight.data = init_layer.final_layer_norm.weight.data
+                layer.ff.norm.bias.data = init_layer.final_layer_norm.bias.data
+
+
         
         
 

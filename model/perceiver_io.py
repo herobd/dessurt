@@ -73,6 +73,18 @@ class FeedForward(nn.Module):
     def forward(self, x):
         return self.net(x)
 
+class FeedForwardBasic(nn.Module):
+    def __init__(self, dim, mult = 4):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(dim, dim * mult),
+            nn.GELU(),
+            nn.Linear(dim * mult, dim)
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
 class Attention(nn.Module):
     def __init__(self, query_dim, context_dim = None, heads = 8, dim_head = 64, v_dim=None):
         super().__init__()
@@ -635,7 +647,7 @@ class BARTAttentionLayer(nn.Module):
 
         self.self_att = PreNorm(main_dim, Attention(main_dim, heads = main_heads, dim_head = main_dim_head))
         self.cross_att = PreNorm(main_dim, Attention(main_dim, encoder_dim, heads = cross_heads, dim_head = cross_dim_head, v_dim=main_dim), context_dim = encoder_dim)
-        self.ff = PreNorm(main_dim, FeedForward(main_dim))
+        self.ff = PreNorm(main_dim, FeedForwardBasic(main_dim))
 
         
 
