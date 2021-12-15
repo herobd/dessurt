@@ -29,6 +29,7 @@ from model.qa_imdoc_gpt2 import QAImDocGPT2
 from model.qa_imdoc_gpt3 import QAImDocGPT3
 from model.qa_imdoc_perceiver import QAImDocPerceiver
 from model.qa_imdoc_model5 import QAImDocModel5
+from model.donut import Donut
 from model.cnn_hwr import HWRWithEmb
 from model.cnn_hwr_pretrain import HWRWithEmbAndOCR
 #from model.test import TEST
