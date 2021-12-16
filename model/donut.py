@@ -77,6 +77,7 @@ class Donut(BaseModel):
         d_model = config['decoder_dim']
 
         init_from_pretrained = config.get('init_from_pretrained')
+        learned_pos_emb = config.get('learned_pos_emb',False)
 
         window_size = config['window_size'] #7
         if type(window_size) is int:
@@ -144,9 +145,13 @@ class Donut(BaseModel):
                 
                 self.text_embedding.weight.data[:,:d_model] = init_emb.weight.data[:,:d_model]
 
-
-        self.q_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000)
-        self.a_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000,offset_start=1000)
+        if learned_pos_emb:
+            self.pos_1d_enc = BartLearnedPositionalEmbedding(1026,d_model)
+            self.pos_1d_enc.weight.data = mode.decoder.embed_positions.weight.data
+            self.q_pos_1d_enc = self.a_pos_1d_enc = None
+        else:
+            self.q_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000)
+            self.a_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000,offset_start=1000)
 
         self.query_special_token_embedder = SpecialTokenEmbedder(d_model)
 
@@ -331,15 +336,19 @@ class Donut(BaseModel):
         q_tokens = torch.cat((query_special_tokens[:,None,:],q_tokens),dim=1)
         num_q+=1
 
-        q_tokens = self.q_pos_1d_enc(q_tokens)
-        #q_padding_mask = (1-q_t['attention_mask']).bool()#.to(device) 
-        #q_padding_mask = q_padding_mask.to(device)
+        if self.q_pos_1d_enc is not None:
+            q_tokens = self.q_pos_1d_enc(q_tokens)
+            #q_padding_mask = (1-q_t['attention_mask']).bool()#.to(device) 
+            #q_padding_mask = q_padding_mask.to(device)
 
 
-        a_tokens = self.a_pos_1d_enc(a_tokens)
-        #a_padding_mask = (1-a_t['attention_mask'][:,1:]).bool().to(device) #remove last SEP
+            a_tokens = self.a_pos_1d_enc(a_tokens)
+            #a_padding_mask = (1-a_t['attention_mask'][:,1:]).bool().to(device) #remove last SEP
 
         qa_tokens = torch.cat((q_tokens,a_tokens),dim=1)
+
+        if self.q_pos_1d_enc is None:
+            qa_tokens += self.pos_1d_enc(qa_tokens.size())
         
         qa_att_mask = torch.BoolTensor(1,num_q+num_a,num_q+num_a).fill_(1) #1/0
         qa_att_mask[:,-num_a:,-num_a:] = torch.tril(qa_att_mask[:,-num_a:,-num_a:])
