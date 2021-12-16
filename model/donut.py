@@ -375,8 +375,8 @@ class Donut(BaseModel):
 
         #compute padding for each question
         qa_att_mask = qa_att_mask.expand(new_batch_size,-1,-1).clone()
-        q_attention = q_t['attention_mask'][:,:self.max_q_tokens]
-        qa_att_mask[:,:,:num_q] *= q_attention[:,None,:]==1
+        q_attention = q_t['attention_mask'][:,:self.max_q_tokens-1]
+        qa_att_mask[:,:,1:num_q] *= q_attention[:,None,:]==1
         #we don't need padding for answer since it doesn't matter what happens with those later tokens
 
         qa_att_mask = qa_att_mask.to(device)
