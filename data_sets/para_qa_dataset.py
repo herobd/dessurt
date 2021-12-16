@@ -944,7 +944,7 @@ class ParaQADataset(QADataset):
                     else:
                         if last_blank:
                             continue #merge blank
-                        text='<blank> '
+                        text='<mask> '
                         space = ' '
                         last_paraline = None
 
