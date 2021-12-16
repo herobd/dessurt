@@ -273,9 +273,11 @@ class Donut(BaseModel):
         
 
         self.answer_decode = nn.Sequential(
-                nn.Linear(d_model,self.decode_tokenizer.vocab_size),
+                nn.Linear(d_model,self.decode_tokenizer.vocab_size,bias=False),
                 nn.LogSoftmax(dim=-1) #except
                 )
+
+        self.answer_decode[0].weight = self.text_embedding.weight #Tie weights
 
 
         #t#self.opt_history=defaultdict(list)#t#
