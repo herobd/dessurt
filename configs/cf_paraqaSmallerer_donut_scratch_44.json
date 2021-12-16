@@ -1,5 +1,5 @@
 {
-    "name": "paraqaSmaller_donut_42",
+    "name": "paraqaSmallerer_donut_scratch_44",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -12,14 +12,14 @@
         "num_workers": 4,
         "rescale_range": [0.9,1.1],
         "crop_params": {
-                "crop_size":[96,384],
+                "crop_size":[96,192],
                 "pad":0,
                 "rot_degree_std_dev": 1
             },
 	"questions": 1,
 	"max_qa_len_in": 640,
 	"max_qa_len_out": 2560,
-        "image_size": [94,380],
+        "image_size": [94,190],
 	"prefetch_factor": 2,
         "shuffle": true
 
@@ -57,7 +57,7 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 400000,
+        "iterations": 500000,
         "accum_grad_steps": 2,
         "#swa": true,
         "#swa_start": 200000,
@@ -87,7 +87,7 @@
 
             "in_token_type": "word",
             "out_token_type": "word",
-            "image_size": [96,384],
+            "image_size": [96,192],
 
 	    "use_res_cnn_embed": true,
             "pre_trained": {
