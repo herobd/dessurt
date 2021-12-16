@@ -63,6 +63,25 @@ def affineTransform(x,out_size,scalew=1, scaleh=1, rot=0):
     grid = F.affine_grid(theta, out_size, align_corners=False)
     return F.grid_sample(x, grid.to(x.device), align_corners=False,mode='nearest')
 
+class BartLearnedPositionalEmbedding(nn.Embedding):
+    """
+    This module learns positional embeddings up to a fixed maximum size.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int):
+        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # and adjust num_embeddings appropriately. Other models don't have this hack
+        self.offset = 2
+        super().__init__(num_embeddings + self.offset, embedding_dim)
+
+    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
+        """`input_ids_shape` is expected to be [bsz x seqlen]."""
+        bsz, seq_len = input_ids_shape[:2]
+        positions = torch.arange(
+            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+        )
+        return super().forward(positions + self.offset)
+
 class Donut(BaseModel):
     def __init__(self,config):
         super(Donut, self).__init__(config)
@@ -147,7 +166,7 @@ class Donut(BaseModel):
 
         if learned_pos_emb:
             self.pos_1d_enc = BartLearnedPositionalEmbedding(1026,d_model)
-            self.pos_1d_enc.weight.data = mode.decoder.embed_positions.weight.data
+            self.pos_1d_enc.weight.data = init_model.decoder.embed_positions.weight.data
             self.q_pos_1d_enc = self.a_pos_1d_enc = None
         else:
             self.q_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000)
