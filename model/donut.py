@@ -517,7 +517,7 @@ class Donut(BaseModel):
         #t#tic=timeit.default_timer()#t#
 
         response_greedy_tokens = response_decoded.argmax(dim=2)
-        target_decoded = a_t['input_ids'][:,1:]# This has the SEP tokens (and padding), but not CLS (start) token
+        target_decoded = a_t['input_ids'][:,:self.max_a_tokens][:,1:]# This has the SEP tokens (and padding), but not CLS (start) token
 
         #decode the prediction to string
         string_response=[]
