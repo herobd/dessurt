@@ -4,12 +4,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from model.pairing_g_graph_layoutlm import  runLayoutLM
-from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding
+from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding, BartLearnedPositionalEmbedding
 from model.rel_pos_im_transformer import QTransformerLayer
 from model.swin_transformer import ConvPatchEmbed, SwinTransformerBlock, PatchMerging
 from model.trans_pooling import QPooler
 try:
     from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
+    from transformers import BartTokenizer, BartModel
     from transformers import LayoutLMTokenizer, LayoutLMModel
 except:
     pass
@@ -72,35 +73,32 @@ class MmSwin(BaseModel):
         else:
             pre_trained_patch_emb = None
 
-        out_token_type = 'char' if config.get('char_output',False) else 'word'
-        in_token_type = 'char' if config.get('char_tokens',False) else 'word'
 
-        out_token_type = config.get('out_token_type',out_token_type)
-        in_token_type = config.get('in_token_type',in_token_type)
+        token_type = config.get('token_type','word')
 
 
-        if in_token_type == 'char':
+        if token_type == 'char':
             self.tokenizer = CharacterTokenizer()
             self.SEP_TOKEN=self.tokenizer.SEP_index
             self.CLS_TOKEN=self.tokenizer.CLS_index
-        elif in_token_type == 'word':
-            self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-            self.SEP_TOKEN= 102
-            self.CLS_TOKEN= 101
+        elif token_type == 'word':
+            if init_from_pretrained=='bart':
+                self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
+                self.SEP_TOKEN= 2
+                self.CLS_TOKEN= 0
+            else:
+                self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+                self.SEP_TOKEN= 102
+                self.CLS_TOKEN= 101
 
-        if in_token_type == out_token_type:
-            self.decode_tokenizer = self.tokenizer
-            self.DECODE_SEP_TOKEN=self.SEP_TOKEN
-            self.DECODE_CLS_TOKEN=self.CLS_TOKEN
-        elif out_token_type == 'char':
-            self.decode_tokenizer = CharacterTokenizer()
-            self.DECODE_SEP_TOKEN=self.decode_tokenizer.SEP_index
-            self.DECODE_CLS_TOKEN=self.decode_tokenizer.CLS_index
 
 
         if init_from_pretrained=='distilbert':
             init_model = DistilBertModel.from_pretrained('distilbert-base-uncased')
             init_emb = init_model.embeddings.word_embeddings
+        elif init_from_pretrained=='bart':
+            init_model = BartModel.from_pretrained('./cache_huggingface/BART')
+            init_emb = init_model.shared
 
 
         self.text_embedding = nn.Embedding(self.tokenizer.vocab_size, d_model)
@@ -115,8 +113,13 @@ class MmSwin(BaseModel):
             self.query_special_start_token_embedder = None
 
 
-        self.q_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000)
-        self.a_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000,offset_start=1000)
+        if init_from_pretrained=='bart':
+            self.pos_1d_enc = BartLearnedPositionalEmbedding(1026,d_model)
+            self.pos_1d_enc.weight.data = init_model.decoder.embed_positions.weight.data
+            self.q_pos_1d_enc = self.a_pos_1d_enc = None
+        else:
+            self.q_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000)
+            self.a_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000,offset_start=1000)
 
 
 
@@ -222,12 +225,10 @@ class MmSwin(BaseModel):
         
         
 
-        self.answer_decode = nn.Sequential(
-                nn.Linear(d_model,self.decode_tokenizer.vocab_size,bias=False),
-                nn.LogSoftmax(dim=-1) #except
-                )
+        self.answer_decode = nn.Linear(d_model,self.tokenizer.vocab_size,bias=False)
+        self.answer_decode.weight = self.text_embedding.weight #Tie weights
+        self.answer_softmax = nn.LogSoftmax(dim=-1) #except
 
-        self.answer_decode[0].weight = self.text_embedding.weight #Tie weights
 
 
         #t#self.opt_history=defaultdict(list)#t#
@@ -303,7 +304,6 @@ class MmSwin(BaseModel):
         #                             { q tokens     }{ a tokens   }
 
 
-        q_tokens = self.q_pos_1d_enc(q_tokens)
         q_padding_mask = (1-q_attention_mask).bool()#.to(device) 
         if self.query_special_token_embedder is not None:
             q_padding_mask = torch.cat((torch.BoolTensor(new_batch_size,1).fill_(True),q_padding_mask),dim=1) #for special query token
@@ -316,9 +316,9 @@ class MmSwin(BaseModel):
             num_q+=missing
         q_padding_mask = q_padding_mask.to(device)
 
-
-        a_tokens = self.a_pos_1d_enc(a_tokens)
         a_padding_mask = (1-a_attention_mask[:,1:]).bool().to(device) #remove last SEP
+
+
         
 
         num_all = num_im+num_q+num_a
@@ -329,10 +329,20 @@ class MmSwin(BaseModel):
         all_att_mask[:,:-num_a,-num_a:] = 0 #nothing else attends to a
         all_att_mask = all_att_mask.to(device)
 
+        if self.q_pos_1d_enc is not None:
+            q_tokens = self.q_pos_1d_enc(q_tokens)
+            a_tokens = self.a_pos_1d_enc(a_tokens)
+
+        qa_tokens = torch.cat( (q_tokens,a_tokens),dim=1)
+
+        if self.q_pos_1d_enc is None:
+            qa_tokens += self.pos_1d_enc(qa_tokens.size())
+            q_tokens = qa_tokens[:,:num_q] 
+            a_tokens = qa_tokens[:,num_q:] 
+
 
         #Run the Swin and accompanying layers
         level=0
-        qa_tokens = torch.cat( (q_tokens,a_tokens),dim=1)
         qa_padding_mask = torch.cat( (q_padding_mask,a_padding_mask), dim=1)
         #convert to 0/-inf as that's what the Swin code expects
         q_padding_mask_inf = torch.FloatTensor(*q_padding_mask.size()).fill_(0).to(device)
@@ -428,6 +438,7 @@ class MmSwin(BaseModel):
 
             #response = all_tokens[:,-(num_a):]
             response_decoded = self.answer_decode(response)
+            response_decoded = self.answer_softmax(response_decoded)
             if get_tokens:
                 response_decoded_all = response_decoded
             response_greedy_token = response_decoded.argmax(dim=2)
@@ -478,6 +489,7 @@ class MmSwin(BaseModel):
                 #Done Swin (RUN)
 
                 response_decoded = self.answer_decode(ans)
+                response_decoded = self.answer_softmax(response_decoded)
                 if get_tokens:
                     response_decoded_all = torch.cat((response_decoded_all,response_decoded),dim=1)
                 response_greedy_token = response_decoded.argmax(dim=2)
@@ -489,7 +501,7 @@ class MmSwin(BaseModel):
                 offset += 1
 
             
-            final_str = self.decode_tokenizer.convert_tokens_to_string(self.decode_tokenizer.convert_ids_to_tokens(output_tokens,skip_special_tokens=True))
+            final_str = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(output_tokens,skip_special_tokens=True))
             
             if PRINT_ATT:
                 attDisplay(image[0],full_ocr_string,'|'+questions[0],'|'+final_str[0]+'^',final_str)
@@ -505,6 +517,7 @@ class MmSwin(BaseModel):
 
 
         response_decoded = self.answer_decode(response)
+        response_decoded = self.answer_softmax(response_decoded)
 
         #t#time = timeit.default_timer()-ticA#t#
         #t#self.opt_history['transformers'].append(time)#t#
@@ -517,11 +530,11 @@ class MmSwin(BaseModel):
         string_response=[]
         for b in range(len(questions)):
             response_greedy_tokens_b = response_greedy_tokens[b]
-            pred_stop = response_greedy_tokens_b==self.DECODE_SEP_TOKEN
+            pred_stop = response_greedy_tokens_b==self.SEP_TOKEN
             if pred_stop.any():
                 stop_index = pred_stop.nonzero(as_tuple=False)[0][0].item()
-                response_greedy_tokens_b[stop_index:]=self.DECODE_SEP_TOKEN
-            string_response.append(self.decode_tokenizer.convert_tokens_to_string(self.decode_tokenizer.convert_ids_to_tokens(response_greedy_tokens_b,skip_special_tokens=True)))
+                response_greedy_tokens_b[stop_index:]=self.SEP_TOKEN
+            string_response.append(self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(response_greedy_tokens_b,skip_special_tokens=True)))
 
 
         #reshape strings into batches
