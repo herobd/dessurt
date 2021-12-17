@@ -1,5 +1,5 @@
 {
-    "name": "synthqa+paraqa+cdip_mmswin_PTfromGood",
+    "name": "synthqa+paraqa+cdip_mmswin_PTfromGood_47",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -19,7 +19,7 @@
                 "config": {
                     "data_set_name": "SynthParaQA",
                     "data_dir": "../data/fonts",
-                    "mode": "easy",
+                    "mode": "easy_word",
                     "batch_size": 1,
                     "num_workers": 4,
                     "rescale_range": [
@@ -48,7 +48,7 @@
                 "config": {
                     "data_set_name": "CDIPCloudQA",
                     "data_dir": "../data/CDIPCloud",
-                    "mode": "easy",
+                    "mode": "easy_word",
                     "batch_size": 1,
                     "num_workers": 4,
                     "rescale_range": [
