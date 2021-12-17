@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from model.pairing_g_graph_layoutlm import  runLayoutLM
-from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding
+from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding,BartLearnedPositionalEmbedding
 from model.swin_transformer import ConvPatchEmbed, SwinTransformerBlock, PatchMerging
 from model.perceiver_io import BARTAttentionLayer
 #try:
@@ -27,60 +27,7 @@ from testtest import PRINT_ATT,ATT_TEXT,attDisplay,NUMS
 
 import timeit
 
-def normalize_bbox2(bbox, dwidth, dheight, twidth, theight, max_dist):
-     return [
-         max(min(int(max_dist * (bbox[0] / dwidth)),max_dist),0),
-         max(min(int(max_dist * (bbox[1] / dheight)),max_dist),0),
-         max(min(int(max_dist * (bbox[2] / twidth)),twidth),0),
-         max(min(int(max_dist * (bbox[3] / theight)),theight),0),
-     ]
 
-#https://discuss.pytorch.org/t/differentiable-affine-transforms-with-grid-sample/79305
-def affineTransform(x,out_size,scalew=1, scaleh=1, rot=0):
-    #trans_scale = torch.FloatTensor([
-    #    [scalew, 0, -x.shape[1]//2],
-    #    [0, scaleh, -x.shape[0]//2],
-    #    [0,0,1]
-    #])
-    scale = torch.FloatTensor([
-        [scalew, 0, 0],
-        [0, scaleh, 0],
-        [0,0,1]
-    ])
-    rot = torch.FloatTensor([
-        [math.cos(rot), -math.sin(rot), 0],
-        [math.sin(rot), math.cos(rot), 0],
-        [0,0,1]
-    ])
-    #retrans = torch.FloatTensor([
-    #    [1,0, out_size[1]//2],
-    #    [0,1, out_size[0]//2],
-    #    [0,0,1]
-    #])
-    #theta = torch.matmul(retrans,torch.matmul(rot,trans_scale))[None,0:2]
-    #theta = rot[None,0:2]
-    theta = torch.matmul(scale,rot)[None,0:2]
-    grid = F.affine_grid(theta, out_size, align_corners=False)
-    return F.grid_sample(x, grid.to(x.device), align_corners=False,mode='nearest')
-
-class BartLearnedPositionalEmbedding(nn.Embedding):
-    """
-    This module learns positional embeddings up to a fixed maximum size.
-    """
-
-    def __init__(self, num_embeddings: int, embedding_dim: int):
-        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
-        super().__init__(num_embeddings + self.offset, embedding_dim)
-
-    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
-        """`input_ids_shape` is expected to be [bsz x seqlen]."""
-        bsz, seq_len = input_ids_shape[:2]
-        positions = torch.arange(
-            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
-        )
-        return super().forward(positions + self.offset)
 
 class Donut(BaseModel):
     def __init__(self,config):
@@ -115,36 +62,26 @@ class Donut(BaseModel):
         else:
             pre_trained_patch_emb = None
 
-        out_token_type = 'char' if config.get('char_output',False) else 'word'
-        in_token_type = 'char' if config.get('char_tokens',False) else 'word'
+        token_type = config.get('token_type','word')
 
-        out_token_type = config.get('out_token_type',out_token_type)
-        in_token_type = config.get('in_token_type',in_token_type)
-
-        if in_token_type == 'char':
+        if token_type == 'char':
             self.tokenizer = CharacterTokenizer()
             self.SEP_TOKEN=self.tokenizer.SEP_index
             self.CLS_TOKEN=self.tokenizer.CLS_index
-        elif in_token_type == 'word':
+        elif token_type == 'word':
             if init_from_pretrained=='bart':
                 self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
+                self.SEP_TOKEN= 2
+                self.CLS_TOKEN= 0
             else:
                 self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-            self.SEP_TOKEN= 102
-            self.CLS_TOKEN= 101
-        elif in_token_type == 'bp':
+                self.SEP_TOKEN= 102
+                self.CLS_TOKEN= 101
+        elif token_type == 'bp':
             self.tokenizer = BytePairTokenizer()
             self.SEP_TOKEN=self.tokenizer.SEP_index
             self.CLS_TOKEN=self.tokenizer.CLS_index
 
-        if in_token_type == out_token_type:
-            self.decode_tokenizer = self.tokenizer
-            self.DECODE_SEP_TOKEN=self.SEP_TOKEN
-            self.DECODE_CLS_TOKEN=self.CLS_TOKEN
-        elif out_token_type == 'char':
-            self.decode_tokenizer = CharacterTokenizer()
-            self.DECODE_SEP_TOKEN=self.decode_tokenizer.SEP_index
-            self.DECODE_CLS_TOKEN=self.decode_tokenizer.CLS_index
 
         if init_from_pretrained=='distilbert':
             init_model = DistilBertModel.from_pretrained('distilbert-base-uncased')
@@ -296,12 +233,11 @@ class Donut(BaseModel):
         
         
 
-        self.answer_decode = nn.Sequential(
-                nn.Linear(d_model,self.decode_tokenizer.vocab_size,bias=False),
-                nn.LogSoftmax(dim=-1) #except
-                )
+        self.answer_decode = nn.Linear(d_model,self.tokenizer.vocab_size,bias=False),
+        self.answer_decode.weight = self.text_embedding.weight #Tie weights
+        self.answer_softmax = nn.LogSoftmax(dim=-1) #except
+                
 
-        self.answer_decode[0].weight = self.text_embedding.weight #Tie weights
 
 
         #t#self.opt_history=defaultdict(list)#t#
@@ -415,6 +351,7 @@ class Donut(BaseModel):
 
             #response = all_tokens[:,-(num_a):]
             response_decoded = self.answer_decode(response)
+            response_decoded = self.answer_softmax(response_decoded)
             if get_tokens:
                 response_decoded_all = response_decoded
             response_greedy_token = response_decoded.argmax(dim=2)
@@ -484,6 +421,7 @@ class Donut(BaseModel):
                 #Done Swin (RUN)
 
                 response_decoded = self.answer_decode(ans)
+                response_decoded = self.answer_softmax(response_decoded)
                 if get_tokens:
                     response_decoded_all = torch.cat((response_decoded_all,response_decoded),dim=1)
                 response_greedy_token = response_decoded.argmax(dim=2)
@@ -495,7 +433,7 @@ class Donut(BaseModel):
                 offset += 1
 
             
-            final_str = self.decode_tokenizer.convert_tokens_to_string(self.decode_tokenizer.convert_ids_to_tokens(output_tokens,skip_special_tokens=True))
+            final_str = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(output_tokens,skip_special_tokens=True))
             
             if PRINT_ATT:
                 attDisplay(image[0],full_ocr_string,'|'+questions[0],'|'+final_str[0]+'^',final_str)
@@ -511,6 +449,7 @@ class Donut(BaseModel):
 
 
         response_decoded = self.answer_decode(response)
+        response_decoded = self.answer_softmax(response_decoded)
 
         #t#time = timeit.default_timer()-ticA#t#
         #t#self.opt_history['transformers'].append(time)#t#
@@ -523,11 +462,11 @@ class Donut(BaseModel):
         string_response=[]
         for b in range(len(questions)):
             response_greedy_tokens_b = response_greedy_tokens[b]
-            pred_stop = response_greedy_tokens_b==self.DECODE_SEP_TOKEN
+            pred_stop = response_greedy_tokens_b==self.SEP_TOKEN
             if pred_stop.any():
                 stop_index = pred_stop.nonzero(as_tuple=False)[0][0].item()
-                response_greedy_tokens_b[stop_index:]=self.DECODE_SEP_TOKEN
-            string_response.append(self.decode_tokenizer.convert_tokens_to_string(self.decode_tokenizer.convert_ids_to_tokens(response_greedy_tokens_b,skip_special_tokens=True)))
+                response_greedy_tokens_b[stop_index:]=self.SEP_TOKEN
+            string_response.append(self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(response_greedy_tokens_b,skip_special_tokens=True)))
 
 
         #reshape strings into batches
