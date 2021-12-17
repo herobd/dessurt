@@ -6,7 +6,7 @@
     "override": true,
     "data_loader": {
         "data_set_name": "SynthParaQA",
-	"mode": "pretrain2",
+	"mode": "pretrain_word",
         "data_dir": "../data/fonts",
         "batch_size": 6,
         "num_workers": 4,

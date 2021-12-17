@@ -109,8 +109,10 @@ class MmSwin(BaseModel):
 
         if use_special_question_tokens:
             self.query_special_token_embedder = SpecialTokenEmbedder(d_model)
+            self.query_special_start_token_embedder = SpecialTokenEmbedder(d_model)
         else:
             self.query_special_token_embedder = None
+            self.query_special_start_token_embedder = None
 
 
         self.q_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000)
@@ -263,7 +265,8 @@ class MmSwin(BaseModel):
 
         #run question+answer through decoder
         if self.query_special_token_embedder is not None:
-            questions, query_special_tokens = self.query_special_token_embedder(questions)
+            _, query_special_tokens = self.query_special_token_embedder(questions)
+            questions, query_special_start_tokens = self.query_special_start_token_embedder(questions)
 
         if self.use_set_length:
             assert self.query_special_token_embedder is not None
@@ -288,6 +291,7 @@ class MmSwin(BaseModel):
 
         if self.query_special_token_embedder is not None:
             q_tokens = torch.cat((query_special_tokens[:,None,:],q_tokens),dim=1)
+            a_tokens[:,0]+=query_special_start_tokens
             num_q+=1
         #DDD
         #a_tokens=torch.autograd.Variable(a_tokens,requires_grad=True)
