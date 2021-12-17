@@ -13,6 +13,7 @@ try:
     from transformers import LayoutLMTokenizer, LayoutLMModel
 except:
     pass
+from model.special_token_embedder import SpecialTokenEmbedder
 from utils.character_tokenizer import CharacterTokenizer
 from collections import defaultdict
 from timm.models.layers import trunc_normal_
@@ -67,6 +68,10 @@ class QAImDocGPT3(BaseModel):
         dropout = 0 if 'no_dropout' in config and  config['no_dropout'] else 0.1
         lighter_conv_patch_emb = config['lighter_conv_patch_emb'] if 'lighter_conv_patch_emb' in config else False
         init_from_pretrained = config.get('init_from_pretrained',False)
+        use_special_question_tokens = config.get('use_special_question_tokens',False)
+        self.use_set_length = config.get('use_set_length',False)
+        self.max_q_tokens = config.get('max_q_tokens',16)
+        self.max_a_tokens = config.get('max_a_tokens',512)
 
         blocks_per_level = config['swin_blocks_per_level'] #[2,2,6,2] -> in:512,emb:64 then 64,32,16,8
         swin_cross_attention = config.get('swin_cross_attention',[True]*sum(blocks_per_level))
@@ -89,6 +94,7 @@ class QAImDocGPT3(BaseModel):
                 swin_text_downsample = config['swin_text_downsample'] if 'swin_text_downsample' in config else [False]*len(blocks_per_level)
                 swin_text_downsample_dense=False
                 self.downsample_ocr = sum(swin_text_downsample)
+                self.downsample_q = 0
 
             window_size = config['window_size'] #7
             if type(window_size) is int:
@@ -115,28 +121,30 @@ class QAImDocGPT3(BaseModel):
         else:
             pre_trained_patch_emb = None
 
-        char_output = config['char_output']
-        char_tokens = config['char_tokens']
-        if char_tokens:
-            char_output=False
+        out_token_type = 'char' if config.get('char_output',False) else 'word'
+        in_token_type = 'char' if config.get('char_tokens',False) else 'word'
 
-        if char_tokens:
+        out_token_type = config.get('out_token_type',out_token_type)
+        in_token_type = config.get('in_token_type',in_token_type)
+
+
+        if in_token_type == 'char':
             self.tokenizer = CharacterTokenizer()
             self.SEP_TOKEN=self.tokenizer.SEP_index
             self.CLS_TOKEN=self.tokenizer.CLS_index
-        else:
+        elif in_token_type == 'word':
             self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
             self.SEP_TOKEN= 102
             self.CLS_TOKEN= 101
 
-        if char_output:
-            self.decode_tokenizer = CharacterTokenizer()
-            self.DECODE_SEP_TOKEN=self.decode_tokenizer.SEP_index
-            self.DECODE_CLS_TOKEN=self.decode_tokenizer.CLS_index
-        else:
+        if in_token_type == out_token_type:
             self.decode_tokenizer = self.tokenizer
             self.DECODE_SEP_TOKEN=self.SEP_TOKEN
             self.DECODE_CLS_TOKEN=self.CLS_TOKEN
+        elif out_token_type == 'char':
+            self.decode_tokenizer = CharacterTokenizer()
+            self.DECODE_SEP_TOKEN=self.decode_tokenizer.SEP_index
+            self.DECODE_CLS_TOKEN=self.decode_tokenizer.CLS_index
 
 
         if init_from_pretrained=='distilbert':
@@ -147,6 +155,11 @@ class QAImDocGPT3(BaseModel):
         self.text_embedding = nn.Embedding(self.tokenizer.vocab_size, d_model)
         if init_from_pretrained:
             self.text_embedding.weight.data[:,:d_model] = init_emb.weight.data[:,:d_model]
+
+        if use_special_question_tokens:
+            self.query_special_token_embedder = SpecialTokenEmbedder(d_model)
+        else:
+            self.query_special_token_embedder = None
 
         self.ocr_out_dim = 97
         self.one_hot_conf = 0.9
@@ -605,11 +618,11 @@ class QAImDocGPT3(BaseModel):
         if self.use_set_length:
             assert self.query_special_token_embedder is not None
             q_t = self.tokenizer(questions,return_tensors="pt",padding='max_length',max_length=self.max_q_tokens,truncation=True)
-            q_input_ids = q_t['input_ids'][:,:self.max_q_input_ids-1]
-            q_attention_mask = q_t['attention_mask'][:,:self.max_q_input_ids-1]
-            a_t = self.tokenizer(answers,return_tensors="pt",padding='max_length',max_length=self.max_a_input_ids,truncation=True)
-            a_input_ids = a_t['input_ids'][:,:self.max_a_input_ids]
-            a_attention_mask = a_t['attention_mask'][:,:self.max_a_input_ids]
+            q_input_ids = q_t['input_ids'][:,:self.max_q_tokens-1]
+            q_attention_mask = q_t['attention_mask'][:,:self.max_q_tokens-1]
+            a_t = self.tokenizer(answers,return_tensors="pt",padding='max_length',max_length=self.max_a_tokens,truncation=True)
+            a_input_ids = a_t['input_ids'][:,:self.max_a_tokens]
+            a_attention_mask = a_t['attention_mask'][:,:self.max_a_tokens]
         else:
             q_t = self.tokenizer(questions,return_tensors="pt",padding=True)
             q_input_ids = q_t['input_ids']
@@ -617,9 +630,9 @@ class QAImDocGPT3(BaseModel):
             a_t = self.tokenizer(answers,return_tensors="pt",padding=True)
             a_input_ids = a_t['input_ids']
             a_attention_mask = a_t['attention_mask']
-        num_q = q_tokens.size(1)
-        num_a = a_tokens.size(1)-1 #remove last SEP token
-        qa_input_ids = self.text_embedding(torch.cat((q_input_ids,a_input_ids[:,:-1]),dim=1).to(device))
+        num_q = q_input_ids.size(1)
+        num_a = a_input_ids.size(1)-1 #remove last SEP token
+        qa_tokens = self.text_embedding(torch.cat((q_input_ids,a_input_ids[:,:-1]),dim=1).to(device))
         q_tokens = qa_tokens[:,:num_q] 
         a_tokens = qa_tokens[:,num_q:] 
 
