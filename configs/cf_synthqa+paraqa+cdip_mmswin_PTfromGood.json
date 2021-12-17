@@ -1,5 +1,5 @@
 {
-    "name": "synthqa+paraqa+cdip_3swin_PTfromFontsSmall",
+    "name": "synthqa+paraqa+cdip_mmswin_PTfromGood",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -15,57 +15,11 @@
         "num_workers": 0,
         "datasets": [
             {
-                "freq": 0.3,
-                "config": {
-                    "data_set_name": "SynthQADocDataset",
-                    "fontdir": "../data/fonts/",
-                    "textdir": "../data/",
-                    "data_dir": "../data/english4line_fontslonger2",
-                    "batch_size": 1,
-                    "num_workers": 4,
-                    "rescale_range": [
-                        1.0,
-                        1.0
-                    ],
-                    "crop_params": {
-                        "crop_size": [
-                            1152,
-                            768
-                        ],
-                        "pad": 0,
-                        "rot_degree_std_dev": 1
-                    },
-                    "questions": 1,
-                    "min_entries": null,
-                    "max_entries": 160,
-                    "text_height": 32,
-                    "wider": 200,
-                    "image_size": [
-                        1152,
-                        768
-                    ],
-                    "change_size": true,
-                    "word_questions": "simple",
-                    "do_masks": true,
-                    "tables": 0.2,
-                    "multiline": 0.6,
-                    "max_qa_len": 26,
-                    "header_dir": "../data/english4line_fonts",
-                    "max_chars": 10,
-                    "min_chars": 1,
-                    "use_before_refresh": 99999999999999999999,
-                    "set_size": 1000000,
-                    "num_processes": -1,
-                    "gen_type": "veryclean",
-                    "char_file": "../data/english_char_set.json",
-                    "shuffle": true
-                }
-            },
-            {
-                "freq": 0.5,
+                "freq": 0.8,
                 "config": {
                     "data_set_name": "SynthParaQA",
                     "data_dir": "../data/fonts",
+                    "mode": "easy",
                     "batch_size": 1,
                     "num_workers": 4,
                     "rescale_range": [
@@ -74,17 +28,16 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1152,
-                            768
+                            1152,768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
-                    "max_qa_len": 26,
+                    "max_qa_len_in": 640,
+                    "max_qa_len_out": 2560,
                     "image_size": [
-                        1000,
-                        700
+                            1150,760
                     ],
                     "prefetch_factor": 10,
                     "persistent_workers": true
@@ -93,8 +46,9 @@
             {
                 "freq": 0.2,
                 "config": {
-                    "data_set_name": "CDIPQA",
-                    "data_dir": "../data/CDIP_ready2",
+                    "data_set_name": "CDIPCloudQA",
+                    "data_dir": "../data/CDIPCloud",
+                    "mode": "easy",
                     "batch_size": 1,
                     "num_workers": 4,
                     "rescale_range": [
@@ -104,14 +58,15 @@
 		    "rescale_to_crop_size_first": true,
                     "crop_params": {
                         "crop_size": [
-                            1152,
-                            768
+                            1152,768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
-                    "max_qa_len": 26
+                    "max_qa_len_in": 640,
+                    "max_qa_len_out": 2560,
+                    "reuse_factor": 1.0
                 }
             }
         ]
@@ -145,7 +100,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 4000000,
-        "accum_grad_steps": 30,
+        "accum_grad_steps": 1,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
@@ -158,7 +113,9 @@
         "monitor": "loss",
         "monitor_mode": "none",
         "retry_count": 0,
+
         "do_ocr": "no",
+
         "#use_learning_schedule": "multi_rise then ramp_to_swa",
         "use_learning_schedule": "multi_rise",
         "warmup_steps": [
@@ -167,28 +124,44 @@
         "#ramp_down_steps": 10000,
         "#swa_lr_mul": 0.01
     },
-    "arch": "QAImDocGPT3",
+    "arch": "MmSwin",
     "model": {
         "image_size": [
             1152,768
         ],
+        "use_set_length": true,
         "init_from_pretrained": "distilbert",
+        "use_special_question_tokens": true,
         "no_dropout": false,
         "window_size": 12,
-        "decode_dim": 512,
-        "dim_ff": 1024,
+        "decode_dim": 768,
+        "dim_ff": 3072,
         "decode_num_heads": 8,
-        "swin_blocks_per_level": [
+        "blocks_per_level": [
             4,
-            4
+            6
+        ],
+        "use_swin":[
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false
         ],
         "swin_cross_attention":[
-            false,
-            false,
             true,
-            false,
             true,
-            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
             false,
             false
         ],
