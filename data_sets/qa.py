@@ -80,6 +80,8 @@ class QADataset(torch.utils.data.Dataset):
             self.max_qa_len_in = config['max_qa_len']
             self.max_qa_len_out = config['max_qa_len']
 
+        self.cased = config.get('cased',False)
+
         self.color = config['color'] if 'color' in config else False
         self.rotate = config['rotation'] if 'rotation' in config else False
         #patchSize=config['patch_size']
@@ -401,8 +403,12 @@ class QADataset(torch.utils.data.Dataset):
             new_q_inboxes= [qa['in_bbs'] for qa in questions_and_answers]
             new_q_outboxes= [qa['out_bbs'] for qa in questions_and_answers]
             new_q_blankboxes= [qa['mask_bbs'] for qa in questions_and_answers]
-            questions = [qa['question'].lower() for qa in questions_and_answers]
-            answers = [qa['answer'].lower() for qa in questions_and_answers]
+            if self.cased:
+                questions = [qa['question'] for qa in questions_and_answers]
+                answers = [qa['answer'] for qa in questions_and_answers]
+            else:
+                questions = [qa['question'].lower() for qa in questions_and_answers]
+                answers = [qa['answer'].lower() for qa in questions_and_answers]
         else:
             questions=answers=None
 

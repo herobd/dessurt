@@ -4,14 +4,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from model.pairing_g_graph_layoutlm import  runLayoutLM
-from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding
+from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding,BartLearnedPositionalEmbedding
 from model.swin_transformer import ConvPatchEmbed, SwinTransformerBlock, PatchMerging
 from model.perceiver_io import BARTAttentionLayer
-try:
-    from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
-    from transformers import LayoutLMTokenizer, LayoutLMModel
-except:
-    pass
+#try:
+from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
+from transformers import BartTokenizer, BartModel
+from transformers import LayoutLMTokenizer, LayoutLMModel
+#except:
+#    pass
 from model.special_token_embedder import SpecialTokenEmbedder
 from model.cnn_hwr import ResConvPatchEmbed
 from model.part_frozen_embedding import PartFrozenEmbedding
@@ -26,41 +27,7 @@ from testtest import PRINT_ATT,ATT_TEXT,attDisplay,NUMS
 
 import timeit
 
-def normalize_bbox2(bbox, dwidth, dheight, twidth, theight, max_dist):
-     return [
-         max(min(int(max_dist * (bbox[0] / dwidth)),max_dist),0),
-         max(min(int(max_dist * (bbox[1] / dheight)),max_dist),0),
-         max(min(int(max_dist * (bbox[2] / twidth)),twidth),0),
-         max(min(int(max_dist * (bbox[3] / theight)),theight),0),
-     ]
 
-#https://discuss.pytorch.org/t/differentiable-affine-transforms-with-grid-sample/79305
-def affineTransform(x,out_size,scalew=1, scaleh=1, rot=0):
-    #trans_scale = torch.FloatTensor([
-    #    [scalew, 0, -x.shape[1]//2],
-    #    [0, scaleh, -x.shape[0]//2],
-    #    [0,0,1]
-    #])
-    scale = torch.FloatTensor([
-        [scalew, 0, 0],
-        [0, scaleh, 0],
-        [0,0,1]
-    ])
-    rot = torch.FloatTensor([
-        [math.cos(rot), -math.sin(rot), 0],
-        [math.sin(rot), math.cos(rot), 0],
-        [0,0,1]
-    ])
-    #retrans = torch.FloatTensor([
-    #    [1,0, out_size[1]//2],
-    #    [0,1, out_size[0]//2],
-    #    [0,0,1]
-    #])
-    #theta = torch.matmul(retrans,torch.matmul(rot,trans_scale))[None,0:2]
-    #theta = rot[None,0:2]
-    theta = torch.matmul(scale,rot)[None,0:2]
-    grid = F.affine_grid(theta, out_size, align_corners=False)
-    return F.grid_sample(x, grid.to(x.device), align_corners=False,mode='nearest')
 
 class Donut(BaseModel):
     def __init__(self,config):
@@ -74,6 +41,9 @@ class Donut(BaseModel):
         blocks_per_level = config['swin_blocks_per_level'] #[2,2,6,2] -> in:512,emb:64 then 64,32,16,8
         bart_layers = config['bart_layers']
         d_model = config['decoder_dim']
+
+        init_from_pretrained = config.get('init_from_pretrained')
+        learned_pos_emb = config.get('learned_pos_emb',False)
 
         window_size = config['window_size'] #7
         if type(window_size) is int:
@@ -92,47 +62,52 @@ class Donut(BaseModel):
         else:
             pre_trained_patch_emb = None
 
-        out_token_type = 'char' if config.get('char_output',False) else 'word'
-        in_token_type = 'char' if config.get('char_tokens',False) else 'word'
+        token_type = config.get('token_type','word')
 
-        out_token_type = config.get('out_token_type',out_token_type)
-        in_token_type = config.get('in_token_type',in_token_type)
-
-        if in_token_type == 'char':
+        if token_type == 'char':
             self.tokenizer = CharacterTokenizer()
             self.SEP_TOKEN=self.tokenizer.SEP_index
             self.CLS_TOKEN=self.tokenizer.CLS_index
-        elif in_token_type == 'word':
-            self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-            self.SEP_TOKEN= 102
-            self.CLS_TOKEN= 101
-        elif in_token_type == 'bp':
+        elif token_type == 'word':
+            if init_from_pretrained=='bart':
+                self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
+                self.SEP_TOKEN= 2
+                self.CLS_TOKEN= 0
+            else:
+                self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+                self.SEP_TOKEN= 102
+                self.CLS_TOKEN= 101
+        elif token_type == 'bp':
             self.tokenizer = BytePairTokenizer()
             self.SEP_TOKEN=self.tokenizer.SEP_index
             self.CLS_TOKEN=self.tokenizer.CLS_index
 
-        if in_token_type == out_token_type:
-            self.decode_tokenizer = self.tokenizer
-            self.DECODE_SEP_TOKEN=self.SEP_TOKEN
-            self.DECODE_CLS_TOKEN=self.CLS_TOKEN
-        elif out_token_type == 'char':
-            self.decode_tokenizer = CharacterTokenizer()
-            self.DECODE_SEP_TOKEN=self.decode_tokenizer.SEP_index
-            self.DECODE_CLS_TOKEN=self.decode_tokenizer.CLS_index
 
+        if init_from_pretrained=='distilbert':
+            init_model = DistilBertModel.from_pretrained('distilbert-base-uncased')
+            init_emb = init_model.embeddings.word_embeddings
+        elif init_from_pretrained=='bart':
+            init_model = BartModel.from_pretrained('./cache_huggingface/BART')
+            init_emb = init_model.shared
+        else:
+            init_model = None
+            init_emb = None
 
         if in_token_type == 'bp': #we'll use the pre-trained embedding
             self.text_embedding = PartFrozenEmbedding(self.tokenizer.vocab_size,self.tokenizer.pretrained_dim(),d_model-self.tokenizer.pretrained_dim(),torch.FloatTensor(self.tokenizer.get_pretrained()))
         else:
             self.text_embedding = nn.Embedding(self.tokenizer.vocab_size, d_model)
             if in_token_type == 'word': #we'll use the pre-trained embedding to initialize
-                distilbert_emb = DistilBertModel.from_pretrained('distilbert-base-uncased').embeddings.word_embeddings
-                distil_size = distilbert_emb.weight.size(1)
-                self.text_embedding.weight.data[:,:d_model] = distilbert_emb.weight.data[:,:d_model]
+                
+                self.text_embedding.weight.data[:,:d_model] = init_emb.weight.data[:,:d_model]
 
-
-        self.q_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000)
-        self.a_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000,offset_start=1000)
+        if learned_pos_emb:
+            self.pos_1d_enc = BartLearnedPositionalEmbedding(1026,d_model)
+            self.pos_1d_enc.weight.data = init_model.decoder.embed_positions.weight.data
+            self.q_pos_1d_enc = self.a_pos_1d_enc = None
+        else:
+            self.q_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000)
+            self.a_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000,offset_start=1000)
 
         self.query_special_token_embedder = SpecialTokenEmbedder(d_model)
 
@@ -224,16 +199,45 @@ class Donut(BaseModel):
         for x in range(bart_layers):
             self.decoder_transformer.append( BARTAttentionLayer(
                 main_dim = d_model,
-                encoder_dim = d_im) )
+                encoder_dim = d_im,
+                main_heads = config.get('self_nheads',8),
+                main_dim_head = config.get('self_head_dim',32)) )
 
-        self.final_resolution = cur_resolution
+        if init_from_pretrained=='bart':
+            #copy weights from pretrained model (huggingface)
+            #We DON'T copy the cross attention (encoder attn) weights as I'm assuming the modality shift means they wouldn't be helpful
+            assert len(self.decoder_transformer) == len(init_model.decoder.layers)
+            for i,layer in enumerate(self.decoder_transformer):
+                init_layer = init_model.decoder.layers[i]
+                layer.self_att.fn.to_q.weight.data = init_layer.self_attn.q_proj.weight.data
+                layer.self_att.fn.to_q.bias.data = init_layer.self_attn.q_proj.bias.data
+                layer.self_att.fn.to_k.weight.data = init_layer.self_attn.k_proj.weight.data
+                layer.self_att.fn.to_k.bias.data = init_layer.self_attn.k_proj.bias.data
+                layer.self_att.fn.to_v.weight.data = init_layer.self_attn.v_proj.weight.data
+                layer.self_att.fn.to_v.bias.data = init_layer.self_attn.v_proj.bias.data
+                layer.self_att.fn.to_out.weight.data = init_layer.self_attn.out_proj.weight.data
+                layer.self_att.fn.to_out.bias.data = init_layer.self_attn.out_proj.bias.data
+
+                layer.self_att.norm.weight.data = init_layer.self_attn_layer_norm.weight.data
+                layer.self_att.norm.bias.data = init_layer.self_attn_layer_norm.bias.data
+
+                layer.ff.fn.net[0].weight.data = init_layer.fc1.weight.data
+                layer.ff.fn.net[0].bias.data = init_layer.fc1.bias.data
+                layer.ff.fn.net[2].weight.data = init_layer.fc2.weight.data
+                layer.ff.fn.net[2].bias.data = init_layer.fc2.bias.data
+
+                layer.ff.norm.weight.data = init_layer.final_layer_norm.weight.data
+                layer.ff.norm.bias.data = init_layer.final_layer_norm.bias.data
+
+
         
         
 
-        self.answer_decode = nn.Sequential(
-                nn.Linear(d_model,self.decode_tokenizer.vocab_size),
-                nn.LogSoftmax(dim=-1) #except
-                )
+        self.answer_decode = nn.Linear(d_model,self.tokenizer.vocab_size,bias=False),
+        self.answer_decode.weight = self.text_embedding.weight #Tie weights
+        self.answer_softmax = nn.LogSoftmax(dim=-1) #except
+                
+
 
 
         #t#self.opt_history=defaultdict(list)#t#
@@ -287,15 +291,19 @@ class Donut(BaseModel):
         q_tokens = torch.cat((query_special_tokens[:,None,:],q_tokens),dim=1)
         num_q+=1
 
-        q_tokens = self.q_pos_1d_enc(q_tokens)
-        #q_padding_mask = (1-q_t['attention_mask']).bool()#.to(device) 
-        #q_padding_mask = q_padding_mask.to(device)
+        if self.q_pos_1d_enc is not None:
+            q_tokens = self.q_pos_1d_enc(q_tokens)
+            #q_padding_mask = (1-q_t['attention_mask']).bool()#.to(device) 
+            #q_padding_mask = q_padding_mask.to(device)
 
 
-        a_tokens = self.a_pos_1d_enc(a_tokens)
-        #a_padding_mask = (1-a_t['attention_mask'][:,1:]).bool().to(device) #remove last SEP
+            a_tokens = self.a_pos_1d_enc(a_tokens)
+            #a_padding_mask = (1-a_t['attention_mask'][:,1:]).bool().to(device) #remove last SEP
 
         qa_tokens = torch.cat((q_tokens,a_tokens),dim=1)
+
+        if self.q_pos_1d_enc is None:
+            qa_tokens += self.pos_1d_enc(qa_tokens.size())
         
         qa_att_mask = torch.BoolTensor(1,num_q+num_a,num_q+num_a).fill_(1) #1/0
         qa_att_mask[:,-num_a:,-num_a:] = torch.tril(qa_att_mask[:,-num_a:,-num_a:])
@@ -303,8 +311,8 @@ class Donut(BaseModel):
 
         #compute padding for each question
         qa_att_mask = qa_att_mask.expand(new_batch_size,-1,-1).clone()
-        q_attention = q_t['attention_mask'][:,:self.max_q_tokens]
-        qa_att_mask[:,:,:num_q] *= q_attention[:,None,:]==1
+        q_attention = q_t['attention_mask'][:,:self.max_q_tokens-1]
+        qa_att_mask[:,:,1:num_q] *= q_attention[:,None,:]==1
         #we don't need padding for answer since it doesn't matter what happens with those later tokens
 
         qa_att_mask = qa_att_mask.to(device)
@@ -343,6 +351,7 @@ class Donut(BaseModel):
 
             #response = all_tokens[:,-(num_a):]
             response_decoded = self.answer_decode(response)
+            response_decoded = self.answer_softmax(response_decoded)
             if get_tokens:
                 response_decoded_all = response_decoded
             response_greedy_token = response_decoded.argmax(dim=2)
@@ -412,6 +421,7 @@ class Donut(BaseModel):
                 #Done Swin (RUN)
 
                 response_decoded = self.answer_decode(ans)
+                response_decoded = self.answer_softmax(response_decoded)
                 if get_tokens:
                     response_decoded_all = torch.cat((response_decoded_all,response_decoded),dim=1)
                 response_greedy_token = response_decoded.argmax(dim=2)
@@ -423,7 +433,7 @@ class Donut(BaseModel):
                 offset += 1
 
             
-            final_str = self.decode_tokenizer.convert_tokens_to_string(self.decode_tokenizer.convert_ids_to_tokens(output_tokens,skip_special_tokens=True))
+            final_str = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(output_tokens,skip_special_tokens=True))
             
             if PRINT_ATT:
                 attDisplay(image[0],full_ocr_string,'|'+questions[0],'|'+final_str[0]+'^',final_str)
@@ -439,23 +449,24 @@ class Donut(BaseModel):
 
 
         response_decoded = self.answer_decode(response)
+        response_decoded = self.answer_softmax(response_decoded)
 
         #t#time = timeit.default_timer()-ticA#t#
         #t#self.opt_history['transformers'].append(time)#t#
         #t#tic=timeit.default_timer()#t#
 
         response_greedy_tokens = response_decoded.argmax(dim=2)
-        target_decoded = a_t['input_ids'][:,1:]# This has the SEP tokens (and padding), but not CLS (start) token
+        target_decoded = a_t['input_ids'][:,:self.max_a_tokens][:,1:]# This has the SEP tokens (and padding), but not CLS (start) token
 
         #decode the prediction to string
         string_response=[]
         for b in range(len(questions)):
             response_greedy_tokens_b = response_greedy_tokens[b]
-            pred_stop = response_greedy_tokens_b==self.DECODE_SEP_TOKEN
+            pred_stop = response_greedy_tokens_b==self.SEP_TOKEN
             if pred_stop.any():
                 stop_index = pred_stop.nonzero(as_tuple=False)[0][0].item()
-                response_greedy_tokens_b[stop_index:]=self.DECODE_SEP_TOKEN
-            string_response.append(self.decode_tokenizer.convert_tokens_to_string(self.decode_tokenizer.convert_ids_to_tokens(response_greedy_tokens_b,skip_special_tokens=True)))
+                response_greedy_tokens_b[stop_index:]=self.SEP_TOKEN
+            string_response.append(self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(response_greedy_tokens_b,skip_special_tokens=True)))
 
 
         #reshape strings into batches

@@ -1,5 +1,5 @@
 {
-    "name": "test",
+    "name": "paraqaSmaller_mmswin_PTfromGood_46",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -7,20 +7,19 @@
     "data_loader": {
         "data_set_name": "SynthParaQA",
 	"mode": "pretrain_word",
-        "cased": true,
         "data_dir": "../data/fonts",
-        "batch_size": 1,
+        "batch_size": 6,
         "num_workers": 4,
         "rescale_range": [0.9,1.1],
         "crop_params": {
-                "crop_size":[1152,768],
+                "crop_size":[96,384],
                 "pad":0,
                 "rot_degree_std_dev": 1
             },
 	"questions": 1,
         "max_qa_len_in": 640,
         "max_qa_len_out": 2560,
-        "image_size": [1152,768],
+        "image_size": [94,380],
 	"prefetch_factor": 2,
         "shuffle": true
     },
@@ -46,8 +45,7 @@
     "loss_params": {
         "xanswer": {},
         "answer": {
-            "smoothing": 0.1,
-            "padding_idx": 1
+            "smoothing": 0.1
         }
     },
     "metrics": [],
@@ -81,10 +79,10 @@
     "arch": "MmSwin",
     "model": {
         "image_size": [
-            1152,768
+            96,384
         ],
         "use_set_length": true,
-        "init_from_pretrained": "bart",
+        "init_from_pretrained": "distilbert",
         "use_special_question_tokens": true,
         "no_dropout": false,
         "window_size": 12,
