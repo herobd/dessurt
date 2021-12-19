@@ -667,7 +667,7 @@ class QAImDocGPT3(BaseModel):
 
 
         a_tokens = self.a_pos_1d_enc(a_tokens)
-        a_padding_mask = (1-a_attention_mask[:,1:]).bool().to(device) #remove last SEP
+        a_padding_mask = (1-a_attention_mask[:,:-1]).bool().to(device) #remove last SEP
         
         if num_ocr>0:
             ocr_tokens += self.ocr_pos_emb_x(xs) + self.ocr_pos_emb_y(ys) + self.ocr_pos_emb_w(ws) + self.ocr_pos_emb_h(hs) + self.ocr_1dpos_enc(ocr_1dpos) + self.ocr_seqid_enc(ocr_seqid)
