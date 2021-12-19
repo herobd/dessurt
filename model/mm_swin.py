@@ -274,9 +274,14 @@ class MmSwin(BaseModel):
             q_t = self.tokenizer(questions,return_tensors="pt",padding='max_length',max_length=self.max_q_tokens,truncation=True)
             q_input_ids = q_t['input_ids'][:,:self.max_q_tokens-1]
             q_attention_mask = q_t['attention_mask'][:,:self.max_q_tokens-1]
-            a_t = self.tokenizer(answers,return_tensors="pt",padding='max_length',max_length=self.max_a_tokens,truncation=True)
-            a_input_ids = a_t['input_ids'][:,:self.max_a_tokens]
-            a_attention_mask = a_t['attention_mask'][:,:self.max_a_tokens]
+            if not RUN:
+                a_t = self.tokenizer(answers,return_tensors="pt",padding='max_length',max_length=self.max_a_tokens,truncation=True)
+                a_input_ids = a_t['input_ids'][:,:self.max_a_tokens]
+                a_attention_mask = a_t['attention_mask'][:,:self.max_a_tokens]
+            else:
+                a_t = self.tokenizer(answers,return_tensors="pt",padding=True)
+                a_input_ids = a_t['input_ids']
+                a_attention_mask = a_t['attention_mask']
         else:
             q_t = self.tokenizer(questions,return_tensors="pt",padding=True)
             q_input_ids = q_t['input_ids']
@@ -287,6 +292,7 @@ class MmSwin(BaseModel):
         num_q = q_input_ids.size(1)
         num_a = a_input_ids.size(1)-1 #remove last SEP token
         qa_tokens = self.text_embedding(torch.cat((q_input_ids,a_input_ids[:,:-1]),dim=1).to(device))
+        #import pdb;pdb.set_trace()
         q_tokens = qa_tokens[:,:num_q] 
         a_tokens = qa_tokens[:,num_q:] 
 
@@ -355,7 +361,6 @@ class MmSwin(BaseModel):
             #store results at each layer to reuse
             saved_proj_im_tokens = []
             saved_q_tokens = []
-            saved_q_pos = []
             saved_q_padding_mask = []
             saved_a_tokens = []
             ##
@@ -384,7 +389,6 @@ class MmSwin(BaseModel):
             if RUN:
                 saved_proj_im_tokens.append(proj_im_tokens)
                 saved_q_tokens.append(q_tokens)
-                saved_q_pos.append(q_pos)
                 saved_q_padding_mask.append(q_padding_mask)
                 saved_a_tokens.append(a_tokens)
             
@@ -453,8 +457,11 @@ class MmSwin(BaseModel):
 
             while output_tokens[-1] != self.SEP_TOKEN and offset<max_pred_len:
 
-                ans_emb = self.text_embedding(response_greedy_token)
-                ans = self.a_pos_1d_enc(ans_emb,offset=offset)
+                ans = self.text_embedding(response_greedy_token)
+                if self.a_pos_1d_enc is None:
+                    ans += self.pos_1d_enc(ans.size(),past_key_values_length=num_q+offset)
+                else:
+                    ans = self.a_pos_1d_enc(ans,offset=offset)
                 num_a += 1
 
 
@@ -475,8 +482,8 @@ class MmSwin(BaseModel):
                     a_tokens = saved_a_tokens[li] = torch.cat((saved_a_tokens[li],ans),dim=1)
                     a_padding_mask = zero.expand(new_batch_size,num_a)#holder_a_padding_mask[:,:num_a]
 
-                    all_padding_mask = torch.cat( (im_padding_mask,ocr_padding_mask,q_padding_mask,a_padding_mask), dim=1)
-                    all_att_mask = one.expand(new_batch_size,1,num_im+num_ocr+num_q+num_a)
+                    all_padding_mask = torch.cat( (im_padding_mask,q_padding_mask,a_padding_mask), dim=1)
+                    all_att_mask = one.expand(new_batch_size,1,num_im+num_q+num_a)
 
 
                     ans = layout_layer(

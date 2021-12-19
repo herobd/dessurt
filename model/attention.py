@@ -171,7 +171,10 @@ class MultiHeadedAttention(nn.Module):
         "Implements Figure 2"
         if mask is not None:
             # Same mask applied to all h heads.
-            mask = mask[None,None,...]#mask.unsqueeze(1)
+            if len(mask.size())==2:
+                mask = mask[None,None,...]#mask.unsqueeze(1)
+            else:
+                mask = mask[:,None,...]
         nbatches = query.size(0)
 
         if self.none:
