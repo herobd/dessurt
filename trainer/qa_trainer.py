@@ -432,7 +432,7 @@ class QATrainer(BaseTrainer):
         for b_answers,b_pred,b_questions in zip(answers,string_a,questions):
             for answer,pred,question in zip(b_answers,b_pred,b_questions):
                 if len(answer)>0 or len(pred)>0:
-                    score_ed.append( editdistance.eval(answer,pred)/((len(answer)+len(pred))/2) )
+                    score_ed.append( editdistance.eval(answer.lower(),pred.lower())/((len(answer)+len(pred))/2) )
                 else:
                     score_ed.append( 0 )
 
