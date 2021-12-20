@@ -87,14 +87,14 @@ class MmSwin(BaseModel):
                 self.SEP_TOKEN= 2
                 self.CLS_TOKEN= 0
             else:
-                self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+                self.tokenizer = DistilBertTokenizer.from_pretrained('./cache_huggingface/distilbert-base-uncased')
                 self.SEP_TOKEN= 102
                 self.CLS_TOKEN= 101
 
 
 
         if init_from_pretrained=='distilbert':
-            init_model = DistilBertModel.from_pretrained('distilbert-base-uncased')
+            init_model = DistilBertModel.from_pretrained('./cache_huggingface/distilbert-base-uncased')
             init_emb = init_model.embeddings.word_embeddings
         elif init_from_pretrained=='bart':
             init_model = BartModel.from_pretrained('./cache_huggingface/BART')

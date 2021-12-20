@@ -161,18 +161,27 @@ class QADataset(torch.utils.data.Dataset):
             except FileNotFoundError:
                 print("ERROR, could not open "+annotationPath)
                 return self.__getitem__((index+1)%self.__len__())
+            except json.decoder.JSONDecodeError as e:
+                print(e)
+                print('Error reading '+annotationPath)
+                return self.__getitem__((index+1)%self.__len__())
         else:
             annotations=annotationPath
 
         #Load image
         #t#tic=timeit.default_timer()#t#
         if imagePath is not None:
-            np_img = img_f.imread(imagePath, 1 if self.color else 0)#*255.0
-            if np_img.max()<=1:
-                np_img*=255
+            try:
+                np_img = img_f.imread(imagePath, 1 if self.color else 0)#*255.0
+            except FileNotFoundError as e:
+                print(e)
+                print('ERROR, could not find: '+imagePath)
+                return self.__getitem__((index+1)%self.__len__())
             if np_img is None or np_img.shape[0]==0:
                 print("ERROR, could not open "+imagePath)
                 return self.__getitem__((index+1)%self.__len__())
+            if np_img.max()<=1:
+                np_img*=255
         else:
             np_img = None#np.zeros([1000,1000])
 

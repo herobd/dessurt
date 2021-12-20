@@ -105,7 +105,8 @@
             "decoder_dim": 768,
             "self_nheads": 12,
             "self_head_dim": 64,
-            "init_from_pretrained": "bart"
+            "init_from_pretrained": "bart",
+            "learned_pos_emb": true
 
     }
 }
