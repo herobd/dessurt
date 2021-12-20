@@ -7,6 +7,7 @@
     "data_loader": {
         "data_set_name": "SynthParaQA",
 	"mode": "pretrain_bart",
+        "cased": true,
         "data_dir": "../data/fonts",
         "batch_size": 6,
         "num_workers": 4,
@@ -52,7 +53,10 @@
     "loss_params": 
         {
             "xanswer": {},
-	    "answer": {"smoothing":0.1}
+	    "answer": {
+                "smoothing":0.1,
+                "padding_idx": 1
+            }
         },
     "metrics": [],
     "trainer": {
@@ -85,8 +89,7 @@
     "arch": "Donut",
     "model": {
 
-            "in_token_type": "word",
-            "out_token_type": "word",
+            "token_type": "word",
             "image_size": [96,384],
 
 	    "use_res_cnn_embed": true,
@@ -102,7 +105,8 @@
             "decoder_dim": 768,
             "self_nheads": 12,
             "self_head_dim": 64,
-            "init_from_pretrained": "bart"
+            "init_from_pretrained": "bart",
+            "learned_pos_emb": true
 
     }
 }
