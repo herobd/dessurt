@@ -1,5 +1,5 @@
 {
-    "name": "synthqa+paraqa+cdip_mmswin_PTfromGood_47",
+    "name": "paraCqa+cdipC_mmswin_bart_PTfrom48_50",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -20,6 +20,7 @@
                     "data_set_name": "SynthParaQA",
                     "data_dir": "../data/fonts",
                     "mode": "easy_word",
+                    "cased": true,
                     "batch_size": 1,
                     "num_workers": 4,
                     "rescale_range": [
@@ -49,6 +50,7 @@
                     "data_set_name": "CDIPCloudQA",
                     "data_dir": "../data/CDIPCloud",
                     "mode": "easy_word",
+                    "cased": true,
                     "batch_size": 1,
                     "num_workers": 4,
                     "rescale_range": [
@@ -93,7 +95,8 @@
     "loss_params": {
         "xanswer": {},
         "answer": {
-            "smoothing": 0.1
+            "smoothing": 0.1,
+            "padding_idx": 1
         }
     },
     "metrics": [],
@@ -130,7 +133,7 @@
             1152,768
         ],
         "use_set_length": true,
-        "init_from_pretrained": "distilbert",
+        "init_from_pretrained": "bart",
         "use_special_question_tokens": true,
         "no_dropout": false,
         "window_size": 12,
