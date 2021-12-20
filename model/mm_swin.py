@@ -117,6 +117,7 @@ class MmSwin(BaseModel):
             self.pos_1d_enc = BartLearnedPositionalEmbedding(1026,d_model)
             self.pos_1d_enc.weight.data = init_model.decoder.embed_positions.weight.data
             self.q_pos_1d_enc = self.a_pos_1d_enc = None
+            self.pos_enc_adapter = nn.Identity() if d_model == 768 else nn.Linear(768,d_model,bias=False)
         else:
             self.q_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000)
             self.a_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000,offset_start=1000)
@@ -342,7 +343,7 @@ class MmSwin(BaseModel):
         qa_tokens = torch.cat( (q_tokens,a_tokens),dim=1)
 
         if self.q_pos_1d_enc is None:
-            qa_tokens += self.pos_1d_enc(qa_tokens.size())
+            qa_tokens += self.pos_enc_adapter(self.pos_1d_enc(qa_tokens.size()))
             q_tokens = qa_tokens[:,:num_q] 
             a_tokens = qa_tokens[:,num_q:] 
 
@@ -460,7 +461,7 @@ class MmSwin(BaseModel):
 
                 ans = self.text_embedding(response_greedy_token)
                 if self.a_pos_1d_enc is None:
-                    ans += self.pos_1d_enc(ans.size(),past_key_values_length=num_q+offset)
+                    ans += self.pos_enc_adapter(self.pos_1d_enc(ans.size(),past_key_values_length=num_q+offset))
                 else:
                     ans = self.a_pos_1d_enc(ans,offset=offset)
                 num_a += 1
