@@ -93,11 +93,11 @@ class Donut(BaseModel):
             init_model = None
             init_emb = None
 
-        if in_token_type == 'bp': #we'll use the pre-trained embedding
+        if token_type == 'bp': #we'll use the pre-trained embedding
             self.text_embedding = PartFrozenEmbedding(self.tokenizer.vocab_size,self.tokenizer.pretrained_dim(),d_model-self.tokenizer.pretrained_dim(),torch.FloatTensor(self.tokenizer.get_pretrained()))
         else:
             self.text_embedding = nn.Embedding(self.tokenizer.vocab_size, d_model)
-            if in_token_type == 'word': #we'll use the pre-trained embedding to initialize
+            if token_type == 'word': #we'll use the pre-trained embedding to initialize
                 
                 self.text_embedding.weight.data[:,:d_model] = init_emb.weight.data[:,:d_model]
 
@@ -233,7 +233,7 @@ class Donut(BaseModel):
         
         
 
-        self.answer_decode = nn.Linear(d_model,self.tokenizer.vocab_size,bias=False),
+        self.answer_decode = nn.Linear(d_model,self.tokenizer.vocab_size,bias=False)
         self.answer_decode.weight = self.text_embedding.weight #Tie weights
         self.answer_softmax = nn.LogSoftmax(dim=-1) #except
                 
