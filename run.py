@@ -237,8 +237,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do
                 if do_saliency:
                     answer,pred_mask = s_model.saliency(in_img,ocr,[[question]])
                 else:
-                    #answer,pred_mask = model(in_img,ocr,[[question]],RUN=run)
-                    pred_a, target_a, answer, pred_mask = model(in_img,ocr,[[question]],[['number']])
+                    answer,pred_mask = model(in_img,ocr,[[question]],RUN=run)
+                    #pred_a, target_a, answer, pred_mask = model(in_img,ocr,[[question]],[['number']])
                 print('Answer: {}      max mask={}'.format(answer,pred_mask.max()))
                 #show_mask = torch.cat((pred_mask,pred_mask>0.5).float()
                 draw_img = 0.5*(1-img)

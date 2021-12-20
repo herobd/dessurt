@@ -292,7 +292,7 @@ class MmSwin(BaseModel):
         num_q = q_input_ids.size(1)
         num_a = a_input_ids.size(1)-1 #remove last SEP token
         qa_tokens = self.text_embedding(torch.cat((q_input_ids,a_input_ids[:,:-1]),dim=1).to(device))
-        #import pdb;pdb.set_trace()
+
         q_tokens = qa_tokens[:,:num_q] 
         a_tokens = qa_tokens[:,num_q:] 
 
@@ -322,7 +322,7 @@ class MmSwin(BaseModel):
             num_q+=missing
         q_padding_mask = q_padding_mask.to(device)
 
-        a_padding_mask = (1-a_attention_mask[:,1:]).bool().to(device) #remove last SEP
+        a_padding_mask = (1-a_attention_mask[:,:-1]).bool().to(device) #remove last SEP
 
 
         
@@ -368,6 +368,7 @@ class MmSwin(BaseModel):
         if get_tokens:
             im_tokens = im_tokens.requires_grad_()
             init_im_tokens = im_tokens
+            init_a_tokens = a_tokens.requires_grad_()
 
         for i,(swin_layer, proj_d2i, layout_layer, proj_i2d, im_downsample, ocr_downsample, q_downsample) in enumerate(self.swin_layers):
 
@@ -514,7 +515,7 @@ class MmSwin(BaseModel):
                 attDisplay(image[0],full_ocr_string,'|'+questions[0],'|'+final_str[0]+'^',final_str)
 
             if get_tokens:
-                return response_decoded_all, None, final_str, out_mask, init_im_tokens, init_ocr_tokens
+                return response_decoded_all, None, final_str, out_mask, init_im_tokens, init_a_tokens
             else:
                 return final_str, out_mask #torch.sigmoid(out_mask)
             ############
