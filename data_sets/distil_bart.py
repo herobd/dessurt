@@ -9,11 +9,22 @@ import math, random, string, re
 from collections import defaultdict, OrderedDict
 import timeit
 from data_sets.gen_daemon import GenDaemon
+from utils import augmentation
 
 from transformers import BartTokenizer, BartForConditionalGeneration
 
 import utils.img_f as img_f
 
+
+def collate(batch):
+    return {
+            'img': torch.cat([b['img'] for b in batch],dim=0),
+            'imgName': [b['imgName'] for b in batch],
+            'questions': [b['questions'] for b in batch],
+            'answers': [b['answers'] for b in batch],
+            'mask_label': None,
+            'mask_labels_batch_mask': None,
+            }
 
 class DistilBartDataset(torch.utils.data.Dataset):
     """
@@ -27,30 +38,29 @@ class DistilBartDataset(torch.utils.data.Dataset):
         if split=='train':
             self.tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
             self.model = BartForConditionalGeneration.from_pretrained('facebook/bart-large') #TODO save to dir
+            self.model.eval()
 
         self.augment_shade = config.get('augment_shade',True)
+        self.rotate_std_dev = (math.pi/180) * config.get('rotate_std_dev',1)
+        self.scale_std_dev = config.get('scale_std_dev',0.05)
+        self.aug_params = config.get('aug_params',{})
+
 
         font_dir = dirPath
-        self.simple_vocab = config.get('simple_vocab')
-        if self.simple_vocab:
-            self.min_read_start_no_mask=4
-            self.min_read_start_with_mask=4
-        self.gen_daemon = GenDaemon(font_dir,simple=self.simple_vocab)
+        self.gen_daemon = GenDaemon(font_dir)
         self.prev_words = None
-
-        self.gt_ocr = config['gt_ocr'] if 'gt_ocr' in config else False
 
         self.image_size = config['image_size']
         self.min_text_height = config['min_text_height'] if 'min_text_height' in config else 8
         self.max_text_height = config['max_text_height'] if 'max_text_height' in config else 32
 
-        self.images=[]
-        for i in range(config['batch_size']*100): #we just randomly generate instances on the fly
-            self.images.append({'id':'{}'.format(i), 'imagePath':None, 'annotationPath':0, 'rescaled':1.0, 'imageName':'0'})
 
         self.held_instance=None
         self.used_held = 0
         self.max_used_held = config['prefetch_factor']//2 if 'prefetch_factor' in config else 2
+
+    def __len__(self):
+        return 1000
 
     def __getitem__(self,index):
 
@@ -70,8 +80,6 @@ class DistilBartDataset(torch.utils.data.Dataset):
             while success:
                 #we'll add as many as we can fit (without trying too hard)
                 success = self.addBlock(ocr,image)
-                if success and self.simple_vocab:
-                    break
 
             self.held_instance= (image,ocr)
             self.used_held=1
@@ -80,10 +88,10 @@ class DistilBartDataset(torch.utils.data.Dataset):
         block = random.choice(ocr)
         words = []
         target_string = []
-        for para in block['paragraphs']:
-            for line in para['lines']:
+        for p,para in enumerate(block['paragraphs']):
+            for l,line in enumerate(para['lines']):
                 for word in line['words']:
-                    words.append(word,p,l)
+                    words.append((word,p,l))
                     target_string.append(word['text'])
         target_string = ' '.join(target_string)
 
@@ -95,8 +103,8 @@ class DistilBartDataset(torch.utils.data.Dataset):
                 loc = random.randrange(0,len(words)-num)
                 before=max(0,loc-1)
                 after=min(len(words),loc+num)
-                good_spot = all(w is not None for words[before:after])
-                if good_spot
+                good_spot = all((w is not None) for w in words[before:after])
+                if good_spot:
                     break
 
             if good_spot:
@@ -117,16 +125,35 @@ class DistilBartDataset(torch.utils.data.Dataset):
                     bot_y = max(w['box'][3] for w in line) +1
                     to_remove.append((left_x,top_y,right_x,bot_y))
 
+        bart_input_string = []
+        for word in words:
+            if word is not None:
+                bart_input_string.append(word[0]['text'])
+            else:
+                bart_input_string.append('<mask>')
+        bart_input_string = ' '.join(bart_input_string)
+        print('Start BART '+bart_input_string[:20])
+        input_ids = self.tokenizer([bart_input_string], return_tensors='pt')['input_ids']
+        gt_input_ids = self.tokenizer([target_string], return_tensors='pt')['input_ids']
+        with torch.no_grad():
+            bart_out = self.model(input_ids, labels=gt_input_ids,output_hidden_states=True)
+        logits = bart_out.logits
+        last_hidden = bart_out.decoder_hidden_states[-1]
+        print('End BART '+bart_input_string[:20])
+
+        if len(image.shape)==2:
+            image = image[:,:,None]
         if self.augment_shade and self.augment_shade>random.random():
             if image.shape[2]==3:
                 image = augmentation.apply_random_color_rotation(image)
                 image = augmentation.apply_tensmeyer_brightness(image,**self.aug_params)
             else:
+                
                 image = augmentation.apply_tensmeyer_brightness(image,**self.aug_params)
 
-        image=np.stack((image,np.zeros([image_h,image_w],dtype=np.uint8)),axis=2)
+        image=np.concatenate((image,np.zeros([image_h,image_w,1],dtype=np.uint8)),axis=2)
         #highlight lines to make it easier to locate
-        for paragraph in block['paragraph']:
+        for paragraph in block['paragraphs']:
             for line in paragraph['lines']:
                 x1,y1,x2,y2 = line['box']
                 image[x1:x2,y1:y2,1] = 1 #highlight block we're working on
@@ -140,15 +167,15 @@ class DistilBartDataset(torch.utils.data.Dataset):
         rot = np.array([  [math.cos(rot_amount), -math.sin(rot_amount), 0],
                         [math.sin(rot_amount), math.cos(rot_amount), 0],
                         [0,0,1] ])
-        scale = np.array([ [scale_amount,0,0,
-                           [0,scale_amount,0,
+        scale = np.array([ [scale_amount,0,0],
+                           [0,scale_amount,0],
                            [0,0,1] ])
-        center = np.array([ [1,0,-org_img.shape[1]/2],
-                            [0,1,-org_img.shape[0]/2],
+        center = np.array([ [1,0,-image.shape[1]/2],
+                            [0,1,-image.shape[0]/2],
                             [0,0,1] ])
-        #center = np.array([[1,0,-org_img.shape[1]/2],[0,1,-org_img.shape[0]/2]])
-        uncenter = np.array([   [1,0,org_img.shape[1]/2],
-                                [0,1,org_img.shape[0]/2],
+        #center = np.array([[1,0,-image.shape[1]/2],[0,1,-image.shape[0]/2]])
+        uncenter = np.array([   [1,0,image.shape[1]/2],
+                                [0,1,image.shape[0]/2],
                                 [0,0,1] ])
         M=center
         M = scale.dot(M)
@@ -166,34 +193,14 @@ class DistilBartDataset(torch.utils.data.Dataset):
                 "img": img,
                 "imgName": "generated",
                 "scale": 1,
+                "questions": ["mlm>"],
+                "answers": [target_string],
+                "mask_label": None,
+                "bart_logits": logits,
+                "bart_last_hidden": last_hidden,
+                }
 
 
-        #qa, qa_bbs = self.makeQuestions(ocr,image_h,image_w,s)
-
-        if self.gt_ocr:
-            recog_strings=[]
-            recog_bbs=[]
-            for block in ocr:
-                for para in block['paragraphs']:
-                    for line in para['lines']:
-                        text = line['text']
-                        recog_strings.append(text)
-                        lX,tY,rX,bY = line['box']
-                        lX*=s
-                        tY*=s
-                        rX*=s
-                        bY*=s
-                        tlX=blX=lX
-                        trX=brX=rX
-                        tlY=trY=tY
-                        blY=brY=bY
-                        lY=rY = (tY+bY)/2
-                        tX=bX = (lX+rX)/2
-                        recog_bbs.append([tlX,tlY,trX,trY,brX,brY,blX,blY,lX,lY,rX,rY,tX,tY,bX,bY])
-            metadata = {'pre-recognition_bbs': recog_bbs, 'pre-recognition': recog_strings}
-        else:
-            metadata = {}
-        return qa_bbs, list(range(qa_bbs.shape[0])), None, {'image':255-image}, metadata, qa
 
 
     def addBlock(self,ocr,image):
@@ -210,7 +217,7 @@ class DistilBartDataset(torch.utils.data.Dataset):
         scale = word_height / words[0][1].shape[0]
 
         #layout the Paragraph to find it's height
-        para_width = random.randrange(image_w//5,image_w-10)
+        para_width = random.randrange(image_w//2.5,image_w-10) #min width wider than synth para
         em_approx = word_height*1.6 #https://en.wikipedia.org/wiki/Em_(typography)
         min_space = 0.2*em_approx #https://docs.microsoft.com/en-us/typography/develop/character-design-standards/whitespace
         max_space = 0.5*em_approx

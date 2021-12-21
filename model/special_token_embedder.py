@@ -28,6 +28,8 @@ class SpecialTokenEmbedder(nn.Module):
                 'f0~','pr~','p0~','f1~','p1~','t0~','r*~','c*~','#r~','#c~','%r~','%c~','%r>','%c>','ar>','ac>','r@~','c@~','r&~','c&~','r&>','c&>','0t~','t#>',
                 #added (para)
                 'infillread~','infillread0~','proper_su~','proper_s0~',
+                #distillation (masked language model)
+                'mlm>',
                 #census TODO
                 ]
         self.get_index = {s:i for i,s in enumerate(tokens)}

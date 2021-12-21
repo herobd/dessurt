@@ -6,22 +6,22 @@
     "override": true,
     "data_loader": {
         "data_set_name": "SynthParaQA",
-	"mode": "pretrain_word",
+        "mode": "pretrain_word",
         "cased": true,
         "data_dir": "../data/fonts",
-        "batch_size": 1,
+        "batch_size": 5,
         "num_workers": 4,
         "rescale_range": [0.9,1.1],
         "crop_params": {
-                "crop_size":[198,198],
+                "crop_size":[96,384],
                 "pad":0,
                 "rot_degree_std_dev": 1
             },
-	"questions": 1,
+        "questions": 1,
         "max_qa_len_in": 640,
         "max_qa_len_out": 2560,
-        "image_size": [198,198],
-	"prefetch_factor": 2,
+        "image_size": [96,384],
+        "prefetch_factor": 2,
         "shuffle": true
     },
     "validation": {
@@ -81,7 +81,7 @@
     "arch": "MmSwin",
     "model": {
         "image_size": [
-            198,198
+            96,384
         ],
         "use_set_length": true,
         "init_from_pretrained": "bart",
@@ -108,14 +108,14 @@
             false
         ],
         "swin_cross_attention":[
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
             false,
             false
         ],
@@ -123,7 +123,7 @@
             4,
             8
         ],
-        "im_embed_dim": 128,
+        "im_embed_dim": 224,
         "full_layers": null
     }
 }

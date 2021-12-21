@@ -237,7 +237,7 @@ class MmSwin(BaseModel):
 
 
     #we're building this for fixed images size
-    def forward(self,image,ocrRes,questions,answers=None,useCurvedBBs=False,RUN=False,get_tokens=False):
+    def forward(self,image,ocrRes,questions,answers=None,useCurvedBBs=False,RUN=False,get_tokens=False,distill=False):
 
 
         device = image.device
@@ -524,8 +524,8 @@ class MmSwin(BaseModel):
 
 
 
-        response_decoded = self.answer_decode(response)
-        response_decoded = self.answer_softmax(response_decoded)
+        response_logits = self.answer_decode(response)
+        response_decoded = self.answer_softmax(response_logits)
 
         #t#time = timeit.default_timer()-ticA#t#
         #t#self.opt_history['transformers'].append(time)#t#
@@ -563,8 +563,10 @@ class MmSwin(BaseModel):
 
 
 
-
-        return response_decoded, target_decoded.to(device), batch_string_response, out_mask
+        if distill:
+            return response_decoded, target_decoded.to(device), batch_string_response, response_logits, response#or a_tokens
+        else:
+            return response_decoded, target_decoded.to(device), batch_string_response, out_mask
 
     #t#def print_opt_times(self):#t#
         #t#for name,times in self.opt_history.items():#t#
