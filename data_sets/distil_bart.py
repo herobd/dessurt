@@ -24,6 +24,8 @@ def collate(batch):
             'answers': [b['answers'] for b in batch],
             'mask_label': None,
             'mask_labels_batch_mask': None,
+            "bart_logits": torch.cat([b['bart_logits'] for b in batch],dim=0),
+            "bart_last_hidden": torch.cat([b['bart_last_hidden'] for b in batch],dim=0),
             }
 
 class DistilBartDataset(torch.utils.data.Dataset):
@@ -39,6 +41,7 @@ class DistilBartDataset(torch.utils.data.Dataset):
             self.tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
             self.model = BartForConditionalGeneration.from_pretrained('facebook/bart-large') #TODO save to dir
             self.model.eval()
+        self.max_auto_tokens = config['max_auto_tokens']
 
         self.augment_shade = config.get('augment_shade',True)
         self.rotate_std_dev = (math.pi/180) * config.get('rotate_std_dev',1)
@@ -85,24 +88,31 @@ class DistilBartDataset(torch.utils.data.Dataset):
             self.used_held=1
         
         ##Make mlm instances
-        block = random.choice(ocr)
         words = []
-        target_string = []
-        for p,para in enumerate(block['paragraphs']):
-            for l,line in enumerate(para['lines']):
-                for word in line['words']:
-                    words.append((word,p,l))
-                    target_string.append(word['text'])
-        target_string = ' '.join(target_string)
+        while len(words)<4 and len(ocr)>1:
+            #block = random.choice(ocr)
+            block_i = random.randrange(len(ocr))
+            block = ocr[block_i]
+            ocr = ocr[:block_i]+ocr[block_i+1:] #remove
+            target_string = []
+            for p,para in enumerate(block['paragraphs']):
+                for l,line in enumerate(para['lines']):
+                    for word in line['words']:
+                        words.append((word,p,l))
+                        target_string.append(word['text'])
+            target_string = ' '.join(target_string)
+        if len(words)<4:
+            return self.__getitem__(index)
 
         num_spans=random.randrange(1,max(len(words)//8,2))
         to_remove=[]
         for i in range(num_spans):
             num = np.random.poisson(3)
+            num = min(num,len(words)-1)
             for i in range(50):
                 loc = random.randrange(0,len(words)-num)
                 before=max(0,loc-1)
-                after=min(len(words),loc+num)
+                after=min(len(words),loc+num+1)
                 good_spot = all((w is not None) for w in words[before:after])
                 if good_spot:
                     break
@@ -132,15 +142,18 @@ class DistilBartDataset(torch.utils.data.Dataset):
             else:
                 bart_input_string.append('<mask>')
         bart_input_string = ' '.join(bart_input_string)
-        print('Start BART '+bart_input_string[:20])
+        #print('Start BART '+bart_input_string[:20])
         input_ids = self.tokenizer([bart_input_string], return_tensors='pt')['input_ids']
         gt_input_ids = self.tokenizer([target_string], return_tensors='pt')['input_ids']
+        gt_input_ids = gt_input_ids[:,:self.max_auto_tokens]
         with torch.no_grad():
             bart_out = self.model(input_ids, labels=gt_input_ids,output_hidden_states=True)
         logits = bart_out.logits
         last_hidden = bart_out.decoder_hidden_states[-1]
-        print('End BART '+bart_input_string[:20])
+        #print('End BART '+bart_input_string)
 
+
+        image = 255-image
         if len(image.shape)==2:
             image = image[:,:,None]
         if self.augment_shade and self.augment_shade>random.random():
@@ -151,15 +164,15 @@ class DistilBartDataset(torch.utils.data.Dataset):
                 
                 image = augmentation.apply_tensmeyer_brightness(image,**self.aug_params)
 
-        image=np.concatenate((image,np.zeros([image_h,image_w,1],dtype=np.uint8)),axis=2)
+        image=np.concatenate((image,np.zeros([image_h,image_w,1],dtype=np.float32)),axis=2)
         #highlight lines to make it easier to locate
         for paragraph in block['paragraphs']:
             for line in paragraph['lines']:
                 x1,y1,x2,y2 = line['box']
-                image[x1:x2,y1:y2,1] = 1 #highlight block we're working on
+                image[y1:y2,x1:x2,1] = 255 #highlight block we're working on
         for x1,y1,x2,y2 in to_remove:
-            image[x1:x2,y1:y2,0] = 128 #we mask to 0 [middle of range] in qa dataset
-            image[x1:x2,y1:y2,1] = -1 #flip mask
+            image[y1:y2,x1:x2,0] = 128 #we mask to 0 [middle of range] in qa dataset
+            image[y1:y2,x1:x2,1] = -255 #flip mask
 
         #rotate image
         rot_amount = np.random.normal(0,self.rotate_std_dev)
@@ -187,7 +200,13 @@ class DistilBartDataset(torch.utils.data.Dataset):
         img = image.transpose([2,0,1])[None,...] #from [row,col,color] to [batch,color,row,  col]
         img = img.astype(np.float32)
         img = torch.from_numpy(img)
-        img = 1.0 - img / 128.0 #ideally the median value would be 0
+        img[:,0] = 1.0 - img[:,0] / 128.0 #ideally the median value would be 0
+        mask_on = img[:,1]>0
+        mask_masked = img[:,1]<-1
+        mask_off = (~mask_on)*(~mask_masked)
+        img[:,1][mask_on] = 1
+        img[:,1][mask_off] = 0
+        img[:,1][mask_masked] = -1
 
         return {
                 "img": img,
@@ -209,10 +228,12 @@ class DistilBartDataset(torch.utils.data.Dataset):
         if self.prev_words is not None:
             words = self.prev_words
             self.prev_words = None
+            use_prev=True
         else:
             words = []
             while len(words)==0:
                 words = self.gen_daemon.generate()
+            use_prev=False
         word_height = random.randrange(self.min_text_height,self.max_text_height)
         scale = word_height / words[0][1].shape[0]
 
@@ -319,8 +340,20 @@ class DistilBartDataset(torch.utils.data.Dataset):
                 start_y = step_y
 
             #Actually draw in the paragraph and build ocr
-            for lines in paras:
-                ocr.append(self.addPara(lines,image,scale,start_x,start_y))
+            for i,lines in enumerate(paras):
+                if i>0 or (use_prev and len(ocr)>0):
+                    to_append = self.addPara(lines,image,scale,start_x,start_y)
+                    last_para = ocr[-1]
+                    new_box = [
+                            min(last_para['box'][0],to_append['box'][0]),
+                            min(last_para['box'][1],to_append['box'][1]),
+                            max(last_para['box'][2],to_append['box'][2]),
+                            max(last_para['box'][3],to_append['box'][3])
+                            ]
+                    last_para['box'] = new_box
+                    last_para['paragraphs']+=to_append['paragraphs']
+                else:
+                    ocr.append(self.addPara(lines,image,scale,start_x,start_y))
             return True
 
     def addPara(self,lines,image,scale,start_x,start_y):
