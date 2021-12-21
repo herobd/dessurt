@@ -229,7 +229,13 @@ class MmSwin(BaseModel):
         self.answer_decode.weight = self.text_embedding.weight #Tie weights
         self.answer_softmax = nn.LogSoftmax(dim=-1) #except
 
-
+        
+        if 'distillation_dim' in config:
+            distillation_dim = config['distillation_dim']
+            if distillation_dim!=d_model:
+                self.ditillation_adapter = nn.Linear(d_model,distillation_dim,bias=True)
+            else:
+                self.ditillation_adapter = nn.Identity()
 
         #t#self.opt_history=defaultdict(list)#t#
 
@@ -275,9 +281,9 @@ class MmSwin(BaseModel):
             q_input_ids = q_t['input_ids'][:,:self.max_q_tokens-1]
             q_attention_mask = q_t['attention_mask'][:,:self.max_q_tokens-1]
             if not RUN:
-                a_t = self.tokenizer(answers,return_tensors="pt",padding='max_length',max_length=self.max_a_tokens,truncation=True)
-                a_input_ids = a_t['input_ids'][:,:self.max_a_tokens]
-                a_attention_mask = a_t['attention_mask'][:,:self.max_a_tokens]
+                a_t = self.tokenizer(answers,return_tensors="pt",padding='max_length',max_length=self.max_a_tokens+1,truncation=True)
+                a_input_ids = a_t['input_ids'][:,:self.max_a_tokens+1]
+                a_attention_mask = a_t['attention_mask'][:,:self.max_a_tokens+1]
             else:
                 a_t = self.tokenizer(answers,return_tensors="pt",padding=True)
                 a_input_ids = a_t['input_ids']
@@ -564,7 +570,7 @@ class MmSwin(BaseModel):
 
 
         if distill:
-            return response_decoded, target_decoded.to(device), batch_string_response, response_logits, response#or a_tokens
+            return response_decoded, target_decoded.to(device), batch_string_response, response_logits, self.ditillation_adapter(response), ~a_padding_mask
         else:
             return response_decoded, target_decoded.to(device), batch_string_response, out_mask
 

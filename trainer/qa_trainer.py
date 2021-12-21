@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.nn.functional as F
 from base import BaseTrainer
 import timeit
 from utils import util
@@ -96,6 +97,9 @@ class QATrainer(BaseTrainer):
             self.ocr_reader = easyocr.Reader(['en'],gpu=config['cuda'])
 
         self.randomly_blank_image  =config['trainer'].get('randomly_blank_image',0)
+
+
+        self.distillation_temperature = config['trainer'].get('distillation_temperature',2.0)
 
         self.DEBUG_max_ocr_len=0
 
@@ -439,27 +443,36 @@ class QATrainer(BaseTrainer):
             losses['maskLoss'] = self.loss['mask'](pred_mask*mask_labels_batch_mask[:,None,None,None],gt_mask)
 
         if distill:
+            #pred_len = batch_mask.size(1)
             teacher_last_hidden = instance['bart_last_hidden'].to(device)
             teacher_logits = instance['bart_logits'].to(device)
+            teacher_len = teacher_last_hidden.size(1)
+            batch_mask = batch_mask[:,:,None] #add channel dim for broadcast
+            teacher_batch_mask = batch_mask[:,:teacher_len]
+
+            hidden_dim = teacher_last_hidden.size(-1)
+            logits_dim = teacher_logits.size(-1)
+            
 
             #cosine loss
-            pred_last_hidden = torch.masked_select(pred_last_hidden,batch_mask)
-            pred_last_hidden = pred_last_hidden.view(-1,pred_last_hidden.size(-1))
-            teacher_last_hidden = torch.masked_select(teacher_last_hidden,batch_mask)
-            teacher_last_hidden = teacher_last_hidden.view(-1,teacher_last_hidden.size(-1))
+            if self.lossWeights['cosine']>0:
+                pred_last_hidden = torch.masked_select(pred_last_hidden,batch_mask)
+                pred_last_hidden = pred_last_hidden.view(-1,hidden_dim)
+                teacher_last_hidden = torch.masked_select(teacher_last_hidden,teacher_batch_mask)
+                teacher_last_hidden = teacher_last_hidden.view(-1,hidden_dim)
 
-            target = s_hidden_states_slct.new(pred_last_hidden.size(0)).fill_(1)
-            losses['cosineLoss'] = F.cosine_embedding_loss(s_hidden_states_slct, t_hidden_states_slct, target,reduction="mean")
+                target = pred_last_hidden.new(pred_last_hidden.size(0)).fill_(1)
+                losses['cosineLoss'] = F.cosine_embedding_loss(pred_last_hidden, teacher_last_hidden, target,reduction="mean")
 
             pred_logits = torch.masked_select(pred_logits,batch_mask)
-            pred_logits = pred_logits.view(-1,pred_logits.size(-1))
-            teacher_logits = torch.masked_select(teacher_logits,batch_mask)
-            teacher_logits = teacher_logits.view(-1,teacher_logits.size(-1))
+            pred_logits = pred_logits.view(-1,logits_dim)
+            teacher_logits = torch.masked_select(teacher_logits,teacher_batch_mask)
+            teacher_logits = teacher_logits.view(-1,logits_dim)
 
-            losses['distillationLoss'] = F.f(
-                    nn.functional.log_softmax(pred_logits / self.temperature, dim=-1),
-                    nn.functional.softmax(teacher_logits / self.temperature, dim=-1),
-                    )* (self.temperature) ** 2
+            losses['distillationLoss'] = F.kl_div(
+                    F.log_softmax(pred_logits / self.distillation_temperature, dim=-1),
+                    F.softmax(teacher_logits / self.distillation_temperature, dim=-1),
+                    reduction='batchmean')* (self.distillation_temperature ** 2)
 
 
         #t#tic=timeit.default_timer()#t#
