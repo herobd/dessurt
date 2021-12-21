@@ -70,7 +70,7 @@ class QATrainer(BaseTrainer):
             self.loss_params=config['loss_params']
         else:
             self.loss_params={}
-        self.lossWeights = config['loss_weights'] if 'loss_weights' in config else {"box": 1, "rel":1}
+        self.lossWeights = config['loss_weights']
         self.batch_size = data_loader.batch_size
         self.data_loader = data_loader
         self.data_loader_iter = iter(data_loader)
@@ -344,6 +344,14 @@ class QATrainer(BaseTrainer):
         if gt_mask is not None:
             gt_mask = gt_mask.to(device)
 
+        distill=False
+        for qs in questions:
+            for q in qs:
+                if 'mlm>'==q:
+                    distill=True
+                else:
+                    assert not distill
+
         #OCR possibilities
         #-All correct
         #-partail corrupt, partail missing
@@ -403,7 +411,12 @@ class QATrainer(BaseTrainer):
         #import pdb;pdb.set_trace()
         if ocr_res is not None and max(len(ocr_b) if ocr_b is not None else -1 for ocr_b in ocr_res)>0 and self.randomly_blank_image>random.random():
             image = None
-        pred_a, target_a, string_a, pred_mask = self.model(image,ocr_res,questions,answers)
+
+        if distill:
+            pred_a, target_a, string_a, pred_logits, pred_last_hidden, batch_mask = self.model(image,ocr_res,questions,answers,distill=True)
+            pred_mask = None
+        else:
+            pred_a, target_a, string_a, pred_mask = self.model(image,ocr_res,questions,answers)
 
         #pred_a[:,0].sum().backward()
         #print(self.model.start_token.grad)
@@ -424,6 +437,29 @@ class QATrainer(BaseTrainer):
         if 'mask' in self.loss and gt_mask is not None and pred_mask is not None: #we allow gt_mask to be none to not supervise
             mask_labels_batch_mask = instance['mask_labels_batch_mask'].to(device)
             losses['maskLoss'] = self.loss['mask'](pred_mask*mask_labels_batch_mask[:,None,None,None],gt_mask)
+
+        if distill:
+            teacher_last_hidden = instance['bart_last_hidden'].to(device)
+            teacher_logits = instance['bart_logits'].to(device)
+
+            #cosine loss
+            pred_last_hidden = torch.masked_select(pred_last_hidden,batch_mask)
+            pred_last_hidden = pred_last_hidden.view(-1,pred_last_hidden.size(-1))
+            teacher_last_hidden = torch.masked_select(teacher_last_hidden,batch_mask)
+            teacher_last_hidden = teacher_last_hidden.view(-1,teacher_last_hidden.size(-1))
+
+            target = s_hidden_states_slct.new(pred_last_hidden.size(0)).fill_(1)
+            losses['cosineLoss'] = F.cosine_embedding_loss(s_hidden_states_slct, t_hidden_states_slct, target,reduction="mean")
+
+            pred_logits = torch.masked_select(pred_logits,batch_mask)
+            pred_logits = pred_logits.view(-1,pred_logits.size(-1))
+            teacher_logits = torch.masked_select(teacher_logits,batch_mask)
+            teacher_logits = teacher_logits.view(-1,teacher_logits.size(-1))
+
+            losses['distillationLoss'] = F.f(
+                    nn.functional.log_softmax(pred_logits / self.temperature, dim=-1),
+                    nn.functional.softmax(teacher_logits / self.temperature, dim=-1),
+                    )* (self.temperature) ** 2
 
 
         #t#tic=timeit.default_timer()#t#
