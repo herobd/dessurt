@@ -348,13 +348,7 @@ class QATrainer(BaseTrainer):
         if gt_mask is not None:
             gt_mask = gt_mask.to(device)
 
-        distill=False
-        for qs in questions:
-            for q in qs:
-                if 'mlm>'==q:
-                    distill=True
-                else:
-                    assert not distill
+        distill= 'bart_logits' in instance and instance['bart_logits'] is not None
 
         #OCR possibilities
         #-All correct
