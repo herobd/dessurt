@@ -38,18 +38,12 @@ class DistilBartDataset(torch.utils.data.Dataset):
         super(DistilBartDataset, self).__init__()
 
         if split=='train':
-<<<<<<< HEAD
-            self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/bart-large')
-            self.model = BartForConditionalGeneration.from_pretrained('./cache_huggingface/bart-large') #TODO save to dir
-            self.model.eval()
-=======
             if not config.get('no_distill',False):
-                self.tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
-                self.model = BartForConditionalGeneration.from_pretrained('facebook/bart-large') #TODO save to dir
+                self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/bart-large')
+                self.model = BartForConditionalGeneration.from_pretrained('./cache_huggingface/bart-large')
                 self.model.eval()
             else:
                 self.tokenizer = None
->>>>>>> b4914c673ae30e9f39b3ba8f6f81e336540ae331
         self.max_auto_tokens = config['max_auto_tokens']
 
         self.augment_shade = config.get('augment_shade',True)
