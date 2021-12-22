@@ -38,9 +38,12 @@ class DistilBartDataset(torch.utils.data.Dataset):
         super(DistilBartDataset, self).__init__()
 
         if split=='train':
-            self.tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
-            self.model = BartForConditionalGeneration.from_pretrained('facebook/bart-large') #TODO save to dir
-            self.model.eval()
+            if not config.get('no_distill',False):
+                self.tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
+                self.model = BartForConditionalGeneration.from_pretrained('facebook/bart-large') #TODO save to dir
+                self.model.eval()
+            else:
+                self.tokenizer = None
         self.max_auto_tokens = config['max_auto_tokens']
 
         self.augment_shade = config.get('augment_shade',True)
@@ -135,22 +138,26 @@ class DistilBartDataset(torch.utils.data.Dataset):
                     bot_y = max(w['box'][3] for w in line) +1
                     to_remove.append((left_x,top_y,right_x,bot_y))
 
-        bart_input_string = []
-        for word in words:
-            if word is not None:
-                bart_input_string.append(word[0]['text'])
-            else:
-                bart_input_string.append('<mask>')
-        bart_input_string = ' '.join(bart_input_string)
-        #print('Start BART '+bart_input_string[:20])
-        input_ids = self.tokenizer([bart_input_string], return_tensors='pt')['input_ids']
-        gt_input_ids = self.tokenizer([target_string], return_tensors='pt')['input_ids']
-        gt_input_ids = gt_input_ids[:,:self.max_auto_tokens]
-        with torch.no_grad():
-            bart_out = self.model(input_ids, labels=gt_input_ids,output_hidden_states=True)
-        logits = bart_out.logits
-        last_hidden = bart_out.decoder_hidden_states[-1]
-        #print('End BART '+bart_input_string)
+        if self.tokenizer is not None:
+            bart_input_string = []
+            for word in words:
+                if word is not None:
+                    bart_input_string.append(word[0]['text'])
+                else:
+                    bart_input_string.append('<mask>')
+            bart_input_string = ' '.join(bart_input_string)
+            #print('Start BART '+bart_input_string[:20])
+            input_ids = self.tokenizer([bart_input_string], return_tensors='pt')['input_ids']
+            gt_input_ids = self.tokenizer([target_string], return_tensors='pt')['input_ids']
+            gt_input_ids = gt_input_ids[:,:self.max_auto_tokens]
+            with torch.no_grad():
+                bart_out = self.model(input_ids, labels=gt_input_ids,output_hidden_states=True)
+            logits = bart_out.logits
+            last_hidden = bart_out.decoder_hidden_states[-1]
+            #print('End BART '+bart_input_string)
+        else:
+            logits = None
+            last_hidden = None
 
 
         image = 255-image
@@ -208,16 +215,19 @@ class DistilBartDataset(torch.utils.data.Dataset):
         img[:,1][mask_off] = 0
         img[:,1][mask_masked] = -1
 
-        return {
+        ret = {
                 "img": img,
                 "imgName": "generated",
                 "scale": 1,
                 "questions": ["mlm>"],
                 "answers": [target_string],
                 "mask_label": None,
-                "bart_logits": logits,
-                "bart_last_hidden": last_hidden,
                 }
+        if logits is not None:
+            ret["bart_logits"] = logits
+            ret["bart_last_hidden"] = last_hidden
+
+        return ret
 
 
 
