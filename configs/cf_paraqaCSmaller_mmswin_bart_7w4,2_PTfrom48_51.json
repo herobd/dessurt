@@ -1,27 +1,27 @@
 {
-    "name": "test",
+    "name": "paraqaCSmaller_mmswin_bart_7w4,2_PTfrom48_51",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
         "data_set_name": "SynthParaQA",
-        "mode": "pretrain_word",
+	"mode": "pretrain_word",
         "cased": true,
         "data_dir": "../data/fonts",
-        "batch_size": 5,
+        "batch_size": 4,
         "num_workers": 4,
         "rescale_range": [0.9,1.1],
         "crop_params": {
-                "crop_size":[96,384],
+                "crop_size":[112,448],
                 "pad":0,
                 "rot_degree_std_dev": 1
             },
-        "questions": 1,
+	"questions": 1,
         "max_qa_len_in": 640,
         "max_qa_len_out": 2560,
-        "image_size": [96,384],
-        "prefetch_factor": 2,
+        "image_size": [110,444],
+	"prefetch_factor": 2,
         "shuffle": true
     },
     "validation": {
@@ -54,7 +54,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 4000000,
-        "accum_grad_steps": 1,
+        "accum_grad_steps": 4,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
@@ -81,23 +81,21 @@
     "arch": "MmSwin",
     "model": {
         "image_size": [
-            96,384
+            112,448
         ],
         "use_set_length": true,
         "init_from_pretrained": "bart",
         "use_special_question_tokens": true,
         "no_dropout": false,
-        "window_size": 12,
+        "window_size": 7,
         "decode_dim": 768,
         "dim_ff": 3072,
         "decode_num_heads": 8,
         "blocks_per_level": [
             4,
-            6
+            4
         ],
         "use_swin":[
-            true,
-            true,
             true,
             true,
             true,
@@ -108,14 +106,12 @@
             false
         ],
         "swin_cross_attention":[
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
             false,
             false
         ],
@@ -123,7 +119,6 @@
             4,
             8
         ],
-        "im_embed_dim": 224,
-        "full_layers": null
+        "im_embed_dim": 224
     }
 }

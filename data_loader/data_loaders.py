@@ -19,6 +19,7 @@ from data_sets import cdip_cloud_qa
 from data_sets import iam_qa
 from data_sets import iam_ner
 from data_sets import census_qa
+from data_sets import distil_bart
 from data_sets import nobrain_qa
 from data_sets import nobrain_graph_pair
 from data_sets import forms_graph_pair
@@ -162,6 +163,8 @@ def getDataLoader(config,split,rank=None,world_size=None):
             return withCollate(synth_ocr_dataset.SynthOCRDataset,synth_ocr_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='CensusQA':
             return withCollate(census_qa.CensusQA,census_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='DistilBartDataset':
+            return withCollate(distil_bart.DistilBartDataset,distil_bart.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='AdobeBoxDetect':
             return withCollate(adobe_box_detect.AdobeBoxDetect,adobe_box_detect.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='AdobeGraphPair':

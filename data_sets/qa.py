@@ -33,19 +33,21 @@ def collate(batch):
 
     return {
             'img': torch.cat([b['img'] for b in batch],dim=0),
-            'bb_gt': [b['bb_gt'] for b in batch], #torch.cat([b['bb_gt'] for b in batch],dim=0),
-            'imgName': [b['imgName'] for b in batch],
-            'scale': [b['scale'] for b in batch],
-            'cropPoint': [b['cropPoint'] for b in batch],
-            'transcription': [b['transcription'] for b in batch],
-            'metadata': [b['metadata'] for b in batch],
-            'form_metadata': [b['form_metadata'] for b in batch],
-            'questions': [b['questions'] for b in batch],
-            'answers': [b['answers'] for b in batch],
+            'bb_gt': [b.get('bb_gt') for b in batch], 
+            'imgName': [b.get('imgName') for b in batch],
+            'scale': [b.get('scale') for b in batch],
+            'cropPoint': [b.get('cropPoint') for b in batch],
+            'transcription': [b.get('transcription') for b in batch],
+            'metadata': [b.get('metadata') for b in batch],
+            'form_metadata': [b.get('form_metadata') for b in batch],
+            'questions': [b.get('questions') for b in batch],
+            'answers': [b.get('answers') for b in batch],
             'mask_label': mask_labels,
             'mask_labels_batch_mask': mask_labels_batch_mask,
             #'mask_label': torch.cat([b['mask_label'] for b in batch],dim=0) if batch[0]['mask_label'] is not None else [b['mask_label'] for b in batch],
-            'pre-recognition': [b['pre-recognition'] for b in batch]
+            'pre-recognition': [b.get('pre-recognition') for b in batch],
+            "bart_logits": torch.cat([b['bart_logits'] for b in batch],dim=0) if 'bart_logits' in batch[0] else None,
+            "bart_last_hidden": torch.cat([b['bart_last_hidden'] for b in batch],dim=0) if 'bart_last_hidden' in batch[0] else None,
             }
 
 def getMask(shape,boxes):
