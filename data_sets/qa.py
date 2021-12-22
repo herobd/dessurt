@@ -154,7 +154,7 @@ class QADataset(torch.utils.data.Dataset):
         rescaled = self.images[index]['rescaled']
         if type(annotationPath) is int:
             annotations = annotationPath
-        elif annotationPath.endswith('.json'):
+        elif isinstance(annotationPath,str) and  annotationPath.endswith('.json'):
             try: 
                 with open(annotationPath) as annFile:
                     annotations = json.loads(annFile.read())
