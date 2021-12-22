@@ -40,6 +40,7 @@ class MmSwin(BaseModel):
 
         blocks_per_level = config['blocks_per_level'] #[2,2,6,2] -> in:512,emb:64 then 64,32,16,8
         use_swin = config.get('use_swin',[True]*sum(blocks_per_level  ))
+        use_auto = config.get('use_auto',[True]*sum(blocks_per_level  ))
         swin_cross_attention = config.get('swin_cross_attention',[True]*sum(blocks_per_level))
         if blocks_per_level is not None:
             if 'swin_text_downsample_all' in config:
@@ -167,6 +168,7 @@ class MmSwin(BaseModel):
                     q_pool = None
                 do_cross_att = swin_cross_attention[len(self.swin_layers)]
                 use_swin_here = use_swin[len(self.swin_layers)]
+                use_auto_here = use_auto[len(self.swin_layers)]
                 self.swin_layers.append( nn.ModuleList( [
                     SwinTransformerBlock(dim=d_im, 
                                 input_resolution=cur_resolution,
@@ -182,8 +184,8 @@ class MmSwin(BaseModel):
                                  norm_layer=nn.LayerNorm,
                                  sees_docq=do_cross_att) if use_swin_here else None,
                     (nn.Linear(d_model,d_im,bias=False) if d_model!=d_im else nn.Identity()) if do_cross_att else None,
-                    QTransformerLayer(d_model,nhead,dim_ff,dropout=dropout),
-                    nn.Linear(d_im,d_model,bias=False) if d_model!=d_im else nn.Identity(),
+                    QTransformerLayer(d_model,nhead,dim_ff,dropout=dropout) if use_auto_here else None,
+                    (nn.Linear(d_im,d_model,bias=False) if d_model!=d_im else nn.Identity()) if use_auto_here else None,
                     PatchMerging(cur_resolution, dim=d_im, norm_layer=nn.LayerNorm) if last else None,
                     None,
                     q_pool
@@ -376,7 +378,7 @@ class MmSwin(BaseModel):
             init_im_tokens = im_tokens
             init_a_tokens = a_tokens.requires_grad_()
 
-        for i,(swin_layer, proj_d2i, layout_layer, proj_i2d, im_downsample, ocr_downsample, q_downsample) in enumerate(self.swin_layers):
+        for i,(swin_layer, proj_d2i, autoregr_layer, proj_i2d, im_downsample, ocr_downsample, q_downsample) in enumerate(self.swin_layers):
 
             #could be run in parallel
             if PRINT_ATT:
@@ -388,22 +390,23 @@ class MmSwin(BaseModel):
                             docq_padding_mask=q_padding_mask_inf) 
                 else:
                     im_tokens = swin_layer(im_tokens)
+                if autoregr_layer is not None:
+                    proj_im_tokens = proj_i2d(im_tokens)
+                #else:
+                #   reuse last proj_im_tokens
 
-                proj_im_tokens = proj_i2d(im_tokens)
-            #else:
-            #   reuse last proj_im_tokens
-
-            if RUN:
-                saved_proj_im_tokens.append(proj_im_tokens)
-                saved_q_tokens.append(q_tokens)
-                saved_q_padding_mask.append(q_padding_mask)
-                saved_a_tokens.append(a_tokens)
-            
-            qa_tokens = layout_layer(
-                    qa_tokens,
-                    torch.cat((proj_im_tokens,qa_tokens),dim=1),
-                    all_att_mask[:,-(num_q+num_a):,:],
-                    all_padding_mask)
+            if autoregr_layer is not None:
+                if RUN:
+                    saved_proj_im_tokens.append(proj_im_tokens)
+                    saved_q_tokens.append(q_tokens)
+                    saved_q_padding_mask.append(q_padding_mask)
+                    saved_a_tokens.append(a_tokens)
+                
+                qa_tokens = autoregr_layer(
+                        qa_tokens,
+                        torch.cat((proj_im_tokens,qa_tokens),dim=1),
+                        all_att_mask[:,-(num_q+num_a):,:],
+                        all_padding_mask)
                     
 
             did_downsample=False
