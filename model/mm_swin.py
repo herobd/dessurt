@@ -379,6 +379,7 @@ class MmSwin(BaseModel):
             
             if swin_layer is not None:
                 if proj_d2i is not None:
+                    import pdb;pdb.set_trace()
                     im_tokens = swin_layer(im_tokens,proj_d2i(q_tokens),
                             docq_padding_mask=q_padding_mask_inf) 
                 else:
