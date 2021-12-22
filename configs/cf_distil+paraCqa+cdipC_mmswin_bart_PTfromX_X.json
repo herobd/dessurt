@@ -19,7 +19,8 @@
                     "data_set_name": "DistilBartDataset",
                     "data_dir": "../data/fonts",
                     "image_size": [1152,768],
-                    "max_auto_tokens": 512
+                    "max_auto_tokens": 512,
+                    "no_distill": true
                 }
             },
 
