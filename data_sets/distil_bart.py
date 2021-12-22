@@ -38,12 +38,18 @@ class DistilBartDataset(torch.utils.data.Dataset):
         super(DistilBartDataset, self).__init__()
 
         if split=='train':
+<<<<<<< HEAD
+            self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/bart-large')
+            self.model = BartForConditionalGeneration.from_pretrained('./cache_huggingface/bart-large') #TODO save to dir
+            self.model.eval()
+=======
             if not config.get('no_distill',False):
                 self.tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
                 self.model = BartForConditionalGeneration.from_pretrained('facebook/bart-large') #TODO save to dir
                 self.model.eval()
             else:
                 self.tokenizer = None
+>>>>>>> b4914c673ae30e9f39b3ba8f6f81e336540ae331
         self.max_auto_tokens = config['max_auto_tokens']
 
         self.augment_shade = config.get('augment_shade',True)
@@ -151,7 +157,14 @@ class DistilBartDataset(torch.utils.data.Dataset):
             gt_input_ids = self.tokenizer([target_string], return_tensors='pt')['input_ids']
             gt_input_ids = gt_input_ids[:,:self.max_auto_tokens]
             with torch.no_grad():
-                bart_out = self.model(input_ids, labels=gt_input_ids,output_hidden_states=True)
+                try:
+                    bart_out = self.model(input_ids, labels=gt_input_ids,output_hidden_states=True)
+                except IndexError as e:
+                    print(e)
+                    print('bad index, probably: {} or {}'.format(input_ids.max(),gt_input_ids.max()))
+                    print(bart_input_string)
+                    print(target_string)
+                    return self.__getitem__(index)
             logits = bart_out.logits
             last_hidden = bart_out.decoder_hidden_states[-1]
             #print('End BART '+bart_input_string)
