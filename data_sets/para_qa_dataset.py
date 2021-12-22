@@ -298,6 +298,27 @@ class ParaQADataset(QADataset):
                     'read_highlighted':0.5,
                     'masked_lm':4.0,
                     'put_in_place':1.0}
+        elif mode == 'hard_word':
+            self.q_types = {
+                    'read_blanked':0.5,
+                    'proper_read_replaced':0.5,
+                    'read_with_masked':1.0,
+                    'read_line':0.1,
+                    'highlight_text': 0.1,
+                    'read_highlighted':0.1,
+                    'masked_lm':4.0,
+                    'put_in_place':1.0,
+                    'read_on':0.9,
+                    'highlight_block':1.0}
+            self.q_types_noblock = {
+                    'read_blanked':0.5,
+                    'proper_read_replaced':0.5,
+                    'read_with_masked':1.0,
+                    'read_line':0.1,
+                    'highlight_text': 0.1,
+                    'read_highlighted':0.1,
+                    'masked_lm':4.0,
+                    'put_in_place':1.0}
         else:
             raise ValueError('Unknown para qa mode: {}'.format(mode))
 

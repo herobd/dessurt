@@ -40,6 +40,7 @@ class MmSwin(BaseModel):
 
         blocks_per_level = config['blocks_per_level'] #[2,2,6,2] -> in:512,emb:64 then 64,32,16,8
         use_swin = config.get('use_swin',[True]*sum(blocks_per_level  ))
+        use_auto = config.get('use_auto',[True]*sum(blocks_per_level  ))
         swin_cross_attention = config.get('swin_cross_attention',[True]*sum(blocks_per_level))
         if blocks_per_level is not None:
             if 'swin_text_downsample_all' in config:
@@ -168,6 +169,7 @@ class MmSwin(BaseModel):
                     q_pool = None
                 do_cross_att = swin_cross_attention[len(self.swin_layers)]
                 use_swin_here = use_swin[len(self.swin_layers)]
+                use_auto_here = use_auto[len(self.swin_layers)]
                 self.swin_layers.append( nn.ModuleList( [
                     SwinTransformerBlock(dim=d_im, 
                                 input_resolution=cur_resolution,
@@ -183,13 +185,17 @@ class MmSwin(BaseModel):
                                  norm_layer=nn.LayerNorm,
                                  sees_docq=do_cross_att) if use_swin_here else None,
                     (nn.Linear(d_model,d_im,bias=False) if d_model!=d_im else nn.Identity()) if do_cross_att else None,
-                    QTransformerLayer(d_model,nhead,dim_ff,dropout=dropout),
-                    nn.Linear(d_im,d_model,bias=False) if d_model!=d_im else nn.Identity(),
+                    QTransformerLayer(d_model,nhead,dim_ff,dropout=dropout) if use_auto_here else None,
+                    (nn.Linear(d_im,d_model,bias=False) if d_model!=d_im else nn.Identity()) if use_auto_here else None,
                     PatchMerging(cur_resolution, dim=d_im, norm_layer=nn.LayerNorm) if last else None,
                     None,
                     q_pool
                     ] ) )
 
+        if config.get('use_bart_layer_init',False):
+            self.bartLayerInit(init_model)
+
+        
 
 
         self.final_resolution = cur_resolution
@@ -230,7 +236,13 @@ class MmSwin(BaseModel):
         self.answer_decode.weight = self.text_embedding.weight #Tie weights
         self.answer_softmax = nn.LogSoftmax(dim=-1) #except
 
-
+        
+        if 'distillation_dim' in config:
+            distillation_dim = config['distillation_dim']
+            if distillation_dim!=d_model:
+                self.ditillation_adapter = nn.Linear(d_model,distillation_dim,bias=True)
+            else:
+                self.ditillation_adapter = nn.Identity()
 
         #t#self.opt_history=defaultdict(list)#t#
 
@@ -238,7 +250,7 @@ class MmSwin(BaseModel):
 
 
     #we're building this for fixed images size
-    def forward(self,image,ocrRes,questions,answers=None,useCurvedBBs=False,RUN=False,get_tokens=False):
+    def forward(self,image,ocrRes,questions,answers=None,useCurvedBBs=False,RUN=False,get_tokens=False,distill=False):
 
 
         device = image.device
@@ -276,9 +288,9 @@ class MmSwin(BaseModel):
             q_input_ids = q_t['input_ids'][:,:self.max_q_tokens-1]
             q_attention_mask = q_t['attention_mask'][:,:self.max_q_tokens-1]
             if not RUN:
-                a_t = self.tokenizer(answers,return_tensors="pt",padding='max_length',max_length=self.max_a_tokens,truncation=True)
-                a_input_ids = a_t['input_ids'][:,:self.max_a_tokens]
-                a_attention_mask = a_t['attention_mask'][:,:self.max_a_tokens]
+                a_t = self.tokenizer(answers,return_tensors="pt",padding='max_length',max_length=self.max_a_tokens+1,truncation=True)
+                a_input_ids = a_t['input_ids'][:,:self.max_a_tokens+1]
+                a_attention_mask = a_t['attention_mask'][:,:self.max_a_tokens+1]
             else:
                 a_t = self.tokenizer(answers,return_tensors="pt",padding=True)
                 a_input_ids = a_t['input_ids']
@@ -371,7 +383,7 @@ class MmSwin(BaseModel):
             init_im_tokens = im_tokens
             init_a_tokens = a_tokens.requires_grad_()
 
-        for i,(swin_layer, proj_d2i, layout_layer, proj_i2d, im_downsample, ocr_downsample, q_downsample) in enumerate(self.swin_layers):
+        for i,(swin_layer, proj_d2i, autoregr_layer, proj_i2d, im_downsample, ocr_downsample, q_downsample) in enumerate(self.swin_layers):
 
             #could be run in parallel
             if PRINT_ATT:
@@ -384,22 +396,23 @@ class MmSwin(BaseModel):
                             docq_padding_mask=q_padding_mask_inf) 
                 else:
                     im_tokens = swin_layer(im_tokens)
+                if autoregr_layer is not None:
+                    proj_im_tokens = proj_i2d(im_tokens)
+                #else:
+                #   reuse last proj_im_tokens
 
-                proj_im_tokens = proj_i2d(im_tokens)
-            #else:
-            #   reuse last proj_im_tokens
-
-            if RUN:
-                saved_proj_im_tokens.append(proj_im_tokens)
-                saved_q_tokens.append(q_tokens)
-                saved_q_padding_mask.append(q_padding_mask)
-                saved_a_tokens.append(a_tokens)
-            
-            qa_tokens = layout_layer(
-                    qa_tokens,
-                    torch.cat((proj_im_tokens,qa_tokens),dim=1),
-                    all_att_mask[:,-(num_q+num_a):,:],
-                    all_padding_mask)
+            if autoregr_layer is not None:
+                if RUN:
+                    saved_proj_im_tokens.append(proj_im_tokens)
+                    saved_q_tokens.append(q_tokens)
+                    saved_q_padding_mask.append(q_padding_mask)
+                    saved_a_tokens.append(a_tokens)
+                
+                qa_tokens = autoregr_layer(
+                        qa_tokens,
+                        torch.cat((proj_im_tokens,qa_tokens),dim=1),
+                        all_att_mask[:,-(num_q+num_a):,:],
+                        all_padding_mask)
                     
 
             did_downsample=False
@@ -526,8 +539,8 @@ class MmSwin(BaseModel):
 
 
 
-        response_decoded = self.answer_decode(response)
-        response_decoded = self.answer_softmax(response_decoded)
+        response_logits = self.answer_decode(response)
+        response_decoded = self.answer_softmax(response_logits)
 
         #t#time = timeit.default_timer()-ticA#t#
         #t#self.opt_history['transformers'].append(time)#t#
@@ -565,8 +578,10 @@ class MmSwin(BaseModel):
 
 
 
-
-        return response_decoded, target_decoded.to(device), batch_string_response, out_mask
+        if distill:
+            return response_decoded, target_decoded.to(device), batch_string_response, response_logits, self.ditillation_adapter(response), ~a_padding_mask
+        else:
+            return response_decoded, target_decoded.to(device), batch_string_response, out_mask
 
     #t#def print_opt_times(self):#t#
         #t#for name,times in self.opt_history.items():#t#
@@ -575,3 +590,36 @@ class MmSwin(BaseModel):
                 #t#times.pop(0)   #t#
                 #t#if len(times)>600:#t#
                     #t#times.pop(0)#t#
+    def bartLayerInit(self,bart_model):
+        #gather decoder layers
+        layers=[]
+        for swin,_,decoder_layer,_,_,_,_ in self.swin_layers:
+            if decoder_layer is not None:
+                layers.append(decoder_layer)
+
+        assert len(layers)==10 #hardcoding for this count
+        assert len(bart_model.decoder.layers)==6
+        these_layers_to_bart = {0:0, 2:1, 4:2, 6:3, 8:4, 9:5}
+        for layer_i,bart_i in these_layers_to_bart.items():
+            init_layer = bart_model.decoder.layers[bart_i]
+            layer = layers[layer_i]
+            print('init {} with {}'.format(layer_i,bart_i))
+            layer.self_attn.linears[0].weight.data = init_layer.self_attn.q_proj.weight.data
+            layer.self_attn.linears[0].bias.data = init_layer.self_attn.q_proj.bias.data
+            layer.self_attn.linears[1].weight.data = init_layer.self_attn.k_proj.weight.data
+            layer.self_attn.linears[1].bias.data = init_layer.self_attn.k_proj.bias.data
+            layer.self_attn.linears[2].weight.data = init_layer.self_attn.v_proj.weight.data
+            layer.self_attn.linears[2].bias.data = init_layer.self_attn.v_proj.bias.data
+            layer.self_attn.linears[3].weight.data = init_layer.self_attn.out_proj.weight.data
+            layer.self_attn.linears[3].bias.data = init_layer.self_attn.out_proj.bias.data
+
+            layer.norm1.weight.data = init_layer.self_attn_layer_norm.weight.data
+            layer.norm1.bias.data = init_layer.self_attn_layer_norm.bias.data
+
+            layer.linear1.weight.data = init_layer.fc1.weight.data
+            layer.linear1.bias.data = init_layer.fc1.bias.data
+            layer.linear2.weight.data = init_layer.fc2.weight.data
+            layer.linear2.bias.data = init_layer.fc2.bias.data
+
+            layer.norm2.weight.data = init_layer.final_layer_norm.weight.data
+            layer.norm2.bias.data = init_layer.final_layer_norm.bias.data

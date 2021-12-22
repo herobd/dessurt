@@ -1,15 +1,15 @@
 {
-    "name": "test",
+    "name": "paraqaCSmaller_mmswin_bart_donut_PTfrom48andBART_60",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
         "data_set_name": "SynthParaQA",
-        "mode": "pretrain_word",
+	"mode": "pretrain_word",
         "cased": true,
         "data_dir": "../data/fonts",
-        "batch_size": 5,
+        "batch_size": 4,
         "num_workers": 4,
         "rescale_range": [0.9,1.1],
         "crop_params": {
@@ -17,11 +17,11 @@
                 "pad":0,
                 "rot_degree_std_dev": 1
             },
-        "questions": 1,
+	"questions": 1,
         "max_qa_len_in": 640,
         "max_qa_len_out": 2560,
-        "image_size": [96,384],
-        "prefetch_factor": 2,
+        "image_size": [94,380],
+	"prefetch_factor": 2,
         "shuffle": true
     },
     "validation": {
@@ -85,15 +85,16 @@
         ],
         "use_set_length": true,
         "init_from_pretrained": "bart",
+        "use_bart_layer_init": true,
         "use_special_question_tokens": true,
         "no_dropout": false,
         "window_size": 12,
         "decode_dim": 768,
         "dim_ff": 3072,
-        "decode_num_heads": 8,
+        "decode_num_heads": 12,
         "blocks_per_level": [
             4,
-            6
+            13
         ],
         "use_swin":[
             true,
@@ -105,9 +106,42 @@
             true,
             true,
             false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
             false
         ],
+        "use_auto":[
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+        ],
         "swin_cross_attention":[
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
             false,
             false,
             false,
@@ -123,7 +157,6 @@
             4,
             8
         ],
-        "im_embed_dim": 224,
-        "full_layers": null
+        "im_embed_dim": 384
     }
 }
