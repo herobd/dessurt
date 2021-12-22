@@ -191,6 +191,10 @@ class MmSwin(BaseModel):
                     q_pool
                     ] ) )
 
+        if config.get('use_bart_layer_init',False):
+            self.bartLayerInit(init_model)
+
+        
 
 
         self.final_resolution = cur_resolution
@@ -584,3 +588,36 @@ class MmSwin(BaseModel):
                 #t#times.pop(0)   #t#
                 #t#if len(times)>600:#t#
                     #t#times.pop(0)#t#
+    def bartLayerInit(self,bart_model):
+        #gather decoder layers
+        layers=[]
+        for swin,_,decoder_layer,_,_,_,_ in self.swin_layers:
+            if decoder_layer is not None:
+                layers.append(decoder_layer)
+
+        assert len(layers)==10 #hardcoding for this count
+        assert len(bart_model.decoder.layers)==6
+        these_layers_to_bart = {0:0, 2:1, 4:2, 6:3, 8:4, 9:5}
+        for layer_i,bart_i in these_layers_to_bart.items():
+            init_layer = bart_model.decoder.layers[bart_i]
+            layer = layers[layer_i]
+            print('init {} with {}'.format(layer_i,bart_i))
+            layer.self_attn.linears[0].weight.data = init_layer.self_attn.q_proj.weight.data
+            layer.self_attn.linears[0].bias.data = init_layer.self_attn.q_proj.bias.data
+            layer.self_attn.linears[1].weight.data = init_layer.self_attn.k_proj.weight.data
+            layer.self_attn.linears[1].bias.data = init_layer.self_attn.k_proj.bias.data
+            layer.self_attn.linears[2].weight.data = init_layer.self_attn.v_proj.weight.data
+            layer.self_attn.linears[2].bias.data = init_layer.self_attn.v_proj.bias.data
+            layer.self_attn.linears[3].weight.data = init_layer.self_attn.out_proj.weight.data
+            layer.self_attn.linears[3].bias.data = init_layer.self_attn.out_proj.bias.data
+
+            layer.norm1.weight.data = init_layer.self_attn_layer_norm.weight.data
+            layer.norm1.bias.data = init_layer.self_attn_layer_norm.bias.data
+
+            layer.linear1.weight.data = init_layer.fc1.weight.data
+            layer.linear1.bias.data = init_layer.fc1.bias.data
+            layer.linear2.weight.data = init_layer.fc2.weight.data
+            layer.linear2.bias.data = init_layer.fc2.bias.data
+
+            layer.norm2.weight.data = init_layer.final_layer_norm.weight.data
+            layer.norm2.bias.data = init_layer.final_layer_norm.bias.data
