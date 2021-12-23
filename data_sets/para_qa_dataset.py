@@ -134,6 +134,39 @@ class ParaQADataset(QADataset):
                     'read_highlighted':1,
                     'masked_lm':1.0,
                     'put_in_place':1.0}
+        elif mode == 'IAM':
+            self.q_types = {
+                    'read_blanked':1,
+                    'proper_read_replaced':1,
+                    'read_with_masked':1,
+                    'read_line':1,
+                    'highlight_text':1.0,
+                    'read_highlighted':1,
+                    'masked_lm':1.0,
+                    'put_in_place':1.0,
+                    'read_on':1.0,
+                    'read_block': 1.0,
+                    'read_block0': 1.0,
+                    }
+            self.q_types_noblock = {
+                    'read_blanked':1,
+                    'proper_read_replaced':1,
+                    'read_with_masked':1.0,
+                    'read_line':1,
+                    'highlight_text':1.0,
+                    'read_highlighted':1,
+                    'masked_lm':1.0,
+                    'put_in_place':1.0,
+                    'read_block': 1.0,
+                    'read_block0': 1.0,
+                    }
+        elif mode == 'IAM_valid':
+            self.q_types = {
+                    'read_block0': 1.0
+                    }
+            self.q_types_noblock = {
+                    'read_block0': 1.0
+                    }
         elif mode == 'easy_bart':
             self.q_types = {
                     #'read_blanked':1,
@@ -1023,6 +1056,22 @@ class ParaQADataset(QADataset):
                     question = 'infillread0~'
                     inmask = [(block_idx,None,None,None)]
                 qa.append([question+prompt,response,allwords,inmask,None,None])
+            elif question_type == 'read_block' or question_type == 'read_block0':
+                if len(ocr)==1:
+                    response = []
+                    inmask = [] #for text lines
+                    for p,paragraph in enumerate(ocr[0]['paragraphs']):
+                        for l,line in enumerate(paragraphs['lines']):
+                            response.append(line['text'])
+                            inmask.append((0,p,l,None))
+
+                    response = '\\'.join(response)
+                    
+                    all_lines = inmask
+                    if question_type == 'read_block':
+                        inmask = None
+                    qa.append([question_type+'>',response,all_lines,inmask,None,None])
+
 
             #else:
             #    raise NotImplementedError('Unknown question type: {}'.format(question_type))

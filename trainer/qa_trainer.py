@@ -583,6 +583,9 @@ class QATrainer(BaseTrainer):
                     log['E_{}_acc'.format(typ)].append(int(hit))
                     log['E_{}_ed'.format(typ)].append(ed)
                     log['E_{}_CER'.format(typ)].append(ed/len(answer) if len(answer)>0 else ed)
+                elif question == 'read_block0>':
+                    ed = editdistance.eval(answer,pred)
+                    log['E_line_based_CER'].append(ed/len(answer) if len(answer)>0 else ed)
                 elif question.startswith('ne~'):
                     pred_type = pred[1]
                     gt_type = answer[1]

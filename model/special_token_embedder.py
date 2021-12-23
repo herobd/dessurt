@@ -30,6 +30,8 @@ class SpecialTokenEmbedder(nn.Module):
                 'infillread~','infillread0~','proper_su~','proper_s0~',
                 #distillation (masked language model)
                 'mlm>',
+                #added (para, for IAM)
+                'read_block>', 'read_block0>',
                 #census TODO
                 ]
         self.get_index = {s:i for i,s in enumerate(tokens)}
