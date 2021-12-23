@@ -51,7 +51,15 @@ class IAMQA(ParaQADataset):
             for name in doc_set:
                 xml_path = os.path.join(dirPath,'xmls',name+'.xml')
                 image_path = os.path.join(dirPath,'forms',name+'.png')
+                #if self.train:
                 self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':xml_path, 'rescaled':rescale })
+                #else:
+                #    _,_,_,_,_,qa = self.parseAnn(xml_path,rescale)
+                #    #qa = self.makeQuestions(rescale,entries))
+                #    import pdb;pdb.set_trace()
+                #    for _qa in qa:
+                #        _qa['bb_ids']=None
+                #        self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':xml_path, 'rescaled':rescale, 'qa':[_qa]})
 
 
 

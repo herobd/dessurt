@@ -107,7 +107,7 @@
     },
     "validation": {
         "shuffle": false,
-        "batch_size": 2,
+        "batch_size": 3,
         "num_workers": 4,
         "datasets": [
             {
