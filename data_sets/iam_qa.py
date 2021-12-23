@@ -7,6 +7,7 @@ import json
 import os
 import math, random, string, re
 from collections import defaultdict, OrderedDict
+from utils import grid_distortion
 from utils.parseIAM import getWordAndLineBoundaries
 import timeit
 from data_sets.para_qa_dataset import ParaQADataset, collate
@@ -24,6 +25,7 @@ class IAMQA(ParaQADataset):
         super(IAMQA, self).__init__(dirPath,split,config,images)
 
         self.crop_to_data=True
+        self.warp_lines = config.get('warp_lines',0.999)
         split_by = 'rwth'
         self.cache_resized = False
         #NEW the document must have a block_score above thresh for anything useing blocks (this is newline following too)
@@ -64,7 +66,7 @@ class IAMQA(ParaQADataset):
         maxY=0
         minX=image_w
         minY=image_h
-        for words,line in zip(W_lines,lines):
+        for words in W_lines:
             ocr_words=[]
             for word in words:
                 minX = min(minX,word[0][2])
@@ -76,6 +78,11 @@ class IAMQA(ParaQADataset):
                 min(image_h,round(maxX+40)),
                 min(image_w,round(maxY+40))]
         self.current_crop=crop[:2]
+
+        crop_x,crop_y = self.current_crop
+        line_bbs=[]
+        for line in lines:
+        [line[0][2]-crop_x,line[0][0]-crop_y,line[0][3]-crop_x,line[0]  [1]-crop_y]
         return crop
 
     def parseAnn(self,xmlfile,s):
@@ -118,3 +125,10 @@ class IAMQA(ParaQADataset):
 
         return qa_bbs, list(range(qa_bbs.shape[0])), None, {}, {}, qa
 
+    def doLineWarp(self,img,bbs):
+        #add channel?
+        pad=5
+        for x1,y1,x2,y2 in bbs:
+            sub_img = img[y1-pad:y2+pad,x1-pad:x2+pad]
+            img = grid_distortion.warp_image(img) #w_mesh_std, h_mesh_std =1.5
+            img[y1-pad:y2+pad,x1-pad:x2+pad] = sub_img

@@ -189,8 +189,12 @@ class QADataset(torch.utils.data.Dataset):
 
         if self.crop_to_data:
             #This exists for the IAM dataset so we don't include the form prompt text (which would be easy to cheat from)
-            x1,y1,x2,y2 = self.getCrop(annotations)
+            crop, line_bbs = self.getCropAndLines(annotations)
+            x1,y1,x2,y2 = crop
             np_img = np_img[y1:y2,x1:x2]
+
+            if self.warp_lines is not None and random.random()<self.warp_lines:
+                self.doLineWarp(np_img,line_bbs)
 
 
         #
