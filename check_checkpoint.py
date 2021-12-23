@@ -20,6 +20,6 @@ if __name__ == '__main__':
         print(saved['swa_state_dict']['n_averaged'])
     print(saved['iteration'])
 
-    #for name in saved['state_dict'].keys():
-    #    print(name)
+    for name in saved['state_dict'].keys():
+        print(name)
 
