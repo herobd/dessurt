@@ -1061,7 +1061,7 @@ class ParaQADataset(QADataset):
                     response = []
                     inmask = [] #for text lines
                     for p,paragraph in enumerate(ocr[0]['paragraphs']):
-                        for l,line in enumerate(paragraphs['lines']):
+                        for l,line in enumerate(paragraph['lines']):
                             response.append(line['text'])
                             inmask.append((0,p,l,None))
 
