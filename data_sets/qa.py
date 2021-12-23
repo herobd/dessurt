@@ -251,8 +251,7 @@ class QADataset(torch.utils.data.Dataset):
         #Parse annotation file
         bbs,ids,trans, metadata, form_metadata, questions_and_answers = self.parseAnn(annotations,s)
 
-
-        if not self.train:
+        if not self.train and 'qa' in self.images[index]:
             questions_and_answers = self.images[index]['qa']
             #But the scale doesn't match! So fix it
             for qa in questions_and_answers:
