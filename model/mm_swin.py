@@ -243,6 +243,8 @@ class MmSwin(BaseModel):
                 self.ditillation_adapter = nn.Linear(d_model,distillation_dim,bias=True)
             else:
                 self.ditillation_adapter = nn.Identity()
+        else:
+            self.ditillation_adapter = nn.Identity()
 
         #t#self.opt_history=defaultdict(list)#t#
 
