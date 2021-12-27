@@ -27,7 +27,8 @@ except:
 def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do_saliency=False,overwrite_char_prob=False):
     np.random.seed(1234)
     torch.manual_seed(1234)
-    no_mask_qs = ['fli:','fna:','re~','l~','v~']
+    no_mask_qs = ['fli:','fna:','re~','l~','v~', 'rm>','mm~']
+    remove_qs = ['rm>','mlm>','mm~']
     if resume is not None:
         checkpoint = torch.load(resume, map_location=lambda storage, location: storage)
         print('loaded {} iteration {}'.format(checkpoint['config']['name'],checkpoint['iteration']))
@@ -224,15 +225,30 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do
                     if question.startswith(q):
                         needs_input_mask=False
                         break
+                needs_remove_mask=False
+                for q in remove_qs:
+                    if question.startswith(q):
+                        needs_remove_mask=True
+                        break
                 if needs_input_mask:
                     # get input mask
+                    print('Select input mask')
                     mask = future.manual_lasso_segmentation(np_img)
                     if mask.sum()==0:
                         mask = np.zeros_like(mask)
                     mask = torch.from_numpy(mask)[None,None,...].to(img.device) #add batch and color channel
                 else:
                     mask = torch.zeros_like(img)
-                in_img = torch.cat((img,mask),dim=1)
+                if needs_remove_mask:
+                    # get remove mask
+                    print('Select remove mask')
+                    rm_mask = future.manual_lasso_segmentation(np_img)
+                    rm_mask = torch.from_numpy(rm_mask)[None,None,...].to(img.device) #add batch and color channel
+                    mask[rm_mask]=-1
+                    rm_img = img*(1-rm_mask)
+                else:
+                    rm_img = img
+                in_img = torch.cat((rm_img,mask),dim=1)
                 
                 if do_saliency:
                     answer,pred_mask = s_model.saliency(in_img,ocr,[[question]])
