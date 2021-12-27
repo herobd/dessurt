@@ -32,8 +32,8 @@ class DocVQA(QADataset):
 
         for instance in data:
             image_path = os.path.join(dirPath,split,instance['image'])
-            answer = random.choice(instance['answers'])
-            qa = (instance['question'],answer)
+            #answer = random.choice(instance['answers'])
+            qa = (instance['question'],instance['answers'])
             self.images.append({'id':instance['questionId'], 'imageName':instance['image'], 'imagePath':image_path, 'annotationPath':qa, 'rescaled':1 })
 
 
@@ -41,7 +41,12 @@ class DocVQA(QADataset):
 
 
     def parseAnn(self,qa,s):
-        question,answer = qa
+        question,answers = qa
+        qa=[]
+        self.qaAdd(qa,
+            'natural_q~'+question,
+            random.choice(answers)
+            )
 
-        return qa_bbs, list(range(qa_bbs.shape[0])), None, {}, {}, qa
+        return np.zeros(0), [], None, {}, {}, qa
 
