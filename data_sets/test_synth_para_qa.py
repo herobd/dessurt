@@ -58,7 +58,7 @@ def display(data):
 
         #widths.append(img.size(1))
         
-        draw=True#'0w' in q or 'w0' in q or 'l0' in q
+        draw='mk>' in q
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -104,7 +104,7 @@ if __name__ == "__main__":
         'batch_size':1,
         #'gt_ocr': True,
         'rescale_range':[0.9,1.1],
-        'mode': 'pretrain_nomask',
+        'mode': 'hard_word',
         'crop_params': {
             "crop_size":[96,384],
             "pad":0,
