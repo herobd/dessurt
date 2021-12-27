@@ -9,27 +9,25 @@ import math, random, string, re
 from collections import defaultdict, OrderedDict
 from utils.funsd_annotations import createLines
 import timeit
-from data_sets.para_qa_dataset import ParaQADataset, collate
+from data_sets.qa import QADataset, collate
 from data_sets.gen_daemon import GenDaemon
 
 import utils.img_f as img_f
 
 
-class SynthParaQA(ParaQADataset):
+class SQuAD(QADataset):
     """
-    Class for creating synthetic paragraph type documents
+    Class for rendering SQuAD to images
     """
 
 
     def __init__(self, dirPath=None, split=None, config=None, images=None):
-        super(SynthParaQA, self).__init__(dirPath,split,config,images)
+        super(SQuAD, self).__init__(dirPath,split,config,images)
 
-        font_dir = dirPath
-        self.simple_vocab = config.get('simple_vocab')
-        if self.simple_vocab:
-            self.min_read_start_no_mask=4
-            self.min_read_start_with_mask=4
-        self.gen_daemon = GenDaemon(font_dir,simple=self.simple_vocab)
+        self.do_masks=True
+
+        font_dir = config.get('font_dir','../data/fonts/')
+        self.gen_daemon = GenDaemon(font_dir,no_wiki=True)
         self.prev_words = None
 
         self.gt_ocr = config['gt_ocr'] if 'gt_ocr' in config else False
@@ -47,36 +45,39 @@ class SynthParaQA(ParaQADataset):
         for article in data:
             name = article['title']
             for p,para in enumerate(article['paragraphs']):
-                self.images.append({'id':'{}{}'.format(name,i), 'imagePath':None, 'annotationPath':para, 'rescaled':1.0, 'imageName':'{}{}'.format(name,i)})
+                context = para['context']
+                for qa in para['qas']:
+                    data = {
+                            'context': context,
+                            'question': qa['question'],
+                            'answers': [a['text'] for a in qa['answers']] if not qa['is_impossible'] else ['№']
+                            }
+                    self.images.append({'id':'{}{}'.format(name,qa['id']), 'imagePath':None, 'annotationPath':data, 'rescaled':1.0, 'imageName':'{}{}'.format(name,qa['id'])})
 
-        self.held_instance=None
-        self.used_held = 0
-        self.max_used_held = config['prefetch_factor']//2 if 'prefetch_factor' in config else 2
 
-    def parseAnn(self,para,s):
+    def parseAnn(self,instance,s):
 
         image_h,image_w = self.image_size
-
-        self.addBlock(para['context'],image)
+        image = np.zeros([image_h,image_w],dtype=np.uint8)
+        self.addBlock(instance['context'],image)
 
             
 
-        qa, qa_bbs = self.makeQuestions(para['qas'],image_h,image_w,s)
+        #qa, qa_bbs = self.makeQuestions(para['qas'],image_h,image_w,s)
+        qa=[]
+        self.qaAdd(qa,
+                'natural_q~'+instance['question'],
+                random.choice(instance['answers'])
+                )
 
         metadata = {}
-        return qa_bbs, list(range(qa_bbs.shape[0])), None, {'image':255-image}, metadata, qa
+        return np.zeros(0), [], None, {'image':255-image}, metadata, qa
 
 
     def addBlock(self,text,image):
         image_h,image_w = image.shape
 
-        if self.prev_words is not None:
-            words = self.prev_words
-            self.prev_words = None
-        else:
-            words = []
-            while len(words)==0:
-                words = self.gen_daemon.generate(text)
+        words = self.gen_daemon.generate(text)
         word_height = random.randrange(self.min_text_height,self.max_text_height)
         scale = word_height / words[0][1].shape[0]
 
@@ -146,10 +147,12 @@ class SynthParaQA(ParaQADataset):
             if para_width >= image_w:
                 para_width = image_w-10
                 word_height *= 0.9
+                word_height = round(word_height)
                 scale = word_height / words[0][1].shape[0]
                 em_approx = word_height*1.6 
                 min_space = 0.2*em_approx 
                 max_space = 0.5*em_approx
+
 
         #find somewhere for the paragraph
         search_step_size=15
@@ -179,6 +182,7 @@ class SynthParaQA(ParaQADataset):
                 del directions[r]
 
         if overlap>0: #couldn't fit
+            assert False
             self.prev_words=words #save to use in next image
             return False
         else:
@@ -188,7 +192,8 @@ class SynthParaQA(ParaQADataset):
 
             #Actually draw in the paragraph and build ocr
             for lines in paras:
-                ocr.append(self.addPara(lines,image,scale,start_x,start_y))
+                #ocr.append(self.addPara(lines,image,scale,start_x,start_y))
+                self.addPara(lines,image,scale,start_x,start_y)
             return True
 
     def addPara(self,lines,image,scale,start_x,start_y):
@@ -196,7 +201,7 @@ class SynthParaQA(ParaQADataset):
         para_max_x = 0
         para_min_y = 999999
         para_max_y = 0
-        ocr_lines=[]
+        #ocr_lines=[]
         for line in lines:
             line_min_x = 999999
             line_max_x = 0
@@ -223,14 +228,14 @@ class SynthParaQA(ParaQADataset):
                 line_max_x = max(line_max_x,x2)
                 line_min_y = min(line_min_y,y1)
                 line_max_y = max(line_max_y,y2)
-            ocr_lines.append({'text':' '.join(line_text),'box':[line_min_x,line_min_y,line_max_x,line_max_y],'words':ocr_words})
+            #ocr_lines.append({'text':' '.join(line_text),'box':[line_min_x,line_min_y,line_max_x,line_max_y],'words':ocr_words})
 
         #Following how I modified the Tesseract output with the CDIP dataset, blocks and paragrphs are identical
-        return {
-                 'box':[para_min_x,para_min_y,para_max_x,para_max_y],
-                 'paragraphs': [{
-                     'box':[para_min_x,para_min_y,para_max_x,para_max_y],
-                     'lines':ocr_lines
-                     }]
-                }
+        #return {
+        #         'box':[para_min_x,para_min_y,para_max_x,para_max_y],
+        #         'paragraphs': [{
+        #             'box':[para_min_x,para_min_y,para_max_x,para_max_y],
+        #             'lines':ocr_lines
+        #             }]
+        #        }
                 
