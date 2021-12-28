@@ -50,6 +50,7 @@ class DocVQA(QADataset):
             'natural_q~'+question,
             random.choice(answers)
             )
-
-        return np.zeros(0), [], None, {}, {}, qa
+        
+        form_metadata={'all_answers':[answers]}
+        return np.zeros(0), [], None, {}, form_metadata, qa
 

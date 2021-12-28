@@ -69,8 +69,8 @@ class SQuAD(QADataset):
                 'natural_q~'+instance['question'],
                 random.choice(instance['answers'])
                 )
+        metadata={'all_answers':[instance['answers']]}
 
-        metadata = {}
         return np.zeros(0), [], None, {'image':255-image}, metadata, qa
 
 
