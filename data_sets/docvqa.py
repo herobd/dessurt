@@ -32,6 +32,7 @@ class DocVQA(QADataset):
         with open(qa_file) as f:
             data = json.load(f)['data']
 
+        self.images=[]
         for instance in data:
             image_path = os.path.join(dirPath,split,instance['image'])
             #answer = random.choice(instance['answers'])
