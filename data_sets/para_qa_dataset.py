@@ -352,6 +352,9 @@ class ParaQADataset(QADataset):
                     'read_highlighted':0.1,
                     'masked_lm':4.0,
                     'put_in_place':1.0}
+        elif mode == 'mk_only':
+            self.q_types = {'masked_lm':4.0}
+            self.q_types_noblock = {'masked_lm':4.0}
         else:
             raise ValueError('Unknown para qa mode: {}'.format(mode))
 

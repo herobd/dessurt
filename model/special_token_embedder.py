@@ -32,6 +32,8 @@ class SpecialTokenEmbedder(nn.Module):
                 'mlm>',
                 #added (para, for IAM)
                 'read_block>', 'read_block0>',
+                #question answering
+                'natural_q~'
                 #census TODO
                 ]
         self.get_index = {s:i for i,s in enumerate(tokens)}
