@@ -9,7 +9,7 @@ import math, random, string, re
 from collections import defaultdict, OrderedDict
 from utils.parseIAM import getWordAndLineBoundaries
 import timeit
-from data_sets.para_qa_dataset import ParaQADataset, collate
+from data_sets.qa import QADataset, collate
 
 import utils.img_f as img_f
 
@@ -21,7 +21,9 @@ class DocVQA(QADataset):
 
 
     def __init__(self, dirPath=None, split=None, config=None, images=None):
-        super(IAMQA, self).__init__(dirPath,split,config,images)
+        super(DocVQA, self).__init__(dirPath,split,config,images)
+
+        self.do_masks=True
 
         if split=='valid':
             split='val'

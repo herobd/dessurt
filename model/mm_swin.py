@@ -464,6 +464,8 @@ class MmSwin(BaseModel):
                 response_decoded_all = response_decoded
             response_greedy_token = response_decoded.argmax(dim=2)
 
+
+
             output_tokens = [response_greedy_token[0,0].item()]
             #print('first token: {}'.format(output_tokens[0]))
 
@@ -549,6 +551,7 @@ class MmSwin(BaseModel):
 
         response_greedy_tokens = response_decoded.argmax(dim=2)
         target_decoded = a_input_ids[:,1:]# This has the SEP tokens (and padding), but not CLS (start) token
+
 
         #decode the prediction to string
         string_response=[]
