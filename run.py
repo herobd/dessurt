@@ -27,8 +27,8 @@ except:
 def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do_saliency=False,overwrite_char_prob=False):
     np.random.seed(1234)
     torch.manual_seed(1234)
-    no_mask_qs = ['fli:','fna:','re~','l~','v~', 'rm>','mm~']
-    remove_qs = ['rm>','mlm>','mm~']
+    no_mask_qs = ['fli:','fna:','re~','l~','v~', 'mm~','mk>']
+    remove_qs = ['rm>','mlm>','mm~','mk>']
     if resume is not None:
         checkpoint = torch.load(resume, map_location=lambda storage, location: storage)
         print('loaded {} iteration {}'.format(checkpoint['config']['name'],checkpoint['iteration']))
@@ -105,6 +105,15 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do
         if 'answer_decode.0.weight' in new_state_dict and config['arch']=='MmSwin':
             new_state_dict['answer_decode.weight'] = new_state_dict['answer_decode.0.weight']
             del new_state_dict['answer_decode.0.weight'  ]
+
+        if 'query_special_start_token_embedder.emb.weight' in new_state_dict:
+            loading_special = new_state_dict['query_special_start_token_embedder.emb.weight']
+            model_special = model.state_dict()['query_special_start_token_embedder.emb.weight']
+
+            if loading_special.size(0) != model_special.size(0):
+                model_special[:loading_special.size(0)] = load_state_dict[:model_special.size(0)]
+                new_state_dict['query_special_start_token_embedder.emb.weight'  ] = model_special
+
 
         model.load_state_dict(new_state_dict)
 
@@ -236,7 +245,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do
                     mask = future.manual_lasso_segmentation(np_img)
                     if mask.sum()==0:
                         mask = np.zeros_like(mask)
-                    mask = torch.from_numpy(mask)[None,None,...].to(img.device) #add batch and color channel
+                    mask = torch.from_numpy(mask)[None,None,...].float().to(img.device) #add batch and color channel
                 else:
                     mask = torch.zeros_like(img)
                 if needs_remove_mask:
@@ -244,11 +253,12 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do
                     print('Select remove mask')
                     rm_mask = future.manual_lasso_segmentation(np_img)
                     rm_mask = torch.from_numpy(rm_mask)[None,None,...].to(img.device) #add batch and color channel
-                    mask[rm_mask]=-1
+                    #mask[rm_mask]=-1
+                    mask = torch.where(rm_mask==1,torch.FloatTensor(*mask.size()).fill_(-1).to(img.device),mask)
                     rm_img = img*(1-rm_mask)
                 else:
                     rm_img = img
-                in_img = torch.cat((rm_img,mask),dim=1)
+                in_img = torch.cat((rm_img,mask.to(img.device)),dim=1)
                 
                 if do_saliency:
                     answer,pred_mask = s_model.saliency(in_img,ocr,[[question]])

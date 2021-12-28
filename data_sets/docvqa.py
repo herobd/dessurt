@@ -9,7 +9,7 @@ import math, random, string, re
 from collections import defaultdict, OrderedDict
 from utils.parseIAM import getWordAndLineBoundaries
 import timeit
-from data_sets.para_qa_dataset import ParaQADataset, collate
+from data_sets.qa import QADataset, collate
 
 import utils.img_f as img_f
 
@@ -21,7 +21,9 @@ class DocVQA(QADataset):
 
 
     def __init__(self, dirPath=None, split=None, config=None, images=None):
-        super(IAMQA, self).__init__(dirPath,split,config,images)
+        super(DocVQA, self).__init__(dirPath,split,config,images)
+
+        self.do_masks=True
 
         if split=='valid':
             split='val'
@@ -30,10 +32,11 @@ class DocVQA(QADataset):
         with open(qa_file) as f:
             data = json.load(f)['data']
 
+        self.images=[]
         for instance in data:
             image_path = os.path.join(dirPath,split,instance['image'])
-            answer = random.choice(instance['answers'])
-            qa = (instance['question'],answer)
+            #answer = random.choice(instance['answers'])
+            qa = (instance['question'],instance['answers'])
             self.images.append({'id':instance['questionId'], 'imageName':instance['image'], 'imagePath':image_path, 'annotationPath':qa, 'rescaled':1 })
 
 
@@ -41,7 +44,13 @@ class DocVQA(QADataset):
 
 
     def parseAnn(self,qa,s):
-        question,answer = qa
-
-        return qa_bbs, list(range(qa_bbs.shape[0])), None, {}, {}, qa
+        question,answers = qa
+        qa=[]
+        self.qaAdd(qa,
+            'natural_q~'+question,
+            random.choice(answers)
+            )
+        
+        form_metadata={'all_answers':[answers]}
+        return np.zeros(0), [], None, {}, form_metadata, qa
 
