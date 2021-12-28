@@ -98,6 +98,8 @@ class GenDaemon:
         font,font_name,fontN,fontN_name = self.gen.getFont()
         out_words = []   
         for word in words:
+            if len(word)==0:
+                continue
             if word[-1]=='\n':
                 newline=True
                 word = word[:-1]
