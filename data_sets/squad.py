@@ -35,19 +35,25 @@ class SQuAD(QADataset):
         self.image_size = config['image_size']
         self.min_text_height = config['min_text_height'] if 'min_text_height' in config else 8
         self.max_text_height = config['max_text_height'] if 'max_text_height' in config else 32
-
-        json_path = os.path.join(dirPath,'train-v2.0.json')
+        if self.train:
+            json_path = os.path.join(dirPath,'train-v2.0.json')
+        else:
+            json_path = os.path.join(dirPath,'dev-v2.0.json')
         with open(json_path) as f:
             data = json.load(f)['data']
+        
         
 
         self.images=[]
         for article in data:
             name = article['title']
+            if not self.train and len(article['paragraphs'])>6:
+                    article['paragraphs']=article['paragraphs'][:3]+article['paragraphs'][-3:] #cut down size to make evaluation faster. First 3 and last 3 paragraphs
             for p,para in enumerate(article['paragraphs']):
                 context = para['context']
                 for qa in para['qas']:
                     data = {
+                            'seed': len(self.images),
                             'context': context,
                             'question': qa['question'],
                             'answers': [a['text'] for a in qa['answers']] if not qa['is_impossible'] else ['№']
@@ -56,6 +62,11 @@ class SQuAD(QADataset):
 
 
     def parseAnn(self,instance,s):
+        if not self.train:
+            seed = instance['seed']
+            random.seed(seed)
+            np.random.seed(seed)
+            torch.manual_seed(seed)
 
         image_h,image_w = self.image_size
         image = np.zeros([image_h,image_w],dtype=np.uint8)
