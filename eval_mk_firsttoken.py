@@ -92,6 +92,7 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                             image_h-4,image_w-4
                     ],
                 "shuffle": False,
+                "num_batches": 500
                     },
             "validation":{}
             }
@@ -126,7 +127,7 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
     metrics = defaultdict(list)
     with torch.no_grad():
 
-        for index,instance in enumerate(data_loader):
+        for index,instance in enumerate(valid_data_loader):
             if verbose:
                 print('batch index: {}/{}'.format(index,len(data_loader)),end='\r')
             _,res,_ = trainer.run(instance,valid=True)
