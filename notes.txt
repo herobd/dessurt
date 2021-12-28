@@ -24,7 +24,11 @@ mk_firsttoken_top10 mean:0.421,  std:0.49371955602345746
 mk_firsttoken_top50 mean:0.5795,  std:0.4936392913859269
 mk_firsttoken_top100 mean:0.6465,  std:0.47805622054314906
 
-iamqa_distil+paraCqa+cdipC_mmswin_bart_PTfrom56i98k_62
+iamqa_distil+paraCqa+cdipC_mmswin_bart_PTfrom56i98k_62 308992
+mk_firsttoken_top10 mean:0.3985,  std:0.4895893687571248
+mk_firsttoken_top50 mean:0.555,  std:0.4969657935914704
+mk_firsttoken_top100 mean:0.6245,  std:0.484251742381997
+score_ed mean:0.8171329309894866,  std:0.3457290401839791
 
 distil+paraCqa+cdipC_noDistill_mmswin_bart_deep_PTfrom69i328k_71 62720
 mk_firsttoken_top10 mean:0.4325,  std:0.49542279923313987
