@@ -430,7 +430,8 @@ class QATrainer(BaseTrainer):
         losses=defaultdict(lambda:0)
         log=defaultdict(list)
         
-        losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
+        if 'answer' in self.loss:
+            losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
         #losses['answerLoss'] = pred_a.sum()
         if 'mask' in self.loss and gt_mask is not None and pred_mask is not None: #we allow gt_mask to be none to not supervise
             mask_labels_batch_mask = instance['mask_labels_batch_mask'].to(device)
@@ -472,6 +473,7 @@ class QATrainer(BaseTrainer):
         #t#tic=timeit.default_timer()#t#
         score_ed = []
         q_type_scores = defaultdict(list)
+        pred_index = 0
         for b_answers,b_pred,b_questions in zip(answers,string_a,questions):
             for answer,pred,question in zip(b_answers,b_pred,b_questions):
                 if len(answer)>0 or len(pred)>0:
@@ -489,6 +491,16 @@ class QATrainer(BaseTrainer):
                     else:
                         q_type = question[0:q_end+1]
                         q_type_scores[q_type].append(score_ed[-1])
+
+                if question.startswith('mk>'):
+                    #get topN accuracy for first token prediction.
+                    #this is for internal evaluation of model LM performance
+                    right_token = target_a[pred_index,0]
+                    scores,preds = torch.sort(pred_a[pred_index,0],descending=True)
+                    for N in [10,50,100]:
+                        hitN = (preds[:N]==right_token).any()#.float().mean()
+                        log['mk_firsttoken_top{}'.format(N)].append(hitN.int().item())
+                pred_index += 1
 
                 
         log['score_ed'] = np.mean(score_ed)
@@ -594,7 +606,8 @@ class QATrainer(BaseTrainer):
                         log['F_recall_{}'.format(gt_type)].append(1 if pred_type==gt_type else 0)
                     if pred_type!='o':
                         log['F_prec_{}'.format(pred_type)].append(1 if pred_type==gt_type else   0)
-
+                elif question.startswith('mk>'):
+                    pass #handled earlier
                 else:
                     print('ERROR: missed question -- {}'.format(question))
                 
