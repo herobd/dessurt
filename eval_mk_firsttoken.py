@@ -92,7 +92,7 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                             image_h-4,image_w-4
                     ],
                 "shuffle": False,
-                "num_batches": 500
+                "num_batches": 1000
                     },
             "validation":{}
             }
