@@ -302,6 +302,7 @@ class QADataset(torch.utils.data.Dataset):
             if 'pre-recognition_bbs' in form_metadata:
                 mask_bbs+= form_metadata['pre-recognition_bbs']
                 mask_ids+=  ['recog{}'.format(ii) for ii in range(len(form_metadata['pre-recognition_bbs']))]
+                del form_metadata['pre-recognition_bbs']
             mask_bbs = np.array(mask_bbs)
             #if len(mask_bbs.shape)==1:
             #    mask_bbs=mask_bbs[None]
@@ -332,15 +333,6 @@ class QADataset(torch.utils.data.Dataset):
                 "img": np_img,
                 "bb_gt": crop_bbs[None,...],
                 'bb_auxs':crop_ids,
-                #'word_bbs':form_metadata['word_boxes'] if 'word_boxes' in form_metadata else None
-                #"line_gt": {
-                #    "start_of_line": start_of_line,
-                #    "end_of_line": end_of_line
-                #    },
-                #"point_gt": {
-                #        "table_points": table_points
-                #        },
-                #"pixel_gt": pixel_gt,
                 
             }, cropPoint)
             np_img = out['img']
@@ -368,6 +360,7 @@ class QADataset(torch.utils.data.Dataset):
                 form_metadata['word_boxes'] = out['bb_gt'][0,word_index:,:8]
                 word_ids=out['bb_auxs'][word_index:]
                 form_metadata['word_trans'] = [form_metadata['word_trans'][int(id[4:])] for id in word_ids]
+                del form_metadata['word_boxes']
             elif self.do_masks:
                 orig_idx=0
                 for ii,(bb_id,bb) in enumerate(zip(out['bb_auxs'],out['bb_gt'][0])):
@@ -476,8 +469,6 @@ class QADataset(torch.utils.data.Dataset):
                 bbs = torch.FloatTensor(1,0,5+8+1)
         else:
             bbs = torch.FloatTensor(1,0,5+8+1)
-        #if 'word_boxes' in form_metadata:
-        #     form_metadata['word_boxes'] = convertBBs(form_metadata['word_boxes'][None,...],self.rotate,0)[0,...]
 
         #import pdb;pdb.set_trace()
         if trans is not None:
@@ -494,6 +485,7 @@ class QADataset(torch.utils.data.Dataset):
                 #    char_prob[pos,self.char_to_ocr[char]]=self.one_hot_conf
                 char_prob = [self.char_to_ocr[char] for char in string if char in self.char_to_ocr]
                 pre_recog.append( (bb[0:8].reshape(4,2),(string,char_prob),None) )
+            del form_metadata['pre-recognition']
         else:
             pre_recog = None
 
@@ -501,6 +493,8 @@ class QADataset(torch.utils.data.Dataset):
         #t#self.opt_history['remainder'].append(time-tic)#t#
         #t#self.opt_history['Full get_item'].append(time-ticFull)#t#
         #t#self.print_opt_times()#t#
+
+        
 
         return {
                 "img": img,
@@ -510,7 +504,7 @@ class QADataset(torch.utils.data.Dataset):
                 "cropPoint": cropPoint,
                 "transcription": transcription,
                 "metadata": [metadata[id] for id in ids if id in metadata],
-                "form_metadata": None,
+                "form_metadata": form_metadata,
                 "questions": questions,
                 "answers": answers,
                 "mask_label": mask_label,

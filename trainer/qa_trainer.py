@@ -516,11 +516,12 @@ class QATrainer(BaseTrainer):
                 iou = (intersection/union).cpu()
             else:
                 iou = None
-            for b,(b_answers,b_pred,b_questions) in enumerate(zip(answers,string_a,questions)):
+            for b,(b_answers,b_pred,b_questions,b_metadata) in enumerate(zip(answers,string_a,questions,instance['form_metadata'])):
                 assert len(b_questions)==1
                 answer = b_answers[0]
                 pred = b_pred[0]
                 question = b_questions[0]
+                
             
                 #print(question)
                 #print(' answ:'+answer)
@@ -608,6 +609,15 @@ class QATrainer(BaseTrainer):
                         log['F_prec_{}'.format(pred_type)].append(1 if pred_type==gt_type else   0)
                 elif question.startswith('mk>'):
                     pass #handled earlier
+                elif question.startswith('natural_q~'):
+                    #Compute Average Normalized Levenshtein Similarity (ANLS).
+                    scores = []
+                    assert len(b_metadata['all_answers'])==1
+                    for ans in b_metadata['all_answers'][0]:
+                        ed = editdistance.eval(ans.lower(),pred.lower())
+                        NL = ed/max(len(ans),len(pred))
+                        scores.append(1-NL if NL<0.5 else 0)
+                    log['E_ANLS'].append(max(scores))
                 else:
                     print('ERROR: missed question -- {}'.format(question))
                 
