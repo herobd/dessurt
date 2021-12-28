@@ -10,6 +10,10 @@ if __name__ == '__main__':
                         help='out file path')
     parser.add_argument('-a', '--arrange_layers', type=str,default=None,
                         help='out file path')
+    parser.add_argument('-R', '--rename_layers', type=str,default=None,
+                        help='out file path')
+    parser.add_argument('-n', '--new_layer_names', type=str,default=None,
+                        help='out file path')
     parser.add_argument('-r', '--remove_layers', type=str,default=None,
                         help='remove these layers. comman seperated')
 
@@ -52,6 +56,19 @@ if __name__ == '__main__':
                 new_sd[k]=v
             else:
                 print('Removed '+k)
+        saved['state_dict']=new_sd
+    if args.rename_layers is not None:
+        to_rename = args.rename_layers.split(',')
+        new_names = args.new_layer_names.split(',')
+        sd = saved['state_dict']
+        new_sd={}
+        for k,v in sd.items():
+            for rename,new in zip(to_rename,new_names):
+                if k.startswith(rename):
+                    new_k = new+k[len(rename):]
+                    print('Renaming {} to {}'.format(k,new_k))
+                    k = new_k
+            new_sd[k]=v
         saved['state_dict']=new_sd
 
     print(saved.keys())
