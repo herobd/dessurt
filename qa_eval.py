@@ -122,6 +122,31 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                         },
                 "validation":{}
                 }
+    elif data_set_name=='DocVQA':
+        data_config={
+                "data_loader": {
+                    "data_set_name": "DocVQA",
+                    "data_dir": "../data/DocVQA",
+                    "batch_size": config['data_loader']['batch_size']*3,
+                    "rescale_range": [
+                        1.0,
+                        1.0
+                    ],
+                    "crop_params": {
+                        "crop_size": [
+                            image_h,image_w
+                        ],
+                        "random": False
+                    },
+                    "questions": 1,
+                    "cased": True,
+                    "image_size": [
+                            image_h-4,image_w-4
+                    ],
+                    "shuffle": False
+                        },
+                "validation":{}
+                }
     else:
         print('ERROR, unknown dataset: {}'.format(data_set_name))
         exit(1)
@@ -157,6 +182,8 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
     with torch.no_grad():
 
         for index,instance in enumerate(valid_data_loader):
+            #if index==10:
+            #    break
             if verbose:
                 print('batch index: {}/{}'.format(index,len(valid_data_loader)),end='\r')
             _,res,_ = trainer.run(instance,valid=True)
