@@ -335,7 +335,7 @@ class QATrainer(BaseTrainer):
 
 
 
-    def run(self,instance,get=[],forward_only=False,valid=False):#
+    def run(self,instance,get=[],forward_only=False,valid=False,run=False):#
 
         image = self._to_tensor(instance['img'])
         device = image.device
@@ -410,6 +410,9 @@ class QATrainer(BaseTrainer):
         if ocr_res is not None and max(len(ocr_b) if ocr_b is not None else -1 for ocr_b in ocr_res)>0 and self.randomly_blank_image>random.random():
             image = None
 
+
+        if run:
+            string_a,pred_mask = self.model(image,ocr_res,questions,RUN=True)
         if distill:
             pred_a, target_a, string_a, pred_logits, pred_last_hidden, batch_mask = self.model(image,ocr_res,questions,answers,distill=True)
             pred_mask = None
@@ -430,44 +433,45 @@ class QATrainer(BaseTrainer):
         losses=defaultdict(lambda:0)
         log=defaultdict(list)
         
-        if 'answer' in self.loss:
-            losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
-        #losses['answerLoss'] = pred_a.sum()
-        if 'mask' in self.loss and gt_mask is not None and pred_mask is not None: #we allow gt_mask to be none to not supervise
-            mask_labels_batch_mask = instance['mask_labels_batch_mask'].to(device)
-            losses['maskLoss'] = self.loss['mask'](pred_mask*mask_labels_batch_mask[:,None,None,None],gt_mask)
+        if not run:
+            if 'answer' in self.loss:
+                losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
+            #losses['answerLoss'] = pred_a.sum()
+            if 'mask' in self.loss and gt_mask is not None and pred_mask is not None: #we allow gt_mask to be none to not supervise
+                mask_labels_batch_mask = instance['mask_labels_batch_mask'].to(device)
+                losses['maskLoss'] = self.loss['mask'](pred_mask*mask_labels_batch_mask[:,None,None,None],gt_mask)
 
-        if distill:
-            #pred_len = batch_mask.size(1)
-            teacher_last_hidden = instance['bart_last_hidden'].to(device)
-            teacher_logits = instance['bart_logits'].to(device)
-            teacher_len = teacher_last_hidden.size(1)
-            batch_mask = batch_mask[:,:,None] #add channel dim for broadcast
-            teacher_batch_mask = batch_mask[:,:teacher_len]
+            if distill:
+                #pred_len = batch_mask.size(1)
+                teacher_last_hidden = instance['bart_last_hidden'].to(device)
+                teacher_logits = instance['bart_logits'].to(device)
+                teacher_len = teacher_last_hidden.size(1)
+                batch_mask = batch_mask[:,:,None] #add channel dim for broadcast
+                teacher_batch_mask = batch_mask[:,:teacher_len]
 
-            hidden_dim = teacher_last_hidden.size(-1)
-            logits_dim = teacher_logits.size(-1)
-            
+                hidden_dim = teacher_last_hidden.size(-1)
+                logits_dim = teacher_logits.size(-1)
+                
 
-            #cosine loss
-            if self.lossWeights['cosine']>0:
-                pred_last_hidden = torch.masked_select(pred_last_hidden,batch_mask)
-                pred_last_hidden = pred_last_hidden.view(-1,hidden_dim)
-                teacher_last_hidden = torch.masked_select(teacher_last_hidden,teacher_batch_mask)
-                teacher_last_hidden = teacher_last_hidden.view(-1,hidden_dim)
+                #cosine loss
+                if self.lossWeights['cosine']>0:
+                    pred_last_hidden = torch.masked_select(pred_last_hidden,batch_mask)
+                    pred_last_hidden = pred_last_hidden.view(-1,hidden_dim)
+                    teacher_last_hidden = torch.masked_select(teacher_last_hidden,teacher_batch_mask)
+                    teacher_last_hidden = teacher_last_hidden.view(-1,hidden_dim)
 
-                target = pred_last_hidden.new(pred_last_hidden.size(0)).fill_(1)
-                losses['cosineLoss'] = F.cosine_embedding_loss(pred_last_hidden, teacher_last_hidden, target,reduction="mean")
+                    target = pred_last_hidden.new(pred_last_hidden.size(0)).fill_(1)
+                    losses['cosineLoss'] = F.cosine_embedding_loss(pred_last_hidden, teacher_last_hidden, target,reduction="mean")
 
-            pred_logits = torch.masked_select(pred_logits,batch_mask)
-            pred_logits = pred_logits.view(-1,logits_dim)
-            teacher_logits = torch.masked_select(teacher_logits,teacher_batch_mask)
-            teacher_logits = teacher_logits.view(-1,logits_dim)
+                pred_logits = torch.masked_select(pred_logits,batch_mask)
+                pred_logits = pred_logits.view(-1,logits_dim)
+                teacher_logits = torch.masked_select(teacher_logits,teacher_batch_mask)
+                teacher_logits = teacher_logits.view(-1,logits_dim)
 
-            losses['distillationLoss'] = F.kl_div(
-                    F.log_softmax(pred_logits / self.distillation_temperature, dim=-1),
-                    F.softmax(teacher_logits / self.distillation_temperature, dim=-1),
-                    reduction='batchmean')* (self.distillation_temperature ** 2)
+                losses['distillationLoss'] = F.kl_div(
+                        F.log_softmax(pred_logits / self.distillation_temperature, dim=-1),
+                        F.softmax(teacher_logits / self.distillation_temperature, dim=-1),
+                        reduction='batchmean')* (self.distillation_temperature ** 2)
 
 
         #t#tic=timeit.default_timer()#t#
@@ -492,7 +496,7 @@ class QATrainer(BaseTrainer):
                         q_type = question[0:q_end+1]
                         q_type_scores[q_type].append(score_ed[-1])
 
-                if question.startswith('mk>'):
+                if question.startswith('mk>') and not run:
                     #get topN accuracy for first token prediction.
                     #this is for internal evaluation of model LM performance
                     right_token = target_a[pred_index,0]
@@ -518,8 +522,8 @@ class QATrainer(BaseTrainer):
                 iou = None
             for b,(b_answers,b_pred,b_questions,b_metadata) in enumerate(zip(answers,string_a,questions,instance['form_metadata'])):
                 assert len(b_questions)==1
-                answer = b_answers[0]
-                pred = b_pred[0]
+                answer = b_answers[0].lower()
+                pred = b_pred[0].lower()
                 question = b_questions[0]
                 
             
@@ -614,7 +618,7 @@ class QATrainer(BaseTrainer):
                     scores = []
                     assert len(b_metadata['all_answers'])==1
                     for ans in b_metadata['all_answers'][0]:
-                        ed = editdistance.eval(ans.lower(),pred.lower())
+                        ed = editdistance.eval(ans,pred)
                         NL = ed/max(len(ans),len(pred))
                         scores.append(1-NL if NL<0.5 else 0)
                     log['E_ANLS'].append(max(scores))
