@@ -24,8 +24,8 @@ def collate(batch):
             'answers': [b['answers'] for b in batch],
             'mask_label': None,
             'mask_labels_batch_mask': None,
-            "bart_logits": torch.cat([b['bart_logits'] for b in batch],dim=0),
-            "bart_last_hidden": torch.cat([b['bart_last_hidden'] for b in batch],dim=0),
+            "bart_logits": torch.cat([b['bart_logits'] for b in batch],dim=0) if 'bart_logits' in batch[0] and batch[0]['bart_logits'] is not None else None,
+            "bart_last_hidden": torch.cat([b['bart_last_hidden'] for b in batch],dim=0) if 'bart_last_hidden' in batch[0] and batch[0]['bart_last_hidden'] is not None else None,
             }
 
 class DistilBartDataset(torch.utils.data.Dataset):
@@ -53,12 +53,13 @@ class DistilBartDataset(torch.utils.data.Dataset):
 
 
         font_dir = dirPath
-        self.gen_daemon = GenDaemon(font_dir,clear=config.get('clear_fonts',False))
+        self.gen_daemon = GenDaemon(font_dir,clear_fonts=config.get('clear_fonts',False))
         self.prev_words = None
 
         self.image_size = config['image_size']
         self.min_text_height = config['min_text_height'] if 'min_text_height' in config else 8
         self.max_text_height = config['max_text_height'] if 'max_text_height' in config else 32
+        self.min_para_width = config.get('min_para_width', 0.5)
 
 
         self.held_instance=None
@@ -255,7 +256,7 @@ class DistilBartDataset(torch.utils.data.Dataset):
         scale = word_height / words[0][1].shape[0]
 
         #layout the Paragraph to find it's height
-        para_width = random.randrange(image_w//2.5,image_w-10) #min width wider than synth para
+        para_width = random.randrange(round(image_w*self.min_para_width),image_w-10) #min width wider than synth para
         em_approx = word_height*1.6 #https://en.wikipedia.org/wiki/Em_(typography)
         min_space = 0.2*em_approx #https://docs.microsoft.com/en-us/typography/develop/character-design-standards/whitespace
         max_space = 0.5*em_approx

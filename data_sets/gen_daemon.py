@@ -33,8 +33,8 @@ def threadFunction(self,nums):
         #print('{} finished gen pass'.format(nums))
 
 class GenDaemon:
-    def __init__(self,font_dir,out_dir=None,num_held=0,simple=False,no_wiki=False):
-        self.gen = SyntheticWord(font_dir)
+    def __init__(self,font_dir,out_dir=None,num_held=0,simple=False,no_wiki=False,clear_fonts=False):
+        self.gen = SyntheticWord(font_dir,clear=clear_fonts)
         if not no_wiki:
             self.wiki_dataset = getWikiDataset()
         self.used_thresh=-1
