@@ -53,7 +53,7 @@ class DistilBartDataset(torch.utils.data.Dataset):
 
 
         font_dir = dirPath
-        self.gen_daemon = GenDaemon(font_dir)
+        self.gen_daemon = GenDaemon(font_dir,clear=config.get('clear_fonts',False))
         self.prev_words = None
 
         self.image_size = config['image_size']
