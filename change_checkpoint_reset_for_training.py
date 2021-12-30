@@ -1,6 +1,7 @@
 import argparse
 import torch
 import json
+import os
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='remove things from checkpoint')
@@ -74,5 +75,10 @@ if __name__ == '__main__':
     print(saved.keys())
 
     new_file = args.out
+    if new_file.endswith('.pth'):
+        if not new_file.endswith('checkpoint-latest.pth'):
+            print('WARNING: out file is not "checkpoint-latest.pth"!!')
+    else:
+        new_file = os.path.join(new_file,'checkpoint-latest.pth')
     torch.save(saved,new_file)
     print('saved '+new_file)
