@@ -15,7 +15,7 @@ from trainer import QATrainer
 logging.basicConfig(level=logging.INFO, format='')
 
 
-def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, config=None, thresh=None, addToConfig=None, test=False,verbose=2):
+def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, config=None, thresh=None, addToConfig=None, test=False,verbose=2,run=False):
     random.seed(1234)
     np.random.seed(1234)
     torch.manual_seed(1234)
@@ -102,7 +102,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                 "data_loader": {
                     "data_set_name": "SQuAD",
                     "data_dir": "../data/SQuAD",
-                    "batch_size": config['data_loader']['batch_size']*3,
+                    "batch_size": config['data_loader']['batch_size']*3 if not run else 1,
                     "rescale_range": [
                         1.0,
                         1.0
@@ -127,7 +127,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                 "data_loader": {
                     "data_set_name": "DocVQA",
                     "data_dir": "../data/DocVQA",
-                    "batch_size": config['data_loader']['batch_size']*3,
+                    "batch_size": config['data_loader']['batch_size']*3 if not run else 1,
                     "rescale_range": [
                         1.0,
                         1.0
@@ -186,7 +186,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
             #    break
             if verbose:
                 print('batch index: {}/{}'.format(index,len(valid_data_loader)),end='\r')
-            _,res,_ = trainer.run(instance,valid=True)
+            _,res,_ = trainer.run(instance,valid=True,run=run)
 
             for name,value in res.items():
                 if 'oss' not in name:#name.startswith('mk_firsttoken_top'):
@@ -225,6 +225,8 @@ if __name__ == '__main__':
                         help='Arbitrary key-value pairs to add to config of the form "k1=v1,k2=v2,...kn=vn"')
     parser.add_argument('-T', '--test', default=False, action='store_const', const=True,
                         help='Run test set')
+    parser.add_argument('-A', '--autoregressive', default=False, action='store_const', const=True,
+                        help='Run with autoregressive prediction')
     parser.add_argument('-v', '--verbosity', default=1, type=int,
                         help='How much stuff to print [0,1,2] (default: 2)')
 
@@ -246,6 +248,6 @@ if __name__ == '__main__':
     #    index = args.imgname
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity)
+            main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=args.autoregressive)
     else:
-        main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity)
+        main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=args.autoregressive)
