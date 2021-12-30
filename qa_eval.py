@@ -147,6 +147,9 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                         },
                 "validation":{}
                 }
+    else:
+        print('ERROR, unknown dataset: {}'.format(data_set_name))
+        exit(1)
     
     data_loader, valid_data_loader = getDataLoader(data_config,'train')
 
