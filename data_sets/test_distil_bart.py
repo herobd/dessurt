@@ -103,10 +103,12 @@ if __name__ == "__main__":
         repeat=1
     data=distil_bart.DistilBartDataset(dirPath=dirPath,split='train',config={
         'batch_size':1,
-        "max_qa_len_in": 640,
-        "max_qa_len_out": 2560,
         "image_size":[1152,768],
-        "max_auto_tokens": 511
+        "max_auto_tokens": 511,
+        "clear_fonts": True,
+        "min_text_height": 14,
+        "min_para_width": 0.65,
+        "no_distill": True
 
 })
 
