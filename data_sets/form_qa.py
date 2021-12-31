@@ -106,6 +106,7 @@ class FormQA(QADataset):
         self.wiki_dataset = getWikiDataset()
         self.punc_regex = re.compile('[%s]' % re.escape(string.punctuation))
         self.do_masks=True
+        self.words = config.get('words',False)
 
         #self.corruption_p = config['text_corruption'] if 'text_corruption' in config else 0.15
         #self.do_words = config['do_words']
@@ -426,7 +427,7 @@ class FormQA(QADataset):
                         response_start = '1>' if down else ''
 
                     response_text = entities[response_id].text
-                    if not down:
+                    if not down and not self.words:
                         response_text = response_text[::-1]
                     if len(response_text)>self.max_qa_len_out:
                         response_text = response_text[:self.max_qa_len_out]
@@ -580,7 +581,7 @@ class FormQA(QADataset):
                 if len(text)<3:
                     continue
 
-                if (self.train and random.random()<0.5) or switch:
+                if (self.train and random.random()<0.5) or switch or self.words:
                     forward=True
                 else:
                     forward=False
