@@ -149,7 +149,13 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             #if (add[-2]=='useDetections' or add[-2]=='useDetect') and 'gt' not in value:
             #    addDATASET=True
     if max_qa_len is None:
-        max_qa_len=config['data_loader']['max_qa_len']
+        #max_qa_len=config['data_loader']['max_qa_len'] if 'max_qa_len' in config['data_loader'] else config['data_loader']['max_qa_len_out']
+        max_qa_len_in = config['data_loader'].get('max_qa_len_in',640)
+        max_qa_len_out = config['data_loader'].get('max_qa_len_out',2560,)
+
+    cased = config['data_loader'].get('cased',True)
+    words = True
+    print('Assume cased and words (no backwards pred)')
         
     if checkpoint is not None:
         if 'swa_state_dict' in checkpoint and checkpoint['iteration']>config['trainer']['swa_start']:
@@ -237,7 +243,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             bb_lines = instance['bb_gt'][0,:,[5,10,7,12]].long()
             pairs = instance['gt_groups_adj']
             transcription_lines = instance['transcription']
-            transcription_lines = [s.lower() for s in transcription_lines]
+            transcription_lines = [s if cased else s.lower() for s in transcription_lines]
             img = instance['img'][0]
             if not quiet:
                 print(instance['imgName'])
@@ -467,8 +473,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             for ti,textline in enumerate(transcription_lines):
                 if ti in used:
                     continue
-                if len(textline)>max_qa_len:
-                    textline=textline[-max_qa_len:]
+                if len(textline)>max_qa_len_in:
+                    textline=textline[-max_qa_len_in:]
                 question='f0~'+textline
                 if PREVENT_MULTILINE:
                     final_text=textline
@@ -582,7 +588,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             #Now get their class
             pred_classes = []
             for text,pred_group in zip(pred_inst,pred_groups):
-                text = text[:max_qa_len] #if it's really long, that probably won't help
+                text = text[:max_qa_len_in] #if it's really long, that probably won't help
                 question='c$~'+text
                 mask = torch.zeros_like(img[:,1])
                 for ti in pred_group:
@@ -643,8 +649,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             rel_score=defaultdict(int)
             inconsistent_class_count=0
             for pgi,text in enumerate(pred_inst):
-                short_text_front = text[:max_qa_len]
-                short_text_back = text[-max_qa_len:]
+                short_text_front = text[:max_qa_len_in]
+                short_text_back = text[-max_qa_len_in:]
 
                 mask = torch.zeros_like(img[:,1])
                 for ti in pred_groups[pgi]:
@@ -656,10 +662,10 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 if pred_classes[pgi]==0: #header
                     qs=[('h0~',short_text_back,False)]
                 elif pred_classes[pgi]==1: #question
-                    qs=[('q0~',short_text_front,True),('l0~',short_text_back,False)]
+                    qs=[('q0~',short_text_front,False if words else True),('l0~',short_text_back,False)]
                     #qs=['l~']
                 elif pred_classes[pgi]==2: #answer
-                    qs=[('v0~',short_text_front,True)]
+                    qs=[('v0~',short_text_front,False if words else True)]
 
                 for q,t,reverse in qs:
                     question=q+t
@@ -785,7 +791,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             pred_rel2 = []
             pred_links=[]
             for gi,(text,pred_group) in enumerate(zip(pred_inst,pred_groups)):
-                text = text[:max_qa_len] #if it's really long, that probably won't help
+                text = text[:max_qa_len_in] #if it's really long, that probably won't help
                 question='g0~'+text
                 mask = torch.zeros_like(img[:,1])
                 for ti in pred_group:
@@ -795,18 +801,22 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 answer, out_mask = model(torch.stack((img[:,0],mask),dim=1),ocr,[[question]],RUN=True)
                 if not quiet:
                     print(question+' {:} '+answer)
-                assert answer[0]=='['
-                assert answer[2]==']'
-                pcls = answer[1] #remove '[ ' & ' ]'
-                #expand from single letter, and get class index
-                for cls,icls in valid_data_loader.dataset.classMap.items():
-                    if cls[0]==pcls:
-                        pcls=cls
-                        icls-=16
-                        break
-                pred_classes2.append(icls)
-                
-                answer = answer[3:]
+                if answer == '№':
+                    print('TODO, force "[" prediction...')
+                    pred_classes2.append(-1)
+                else:
+                    assert answer[0]=='['
+                    assert answer[2]==']'
+                    pcls = answer[1] #remove '[ ' & ' ]'
+                    #expand from single letter, and get class index
+                    for cls,icls in valid_data_loader.dataset.classMap.items():
+                        if cls[0]==pcls:
+                            pcls=cls
+                            icls-=16
+                            break
+                    pred_classes2.append(icls)
+                    
+                    answer = answer[3:]
                 if answer==blank_token or answer==np_token:
                     links = []
                 else:
