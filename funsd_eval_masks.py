@@ -29,7 +29,7 @@ np_token = '№'
 blank_token = 'ø'
 
 def norm_ed(s1,s2):
-    return editdistance.eval(s1,s2)/max(len(s1),len(s2),1)
+    return editdistance.eval(s1.lower(),s2.lower())/max(len(s1),len(s2),1)
 
 def unrollList(model,img,ocr,prev_answer,query,count=10,quiet=False):
     if prev_answer[-1]!=end_token and prev_answer[-1]!=np_token and prev_answer[-1]!=blank_token:
