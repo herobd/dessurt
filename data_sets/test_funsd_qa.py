@@ -44,7 +44,7 @@ def display(data):
         #widths.append(img.size(1))
         draw = False
         for x in ['json>']:#['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
-            if x in q:
+            if x in q and 'row head' in a:
                 draw = True
                 break
         #draw = draw and '\\' in a

@@ -35,6 +35,25 @@ class Table:
         for row in self.cells:
             ae += [c for c in row if c is not None]
         return ae
+    def getBox(self):
+        lx=ty=999999
+        rx=by=-1
+        all_entities = []
+        if self.row_headers is not None:
+            all_entities += self.row_headers
+        if self.col_headers is not None:
+            all_entities += self.col_headers
+        for row in self.cells:
+            all_entities += row
+
+        for entity in all_entities:
+            if entity is not None:
+                x1,y1,x2,y2 = entity.getBox()
+                lx = min(lx,x1)
+                rx = max(rx,x2)
+                ty = min(ty,y1)
+                by = max(by,y2)
+        return lx,ty,rx,by
 
 class Entity:
     #This represents a multi-line entity
@@ -84,6 +103,12 @@ class Entity:
         self.box=[lX,tY,rX,tY,rX,bY,lX,bY,
                     lX,(tY+bY)/2,rX,(tY+bY)/2,(lX+rX)/2,tY,(lX+rX)/2,bY]
         self.lines=[Line(self.text,self.box)]
+    
+    def getBox(self): #returns left-x,top-y,right-x,bottom-y regardless of type of self.box
+        if len(self.box)==4:
+            return self.box
+        else:
+            return min(self.box[::2]),min(self.box[1::2]),max(self.box[::2]),max(self.box[1::2])
 
 class Line:
     def __init__(self,text,box):
@@ -93,6 +118,11 @@ class Line:
         self.ambiguous=False
     def __repr__(self):
         return 'Line({} {})'.format(self.text,self.box)
+    def getBox(self): #returns left-x,top-y,right-x,bottom-y regardless of type of self.box
+        if len(self.box)==4:
+            return self.box
+        else:
+            return min(self.box[::2]),min(self.box[1::2]),max(self.box[::2]),max(self.box[1::2])
         
 
 class FormQA(QADataset):
@@ -1177,50 +1207,201 @@ class FormQA(QADataset):
 
     def makeJsonText(self,entities,entity_link,tables):
         #spits out json with all structure
+
+        claimed_by={} #used later to find which entities aren;t claimed
+
+        #First, sort entities into read order
+        #  tables are going to become an entity.
+        table_entities=set()
+        table_map={}
+        for table in tables:
+
+            all_table_entities = []
+            if table.row_headers is not None:
+                all_table_entities += table.row_headers
+            if table.col_headers is not None:
+                all_table_entities += table.col_headers
+            for row in table.cells:
+                all_table_entities += row
+            table_entities.update(all_table_entities)
+            for e in all_table_entities:
+                for i,e2 in enumerate(entities):
+                    if e==e2:
+                        table_map[i]=table_id+len(entities)
+                        break
+        entities += tables
+        old_entities = entities
+        #table_ids = list(range(len(entities)-len(tables),len(entities)))
+        
+        entities = [(i,e) for i,e in enumerate(entities) if e not in table_entities] #remove entities in tabes (they are accounted for as we added the tables)
+        entities.sort(key=lambda a:a[1].getBox()[1]) #sort by y positions
+        old_to_new={}
+        new_entities=[]
+        i=0
+        while i<len(entities):
+            gi,entity = entities[i]
+            #We want to reorder things so evertthing on a (rougly) paralele line is processed left to right
+
+            #first get the average line height
+            if isinstance(entity,Entity):
+                h_sum=0
+                for line in entity.lines:
+                    h_sum += line.getBox()[3]-line.getBox()[1]
+                avg_line_h = h_sum/len(entity.lines)
+            else:
+                h_sum = 0
+                h_count = 0
+                if entity.row_headers is not None:
+                    for header in entity.row_headers:
+                        if header is not None:
+                            for line in header.lines:
+                                h_sum += line.getBox()[3]-line.getBox()[1]
+                                h_count +=1
+                if entity.col_headers is not None:
+                    for header in entity.col_headers:
+                        if header is not None:
+                            for line in header.lines:
+                                h_sum += line.getBox()[3]-line.getBox()[1]
+                                h_count +=1
+                avg_line_h = h_sum/h_count
+
+            #and use that to set the "rougly parallel line"
+            y_min = entities[i][1].getBox()[1]-(avg_line_h*0.4)
+            y_max = entities[i][1].getBox()[3]+(avg_line_h*0.4)
+            #print('y_min={}, y_max={},  entity={}'.format(y_min,y_max,entity.getBox()))
+
+            #get all entities (following this one) that fall into that line
+            j=i+1
+            while j<len(entities) and entities[j][1].getBox()[1]>y_min and entities[j][1].getBox()[3]<y_max:
+                j+=1
+            do_this = True #no reorder, can add this entity
+            if j>i+1:
+                #Go through them and add any before this entity (horizontally) to the "before" ones
+                before_entries=[]
+                after_entries=[] #entities in range [i+1,j) that aren't moved before
+                for sub_i in range(i+1,j):
+                    other_entity = entities[sub_i][1]
+                    if other_entity.getBox()[0]<entity.getBox()[0]:
+                        before_entries.append(entities[sub_i])
+                    else:
+                        after_entries.append(entities[sub_i])
+                
+                if len(before_entries)>0: 
+                    #Need to reorder
+                    do_this = False #don't add this entity, wait and reevaluate the new first element
+                    entities = before_entries+entities[i:i+1]+after_entries+entities[j:]
+                    i=0 #reset iterator
+
+            if do_this:
+                old_to_new[gi]=len(new_entities)
+                new_entities.append(entity)
+                i+=1
+        
+        new_entity_link = []
+        for head,tail in entity_link:
+            head = old_to_new[head]
+            if tail is None:
+                pass
+            elif isinstance(tail,(list,tuple)):
+                #check if any tail is in table
+                #then there are two cases, header->subheader or a table header
+                part_of_table = False
+                for t in tail:
+                    if t in table_map:
+                        part_of_table = True
+                        break
+
+                if not part_of_table:
+                    tail = [old_to_new[t] for t in tail]
+                else:
+                    #Is this a whole row/col/table super-header?
+                    pass
+
+                try:
+                    tail = [old_to_new[t] for t in tail]
+                except KeyError as er:
+                    if new_entities[head].cls == 'header':
+                        #we assume this is a overheader over a couple col/row headers
+                        #we'll just add extra text to each
+                        head_text = new_entities[head].text
+                        for t in tail:
+                            assert old_entities[t].cls == 'question'
+                            old_entities[t].text = '<<'+head_text+'>> '+old_entities[t].text
+                        claimed_by[head]=-1 #the table, which I don't have the index for
+                        continue
+                    else:
+                        raise er
+            else:
+                tail = old_to_new[tail]
+            new_entity_link.append((head,tail))
+        assert len(new_entity_link) == len(entity_link) or len(tables)>0
+        entity_link = new_entity_link
+        entities = new_entities
+        
+        #display
+        #entities = new_entities
+        #test_img = np.zeros((1000,1000,3),dtype=np.uint8)
+        #for i,entity in enumerate(entities):
+        #    print('{} {}'.format(i,entity.text))
+        #    color = (random.randrange(256),random.randrange(256),random.randrange(256))
+        #    while sum(color)<150:
+        #        color = (random.randrange(256),random.randrange(256),random.randrange(256))
+        #    img_f.rectangle(test_img,entity.box[:2],entity.box[4:],color)
+        #    #dots
+        #    x= round(entity.box[0]+2)
+        #    y= round(entity.box[1]+2)
+        #    for j in range(i):
+        #        if (j+1)%5==0:
+        #            #cross
+        #            img_f.line(test_img,(x-8,y),(x-2,y+4),color)
+        #        else:
+        #            test_img[y:y+5,x] = color
+        #        x+=2
+        #img_f.imshow('x',test_img)
+        #img_f.show()
+
         link_dict = {k:v for k,v in entity_link}
-        #entities is in read order, so use it's ordering
 
         #First we need to identiy the "heads", which are unclained entities
-        claimed_by={}
         for ei,child in entity_link:
             if isinstance(child,(list,tuple)):
                 for ch in child:
                     claimed_by[ch]=ei
             elif child is not None:
                 claimed_by[child]=ei
-        print(entity_link)
-        print(claimed_by)
             
         #full={}
         doc=[] #do list of tuples (list) to allow duplicate keys
         for ei,entity in enumerate(entities):
 
-            if ei not in claimed_by:
-                print('{} {}'.format(ei,entities[ei].text))
+            if ei not in claimed_by and entity not in table_entities:
                 children = self.getChildren(ei,entities,link_dict)
                 #full[entities[ei]]=children
-                if children is not None:
-                    doc.append((entities[ei],children))
+                if isinstance(entities[ei],Table):
+                    doc.append(children)
+                elif entities[ei].cls == 'header':
+                    if children is not None:
+                        doc.append({'header':entities[ei],'questions':children})
+                    else:
+                        doc.append({'header':entities[ei]})
                 else:
-                    doc.append(entities[ei])
+                    if children is not None:
+                        doc.append([entities[ei],children])
+                    else:
+                        doc.append(entities[ei])
 
-        #Do tables
-        tables_data = []
-        for table in tables:
-            table_data = {'row_headers':table.row_headers,
-                          'col_headers':table.col_headers,
-                          'cells':table.cells}
 
-            tables_data.append(table_data)
-        full ={ 'document': doc,
-                'tables':tables_data
-                }
-
-        return json.dumps(full,default=lambda a:a.text)
+        return json.dumps(doc,default=lambda a:a.text)
 
 
     def getChildren(self,ei,entities,link_dict):
-        if ei in link_dict:
+        if isinstance(entities[ei],Table):
+            ret = {
+                    'row headers': entities[ei].row_headers,
+                    'col headers': entities[ei].col_headers,
+                    'cells': entities[ei].cells
+                    }
+        elif ei in link_dict:
             children = link_dict[ei]
             if entities[ei].cls=="header":
                 if not isinstance(children,(list,tuple)):
@@ -1231,10 +1412,16 @@ class FormQA(QADataset):
                     if child is not None:
                         #assert entities[child].cls=='question' or 
                         next_children = self.getChildren(child,entities,link_dict)
-                        if next_children is not None:
-                            ret.append((entities[child],next_children))
+                        if entities[child].cls=='header':
+                            if next_children is not None:
+                                ret.append({'header':entities[child],'questions':next_children})
+                            else:
+                                ret.append({'header':entities[child]})
                         else:
-                            ret.append(entities[child])
+                            if next_children is not None:
+                                ret.append([entities[child],next_children])
+                            else:
+                                ret.append(entities[child])
             elif entities[ei].cls=="question":
                 if not isinstance(children,(list,tuple)):
                     children = [children]
