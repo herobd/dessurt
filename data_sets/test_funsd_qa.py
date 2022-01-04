@@ -7,6 +7,7 @@ from matplotlib.patches import Polygon
 import numpy as np
 import torch
 import utils.img_f as cv2
+import json
 
 widths=[]
 
@@ -35,6 +36,9 @@ def display(data):
         #print('answers: {}'.format(data['answers'][b]))
         print('questions and answers')
         for q,a in zip(data['questions'][b],data['answers'][b]):
+            if q=='json>':
+                a = json.loads(a)
+                a = json.dumps(a,indent=3)
             print(q+' : '+a)
 
         #widths.append(img.size(1))
@@ -45,7 +49,7 @@ def display(data):
                 break
         #draw = draw and '\\' in a
 
-        #draw=True
+        draw=True
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())

@@ -193,7 +193,8 @@ class FUNSDQA(FormQA):
         return box.tolist()
 
     def prepareForm(self,bbs,transcription,groups,groups_adj):
-
+        print('groups adj')
+        print(groups_adj)
 
         entities=[]
 
@@ -248,6 +249,8 @@ class FUNSDQA(FormQA):
 
         relationships_q_a=defaultdict(list)
         relationships_a_q=defaultdict(list)
+        print('questions_gs')
+        print(questions_gs)
         for q_gi in questions_gs:
             found=False
             for gi1,gi2 in groups_adj:
@@ -281,7 +284,9 @@ class FUNSDQA(FormQA):
         row_headers=set()
         col_headers=set()
         skip=set()
-
+        
+        print('relationships_q_a')
+        print(relationships_q_a)
         merged_groups = {}
         for qi,ais in relationships_q_a.items():
             if qi in skip:
@@ -368,7 +373,8 @@ class FUNSDQA(FormQA):
         for oi,gi in merged_groups.items():
             old_to_new_e_map[oi]=old_to_new_e_map[gi]
 
-
+        print('q_a_pairs')
+        print(q_a_pairs)
         for qi,ais in q_a_pairs.items():
             head = old_to_new_e_map[qi]
             tail = [old_to_new_e_map[ai] for ai in ais if ai is not None]
@@ -709,7 +715,8 @@ class FUNSDQA(FormQA):
                         assert new_entities[head].text != new_entities[t].text
                 else:
                     assert new_entities[head].text != new_entities[tail].text
-
+        print('original links')
+        print(entity_link)
         #Sort entities into read order
         entities = list(enumerate(new_entities))
         entities.sort(key=lambda a:a[1].box[1]) #sort by y positions
@@ -757,7 +764,6 @@ class FUNSDQA(FormQA):
                 new_entities.append(entity)
                 i+=1
         
-        print(entity_link)
         new_entity_link = []
         for head,tail in entity_link:
             head = old_to_new[head]
