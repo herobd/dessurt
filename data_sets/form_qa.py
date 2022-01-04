@@ -107,6 +107,7 @@ class FormQA(QADataset):
         self.punc_regex = re.compile('[%s]' % re.escape(string.punctuation))
         self.do_masks=True
         self.words = config.get('words',False)
+        use_json = config.get('use_json',False)
 
         #self.corruption_p = config['text_corruption'] if 'text_corruption' in config else 0.15
         #self.do_words = config['do_words']
@@ -156,6 +157,11 @@ class FormQA(QADataset):
                     'count-tables':0.9,
                     'highlight-table':1.1
                     }
+            if use_json:
+                self.q_types['full_json'] = 2
+                self.q_types_no_table['full_json'] = 2
+                self.q_types_only_table['full_json'] = 2
+
         else:
             #these are what we'll use to actually score
             #(not actually looked at as it isn't sampling)
@@ -189,7 +195,7 @@ class FormQA(QADataset):
             all_of_cls[entity.cls].append(entity)
 
         q_a_pairs = []
-
+        json_text = None
         if self.train:
             if len(tables)>0:
                 if len(entity_link)>0:
@@ -200,16 +206,19 @@ class FormQA(QADataset):
                 probs = self.q_types_no_table
             q_types = random.choices(list(probs.keys()),probs.values(),k=self.questions*50)
         else:
-            q_types = []
-            for cls in all_of_cls:
-                q_types.append(('all',cls,None))
-            for ei in range(len(full_entities)):
-                q_types.append(('class-link', ei,True))
-                q_types.append(('class-link', ei,False))
-            for entity in entities:
-                if len(entity.text)>=self.max_qa_len_out or len(entity.lines)>1:
-                    q_types.append(('read',entity,True))
-                    q_types.append(('read',entity,False))
+            if 'full_json' in probs.keys():
+                q_types = ['full_json']
+            else:
+                q_types = []
+                for cls in all_of_cls:
+                    q_types.append(('all',cls,None))
+                for ei in range(len(full_entities)):
+                    q_types.append(('class-link', ei,True))
+                    q_types.append(('class-link', ei,False))
+                for entity in entities:
+                    if len(entity.text)>=self.max_qa_len_out or len(entity.lines)>1:
+                        q_types.append(('read',entity,True))
+                        q_types.append(('read',entity,False))
 
         
         #becuase a one-to-many is a single QA going down, but multiple QAs going up
@@ -229,7 +238,12 @@ class FormQA(QADataset):
                 q_type,instance,switch = q_type
             else:
                 switch=False
-            if q_type == 'all':
+
+            if q_type == 'full_json':
+                if json_text is None:
+                    json_text = self.makeJsonText(entities,entity_link,tables)
+                self.qaAdd(q_a_pairs,'json>',json_text)
+            elif q_type == 'all':
                 if self.train:
                     if len(entities)>0:
                         if random.random()<0.2:
@@ -1160,3 +1174,67 @@ class FormQA(QADataset):
             
             new_link_dict[e1]=sorted_e2s
         return new_link_dict
+
+    def makeJsonText(self,entities,entity_link,tables):
+        #spits out json with all structure
+        link_dict = {k:v for k,v in entity_link}
+        #entities is in read order, so use it's ordering
+
+        #First we need to identiy the "heads", which are unclained entities
+        claimed_by={}
+        for ei,child in entity_link:
+            if isinstance(child,(list,tuple)):
+                for ch in child:
+                    claimed_by[ch]=ei
+            elif child is not None:
+                claimed_by[child]=ei
+        print(entity_link)
+        print(claimed_by)
+            
+        full={}
+        for ei,entity in enumerate(entities):
+
+            if ei not in claimed_by:
+                print('{} {}'.format(ei,entities[ei].text))
+                children = self.getChildren(ei,entities,link_dict)
+                full[entities[ei].text]=children
+
+        #Do tables
+        tables_data = []
+        for table in tables:
+            table_data = {'row_headers':table.row_headers,
+                          'col_headers':table.col_headers,
+                          'cells':table.cells}
+
+            tables_data.append(table_data)
+        full['tables']=tables_data
+
+        return json.dumps(full,default=lambda a:a.text)
+
+
+    def getChildren(self,ei,entities,link_dict):
+        if ei in link_dict:
+            children = link_dict[ei]
+            if entities[ei].cls=="header":
+                if not isinstance(children,(list,tuple)):
+                    children = [children]
+                ret = {}
+                for child in children:
+                    if child is not None:
+                        #assert entities[child].cls=='question' or 
+                        ret[entities[child].text] = self.getChildren(child,entities,link_dict)
+            elif entities[ei].cls=="question":
+                if not isinstance(children,(list,tuple)):
+                    children = [children]
+                ret = []
+                for child in children:
+                    if child is not None:
+                        assert entities[child].cls=='answer'
+                        ret.append(entities[child].text)
+            else:
+                assert children is None
+                ret = entities[ei].text
+        else:
+            ret = ''
+        return ret
+                
