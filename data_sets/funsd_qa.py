@@ -710,6 +710,88 @@ class FUNSDQA(FormQA):
                 else:
                     assert new_entities[head].text != new_entities[tail].text
 
+        #Sort entities into read order
+        entities = list(enumerate(new_entities))
+        entities.sort(key=lambda a:a[1].box[1]) #sort by y positions
+        old_to_new={}
+        new_entities=[]
+        i=0
+        while i<len(entities):
+            gi,entity = entities[i]
+            #We want to reorder things so evertthing on a (rougly) paralele line is processed left to right
+
+            #first get the average line height
+            h_sum=0
+            for line in entity.lines:
+                h_sum += line.box[5]-line.box[1]
+            avg_line_h = h_sum/len(entity.lines)
+            #and use that to set the "rougly parallel line"
+            y_min = entities[i][1].box[1]-(avg_line_h*0.4)
+            y_max = entities[i][1].box[5]+(avg_line_h*0.4)
+            #print('y_min={}, y_max={},  entity={}'.format(y_min,y_max,entity.box))
+
+            #get all entities (following this one) that fall into that line
+            j=i+1
+            while j<len(entities) and entities[j][1].box[1]>y_min and entities[j][1].box[5]<y_max:
+                j+=1
+            do_this = True #no reorder, can add this entity
+            if j>i+1:
+                #Go through them and add any before this entity (horizontally) to the "before" ones
+                before_entries=[]
+                after_entries=[] #entities in range [i+1,j) that aren't moved before
+                for sub_i in range(i+1,j):
+                    other_entity = entities[sub_i][1]
+                    if other_entity.box[0]<entity.box[0]:
+                        before_entries.append(entities[sub_i])
+                    else:
+                        after_entries.append(entities[sub_i])
+                
+                if len(before_entries)>0: 
+                    #Need to reorder
+                    do_this = False #don't add this entity, wait and reevaluate the new first element
+                    entities = before_entries+entities[i:i+1]+after_entries+entities[j:]
+                    i=0 #reset iterator
+
+            if do_this:
+                old_to_new[gi]=len(new_entities)
+                new_entities.append(entity)
+                i+=1
+        
+        print(entity_link)
+        new_entity_link = []
+        for head,tail in entity_link:
+            head = old_to_new[head]
+            if tail is None:
+                pass
+            elif isinstance(tail,(list,tuple)):
+                tail = [old_to_new[t] for t in tail]
+            else:
+                tail = old_to_new[tail]
+            new_entity_link.append((head,tail))
+        assert len(new_entity_link) == len(entity_link)
+        entity_link = new_entity_link
+        
+        #display
+        #entities = new_entities
+        #test_img = np.zeros((1000,1000,3),dtype=np.uint8)
+        #for i,entity in enumerate(entities):
+        #    print('{} {}'.format(i,entity.text))
+        #    color = (random.randrange(256),random.randrange(256),random.randrange(256))
+        #    while sum(color)<150:
+        #        color = (random.randrange(256),random.randrange(256),random.randrange(256))
+        #    img_f.rectangle(test_img,entity.box[:2],entity.box[4:],color)
+        #    #dots
+        #    x= round(entity.box[0]+2)
+        #    y= round(entity.box[1]+2)
+        #    for j in range(i):
+        #        if (j+1)%5==0:
+        #            #cross
+        #            img_f.line(test_img,(x-8,y),(x-2,y+4),color)
+        #        else:
+        #            test_img[y:y+5,x] = color
+        #        x+=2
+        #img_f.imshow('x',test_img)
+        #img_f.show()
         return new_entities,entity_link,real_tables
 
     def prepareFormRaw(self,bbs,transcription,groups,groups_adj):
@@ -732,6 +814,8 @@ class FUNSDQA(FormQA):
                     old_to_new[gi]=len(entities)
                     entities.append(entity)
 
+
+
         link_dict = defaultdict(list)
         for e1,e2 in groups_adj:
             if e1 in old_to_new and e2 in old_to_new:
@@ -743,6 +827,9 @@ class FUNSDQA(FormQA):
 
         link_dict=self.sortLinkDict(entities,link_dict)
         return entities,link_dict
+
+
+
 
 
 def addTableElement(table_values,row_headers,col_headers,ai,qi1,qi2,entities,threshold=5):

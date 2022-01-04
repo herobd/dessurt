@@ -39,7 +39,7 @@ def display(data):
 
         #widths.append(img.size(1))
         draw = False
-        for x in ['al~']:#['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
+        for x in ['json>']:#['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
             if x in q:
                 draw = True
                 break
@@ -58,7 +58,7 @@ def display(data):
 
             #cv2.waitKey()
 
-            cv2.imwrite('testsinglesize_1024.png',img.numpy()[:,:,0])
+            #cv2.imwrite('testsinglesize_1024.png',img.numpy()[:,:,0])
 
         #fig = plt.figure()
 
@@ -86,7 +86,7 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=funsd_qa.FUNSDQA(dirPath=dirPath,split='valid',config={
+    data=funsd_qa.FUNSDQA(dirPath=dirPath,split='train',config={
         '#rescale_range':[0.8,1.2],
         'rescale_range':[1,1],
         'crop_params': {
@@ -98,7 +98,10 @@ if __name__ == "__main__":
         'questions':1,
         'do_words': False,
         'char_qs': "full",
-        'max_qa_len': 26
+        'max_qa_len': 26,
+        "cased": True,
+        "words": True,
+        "use_json": True
 
 })
 
@@ -108,7 +111,7 @@ if __name__ == "__main__":
         #if start==0:
         #display(data[0])
     for i in range(0,start):
-        print(i)
+        print('test {}'.format(i))
         dataLoaderIter.next()
         #display(data[i])
     try:
