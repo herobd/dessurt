@@ -35,7 +35,7 @@ class SpecialTokenEmbedder(nn.Module):
                 #question answering
                 'natural_q~',
                 #NER
-                'ne>',
+                'ne>','ne~',
                 #census TODO
                 ]
         self.get_index = {s:i for i,s in enumerate(tokens)}
