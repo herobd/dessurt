@@ -1191,13 +1191,18 @@ class FormQA(QADataset):
         print(entity_link)
         print(claimed_by)
             
-        full={}
+        #full={}
+        doc=[] #do list of tuples (list) to allow duplicate keys
         for ei,entity in enumerate(entities):
 
             if ei not in claimed_by:
                 print('{} {}'.format(ei,entities[ei].text))
                 children = self.getChildren(ei,entities,link_dict)
-                full[entities[ei].text]=children
+                #full[entities[ei]]=children
+                if children is not None:
+                    doc.append((entities[ei],children))
+                else:
+                    doc.append(entities[ei])
 
         #Do tables
         tables_data = []
@@ -1207,7 +1212,9 @@ class FormQA(QADataset):
                           'cells':table.cells}
 
             tables_data.append(table_data)
-        full['tables']=tables_data
+        full ={ 'document': doc,
+                'tables':tables_data
+                }
 
         return json.dumps(full,default=lambda a:a.text)
 
@@ -1218,11 +1225,16 @@ class FormQA(QADataset):
             if entities[ei].cls=="header":
                 if not isinstance(children,(list,tuple)):
                     children = [children]
-                ret = {}
+                #ret = {}
+                ret = []
                 for child in children:
                     if child is not None:
                         #assert entities[child].cls=='question' or 
-                        ret[entities[child].text] = self.getChildren(child,entities,link_dict)
+                        next_children = self.getChildren(child,entities,link_dict)
+                        if next_children is not None:
+                            ret.append((entities[child],next_children))
+                        else:
+                            ret.append(entities[child])
             elif entities[ei].cls=="question":
                 if not isinstance(children,(list,tuple)):
                     children = [children]
@@ -1230,11 +1242,11 @@ class FormQA(QADataset):
                 for child in children:
                     if child is not None:
                         assert entities[child].cls=='answer'
-                        ret.append(entities[child].text)
+                        ret.append(entities[child])
             else:
                 assert children is None
                 ret = entities[ei].text
         else:
-            ret = ''
+            ret = None
         return ret
                 

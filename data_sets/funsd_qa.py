@@ -193,8 +193,6 @@ class FUNSDQA(FormQA):
         return box.tolist()
 
     def prepareForm(self,bbs,transcription,groups,groups_adj):
-        print('groups adj')
-        print(groups_adj)
 
         entities=[]
 
@@ -212,6 +210,7 @@ class FUNSDQA(FormQA):
             else:
                 entities.append(None)
                 #removed.add(gi)
+
 
 
         entities,groups_adj = cleanUp(entities,groups_adj)
@@ -249,8 +248,6 @@ class FUNSDQA(FormQA):
 
         relationships_q_a=defaultdict(list)
         relationships_a_q=defaultdict(list)
-        print('questions_gs')
-        print(questions_gs)
         for q_gi in questions_gs:
             found=False
             for gi1,gi2 in groups_adj:
@@ -285,8 +282,6 @@ class FUNSDQA(FormQA):
         col_headers=set()
         skip=set()
         
-        print('relationships_q_a')
-        print(relationships_q_a)
         merged_groups = {}
         for qi,ais in relationships_q_a.items():
             if qi in skip:
@@ -373,8 +368,6 @@ class FUNSDQA(FormQA):
         for oi,gi in merged_groups.items():
             old_to_new_e_map[oi]=old_to_new_e_map[gi]
 
-        print('q_a_pairs')
-        print(q_a_pairs)
         for qi,ais in q_a_pairs.items():
             head = old_to_new_e_map[qi]
             tail = [old_to_new_e_map[ai] for ai in ais if ai is not None]
@@ -715,8 +708,6 @@ class FUNSDQA(FormQA):
                         assert new_entities[head].text != new_entities[t].text
                 else:
                     assert new_entities[head].text != new_entities[tail].text
-        print('original links')
-        print(entity_link)
         #Sort entities into read order
         entities = list(enumerate(new_entities))
         entities.sort(key=lambda a:a[1].box[1]) #sort by y positions
@@ -1063,5 +1054,5 @@ def cleanUp(entities,entity_adj):
                 old_to_new[i]=len(new_entities)
                 new_entities.append(entity)
         new_entity_adj=[(old_to_new[e1],old_to_new[e2]) for e1,e2 in entity_adj if \
-                e1 in old_to_new and e2 in new_entities] 
+                e1 in old_to_new and e2 in old_to_new] 
     return new_entities,new_entity_adj
