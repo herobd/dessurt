@@ -49,7 +49,7 @@ def display(data):
                 break
         #draw = draw and '\\' in a
 
-        draw=True
+        #draw=True
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
