@@ -27,6 +27,7 @@ class IAMNER(QADataset):
         self.crop_to_data=True
         split_by = 'rwth'
         self.cache_resized = False
+        self.warp_lines = None
 
         task = config['task'] if 'task' in config else 6
 
@@ -66,7 +67,7 @@ class IAMNER(QADataset):
 
 
 
-    def getCrop(self,xmlfile):
+    def getCropAndLines(self,xmlfile):
         W_lines,lines, writer,image_h,image_w = getWordAndLineBoundaries(xmlfile)
         #W_lines is list of lists
         # inner list has ([minY,maxY,minX,maxX],text,id) id=gt for NER
@@ -89,14 +90,19 @@ class IAMNER(QADataset):
                 min(image_h,round(maxX+40)),
                 min(image_w,round(maxY+40))]
         self.current_crop=crop[:2]
-        return crop
+
+        crop_x,crop_y = self.current_crop
+        line_bbs=[]
+        for line in lines:
+            line_bbs.append([line[0][2]-crop_x,line[0][0]-crop_y,line[0][3]-crop_x,line[0]  [1]-crop_y])
+        return crop, line_bbs
 
     def makeQuestions(self,xmlfile,s):
         W_lines,lines, writer,image_h,image_w = getWordAndLineBoundaries(xmlfile)
         #W_lines is list of lists
         # inner list has ([minY,maxY,minX,maxX],text,id) id=gt for NER
         if self.current_crop is None:
-            self.getCrop(xmlfile)
+            self.getCropAndLines(xmlfile)
         crop_x,crop_y = self.current_crop
         self.current_crop = None
         qa_by_class = defaultdict(list)
