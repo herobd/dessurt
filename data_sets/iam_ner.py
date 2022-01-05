@@ -107,47 +107,51 @@ class IAMNER(QADataset):
         self.current_crop = None
         qa_by_class = defaultdict(list)
         bbs = []
-        for words in W_lines:
-            for word in words:
-                cls = self.word_id_to_cls[word[2]]
-                tY,bY,lX,rX = word[0]
-                tY-=crop_y
-                bY-=crop_y
-                lX-=crop_x
-                rX-=crop_x
-                bb = [lX*s, tY*s, rX*s, tY*s, rX*s, bY*s, lX*s, bY*s,
-                            s*lX, s*(tY+bY)/2.0, s*rX, s*(tY+bY)/2.0, s*(lX+rX)/2.0, s*tY, s*(rX+lX)/ 2.0, s*bY]
-                inmask = [bb]
-                if self.train and random.random()<0.5:
-                    q='ne>'
-                    a='['+cls+']'+word[1]
-                else:
-                    q='ne~'+word[1]
-                    a='['+cls+']'
-                qa_by_class[cls].append((q,a,[len(bbs)],inmask))
-                #self.qaAdd(qas,q,a,[len(bbs)],inmask)
-                bbs.append(bb)
 
-        qas=[]
-        if self.train:
-            #balance by class
-            classes = list(qa_by_class.keys())
-            random.shuffle(classes)
-            for qa_cls in qa_by_class.values():
-                random.shuffle(qa_cls)
-            i=0
-            some_added=True
-            while len(qas)<3*self.questions and some_added:
-                some_added = False
-                for cls in classes:
-                    if len(qa_by_class[cls])>i:
-                        self.qaAdd(qas,*qa_by_class[cls][i])
-                        some_added=True
-                i+=1
+        if self.full_lines:
+            TODO
         else:
-            for qa_cls in qa_by_class.values():
-                for qa in qa_cls:
-                    self.qaAdd(qas,*qa)
+            for words in W_lines:
+                for word in words:
+                    cls = self.word_id_to_cls[word[2]]
+                    tY,bY,lX,rX = word[0]
+                    tY-=crop_y
+                    bY-=crop_y
+                    lX-=crop_x
+                    rX-=crop_x
+                    bb = [lX*s, tY*s, rX*s, tY*s, rX*s, bY*s, lX*s, bY*s,
+                                s*lX, s*(tY+bY)/2.0, s*rX, s*(tY+bY)/2.0, s*(lX+rX)/2.0, s*tY, s*(rX+lX)/ 2.0, s*bY]
+                    inmask = [bb]
+                    if self.train and random.random()<0.5:
+                        q='ne>'
+                        a='['+cls+']'+word[1]
+                    else:
+                        q='ne~'+word[1]
+                        a='['+cls+']'
+                    qa_by_class[cls].append((q,a,[len(bbs)],inmask))
+                    #self.qaAdd(qas,q,a,[len(bbs)],inmask)
+                    bbs.append(bb)
+
+            qas=[]
+            if self.train:
+                #balance by class
+                classes = list(qa_by_class.keys())
+                random.shuffle(classes)
+                for qa_cls in qa_by_class.values():
+                    random.shuffle(qa_cls)
+                i=0
+                some_added=True
+                while len(qas)<3*self.questions and some_added:
+                    some_added = False
+                    for cls in classes:
+                        if len(qa_by_class[cls])>i:
+                            self.qaAdd(qas,*qa_by_class[cls][i])
+                            some_added=True
+                    i+=1
+            else:
+                for qa_cls in qa_by_class.values():
+                    for qa in qa_cls:
+                        self.qaAdd(qas,*qa)
         return qas,bbs
 
     def parseAnn(self,xmlfile,s):

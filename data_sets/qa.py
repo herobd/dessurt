@@ -160,6 +160,7 @@ class QADataset(torch.utils.data.Dataset):
             try: 
                 with open(annotationPath) as annFile:
                     annotations = json.loads(annFile.read())
+                    annotations['XX_imageName']=imageName
             except FileNotFoundError:
                 print("ERROR, could not open "+annotationPath)
                 return self.__getitem__((index+1)%self.__len__())

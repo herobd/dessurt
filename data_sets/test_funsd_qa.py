@@ -22,7 +22,8 @@ def display(data):
         mask = data['img'][b,1]<0
         img[:,:,0] *= ~mask
         img[:,:,1] *= ~show
-        img[:,:,2] *= 1-data['mask_label'][b,0]
+        if data['mask_label'] is not None:
+            img[:,:,2] *= 1-data['mask_label'][b,0]
         #label = data['label']
         #gt = data['gt'][b]
         #print(label[:data['label_lengths'][b],b])
