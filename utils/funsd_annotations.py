@@ -120,3 +120,82 @@ def createLines(annotations,classMap,scale):
     bbs = bbs[None,...] #add batch dim
 
     return bbs, numNeighbors, trans, groups
+
+rulebook={
+        '0011838621': [ ('add link',29,32),
+                         ('add link',29,7)
+                         ],
+
+        '0000999294': [
+            ('change class',36,'header'),
+            ('change class',41,'question'),
+
+            ('add link',41,51),
+            ('add link',41,61),
+            ('add link',41,62),
+            ('add link',41,65),
+            ('add link',41,66),
+            ('add link',41,71),
+            ('add link',41,70),
+            ],
+        '0001476912': [
+            ('change class',11,'header'),
+            ('change class',12,'question'),
+            ('change class',48,'question'),
+            ('remove link',11,21),
+            ('remove link',11,22),
+            ('add link',21,48),
+            ('add link',22,12),
+            ('add link',20,46),
+            ('change text',48,'Los Angeles'),
+            ],
+        '0001485288':[
+            ('change class',20,'question'),
+            ],
+        '0011973451': [
+                         ('add link',13,4)
+                         ],
+        }
+#'change text': [id,text]
+
+for doc in rulebook:
+    new_rules = defaultdict(list)
+    for typ,info0,info1 in rulebook[doc]:
+        if typ=='add link':
+            new_rules[info0].append((typ,info1))
+            new_rules[info1].append((typ,info0))
+        elif typ=='remove link':
+            new_rules[info0].append((typ,info1))
+            new_rules[info1].append((typ,info0))
+        elif typ=='change text' or typ=='change class':
+            new_rules[info0].append((typ,info1))
+    rulebook[doc] = new_rules
+
+
+def fixFUNSD(annotations):
+    for name,rules in rulebook.items():
+        if name in annotations['XX_imageName']:
+            #apply rules
+            #links_to_add,links_to_remove = rules
+            for entity in annotations['form']:
+                if entity['id'] in rules:
+                    for rule in rules[entity['id']]:
+                        typ,info = rule
+                        if typ=='remove link':
+                            for i,link in enumerate(entity['linking']):
+                                if info in link:
+                                    del entity['linking'][i]
+                                    break
+                        elif typ=='add link':
+                            entity['linking'].append([info,entity['id']])
+                        elif typ=='change text':
+                            if isinstance(info,str):
+                                entity['text']=info
+                                for i,word in enumerate(info.split(' ')):
+                                    entity['words'][i]['text']=word
+                            else:
+                                assert False
+                        elif typ=='change class':
+                            entity['label'] = info
+                
+

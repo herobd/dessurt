@@ -35,6 +35,56 @@ class Table:
         for row in self.cells:
             ae += [c for c in row if c is not None]
         return ae
+    def addRowHeader(self,entity):
+        #find where they go
+        entity_y = (entity.getBox()[1]+entity.getBox()[3])/2
+        found=False
+        for pos,header in enumerate(self.row_headers):
+            header_y = (header.getBox()[1]+header.getBox()[3])/2
+            if entity_y<header_y:
+                found=True
+                break
+        if not found:
+            pos = len(self.row_headers)
+
+        self.row_headers.insert(pos,entity)
+        self.cells.insert(pos,[None]*len(self.col_headers))
+
+    def addColHeader(self,entity):
+        #find where they go
+        entity_x = (entity.getBox()[0]+entity.getBox()[2])/2
+        found=False
+        for pos,header in enumerate(self.col_headers):
+            header_x = (header.getBox()[0]+header.getBox()[2])/2
+            if entity_x<header_x:
+                found=True
+                break
+        if not found:
+            pos = len(self.col_headers)
+
+        self.col_headers.insert(pos,entity)
+        for row in self.cells:
+            row.insert(pos,None)
+
+    def addHeader(self,entity):
+        row_mean_x = 0
+        for header in self.row_headers:
+            row_mean_x += sum(header.getBox()[0::2])
+        row_mean_x/= 2*len(self.row_headers)
+        col_mean_y = 0
+        for header in self.col_headers:
+            col_mean_y += sum(header.getBox()[1::2])
+        col_mean_y/= 2*len(self.col_headers)
+
+        y_diff = abs(col_mean_y - sum(entity.getBox()[1::2])/2)
+        x_diff = abs(row_mean_x - sum(entity.getBox()[::2])/2)
+
+        if y_diff<x_diff:
+            self.addRowHeader(entity)
+        else:
+            self.addColHeader(entity)
+
+
     def getBox(self):
         lx=ty=999999
         rx=by=-1
@@ -57,35 +107,44 @@ class Table:
 
 class Entity:
     #This represents a multi-line entity
-    def __init__(self,cls,lines):
-        self.cls=cls
-        self.lines=lines
-
-        self.text=''
-        self.text_map = []
-        lX=tY=99999999999
-        rX=bY=-1
-        full=False
-        for li,line in enumerate(self.lines):
-            self.text+=line.text+'\\'
-            self.text_map+=[li]*(len(line.text)+1)
-            if len(line.box)==4:
-                lX = min(lX,line.box[0])
-                tY = min(tY,line.box[1])
-                rX = max(rX,line.box[2])
-                bY = max(bY,line.box[3])
-            else:
-                full=True
-                lX = min(lX,*line.box[::2])
-                tY = min(tY,*line.box[1::2])
-                rX = max(rX,*line.box[::2])
-                bY = max(bY,*line.box[1::2])
-        self.text=self.text[:-1]#removing trailing '\'
-        if not full:
-            self.box=[lX,tY,rX,bY]
+    def __init__(self,cls,lines=None):
+        if isinstance(cls,Entity) and lines is None:
+            #copy contstructor
+            other = cls
+            self.cls = other.cls
+            self.lines = list(other.lines)
+            self.text = other.text
+            self.text_map= other.text_map
+            self.box=other.box
         else:
-            self.box=[lX,tY,rX,tY,rX,bY,lX,bY,
-                    lX,(tY+bY)/2,rX,(tY+bY)/2,(lX+rX)/2,tY,(lX+rX)/2,bY]
+            self.cls=cls
+            self.lines=lines
+
+            self.text=''
+            self.text_map = []
+            lX=tY=99999999999
+            rX=bY=-1
+            full=False
+            for li,line in enumerate(self.lines):
+                self.text+=line.text+'\\'
+                self.text_map+=[li]*(len(line.text)+1)
+                if len(line.box)==4:
+                    lX = min(lX,line.box[0])
+                    tY = min(tY,line.box[1])
+                    rX = max(rX,line.box[2])
+                    bY = max(bY,line.box[3])
+                else:
+                    full=True
+                    lX = min(lX,*line.box[::2])
+                    tY = min(tY,*line.box[1::2])
+                    rX = max(rX,*line.box[::2])
+                    bY = max(bY,*line.box[1::2])
+            self.text=self.text[:-1]#removing trailing '\'
+            if not full:
+                self.box=[lX,tY,rX,bY]
+            else:
+                self.box=[lX,tY,rX,tY,rX,bY,lX,bY,
+                        lX,(tY+bY)/2,rX,(tY+bY)/2,(lX+rX)/2,tY,(lX+rX)/2,bY]
         assert self.text != ''
 
     def __repr__(self):
@@ -188,9 +247,9 @@ class FormQA(QADataset):
                     'highlight-table':1.1
                     }
             if use_json:
-                self.q_types['full_json'] = 2
-                self.q_types_no_table['full_json'] = 2
-                self.q_types_only_table['full_json'] = 2
+                self.q_types['full_json'] = 299999999999
+                self.q_types_no_table['full_json'] = 2999999999
+                self.q_types_only_table['full_json'] = 299999999
 
         else:
             #these are what we'll use to actually score
@@ -1208,13 +1267,14 @@ class FormQA(QADataset):
     def makeJsonText(self,entities,entity_link,tables):
         #spits out json with all structure
 
+        #entities = [Entity(e) for e in entities]
         claimed_by={} #used later to find which entities aren;t claimed
 
         #First, sort entities into read order
         #  tables are going to become an entity.
-        table_entities=set()
+        table_entities=[]
         table_map={}
-        for table in tables:
+        for table_id,table in enumerate(tables):
 
             all_table_entities = []
             if table.row_headers is not None:
@@ -1223,17 +1283,31 @@ class FormQA(QADataset):
                 all_table_entities += table.col_headers
             for row in table.cells:
                 all_table_entities += row
-            table_entities.update(all_table_entities)
+            table_entities+=all_table_entities
             for e in all_table_entities:
                 for i,e2 in enumerate(entities):
                     if e==e2:
                         table_map[i]=table_id+len(entities)
                         break
+        
         entities += tables
         old_entities = entities
         #table_ids = list(range(len(entities)-len(tables),len(entities)))
         
         entities = [(i,e) for i,e in enumerate(entities) if e not in table_entities] #remove entities in tabes (they are accounted for as we added the tables)
+        #non_table_entities = []
+        #for i,e in enumerate(entities):
+        #    match=False
+        #    if not isinstance(e,Table):
+        #        for te in table_entities:
+        #            if e==te or (e.text==te.text and e.getBox()[0]==te.getBox()[0] and e.getBox()[1]==te.getBox()[1]):
+        #                match=True
+        #                break
+        #        #if (not match) and e.text=='<<Physical Characteristics>> Total Pressure Drop (encap.)':
+        #            #import pdb;pdb.set_trace()
+        #    if not match:
+        #        non_table_entities.append((i,e))
+        #entities = non_table_entities
         entities.sort(key=lambda a:a[1].getBox()[1]) #sort by y positions
         old_to_new={}
         new_entities=[]
@@ -1303,34 +1377,78 @@ class FormQA(QADataset):
             if tail is None:
                 pass
             elif isinstance(tail,(list,tuple)):
-                #check if any tail is in table
+                #checny(k if any tail is in table
                 #then there are two cases, header->subheader or a table header
                 part_of_table = False
+                not_in_table = []
+                in_table = []
                 for t in tail:
                     if t in table_map:
                         part_of_table = True
-                        break
+                        table_id = table_map[t]
+                        in_table.append(t)
+                        #break
+                    else:
+                        not_in_table.append(t)
 
                 if not part_of_table:
                     tail = [old_to_new[t] for t in tail]
                 else:
-                    #Is this a whole row/col/table super-header?
-                    pass
+                    table = old_entities[table_id]
 
-                try:
-                    tail = [old_to_new[t] for t in tail]
-                except KeyError as er:
-                    if new_entities[head].cls == 'header':
+                    #edit the table in include not-in-table entities
+                    # should they be row or header?
+                    is_row = any([old_entities[t] in table.row_headers for t in in_table])
+                    is_col = any([old_entities[t] in table.col_headers for t in in_table])
+
+                    assert is_row or is_col
+
+                    if is_row and not is_col:
+                        for t in not_in_table:
+                            table.addRowHeader(old_entities[t])
+                    elif not is_row and is_col:
+                        for t in not_in_table:
+                            table.addColHeader(old_entities[t])
+                    else:
+                        for t in not_in_table:
+                            table.addHeader(old_entities[t])
+                    table_entities += [old_entities[t] for t in tail]
+
+
+                    #Is this a whole row/col/table super-header?
+                    table_header = False
+                    if len(tail)==len(table.row_headers):
+                        table_header = True
+                        for t in tail:
+                            t_entity = old_entities[t]
+                            if t_entity not in table.row_headers:
+                                table_header = False
+                                break
+                    if not table_header and len(tail)==len(table.col_headers):
+                        table_header = True
+                        for t in tail:
+                            t_entity = old_entities[t]
+                            if t_entity not in table.col_headers:
+                                table_header = False
+                                break
+
+                    new_table_id = old_to_new[table_id]
+
+                    if table_header:
+                        new_entity_link.append((head,new_table_id))
+                    else:
                         #we assume this is a overheader over a couple col/row headers
                         #we'll just add extra text to each
                         head_text = new_entities[head].text
                         for t in tail:
                             assert old_entities[t].cls == 'question'
                             old_entities[t].text = '<<'+head_text+'>> '+old_entities[t].text
-                        claimed_by[head]=-1 #the table, which I don't have the index for
-                        continue
-                    else:
-                        raise er
+                        claimed_by[head]=new_table_id #the table, which I don't have the index for
+                        
+                        
+                    #not adding normal link
+                    continue
+
             else:
                 tail = old_to_new[tail]
             new_entity_link.append((head,tail))
@@ -1379,6 +1497,7 @@ class FormQA(QADataset):
                 #full[entities[ei]]=children
                 if isinstance(entities[ei],Table):
                     doc.append(children)
+
                 elif entities[ei].cls == 'header':
                     if children is not None:
                         doc.append({'header':entities[ei],'questions':children})
@@ -1412,7 +1531,9 @@ class FormQA(QADataset):
                     if child is not None:
                         #assert entities[child].cls=='question' or 
                         next_children = self.getChildren(child,entities,link_dict)
-                        if entities[child].cls=='header':
+                        if isinstance(entities[child],Table):
+                            ret=next_children
+                        elif entities[child].cls=='header':
                             if next_children is not None:
                                 ret.append({'header':entities[child],'questions':next_children})
                             else:
