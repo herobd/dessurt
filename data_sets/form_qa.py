@@ -40,10 +40,11 @@ class Table:
         entity_y = (entity.getBox()[1]+entity.getBox()[3])/2
         found=False
         for pos,header in enumerate(self.row_headers):
-            header_y = (header.getBox()[1]+header.getBox()[3])/2
-            if entity_y<header_y:
-                found=True
-                break
+            if header is not None:
+                header_y = (header.getBox()[1]+header.getBox()[3])/2
+                if entity_y<header_y:
+                    found=True
+                    break
         if not found:
             pos = len(self.row_headers)
 
@@ -55,10 +56,11 @@ class Table:
         entity_x = (entity.getBox()[0]+entity.getBox()[2])/2
         found=False
         for pos,header in enumerate(self.col_headers):
-            header_x = (header.getBox()[0]+header.getBox()[2])/2
-            if entity_x<header_x:
-                found=True
-                break
+            if header is not None:
+                header_x = (header.getBox()[0]+header.getBox()[2])/2
+                if entity_x<header_x:
+                    found=True
+                    break
         if not found:
             pos = len(self.col_headers)
 
@@ -68,13 +70,19 @@ class Table:
 
     def addHeader(self,entity):
         row_mean_x = 0
+        row_count = 0
         for header in self.row_headers:
-            row_mean_x += sum(header.getBox()[0::2])
-        row_mean_x/= 2*len(self.row_headers)
+            if header is not None:
+                row_mean_x += sum(header.getBox()[0::2])
+                row_count +=1
+        row_mean_x/= 2*row_count
         col_mean_y = 0
+        col_count = 0
         for header in self.col_headers:
-            col_mean_y += sum(header.getBox()[1::2])
-        col_mean_y/= 2*len(self.col_headers)
+            if headers is not None:
+                col_mean_y += sum(header.getBox()[1::2])
+                col_count += 1
+        col_mean_y/= 2*col_count
 
         y_diff = abs(col_mean_y - sum(entity.getBox()[1::2])/2)
         x_diff = abs(row_mean_x - sum(entity.getBox()[::2])/2)
@@ -202,61 +210,111 @@ class FormQA(QADataset):
         #self.do_words = config['do_words']
         #self.char_qs = config['char_qs'] if 'char_qs' in config else False
         if self.train:
-            self.q_types = {
-                    'np':0.2,
-                    'all':1.0,
-                    'class-link':1.3,
-                    'class':0.7,
-                    'down-pair':1.0,
-                    'up-pair':1.0,
-                    'read':1.0,
-                    'cell':1.1,
-                    'row-header':1.1,
-                    'col-header':1.1,
-                    'all-row':1.1,
-                    'all-col':1.1,
-                     'list-row-headers':1.1,
-                    'list-col-headers':1.1,
-                    'count-tables':0.9,
-                    'highlight-table':1.1
-                    }
-            self.q_types_no_table = {
-                    'np':0.2,
-                    'all':1.0,
-                    'class-link':1.3,
-                    'class':0.7,
-                    'down-pair':1.0,
-                    'up-pair':1.0,
-                    'read':1.0,
-                    'count-tables':0.05
-                    }
-            self.q_types_only_table = {
-                    'np':0.2,
-                    'all':1.0,
-                    'class-link':1.3,
-                    'class':0.7,
-                    'read':1.0,
-                    'cell':1.1,
-                    'row-header':1.1,
-                    'col-header':1.1,
-                    'all-row':1.1,
-                    'all-col':1.1,
-                     'list-row-headers':1.1,
-                    'list-col-headers':1.1,
-                    'count-tables':0.9,
-                    'highlight-table':1.1
-                    }
             if use_json:
-                self.q_types['full_json'] = 299999999999
-                self.q_types_no_table['full_json'] = 2999999999
-                self.q_types_only_table['full_json'] = 299999999
+                self.q_types = {
+                        'full_json': 4,
+                        'np':0.2,
+                        #'all':1.0,
+                        #'class-link':1.3,
+                        'class':0.7,
+                        'down-pair':1.0,
+                        'up-pair':1.0,
+                        'read':1.0,
+                        'cell':1.1,
+                        'row-header':1.1,
+                        'col-header':1.1,
+                        'all-row':1.1,
+                        'all-col':1.1,
+                         'list-row-headers':1.1,
+                        'list-col-headers':1.1,
+                        'count-tables':0.9,
+                        'highlight-table':1.1
+                        }
+                self.q_types_no_table = {
+                        'full_json': 4,
+                        'np':0.2,
+                        #'all':1.0,
+                        #'class-link':1.3,
+                        'class':0.7,
+                        'down-pair':1.0,
+                        'up-pair':1.0,
+                        'read':1.0,
+                        'count-tables':0.01
+                        }
+                self.q_types_only_table = {
+                        'full_json': 4,
+                        'np':0.2,
+                        #'all':1.0,
+                        #'class-link':1.3,
+                        'class':0.7,
+                        'read':1.0,
+                        'cell':1.1,
+                        'row-header':1.1,
+                        'col-header':1.1,
+                        'all-row':1.1,
+                        'all-col':1.1,
+                         'list-row-headers':1.1,
+                        'list-col-headers':1.1,
+                        'count-tables':0.9,
+                        'highlight-table':1.1
+                        }
+            else:
+                self.q_types = {
+                        'np':0.2,
+                        'all':1.0,
+                        'class-link':1.3,
+                        'class':0.7,
+                        'down-pair':1.0,
+                        'up-pair':1.0,
+                        'read':1.0,
+                        'cell':1.1,
+                        'row-header':1.1,
+                        'col-header':1.1,
+                        'all-row':1.1,
+                        'all-col':1.1,
+                         'list-row-headers':1.1,
+                        'list-col-headers':1.1,
+                        'count-tables':0.9,
+                        'highlight-table':1.1
+                        }
+                self.q_types_no_table = {
+                        'np':0.2,
+                        'all':1.0,
+                        'class-link':1.3,
+                        'class':0.7,
+                        'down-pair':1.0,
+                        'up-pair':1.0,
+                        'read':1.0,
+                        'count-tables':0.05
+                        }
+                self.q_types_only_table = {
+                        'np':0.2,
+                        'all':1.0,
+                        'class-link':1.3,
+                        'class':0.7,
+                        'read':1.0,
+                        'cell':1.1,
+                        'row-header':1.1,
+                        'col-header':1.1,
+                        'all-row':1.1,
+                        'all-col':1.1,
+                         'list-row-headers':1.1,
+                        'list-col-headers':1.1,
+                        'count-tables':0.9,
+                        'highlight-table':1.1
+                        }
 
         else:
             #these are what we'll use to actually score
             #(not actually looked at as it isn't sampling)
-            self.q_types =         ['all','class-link','read']
-            self.q_types_no_table =        ['all','class-link','read']
-            self.q_types_only_table =        ['all','class-link','read']
+            if use_json:
+                self.q_types =         ['full_json']
+                self.q_types_no_table =        ['full_json']
+                self.q_types_only_table =        ['full_json']
+            else:
+                self.q_types =         ['all','class-link','read']
+                self.q_types_no_table =        ['all','class-link','read']
+                self.q_types_only_table =        ['all','class-link','read']
 
         self.q_types_for_np = ['class-link','class','down-pair','up-pair','read','cell','row-header','col-header','all-row', 'list-row-headers','list-col-headers']
 
@@ -284,7 +342,6 @@ class FormQA(QADataset):
             all_of_cls[entity.cls].append(entity)
 
         q_a_pairs = []
-        json_text = None
         if self.train:
             if len(tables)>0:
                 if len(entity_link)>0:
@@ -293,10 +350,13 @@ class FormQA(QADataset):
                     probs = self.q_types_only_table
             else:
                 probs = self.q_types_no_table
+            if 'full_json' in probs.keys():
+                json_text = self.makeJsonText(entities,entity_link,tables)
             q_types = random.choices(list(probs.keys()),probs.values(),k=self.questions*50)
         else:
-            if 'full_json' in probs.keys():
-                q_types = ['full_json']
+            if 'full_json' in self.q_types:
+                q_types = [('full_json',None,None)]
+                son_text = self.makeJsonText(entities,entity_link,tables)
             else:
                 q_types = []
                 for cls in all_of_cls:
@@ -322,6 +382,7 @@ class FormQA(QADataset):
 
         #import pdb;pdb.set_trace()
 
+
         for q_type in q_types:
             if not self.train:
                 q_type,instance,switch = q_type
@@ -329,8 +390,8 @@ class FormQA(QADataset):
                 switch=False
 
             if q_type == 'full_json':
-                if json_text is None:
-                    json_text = self.makeJsonText(entities,entity_link,tables)
+                #if json_text is None:
+                #    json_text = self.makeJsonText(entities,entity_link,tables)
                 self.qaAdd(q_a_pairs,'json>',json_text)
             elif q_type == 'all':
                 if self.train:
@@ -1290,7 +1351,7 @@ class FormQA(QADataset):
                         table_map[i]=table_id+len(entities)
                         break
         
-        entities += tables
+        entities = entities+tables
         old_entities = entities
         #table_ids = list(range(len(entities)-len(tables),len(entities)))
         
@@ -1417,23 +1478,24 @@ class FormQA(QADataset):
 
                     #Is this a whole row/col/table super-header?
                     table_header = False
-                    if len(tail)==len(table.row_headers):
+                    if len(tail)>=len(table.row_headers):
                         table_header = True
-                        for t in tail:
-                            t_entity = old_entities[t]
-                            if t_entity not in table.row_headers:
+                        tail_entities = [old_entities[t] for t in tail]
+                        for r_h in table.row_headers:
+                            if r_h not in tail_entities:
                                 table_header = False
                                 break
-                    if not table_header and len(tail)==len(table.col_headers):
+
+                    if not table_header and len(tail)>=len(table.col_headers):
                         table_header = True
-                        for t in tail:
-                            t_entity = old_entities[t]
-                            if t_entity not in table.col_headers:
+                        tail_entities = [old_entities[t] for t in tail]
+                        for c_h in table.col_headers:
+                            if c_h not in tail_entities:
                                 table_header = False
                                 break
 
                     new_table_id = old_to_new[table_id]
-
+                    
                     if table_header:
                         new_entity_link.append((head,new_table_id))
                     else:
@@ -1449,8 +1511,26 @@ class FormQA(QADataset):
                     #not adding normal link
                     continue
 
-            else:
+            elif tail in old_to_new:
                 tail = old_to_new[tail]
+            elif new_entities[head].cls=='header':
+                #this actually is part of a table?
+                possible_header = old_entities[tail]
+                found=False
+                for table in tables:
+                    for header in table.row_headers+table.col_headers:
+                        if header==possible_header:
+                            header.text = '<<'+new_entities[head].text+'>> '+header.text
+                            found=True
+                            break
+                    if found:
+                        break
+                if not found:
+                    continue
+            else:
+                print('unhandeled case, probably {} {} is in a table'.format(tail,old_entities[tail]))
+                import pdb;pdb.set_trace()
+                print('ERROR')
             new_entity_link.append((head,tail))
         assert len(new_entity_link) == len(entity_link) or len(tables)>0
         entity_link = new_entity_link
@@ -1499,15 +1579,22 @@ class FormQA(QADataset):
                     doc.append(children)
 
                 elif entities[ei].cls == 'header':
-                    if children is not None:
-                        doc.append({'header':entities[ei],'questions':children})
-                    else:
-                        doc.append({'header':entities[ei]})
+                    doc.append(formatHeader(entities[ei],children))
+                    #if children is not None:
+                    #    doc.append({'header':entities[ei],'content':children})
+                    #else:
+                    #    doc.append({'header':entities[ei]})
                 else:
                     if children is not None:
-                        doc.append([entities[ei],children])
+                        assert entities[ei].cls=='question'
+                        doc.append(formatQuestion(entities[ei],children))
+                        #if len(children)>0:
+                        #    doc.append({'question':entities[ei],'answers':children})
+                        #else:
+                        #    doc.append({'question':entities[ei]})
                     else:
-                        doc.append(entities[ei])
+                        #assert entities[ei].cls=='other'
+                        doc.append(formatOther(entities[ei]))
 
 
         return json.dumps(doc,default=lambda a:a.text)
@@ -1517,7 +1604,7 @@ class FormQA(QADataset):
         if isinstance(entities[ei],Table):
             ret = {
                     'row headers': entities[ei].row_headers,
-                    'col headers': entities[ei].col_headers,
+                    'column headers': entities[ei].col_headers,
                     'cells': entities[ei].cells
                     }
         elif ei in link_dict:
@@ -1534,13 +1621,19 @@ class FormQA(QADataset):
                         if isinstance(entities[child],Table):
                             ret=next_children
                         elif entities[child].cls=='header':
-                            if next_children is not None:
-                                ret.append({'header':entities[child],'questions':next_children})
-                            else:
-                                ret.append({'header':entities[child]})
+                            ret.append(formatHeader(entities[child],next_children))
+                            #if next_children is not None:
+                            #    ret.append({'header':entities[child],'content':next_children})
+                            #else:
+                            #    ret.append({'header':entities[child]})
                         else:
                             if next_children is not None:
-                                ret.append([entities[child],next_children])
+                                assert entities[child].cls=='question'
+                                ret.append(formatQuestion(entities[child],next_children))
+                                #if len(next_children)>0:
+                                #    ret.append({'question':entities[child],'answers':next_children})
+                                #else:
+                                #    ret.append({'question':entities[child]})
                             else:
                                 ret.append(entities[child])
             elif entities[ei].cls=="question":
@@ -1557,4 +1650,25 @@ class FormQA(QADataset):
         else:
             ret = None
         return ret
-                
+ 
+#This formatting is specifically choosen so the autoregressive predicts the text and than the class
+def formatHeader(entity,children):
+    #return {'text':entity,
+    #        'header content': children if children is not None else []
+    #        }
+    ret = {entity.text:'header'}
+    if children is not None:
+        ret['content']=children
+    return ret
+def formatQuestion(entity,children):
+    #return {'text':entity,
+    #        'question answers': children if children is not None else []
+    #        }
+    ret = {entity.text:'question'}
+    if len(children)>0:
+        ret['answers']=children
+    return ret
+def formatOther(entity):
+    #return {'text':entity}
+    return {entity.text:entity.cls}
+            

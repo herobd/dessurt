@@ -123,7 +123,10 @@ def createLines(annotations,classMap,scale):
 
 rulebook={
         '0011838621': [ ('add link',29,32),
-                         ('add link',29,7)
+                         ('add link',29,7),
+                         ('change class',60,'answer'),
+                         ('change class',61,'answer'),
+                         ('change text',61,'M. D. Davis'),
                          ],
 
         '0000999294': [
@@ -155,6 +158,133 @@ rulebook={
         '0011973451': [
                          ('add link',13,4)
                          ],
+        '0060029036': [
+            ('change class',42,'header'),
+            ('add link',42,43),
+            ('add link',42,44),
+            ('add link',42,45),
+            ('change class',35,'header'),
+            ('add link',35,36),
+            ('add link',35,11),
+            ('add link',35,12),
+            ],
+        '0060094595': [
+            ('change class',24,'header'),
+            ('change class',27,'header'),
+            ('change class',50,'header'),
+            ('change text',50,'Burn Test'),
+
+            ('add link',50,51),
+            ('add link',50,52),
+            ('add link',50,53),
+            ('add link',50,53),
+            ('add link',50,54),
+            ('add link',50,55),
+            ('add link',50,56),
+
+             ('add link',27,0),
+             ('add link',27,1),
+             ('add link',27,2),
+             ('add link',27,3),
+             ('add link',27,36),
+
+            ],
+        '01073843': [
+                #85, 86,87,88,89,90
+                ('change class',94,'header'),
+                ('change text',94,'COMPOUND (ug plate)'),
+                ('change class',24,'question'),
+                ('change class',25,'question'),
+                ('change class',26,'question'),
+                ('add link',24,30),
+                ('add link',86,30),
+                ('add link',24,61),
+                ('add link',88,61),
+                ('add link',24,63),
+                ('add link',90,63),
+                ('add link',25,29),#1.10 
+                ('add link',85,29),#1.10 
+                ('add link',25,31),#1.12
+                ('add link',86,31),#1.12
+                ('add link',25,33),#1.07
+                ('add link',87,33),#1.07
+                ('add link',25,59),#.82
+                ('add link',88,59),#.82
+                ('add link',25,62),#.78
+                ('add link',89,62),#.78
+                ('add link',25,64),#.71
+                ('add link',90,64),#.71
+                ('add link',26,32),
+                ('add link',86,32),
+                ('add link',26,60),
+                ('add link',88,60),
+                ('add link',26,65),
+                ('add link',90,65),
+
+                ('change class',97,'header'),
+                ('change class',35,'question'),
+                ('change class',36,'question'),
+                ('add link',35,39),
+                ('add link',35,43),
+                ('add link',35,47),
+                ('add link',35,51),
+                ('add link',35,55),
+                ('add link',35,57),
+                ('add link',36,40),
+                ('add link',36,44),
+                ('add link',36,48),
+                ('add link',36,52),
+                ('add link',36,56),
+                ('add link',36,58),
+
+
+                ('add link',85,39),
+                ('add link',86,43),
+                ('add link',87,47),
+                ('add link',88,51),
+                ('add link',89,55),
+                ('add link',90,57),
+                ('add link',85,40),
+                ('add link',86,44),
+                ('add link',87,48),
+                ('add link',88,52),
+                ('add link',89,56),
+                ('add link',90,58),
+
+                ('change class',13,'header'),
+                ('change class',37,'question'),
+                ('change class',38,'question'),
+                ('add link',37,41),
+                ('add link',37,45),
+                ('add link',37,49),
+                ('add link',37,53),
+                ('add link',38,42),
+                ('add link',38,46),
+                ('add link',38,50),
+                ('add link',38,54),
+
+                ('add link',85,41),
+                ('add link',86,45),
+                ('add link',87,49),
+                ('add link',88,53),
+                ('add link',85,42),
+                ('add link',86,46),
+                ('add link',87,50),
+                ('add link',88,54),
+
+                ('remove link',95,30),
+                ('remove link',95,31),
+                ('remove link',95,32),
+                ('remove link',95,33),
+                ('remove link',95,59),
+                ('remove link',95,60),
+                ('remove link',95,61),
+                ('remove link',95,62),
+                ('remove link',95,63),
+                ('remove link',95,64),
+                ('remove link',95,65),
+
+                ],
         }
 #'change text': [id,text]
 
