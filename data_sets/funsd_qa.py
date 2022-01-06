@@ -81,6 +81,8 @@ class FUNSDQA(FormQA):
                 ##DEBUG
                 #if '0011973451' not in image_name:
                 #    continue
+                #if len(self.images)==0 and '01073843' not in image_name:
+                #    continue
                 ##DEBUG
 
                 org_path = imagePath
@@ -222,11 +224,12 @@ class FUNSDQA(FormQA):
                 #removed.add(gi)
 
 
+        #import pdb;pdb.set_trace()
         entities,groups_adj = cleanUp(entities,groups_adj)
         group_count = len(entities)
 
         #for i,entity in enumerate(entities):
-        #    if entity.text=='$250':
+        #    if entity.text=='Dollar Cost':
         #        DDD=i
 
 
@@ -299,7 +302,7 @@ class FUNSDQA(FormQA):
         merged_groups = {}
         for qi,ais in relationships_q_a.items():
             #if DDD in ais:
-             #   import pdb;pdb.set_trace()
+            #    import pdb;pdb.set_trace()
             if qi in skip:
                 continue
             if len(ais)==1:
@@ -807,56 +810,97 @@ class FUNSDQA(FormQA):
 
             #if '\\' in new_entities[row_h].text:
                 #row_h_split_candidates.append((row_h,r))
+        
+        if len(double_assigned)>0:
+            #Can split rows?
+            can_split_rows= len(col_h_split_candidates)==0
+            if can_split_rows:
+                for tab_pos,split_row_h,r in row_h_split_candidates:
+                    if len(new_entities[row_h].lines)!=2:
+                        can_split_rows=False
+                        break
 
-        for tab_pos,split_row_h,r in row_h_split_candidates:
-            if len(new_entities[row_h].lines)==2:
-                #we'll split these lines
-                top_header = Entity(new_entities[split_row_h].cls,new_entities[split_row_h].lines[0:1])
-                top_yc = (top_header.box[1]+top_header.box[5])/2
-                bot_header = Entity(new_entities[split_row_h].cls,new_entities[split_row_h].lines[1:])
-                bot_yc = (bot_header.box[1]+bot_header.box[5])/2
+            if can_split_rows:
+                #Okay, get those rows split!
+                for tab_pos,split_row_h,r in row_h_split_candidates:
+                    #if len(new_entities[row_h].lines)==2:
+                    #we'll split these lines
+                    top_header = Entity(new_entities[split_row_h].cls,new_entities[split_row_h].lines[0:1])
+                    top_yc = (top_header.box[1]+top_header.box[5])/2
+                    bot_header = Entity(new_entities[split_row_h].cls,new_entities[split_row_h].lines[1:])
+                    bot_yc = (bot_header.box[1]+bot_header.box[5])/2
 
-                real_tables[tab_pos].cells[r]=[None]*len(real_tables[tab_pos].col_headers)
-                real_tables[tab_pos].cells.insert(r+1,[None]*len(real_tables[tab_pos].col_headers))
+                    real_tables[tab_pos].cells[r]=[None]*len(real_tables[tab_pos].col_headers)
+                    real_tables[tab_pos].cells.insert(r+1,[None]*len(real_tables[tab_pos].col_headers))
 
-                real_tables[tab_pos].row_headers[r]=top_header
-                real_tables[tab_pos].row_headers.insert(r+1,bot_header)
+                    real_tables[tab_pos].row_headers[r]=top_header
+                    real_tables[tab_pos].row_headers.insert(r+1,bot_header)
 
-                new_entities[split_row_h]=top_header
-                bot_row_h = len(new_entities)
-                new_entities.append(bot_header)
+                    new_entities[split_row_h]=top_header
+                    bot_row_h = len(new_entities)
+                    new_entities.append(bot_header)
 
-                for i in range(len(new_table_values)):
-                    tab_id,col_h,row_h,v = new_table_values[i]
-                    if split_row_h == row_h:
-                        #which one is it assigned to?
-                        yc = (new_entities[v].box[1]+new_entities[v].box[5])/2
-                        dist_top = abs(top_yc-yc)
-                        dist_bot = abs(bot_yc-yc)
-                        c = all_col_entity_ids[tab_pos].index(col_h) if col_h is not None else blank_col_pos[v]
-                        if dist_bot<dist_top:
-                            new_table_values[i] = (tab_id,col_h,bot_row_h,v)
-                            real_tables[tab_pos].cells[r+1][c] = new_entities[v]
-                        else:
-                            real_tables[tab_pos].cells[r][c] = new_entities[v]
+                    for i in range(len(new_table_values)):
+                        tab_id,col_h,row_h,v = new_table_values[i]
+                        if split_row_h == row_h:
+                            #which one is it assigned to?
+                            yc = (new_entities[v].box[1]+new_entities[v].box[5])/2
+                            dist_top = abs(top_yc-yc)
+                            dist_bot = abs(bot_yc-yc)
+                            c = all_col_entity_ids[tab_pos].index(col_h) if col_h is not None else blank_col_pos[v]
+                            if dist_bot<dist_top:
+                                new_table_values[i] = (tab_id,col_h,bot_row_h,v)
+                                real_tables[tab_pos].cells[r+1][c] = new_entities[v]
+                            else:
+                                real_tables[tab_pos].cells[r][c] = new_entities[v]
             else:
-                raise NotImplementedError('only assuming newline splits')
+                #Just double assign each cell 
+                newer_to_new_entities=list(range(len(new_entities)))
+                for (tab_pos,r,c),cells in double_assigned.items():
+                    #read-order the entities
+                    cells.sort(key=lambda a:a.box[1])
+                    lines=[]
+                    cls = cells[0].cls
+                    i=0
+                    while i<len(cells):
+                        assert cells[i].cls==cls
+                        j=i+1
+                        while j<len(cells) and cells[j].box[1]-cells[i].box[1]<5:
+                            j+=1
 
-        if len(col_h_split_candidates)>0:
-            raise NotImplementedError('assuming no col splits')
+                        row = cells[i:j]
+                        row.sort(key=lambda a:a.box[0])
+                        for entity in row:
+                            lines+=entity.lines
+                        i=j
+                    new_e = Entity(cls,lines)
+                    real_tables[tab_pos].cells[r][c]=new_e
 
-        
-        
+                    to_remove = []
+                    for i,e in enumerate(new_entities):
+                        if e in cells:
+                            to_remove.append(i)
+                    to_remove.sort(reverse=True)
+                    for i in to_remove:
+                        del new_entities[i]
+                        del newer_to_new_entities[i]
+                    new_entities.append(new_e)
 
-        ##DEBUG
-        for head,tail in entity_link:
-            assert new_entities[head].cls!='answer'
-            if tail is not None:
-                if isinstance(tail,list):
-                    for t in tail:
-                        assert new_entities[head].text != new_entities[t].text
-                else:
-                    assert new_entities[head].text != new_entities[tail].text
+                new_to_newer = {j:i for i,j in enumerate(newer_to_new_entities)}
+                new_entity_link=[]
+                for head,tail in entity_link:
+                    head = new_to_newer[head]
+                    if tail is not None:
+                        if isinstance(tail,list):
+                            tail = [new_to_newer[t] for t in tail]
+                        else:
+                            tail = new_to_newer[tail]
+                        new_entity_link.append((head,tail))
+                entity_link = new_entity_link
+
+
+                
+
         return new_entities,entity_link,real_tables
 
     def prepareFormRaw(self,bbs,transcription,groups,groups_adj):
@@ -1024,19 +1068,40 @@ def cleanUp(entities,entity_adj):
                 #y_diff1 = entity.box[9]-entities[links_to_questions[0]].box[9]#center y
                 #x_diff2 = entity.box[12]-entities[links_to_questions[1]].box[12]#center x
                 #y_diff2 = entity.box[9]-entities[links_to_questions[1]].box[9]#center y
+                #these need written more robustly
+                #first_left_of = max(first[::2])-5<min(entity.box[::2])
+                #first_right_of = min(first[::2])+5>max(entity.box[::2])
+                #first_top_of = max(first[1::2])-5<min(entity.box[1::2])
+                #first_bottom_of = min(first[1::2])+5>max(entity.box[1::2])
 
-                first_left_of = max(first[::2])-5<min(entity.box[::2])
-                first_right_of = min(first[::2])+5>max(entity.box[::2])
-                first_top_of = max(first[1::2])-5<min(entity.box[1::2])
-                first_bottom_of = min(first[1::2])+5>max(entity.box[1::2])
+                first_left_dist = min(entity.box[::2])-max(first[::2])
+                first_right_dist = min(first[::2])-max(entity.box[::2])
+                first_top_dist = min(entity.box[1::2])-max(first[1::2])
+                first_bot_dist = min(first[1::2])-max(entity.box[1::2])
+
+                first_left_of = first_left_dist > max(first_top_dist,first_bot_dist)
+                first_right_of = first_right_dist > max(first_top_dist,first_bot_dist)
+                first_top_of = first_top_dist > max(first_left_dist,first_right_dist)
+                first_bottom_of = first_bot_dist > max(first_left_dist,first_right_dist)
 
                 first_is_row_header = first_left_of or first_right_of
                 first_is_col_header = first_top_of or first_bottom_of
 
-                second_left_of = max(second[::2])-5<min(entity.box[::2])
-                second_right_of = min(second[::2])+5>max(entity.box[::2])
-                second_top_of = max(second[1::2])-5<min(entity.box[1::2])
-                second_bottom_of = min(second[1::2])+5>max(entity.box[1::2])
+                #second_left_of = max(second[::2])-5<min(entity.box[::2])
+                #second_right_of = min(second[::2])+5>max(entity.box[::2])
+                #second_top_of = max(second[1::2])-5<min(entity.box[1::2])
+                #second_bottom_of = min(second[1::2])+5>max(entity.box[1::2])
+
+                second_left_dist = min(entity.box[::2])-max(second[::2])
+                second_right_dist = min(second[::2])-max(entity.box[::2])
+                second_top_dist = min(entity.box[1::2])-max(second[1::2])
+                second_bot_dist = min(second[1::2])-max(entity.box[1::2])
+
+                second_left_of = second_left_dist > max(second_top_dist,second_bot_dist)
+                second_right_of = second_right_dist > max(second_top_dist,second_bot_dist)
+                second_top_of = second_top_dist > max(second_left_dist,second_right_dist)
+                second_bottom_of = second_bot_dist > max(second_left_dist,second_right_dist)
+
 
                 second_is_row_header = second_left_of or second_right_of
                 second_is_col_header = second_top_of or second_bottom_of
@@ -1067,11 +1132,15 @@ def cleanUp(entities,entity_adj):
                 if first_is_row_header==first_is_col_header:
                     #bad=True
                     #print('{} has ambiguous header {}'.format(entity,entities[links_to_questions[0]]))
+                    #if i==35 or i==13:
+                    #    import pdb;pdb.set_trace()
                     adj_to_remove.add((i,links_to_questions[0]))
                     adj_to_remove.add((links_to_questions[0],i))
                 elif second_is_row_header==second_is_col_header:
                     #bad=True
                     #print('{} has ambiguous header {}'.format(entity,entities[links_to_questions[1]]))
+                    #if i==35 or i==13:
+                    #    import pdb;pdb.set_trace()
                     adj_to_remove.add((i,links_to_questions[1]))
                     adj_to_remove.add((links_to_questions[1],i))
 
@@ -1081,6 +1150,8 @@ def cleanUp(entities,entity_adj):
                     #        entity,
                     #        entities[links_to_questions[0]],
                     #        entities[links_to_questions[1]]))
+                    #if i==35 or i==13:
+                    #    import pdb;pdb.set_trace()
                     r = int(random.random()<0.5)
                     adj_to_remove.add((i,links_to_questions[r]))
                     adj_to_remove.add((links_to_questions[r],i))
