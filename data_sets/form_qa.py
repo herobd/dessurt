@@ -212,7 +212,7 @@ class FormQA(QADataset):
         if self.train:
             if use_json:
                 self.q_types = {
-                        'full_json': 4,
+                        'full_json': 10,
                         'np':0.2,
                         #'all':1.0,
                         #'class-link':1.3,
@@ -242,7 +242,7 @@ class FormQA(QADataset):
                         'count-tables':0.01
                         }
                 self.q_types_only_table = {
-                        'full_json': 4,
+                        'full_json': 11,
                         'np':0.2,
                         #'all':1.0,
                         #'class-link':1.3,
