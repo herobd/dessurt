@@ -135,15 +135,15 @@ class QADataset(torch.utils.data.Dataset):
 
 
     def qaAdd(self,qa,question,answer,bb_ids=None,in_bbs=[],out_bbs=None,mask_bbs=[]):
-        if all([pair['question']!=question for pair in qa]): #prevent duplicate q
-            qa.append({
-                'question':question,
-                'answer':answer,
-                'bb_ids':bb_ids,
-                'in_bbs':in_bbs,
-                'out_bbs':out_bbs,
-                'mask_bbs':mask_bbs
-                })
+        #aif all([(pair['question']!=question or  for pair in qa]): #prevent duplicate q
+        qa.append({
+            'question':question,
+            'answer':answer,
+            'bb_ids':bb_ids,
+            'in_bbs':in_bbs,
+            'out_bbs':out_bbs,
+            'mask_bbs':mask_bbs
+            })
 
     def __getitem__(self,index):
         return self.getitem(index)
