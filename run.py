@@ -27,7 +27,7 @@ except:
 def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do_saliency=False,overwrite_char_prob=False):
     np.random.seed(1234)
     torch.manual_seed(1234)
-    no_mask_qs = ['fli:','fna:','re~','l~','v~', 'mm~','mk>']
+    no_mask_qs = ['fli:','fna:','re~','l~','v~', 'mm~','mk>','natrual_q~']
     remove_qs = ['rm>','mlm>','mm~','mk>']
     if resume is not None:
         checkpoint = torch.load(resume, map_location=lambda storage, location: storage)
