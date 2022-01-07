@@ -22,7 +22,8 @@ def display(data):
         mask = data['img'][b,1]<0
         img[:,:,0] *= ~mask
         img[:,:,1] *= ~show
-        img[:,:,2] *= 1-data['mask_label'][b,0]
+        if data['mask_label'] is not None:
+            img[:,:,2] *= 1-data['mask_label'][b,0]
         #label = data['label']
         #gt = data['gt'][b]
         #print(label[:data['label_lengths'][b],b])
@@ -43,11 +44,13 @@ def display(data):
 
         #widths.append(img.size(1))
         draw = False
-        for x in ['json>']:#['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
-            if x in q and 'row head' in a:
-                draw = True
-                break
+        #for x in ['json>']:#['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
+        #    if x in q and '<<' in a:
+        #        draw = True
+        #        break
         #draw = draw and '\\' in a
+        if 'json' not in q and ('>>' in a or '>>' in q):
+            draw = True
 
         #draw=True
         if draw :
@@ -102,7 +105,7 @@ if __name__ == "__main__":
         'questions':1,
         'do_words': False,
         'char_qs': "full",
-        'max_qa_len': 26,
+        'max_qa_len': 2000,
         "cased": True,
         "words": True,
         "use_json": True

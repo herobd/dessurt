@@ -84,6 +84,12 @@ mk_firsttoken_top50 mean:0.6045,  std:0.4889578202667384
 mk_firsttoken_top100 mean:0.679,  std:0.4668607929565301
 score_ed mean:0.7479832648067508,  std:0.34476024273970995
 
+distil+paraCqa+cdipC_noDistill_mmswin_bart_deep_PTfrom69i328k_71 560641
+mk_firsttoken_top10 mean:0.4505,  std:0.4975437166722136
+mk_firsttoken_top50 mean:0.6005,  std:0.48979562064191634
+mk_firsttoken_top100 mean:0.6815,  std:0.46589456961849207
+score_ed mean:0.7508156018786487,  std:0.36316984474437
+
 distilGN+paraCqa+cdipC_mmswin_bart_deep_PTfrom80_85 148736
 mk_firsttoken_top10 mean:0.447,  std:0.4971830648765101
 mk_firsttoken_top50 mean:0.602,  std:0.4894854441145313
@@ -95,6 +101,13 @@ mk_firsttoken_top10 mean:0.4505,  std:0.4975437166722136
 mk_firsttoken_top50 mean:0.5965,  std:0.4905993783118768
 mk_firsttoken_top100 mean:0.683,  std:0.4653074252577537
 score_ed mean:0.771295460046578,  std:0.3604420235537048
+
+distilGN+paraCqa+cdipC_mmswin_bart_deep_PTfrom80_85 241921
+mk_firsttoken_top10 mean:0.4435,  std:0.49679749395503187
+mk_firsttoken_top50 mean:0.603,  std:0.48927599573246994
+mk_firsttoken_top100 mean:0.6685,  std:0.47075232341434065
+score_ed mean:0.7736319315827956,  std:0.3591052741535349
+
 
 distil+paraCqa+cdipC_mmswin_bart_deep_PTfrom67i280k_70 67328
 mk_firsttoken_top10 mean:0.419,  std:0.493395378981198
@@ -143,6 +156,12 @@ mk_firsttoken_top50 mean:0.6145,  std:0.4867132112445685
 mk_firsttoken_top100 mean:0.6855,  std:0.46431643304970366
 score_ed mean:0.7365669198273636,  std:0.35826154380120234
 
+distil+paraCqa+cdipC_noDistill_mmswin_bart_PTfrom50i260k_69 947457
+mk_firsttoken_top10 mean:0.465,  std:0.4987734956871706
+mk_firsttoken_top50 mean:0.6215,  std:0.4850131441517848
+mk_firsttoken_top100 mean:0.69,  std:0.462493243193887
+score_ed mean:0.7363613560797937,  std:0.35796520286115535
+
 distilGN+paraCqa+cdipC_mmswin_bart_PTfrom69i576k_78 283392
 mk_firsttoken_top10 mean:0.454,  std:0.49787950349457055
 mk_firsttoken_top50 mean:0.6055,  std:0.48874303064084706
@@ -166,6 +185,12 @@ mk_firsttoken_top10 mean:0.43,  std:0.4950757517794625
 mk_firsttoken_top50 mean:0.5925,  std:0.491369260332797
 mk_firsttoken_top100 mean:0.6595,  std:0.4738773575515082
 score_ed mean:0.775101131851733,  std:0.35926772884574476
+
+distilGN+paraCqa+cdipC_mmswin_bart_PTfrom50i260k_79 365825
+mk_firsttoken_top10 mean:0.443,  std:0.49674037484384126
+mk_firsttoken_top50 mean:0.602,  std:0.4894854441145313
+mk_firsttoken_top100 mean:0.673,  std:0.46911725613112976
+score_ed mean:0.7767245871921454,  std:0.3457157871386456
 
 
 squad+iamqa+distil+paraCqa+cdipC_noDistill_mmswin_bart_PTfrom65i351k_73 63488
@@ -210,6 +235,11 @@ E_ANLS mean:0.6405274921852738,  std:0.432247051142594
 
 ==============================================
 ==DocVQA== (autoregressive)
+
+docvqa_mmswin_bart_PTfrom73i65k_74 153856
+natural_q~_ED mean:0.8377922347992975,  std:0.5075729827370611
+E_ANLS mean:0.2187804305257047,  std:0.35555366300280383
+
 docvqa_mmswin_bart_PTfrom73i65k_74 419328
 natural_q~_ED mean:0.8264636540104815,  std:0.4834273488220953
 E_ANLS mean:0.20433641062716562,  std:0.3512761158530062
@@ -221,6 +251,7 @@ E_ANLS mean:0.18667215168822252,  std:0.33922349901250715
 docvqa_mmswin_bart_PTfrom73i219k_84 337408
 natural_q~_ED mean:0.9090783245575218,  std:0.4973133404078315
 E_ANLS mean:0.1755052386899585,  std:0.33325558094831037
+
 
 ============================
 
@@ -281,6 +312,19 @@ old Total entity recall, prec, Fm:      0.6983372921615202      0.64052287581699
 New Total entity recall, prec, Fm:      0.7066508313539193      0.6481481481481481      0.6761363636363636
 old Total rel recall, prec, Fm: 0.35658914728682173     0.28615863141524106     0.3175150992234685
 New Total rel recall, prec, Fm: 0.36627906976744184     0.2990506329113924      0.3292682926829268
+
+funsd_mmswin_bart_PTfrom69i582k_82 401664
+old Total entity recall, prec, Fm:      0.71      0.65      0.68
+New Total entity recall, prec, Fm:      0.734      0.673202614379085       0.7022727272727273
+old Total rel recall, prec, Fm: 0.40891472868217055     0.3093841642228739      0.35225375626043404
+New Total rel recall, prec, Fm: 0.44573643410852715     0.31767955801104975     0.3709677419354839
+
+funsd+table_mmswin_bart_PTfrom69i580k_81 391168
+old Total entity recall, prec, Fm:      0.734   0.673   0.702
+New Total entity recall, prec, Fm:      0.727   0.667   0.695
+old Total rel recall, prec, Fm: 0.409   0.311   0.353
+New Total rel recall, prec, Fm: 0.424   0.341   0.378
+
 
 
 =======

@@ -7,7 +7,7 @@ import json
 import os
 import math, random, string
 from collections import defaultdict, OrderedDict
-from utils.funsd_annotations import createLines
+from utils.funsd_annotations import createLines, fixFUNSD
 import timeit
 from data_sets.form_qa import FormQA,collate, Line, Entity, Table
 
@@ -78,6 +78,13 @@ class FUNSDQA(FormQA):
                     exit()
             self.images=[]
             for image_name,imagePath,jsonPath in imagesAndAnn:
+                ##DEBUG
+                #if '0011973451' not in image_name:
+                #    continue
+                #if len(self.images)==0 and '01073843' not in image_name:
+                #    continue
+                ##DEBUG
+
                 org_path = imagePath
                 if self.cache_resized:
                     path = os.path.join(self.cache_path,image_name)
@@ -130,6 +137,8 @@ class FUNSDQA(FormQA):
         #    numClasses+=1
         #if usePairedClass:
         #    numClasses+=1
+
+        fixFUNSD(annotations)
 
         numClasses=len(self.classMap)
         #if self.split_to_lines:
@@ -207,14 +216,22 @@ class FUNSDQA(FormQA):
                     lines.append(Line(transcription[bbid],bbs[bbid,:16]))
             if len(lines)>0:
                 entities.append(Entity(cls_name,lines))
+                #if entities[-1].text=='$250':
+                #    BBB=len(entities)-1
+                #    print('BBB {}'.format(BBB))
             else:
                 entities.append(None)
                 #removed.add(gi)
 
 
-
+        #import pdb;pdb.set_trace()
         entities,groups_adj = cleanUp(entities,groups_adj)
         group_count = len(entities)
+
+        #for i,entity in enumerate(entities):
+        #    if entity.text=='Dollar Cost':
+        #        DDD=i
+
 
         questions_gs=set()
         answers_gs=set()
@@ -277,13 +294,15 @@ class FUNSDQA(FormQA):
         q_a_pairs=defaultdict(list)
         #table_map = {}
         #tables=[]
-        table_values={}
+        table_values=defaultdict(set)
         row_headers=set()
         col_headers=set()
         skip=set()
         
         merged_groups = {}
         for qi,ais in relationships_q_a.items():
+            #if DDD in ais:
+            #    import pdb;pdb.set_trace()
             if qi in skip:
                 continue
             if len(ais)==1:
@@ -463,10 +482,12 @@ class FUNSDQA(FormQA):
         header_to_table_id={}
         cur_table_id=0
         new_table_values=[]
-        for (col_h,row_h),v in table_values.items():
+
+        #seperate into different tables
+        for (col_h,row_h) in table_values.keys():
             col_h = old_to_new_e_map[col_h] if col_h is not None else None
             row_h = old_to_new_e_map[row_h] if row_h is not None else None
-            v = old_to_new_e_map[v]
+            #v = old_to_new_e_map[v]
 
             if col_h is not None and col_h in header_to_table_id:
                 col_tab = header_to_table_id[col_h]
@@ -517,10 +538,10 @@ class FUNSDQA(FormQA):
         #Rebuild table_values with table ids
         blank_col = defaultdict(lambda:defaultdict(list))
         blank_row = defaultdict(lambda:defaultdict(list))
-        for (col_h,row_h),v in table_values.items():
+        for (col_h,row_h),vs in table_values.items():
             col_h = old_to_new_e_map[col_h] if col_h is not None else None
             row_h = old_to_new_e_map[row_h] if row_h is not None else None
-            v = old_to_new_e_map[v]
+            vs = [old_to_new_e_map[v] for v in vs]
             
             if col_h is not None:
                 tab_id = header_to_table_id[col_h]
@@ -528,12 +549,13 @@ class FUNSDQA(FormQA):
                     assert tab_id == header_to_table_id[row_h]
             else:
                 tab_id = header_to_table_id[row_h]
-
-            new_table_values.append((tab_id,col_h,row_h,v))
+            
+            for v in vs:
+                new_table_values.append((tab_id,col_h,row_h,v))
             if col_h is None:
-                blank_col[tab_id][row_h].append(v)
+                blank_col[tab_id][row_h]+=vs
             elif row_h is None:
-                blank_row[tab_id][col_h].append(v)
+                blank_row[tab_id][col_h]+=vs
             #x,y = bbs[groups[v][0],0:2]
             #if col_h is not None:
             #    col_vs[col_h].append((v,y))
@@ -573,8 +595,10 @@ class FUNSDQA(FormQA):
 
             #first make a list with the headers and their x m=position
             pos_col_hs = [(new_entities[ch].box[0],ch) for ch in col_hs if ch is not None]
+            centerx_col_headers = [((new_entities[ch].box[0]+new_entities[ch].box[4])/2,ch) for ch in col_hs if ch is not None]
             if None in col_hs:
                 #We also need to find where the columns without headers go
+                #Also, often cells may be mislabeled, so we should check if they have a good header candidiate
                 #how many blank columns are there?
                 #We will seperate cells with no header by their x position
                 #first compute the average width
@@ -614,7 +638,27 @@ class FUNSDQA(FormQA):
                 for blank_col_items,positions in zip(blank_cols_items,columns_xs):
                     #Now add these columns to list with positions, we use the column cell ids instead of the header id
                     x_center = np.mean(positions)
-                    pos_col_hs.append((x_center,blank_col_items))
+                    add_to=None
+                    for h_x_center,col_h in centerx_col_headers:
+                        if abs(x_center - h_x_center) < avg_len*0.6:
+                            #add to this column instead
+                            add_to = col_h
+                            break
+
+                    if add_to is None:
+                        pos_col_hs.append((x_center,blank_col_items))
+                    else:
+                        #we need to update the new_table_values entries
+                        for v in blank_col_items:
+                            added=False
+                            for i in range(len(new_table_values)):
+                                tab_id2,col_h,row_h,v2 = new_table_values[i]
+                                if v==v2:
+                                    assert col_h is None
+                                    new_table_values[i] = (tab_id,add_to,row_h,v)
+                                    added=True
+                                    break
+                            assert added
 
             pos_col_hs.sort(key=lambda x:x[0])
             col_entities = []#ordered list used to create Table object
@@ -636,6 +680,7 @@ class FUNSDQA(FormQA):
             ##Get rows sorted
             #same as col
             pos_row_hs = [(new_entities[rh].box[1],rh) for rh in row_hs if rh is not None]
+            centery_row_headers = [((new_entities[rh].box[1]+new_entities[rh].box[5])/2,rh) for rh in row_hs if rh is not None]
             if None in row_hs:
                 #how many blank rows are there?
                 sum_height=0
@@ -653,7 +698,7 @@ class FUNSDQA(FormQA):
                 for row_h,values in blank_row[tab_id].items():
                     for value in values:
                         cell = new_entities[value]
-                        y_center = (cell.box[0]+cell.box[4])/2
+                        y_center = (cell.box[1]+cell.box[5])/2
                         matched_row_id=None
                         for row_id,row in enumerate(rows_ys):
                             if abs(y_center-np.mean(row))<avg_height:
@@ -668,7 +713,29 @@ class FUNSDQA(FormQA):
 
                 for blank_row_items,positions in zip(blank_rows_items,rows_ys):
                     y_center = np.mean(positions)
-                    pos_row_hs.append((y_center,blank_row_items))
+
+                    add_to=None
+                    for h_y_center,row_h in centery_row_headers:
+                        if abs(y_center - h_y_center) < avg_height*0.6:
+                            #add to this row instead
+                            add_to = row_h
+                            break
+
+                    if add_to is None:
+                        pos_row_hs.append((y_center,blank_row_items))
+                    else:
+                        #we need to update the new_table_values entries
+                        for v in blank_row_items:
+                            added=False
+                            for i in range(len(new_table_values)):
+                                tab_id2,col_h,row_h,v2 = new_table_values[i]
+                                if v==v2:
+                                    assert row_h is None
+                                    new_table_values[i] = (tab_id,col_h,add_to,v)
+                                    added=True
+                                    break
+                            assert added
+
 
             pos_row_hs.sort(key=lambda y:y[0])
             row_entities = []
@@ -689,25 +756,151 @@ class FUNSDQA(FormQA):
             tab_id_to_pos[tab_id] = len(real_tables)
             real_tables.append(Table(row_entities,col_entities))
 
+        double_assigned=defaultdict(list)
+        reverse_row_index=defaultdict(set)
+        reverse_col_index=defaultdict(set)
         for tab_id, col_h, row_h, v in new_table_values:
             tab_pos = tab_id_to_pos[tab_id]
             #Lookup poition of v in Table
             try:
                 r = all_row_entity_ids[tab_pos].index(row_h) if row_h is not None else blank_row_pos[v]
                 c = all_col_entity_ids[tab_pos].index(col_h) if col_h is not None else blank_col_pos[v]
-                real_tables[tab_pos].cells[r][c]=new_entities[v]
+                reverse_row_index[r].add(row_h)
+                reverse_col_index[c].add(col_h)
+                if real_tables[tab_pos].cells[r][c] is None: #shouldn't write twice
+                    real_tables[tab_pos].cells[r][c]=new_entities[v]
+                else:
+                    if len(double_assigned[(tab_pos,r,c)])==0:
+                        double_assigned[(tab_pos,r,c)].append(real_tables[tab_pos].cells[r][c])
+                    double_assigned[(tab_pos,r,c)].append(new_entities[v])
+
             except ValueError:
                 pass
 
-        ##DEBUG
-        for head,tail in entity_link:
-            assert new_entities[head].cls!='answer'
-            if tail is not None:
-                if isinstance(tail,list):
-                    for t in tail:
-                        assert new_entities[head].text != new_entities[t].text
-                else:
-                    assert new_entities[head].text != new_entities[tail].text
+        #resolve double assignment
+        row_h_split_candidates=set()
+        col_h_split_candidates=set()
+        for (tab_pos,r,c),cells in double_assigned.items():
+            assert len(cells)==2 #I'm not sure what to do with more...
+            assert len(reverse_row_index[r])==1
+            assert len(reverse_col_index[c])==1
+
+            row_h = next(iter(reverse_row_index[r]))
+            col_h = next(iter(reverse_col_index[c]))
+
+            #are the cells verticle or horizontally stacked?
+            min_x=max_x=(cells[0].box[0]+cells[0].box[4])/2
+            min_y=max_y=(cells[0].box[1]+cells[0].box[5])/2
+            for cell in cells[1:]:
+                xc = (cell.box[0]+cell.box[4])/2
+                yc = (cell.box[1]+cell.box[5])/2
+                min_x = min(min_x,xc)
+                max_x = max(max_x,xc)
+                min_y = min(min_y,yc)
+                max_y = max(max_y,yc)
+
+            y_diff = max_y - min_y
+            x_diff = max_x - min_x
+
+            if y_diff>x_diff:
+                #row_h_split_candidates[row_h]+=cells
+                row_h_split_candidates.add((tab_pos,row_h,r))
+            else:
+                col_h_split_candidates.add((tab_pos,col_h,c))
+
+            #if '\\' in new_entities[row_h].text:
+                #row_h_split_candidates.append((row_h,r))
+        
+        if len(double_assigned)>0:
+            #Can split rows?
+            can_split_rows= len(col_h_split_candidates)==0
+            if can_split_rows:
+                for tab_pos,split_row_h,r in row_h_split_candidates:
+                    if len(new_entities[row_h].lines)!=2:
+                        can_split_rows=False
+                        break
+
+            if can_split_rows:
+                #Okay, get those rows split!
+                for tab_pos,split_row_h,r in row_h_split_candidates:
+                    #if len(new_entities[row_h].lines)==2:
+                    #we'll split these lines
+                    top_header = Entity(new_entities[split_row_h].cls,new_entities[split_row_h].lines[0:1])
+                    top_yc = (top_header.box[1]+top_header.box[5])/2
+                    bot_header = Entity(new_entities[split_row_h].cls,new_entities[split_row_h].lines[1:])
+                    bot_yc = (bot_header.box[1]+bot_header.box[5])/2
+
+                    real_tables[tab_pos].cells[r]=[None]*len(real_tables[tab_pos].col_headers)
+                    real_tables[tab_pos].cells.insert(r+1,[None]*len(real_tables[tab_pos].col_headers))
+
+                    real_tables[tab_pos].row_headers[r]=top_header
+                    real_tables[tab_pos].row_headers.insert(r+1,bot_header)
+
+                    new_entities[split_row_h]=top_header
+                    bot_row_h = len(new_entities)
+                    new_entities.append(bot_header)
+
+                    for i in range(len(new_table_values)):
+                        tab_id,col_h,row_h,v = new_table_values[i]
+                        if split_row_h == row_h:
+                            #which one is it assigned to?
+                            yc = (new_entities[v].box[1]+new_entities[v].box[5])/2
+                            dist_top = abs(top_yc-yc)
+                            dist_bot = abs(bot_yc-yc)
+                            c = all_col_entity_ids[tab_pos].index(col_h) if col_h is not None else blank_col_pos[v]
+                            if dist_bot<dist_top:
+                                new_table_values[i] = (tab_id,col_h,bot_row_h,v)
+                                real_tables[tab_pos].cells[r+1][c] = new_entities[v]
+                            else:
+                                real_tables[tab_pos].cells[r][c] = new_entities[v]
+            else:
+                #Just double assign each cell 
+                newer_to_new_entities=list(range(len(new_entities)))
+                for (tab_pos,r,c),cells in double_assigned.items():
+                    #read-order the entities
+                    cells.sort(key=lambda a:a.box[1])
+                    lines=[]
+                    cls = cells[0].cls
+                    i=0
+                    while i<len(cells):
+                        assert cells[i].cls==cls
+                        j=i+1
+                        while j<len(cells) and cells[j].box[1]-cells[i].box[1]<5:
+                            j+=1
+
+                        row = cells[i:j]
+                        row.sort(key=lambda a:a.box[0])
+                        for entity in row:
+                            lines+=entity.lines
+                        i=j
+                    new_e = Entity(cls,lines)
+                    real_tables[tab_pos].cells[r][c]=new_e
+
+                    to_remove = []
+                    for i,e in enumerate(new_entities):
+                        if e in cells:
+                            to_remove.append(i)
+                    to_remove.sort(reverse=True)
+                    for i in to_remove:
+                        del new_entities[i]
+                        del newer_to_new_entities[i]
+                    new_entities.append(new_e)
+
+                new_to_newer = {j:i for i,j in enumerate(newer_to_new_entities)}
+                new_entity_link=[]
+                for head,tail in entity_link:
+                    head = new_to_newer[head]
+                    if tail is not None:
+                        if isinstance(tail,list):
+                            tail = [new_to_newer[t] for t in tail]
+                        else:
+                            tail = new_to_newer[tail]
+                        new_entity_link.append((head,tail))
+                entity_link = new_entity_link
+
+
+                
+
         return new_entities,entity_link,real_tables
 
     def prepareFormRaw(self,bbs,transcription,groups,groups_adj):
@@ -777,16 +970,16 @@ def addTableElement(table_values,row_headers,col_headers,ai,qi1,qi2,entities,thr
             #import pdb;pdb.set_trace()
             return False
         
-        table_values[(col_h,row_h)]=ai
+        table_values[(col_h,row_h)].add(ai)
         row_headers.add(row_h)
         col_headers.add(col_h)
     else:
         if x_diff_1>y_diff_1:
             row_headers.add(qi1)
-            table_values[(None,qi1)]=ai
+            table_values[(None,qi1)].add(ai)
         elif x_diff_1<y_diff_1:
             col_headers.add(qi1)
-            table_values[(qi1,None)]=ai
+            table_values[(qi1,None)].add(ai)
     return True
 
 
@@ -875,19 +1068,40 @@ def cleanUp(entities,entity_adj):
                 #y_diff1 = entity.box[9]-entities[links_to_questions[0]].box[9]#center y
                 #x_diff2 = entity.box[12]-entities[links_to_questions[1]].box[12]#center x
                 #y_diff2 = entity.box[9]-entities[links_to_questions[1]].box[9]#center y
+                #these need written more robustly
+                #first_left_of = max(first[::2])-5<min(entity.box[::2])
+                #first_right_of = min(first[::2])+5>max(entity.box[::2])
+                #first_top_of = max(first[1::2])-5<min(entity.box[1::2])
+                #first_bottom_of = min(first[1::2])+5>max(entity.box[1::2])
 
-                first_left_of = max(first[::2])<min(entity.box[::2])
-                first_right_of = min(first[::2])>max(entity.box[::2])
-                first_top_of = max(first[1::2])<min(entity.box[1::2])
-                first_bottom_of = min(first[1::2])>max(entity.box[1::2])
+                first_left_dist = min(entity.box[::2])-max(first[::2])
+                first_right_dist = min(first[::2])-max(entity.box[::2])
+                first_top_dist = min(entity.box[1::2])-max(first[1::2])
+                first_bot_dist = min(first[1::2])-max(entity.box[1::2])
+
+                first_left_of = first_left_dist > max(first_top_dist,first_bot_dist)
+                first_right_of = first_right_dist > max(first_top_dist,first_bot_dist)
+                first_top_of = first_top_dist > max(first_left_dist,first_right_dist)
+                first_bottom_of = first_bot_dist > max(first_left_dist,first_right_dist)
 
                 first_is_row_header = first_left_of or first_right_of
                 first_is_col_header = first_top_of or first_bottom_of
 
-                second_left_of = max(second[::2])<min(entity.box[::2])
-                second_right_of = min(second[::2])>max(entity.box[::2])
-                second_top_of = max(second[1::2])<min(entity.box[1::2])
-                second_bottom_of = min(second[1::2])>max(entity.box[1::2])
+                #second_left_of = max(second[::2])-5<min(entity.box[::2])
+                #second_right_of = min(second[::2])+5>max(entity.box[::2])
+                #second_top_of = max(second[1::2])-5<min(entity.box[1::2])
+                #second_bottom_of = min(second[1::2])+5>max(entity.box[1::2])
+
+                second_left_dist = min(entity.box[::2])-max(second[::2])
+                second_right_dist = min(second[::2])-max(entity.box[::2])
+                second_top_dist = min(entity.box[1::2])-max(second[1::2])
+                second_bot_dist = min(second[1::2])-max(entity.box[1::2])
+
+                second_left_of = second_left_dist > max(second_top_dist,second_bot_dist)
+                second_right_of = second_right_dist > max(second_top_dist,second_bot_dist)
+                second_top_of = second_top_dist > max(second_left_dist,second_right_dist)
+                second_bottom_of = second_bot_dist > max(second_left_dist,second_right_dist)
+
 
                 second_is_row_header = second_left_of or second_right_of
                 second_is_col_header = second_top_of or second_bottom_of
@@ -918,11 +1132,15 @@ def cleanUp(entities,entity_adj):
                 if first_is_row_header==first_is_col_header:
                     #bad=True
                     #print('{} has ambiguous header {}'.format(entity,entities[links_to_questions[0]]))
+                    #if i==35 or i==13:
+                    #    import pdb;pdb.set_trace()
                     adj_to_remove.add((i,links_to_questions[0]))
                     adj_to_remove.add((links_to_questions[0],i))
                 elif second_is_row_header==second_is_col_header:
                     #bad=True
                     #print('{} has ambiguous header {}'.format(entity,entities[links_to_questions[1]]))
+                    #if i==35 or i==13:
+                    #    import pdb;pdb.set_trace()
                     adj_to_remove.add((i,links_to_questions[1]))
                     adj_to_remove.add((links_to_questions[1],i))
 
@@ -932,6 +1150,8 @@ def cleanUp(entities,entity_adj):
                     #        entity,
                     #        entities[links_to_questions[0]],
                     #        entities[links_to_questions[1]]))
+                    #if i==35 or i==13:
+                    #    import pdb;pdb.set_trace()
                     r = int(random.random()<0.5)
                     adj_to_remove.add((i,links_to_questions[r]))
                     adj_to_remove.add((links_to_questions[r],i))
@@ -960,6 +1180,7 @@ def cleanUp(entities,entity_adj):
         #            #subheaders
         #        import pdb;pdb.set_trace()
     debug = len(entity_adj)
+    #import pdb;pdb.set_trace()
     entity_adj -= adj_to_remove
     assert len(adj_to_remove)==0 or len(entity_adj)<debug
     if len(entity_i_to_remove)==0:
