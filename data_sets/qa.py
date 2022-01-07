@@ -33,19 +33,21 @@ def collate(batch):
 
     return {
             'img': torch.cat([b['img'] for b in batch],dim=0),
-            'bb_gt': [b['bb_gt'] for b in batch], #torch.cat([b['bb_gt'] for b in batch],dim=0),
-            'imgName': [b['imgName'] for b in batch],
-            'scale': [b['scale'] for b in batch],
-            'cropPoint': [b['cropPoint'] for b in batch],
-            'transcription': [b['transcription'] for b in batch],
-            'metadata': [b['metadata'] for b in batch],
-            'form_metadata': [b['form_metadata'] for b in batch],
-            'questions': [b['questions'] for b in batch],
-            'answers': [b['answers'] for b in batch],
+            'bb_gt': [b.get('bb_gt') for b in batch], 
+            'imgName': [b.get('imgName') for b in batch],
+            'scale': [b.get('scale') for b in batch],
+            'cropPoint': [b.get('cropPoint') for b in batch],
+            'transcription': [b.get('transcription') for b in batch],
+            'metadata': [b.get('metadata') for b in batch],
+            'form_metadata': [b.get('form_metadata') for b in batch],
+            'questions': [b.get('questions') for b in batch],
+            'answers': [b.get('answers') for b in batch],
             'mask_label': mask_labels,
             'mask_labels_batch_mask': mask_labels_batch_mask,
             #'mask_label': torch.cat([b['mask_label'] for b in batch],dim=0) if batch[0]['mask_label'] is not None else [b['mask_label'] for b in batch],
-            'pre-recognition': [b['pre-recognition'] for b in batch]
+            'pre-recognition': [b.get('pre-recognition') for b in batch],
+            "bart_logits": torch.cat([b['bart_logits'] for b in batch],dim=0) if 'bart_logits' in batch[0] else None,
+            "bart_last_hidden": torch.cat([b['bart_last_hidden'] for b in batch],dim=0) if 'bart_last_hidden' in batch[0] else None,
             }
 
 def getMask(shape,boxes):
@@ -79,6 +81,8 @@ class QADataset(torch.utils.data.Dataset):
         if self.max_qa_len_in is None and self.max_qa_len_out is None and 'max_qa_len' in config:
             self.max_qa_len_in = config['max_qa_len']
             self.max_qa_len_out = config['max_qa_len']
+
+        self.cased = config.get('cased',False)
 
         self.color = config['color'] if 'color' in config else False
         self.rotate = config['rotation'] if 'rotation' in config else False
@@ -152,12 +156,17 @@ class QADataset(torch.utils.data.Dataset):
         rescaled = self.images[index]['rescaled']
         if type(annotationPath) is int:
             annotations = annotationPath
-        elif annotationPath.endswith('.json'):
+        elif isinstance(annotationPath,str) and  annotationPath.endswith('.json'):
             try: 
                 with open(annotationPath) as annFile:
                     annotations = json.loads(annFile.read())
+                    annotations['XX_imageName']=imageName
             except FileNotFoundError:
                 print("ERROR, could not open "+annotationPath)
+                return self.__getitem__((index+1)%self.__len__())
+            except json.decoder.JSONDecodeError as e:
+                print(e)
+                print('Error reading '+annotationPath)
                 return self.__getitem__((index+1)%self.__len__())
         else:
             annotations=annotationPath
@@ -165,19 +174,28 @@ class QADataset(torch.utils.data.Dataset):
         #Load image
         #t#tic=timeit.default_timer()#t#
         if imagePath is not None:
-            np_img = img_f.imread(imagePath, 1 if self.color else 0)#*255.0
-            if np_img.max()<=1:
-                np_img*=255
+            try:
+                np_img = img_f.imread(imagePath, 1 if self.color else 0)#*255.0
+            except FileNotFoundError as e:
+                print(e)
+                print('ERROR, could not find: '+imagePath)
+                return self.__getitem__((index+1)%self.__len__())
             if np_img is None or np_img.shape[0]==0:
                 print("ERROR, could not open "+imagePath)
                 return self.__getitem__((index+1)%self.__len__())
+            if np_img.max()<=1:
+                np_img*=255
         else:
             np_img = None#np.zeros([1000,1000])
 
         if self.crop_to_data:
             #This exists for the IAM dataset so we don't include the form prompt text (which would be easy to cheat from)
-            x1,y1,x2,y2 = self.getCrop(annotations)
+            crop, line_bbs = self.getCropAndLines(annotations)
+            x1,y1,x2,y2 = crop
             np_img = np_img[y1:y2,x1:x2]
+            
+            if self.warp_lines is not None and random.random()<self.warp_lines:
+                self.doLineWarp(np_img,line_bbs)
 
 
         #
@@ -234,8 +252,7 @@ class QADataset(torch.utils.data.Dataset):
         #Parse annotation file
         bbs,ids,trans, metadata, form_metadata, questions_and_answers = self.parseAnn(annotations,s)
 
-
-        if not self.train:
+        if not self.train and 'qa' in self.images[index]:
             questions_and_answers = self.images[index]['qa']
             #But the scale doesn't match! So fix it
             for qa in questions_and_answers:
@@ -286,6 +303,7 @@ class QADataset(torch.utils.data.Dataset):
             if 'pre-recognition_bbs' in form_metadata:
                 mask_bbs+= form_metadata['pre-recognition_bbs']
                 mask_ids+=  ['recog{}'.format(ii) for ii in range(len(form_metadata['pre-recognition_bbs']))]
+                del form_metadata['pre-recognition_bbs']
             mask_bbs = np.array(mask_bbs)
             #if len(mask_bbs.shape)==1:
             #    mask_bbs=mask_bbs[None]
@@ -316,15 +334,6 @@ class QADataset(torch.utils.data.Dataset):
                 "img": np_img,
                 "bb_gt": crop_bbs[None,...],
                 'bb_auxs':crop_ids,
-                #'word_bbs':form_metadata['word_boxes'] if 'word_boxes' in form_metadata else None
-                #"line_gt": {
-                #    "start_of_line": start_of_line,
-                #    "end_of_line": end_of_line
-                #    },
-                #"point_gt": {
-                #        "table_points": table_points
-                #        },
-                #"pixel_gt": pixel_gt,
                 
             }, cropPoint)
             np_img = out['img']
@@ -352,6 +361,7 @@ class QADataset(torch.utils.data.Dataset):
                 form_metadata['word_boxes'] = out['bb_gt'][0,word_index:,:8]
                 word_ids=out['bb_auxs'][word_index:]
                 form_metadata['word_trans'] = [form_metadata['word_trans'][int(id[4:])] for id in word_ids]
+                del form_metadata['word_boxes']
             elif self.do_masks:
                 orig_idx=0
                 for ii,(bb_id,bb) in enumerate(zip(out['bb_auxs'],out['bb_gt'][0])):
@@ -401,8 +411,12 @@ class QADataset(torch.utils.data.Dataset):
             new_q_inboxes= [qa['in_bbs'] for qa in questions_and_answers]
             new_q_outboxes= [qa['out_bbs'] for qa in questions_and_answers]
             new_q_blankboxes= [qa['mask_bbs'] for qa in questions_and_answers]
-            questions = [qa['question'].lower() for qa in questions_and_answers]
-            answers = [qa['answer'].lower() for qa in questions_and_answers]
+            if self.cased:
+                questions = [qa['question'] for qa in questions_and_answers]
+                answers = [qa['answer'] for qa in questions_and_answers]
+            else:
+                questions = [qa['question'].lower() for qa in questions_and_answers]
+                answers = [qa['answer'].lower() for qa in questions_and_answers]
         else:
             questions=answers=None
 
@@ -456,8 +470,6 @@ class QADataset(torch.utils.data.Dataset):
                 bbs = torch.FloatTensor(1,0,5+8+1)
         else:
             bbs = torch.FloatTensor(1,0,5+8+1)
-        #if 'word_boxes' in form_metadata:
-        #     form_metadata['word_boxes'] = convertBBs(form_metadata['word_boxes'][None,...],self.rotate,0)[0,...]
 
         #import pdb;pdb.set_trace()
         if trans is not None:
@@ -474,6 +486,7 @@ class QADataset(torch.utils.data.Dataset):
                 #    char_prob[pos,self.char_to_ocr[char]]=self.one_hot_conf
                 char_prob = [self.char_to_ocr[char] for char in string if char in self.char_to_ocr]
                 pre_recog.append( (bb[0:8].reshape(4,2),(string,char_prob),None) )
+            del form_metadata['pre-recognition']
         else:
             pre_recog = None
 
@@ -481,6 +494,8 @@ class QADataset(torch.utils.data.Dataset):
         #t#self.opt_history['remainder'].append(time-tic)#t#
         #t#self.opt_history['Full get_item'].append(time-ticFull)#t#
         #t#self.print_opt_times()#t#
+
+        
 
         return {
                 "img": img,
@@ -490,7 +505,7 @@ class QADataset(torch.utils.data.Dataset):
                 "cropPoint": cropPoint,
                 "transcription": transcription,
                 "metadata": [metadata[id] for id in ids if id in metadata],
-                "form_metadata": None,
+                "form_metadata": form_metadata,
                 "questions": questions,
                 "answers": answers,
                 "mask_label": mask_label,

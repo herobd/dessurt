@@ -530,7 +530,11 @@ class BaseTrainer:
         :param resume_path: Checkpoint path to be resumed
         """
         self.logger.info("Loading checkpoint: {} ...".format(resume_path))
-        checkpoint = torch.load(resume_path, map_location=lambda storage, location: storage)
+        try:
+            checkpoint = torch.load(resume_path, map_location=lambda storage, location: storage)
+        except:
+            resume_path = resume_path.replace('latest','prev')
+            checkpoint = torch.load(resume_path, map_location=lambda storage, location: storage)
         if 'override' not in self.config or not self.config['override']:
             self.config = checkpoint['config']
         if not self.reset_iteration:
