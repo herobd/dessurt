@@ -27,6 +27,12 @@ mk_firsttoken_top50 mean:0.583,  std:0.49306287631497864
 mk_firsttoken_top100 mean:0.6635,  std:0.47251216915546207
 score_ed mean:0.7959811096813275,  std:0.3708001563492403
 
+distil+paraCqa+cdipC_noDistill_mmswin_bart_singleCross_PTfrom66i332k_77
+mk_firsttoken_top10 mean:0.4335,  std:0.495558018803046
+mk_firsttoken_top50 mean:0.597,  std:0.49050076452539815
+mk_firsttoken_top100 mean:0.6755,  std:0.4681877294419408
+score_ed mean:0.7483019908769072,  std:0.36137053272375486
+
 iamqa+distil+paraCqa+cdipC_mmswin_bart_singleCross_PTfrom58i108k_64 333312
 mk_firsttoken_top10 mean:0.3865,  std:0.4869473790873095
 mk_firsttoken_top50 mean:0.553,  std:0.4971830648765101
@@ -66,6 +72,18 @@ mk_firsttoken_top50 mean:0.5865,  std:0.4924609121544571
 mk_firsttoken_top100 mean:0.652,  std:0.47633601585435464
 score_ed mean:0.7778197481596221,  std:0.3471404048471401
 
+distil+paraCqa+cdipC_noDistill_mmswin_bart_deep_PTfrom69i328k_71 458240
+mk_firsttoken_top10 mean:0.4655,  std:0.49880832992242624
+mk_firsttoken_top50 mean:0.601,  std:0.4896927608204965
+mk_firsttoken_top100 mean:0.6695,  std:0.4703931866003163
+score_ed mean:0.747294743200216,  std:0.35774736809725766
+
+distilGN+paraCqa+cdipC_mmswin_bart_deep_PTfrom80_85 148736
+mk_firsttoken_top10 mean:0.447,  std:0.4971830648765101
+mk_firsttoken_top50 mean:0.602,  std:0.4894854441145313
+mk_firsttoken_top100 mean:0.672,  std:0.46948482403587877
+score_ed mean:0.7791385607882401,  std:0.3705854208433955
+
 distil+paraCqa+cdipC_mmswin_bart_deep_PTfrom67i280k_70 67328
 mk_firsttoken_top10 mean:0.419,  std:0.493395378981198
 mk_firsttoken_top50 mean:0.5705,  std:0.49500479795654506
@@ -100,6 +118,25 @@ mk_firsttoken_top10 mean:0.4365,  std:0.4959513585020209
 mk_firsttoken_top50 mean:0.5995,  std:0.4899997448978928
 mk_firsttoken_top100 mean:0.6765,  std:0.4678116608208906
 score_ed mean:0.7715034449309027,  std:0.36651057251109637
+
+distil+paraCqa+cdipC_noDistill_mmswin_bart_PTfrom50i260k_69 868096
+mk_firsttoken_top10 mean:0.4545,  std:0.4979254462266414
+mk_firsttoken_top50 mean:0.615,  std:0.4865953144040744
+mk_firsttoken_top100 mean:0.689,  std:0.4629027975720173
+score_ed mean:0.7328137817041542,  std:0.3527827608664974
+
+distilGN+paraCqa+cdipC_mmswin_bart_PTfrom69i576k_78 283392
+mk_firsttoken_top10 mean:0.454,  std:0.49787950349457055
+mk_firsttoken_top50 mean:0.6055,  std:0.48874303064084706
+mk_firsttoken_top100 mean:0.6785,  std:0.4670521919443265
+score_ed mean:0.7426190186094709,  std:0.3563230506606811
+
+distilGN+paraCqa+cdipC_mmswin_bart_PTfrom50i260k_79 272640
+mk_firsttoken_top10 mean:0.427,  std:0.494642294997102
+mk_firsttoken_top50 mean:0.593,  std:0.4912748721438947
+mk_firsttoken_top100 mean:0.675,  std:0.4683748498798798
+score_ed mean:0.7859721266816313,  std:0.35433476133879593
+
 
 squad+iamqa+distil+paraCqa+cdipC_noDistill_mmswin_bart_PTfrom65i351k_73 63488
 mk_firsttoken_top10 mean:0.408,  std:0.49146312170904544
@@ -141,6 +178,15 @@ squad+iamqa+distil+paraCqa+cdipC_mmswin_bart_PTfrom62i256k_72 162048
 natural_q~_ED mean:0.48452313633422356,  std:0.6293027521905793
 E_ANLS mean:0.6405274921852738,  std:0.432247051142594
 
+==============================================
+==DocVQA== (autoregressive)
+docvqa_mmswin_bart_PTfrom73i65k_74 419328
+natural_q~_ED mean:0.8264636540104815,  std:0.4834273488220953
+E_ANLS mean:0.20433641062716562,  std:0.3512761158530062
+
+docvqa_mmswin_bart_PTfrom73i219k_84 253440 (this actualy is better than above checkpoint in terms of teacher-froced ANLS)
+natural_q~_ED mean:0.8664983315791706,  std:0.48663643655558564
+E_ANLS mean:0.18667215168822252,  std:0.33922349901250715
 
 ============================
 

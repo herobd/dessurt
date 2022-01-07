@@ -33,7 +33,11 @@ class SpecialTokenEmbedder(nn.Module):
                 #added (para, for IAM)
                 'read_block>', 'read_block0>',
                 #question answering
-                'natural_q~'
+                'natural_q~',
+                #NER
+                'ne>','ne~','ner_line>','ner_text~','ner_full>',
+                #Forms
+                'json>',
                 #census TODO
                 ]
         self.get_index = {s:i for i,s in enumerate(tokens)}
