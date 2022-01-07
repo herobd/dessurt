@@ -106,7 +106,8 @@ if __name__ == "__main__":
             "#random": False
             },
         'questions':1,
-        'max_ner_len': 26
+        'full': True,
+        'cased': True
 
 })
 
