@@ -93,6 +93,11 @@ class MmSwin(BaseModel):
                 self.CLS_TOKEN= 101
 
 
+        if config.get('NER_tokens',False):
+            tokens = ["[NE:{}]".format(cls) for cls in ['N', 'C', 'L', 'T', 'O', 'P', 'G','NORP', 'LAW', 'PER', 'QUANTITY', 'MONEY', 'CARDINAL', 'LOCATION', 'LANGUAGE', 'ORG', 'DATE', 'FAC', 'ORDINAL', 'TIME', 'WORK_OF_ART', 'PERCENT', 'GPE', 'EVENT', 'PRODUCT']]
+            self.tokenizer.add_tokens(tokens, special_tokens=True)
+
+
 
         if init_from_pretrained=='distilbert':
             init_model = DistilBertModel.from_pretrained('./cache_huggingface/distilbert-base-uncased')

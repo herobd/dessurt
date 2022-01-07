@@ -78,11 +78,24 @@ mk_firsttoken_top50 mean:0.601,  std:0.4896927608204965
 mk_firsttoken_top100 mean:0.6695,  std:0.4703931866003163
 score_ed mean:0.747294743200216,  std:0.35774736809725766
 
+distil+paraCqa+cdipC_noDistill_mmswin_bart_deep_PTfrom69i328k_71 560641
+mk_firsttoken_top10 mean:0.4505,  std:0.4975437166722136
+mk_firsttoken_top50 mean:0.6005,  std:0.48979562064191634
+mk_firsttoken_top100 mean:0.6815,  std:0.46589456961849207
+score_ed mean:0.7508156018786487,  std:0.36316984474437
+
 distilGN+paraCqa+cdipC_mmswin_bart_deep_PTfrom80_85 148736
 mk_firsttoken_top10 mean:0.447,  std:0.4971830648765101
 mk_firsttoken_top50 mean:0.602,  std:0.4894854441145313
 mk_firsttoken_top100 mean:0.672,  std:0.46948482403587877
 score_ed mean:0.7791385607882401,  std:0.3705854208433955
+
+distilGN+paraCqa+cdipC_mmswin_bart_deep_PTfrom80_85 241921
+mk_firsttoken_top10 mean:0.4435,  std:0.49679749395503187
+mk_firsttoken_top50 mean:0.603,  std:0.48927599573246994
+mk_firsttoken_top100 mean:0.6685,  std:0.47075232341434065
+score_ed mean:0.7736319315827956,  std:0.3591052741535349
+
 
 distil+paraCqa+cdipC_mmswin_bart_deep_PTfrom67i280k_70 67328
 mk_firsttoken_top10 mean:0.419,  std:0.493395378981198
@@ -125,6 +138,12 @@ mk_firsttoken_top50 mean:0.615,  std:0.4865953144040744
 mk_firsttoken_top100 mean:0.689,  std:0.4629027975720173
 score_ed mean:0.7328137817041542,  std:0.3527827608664974
 
+distil+paraCqa+cdipC_noDistill_mmswin_bart_PTfrom50i260k_69 947457
+mk_firsttoken_top10 mean:0.465,  std:0.4987734956871706
+mk_firsttoken_top50 mean:0.6215,  std:0.4850131441517848
+mk_firsttoken_top100 mean:0.69,  std:0.462493243193887
+score_ed mean:0.7363613560797937,  std:0.35796520286115535
+
 distilGN+paraCqa+cdipC_mmswin_bart_PTfrom69i576k_78 283392
 mk_firsttoken_top10 mean:0.454,  std:0.49787950349457055
 mk_firsttoken_top50 mean:0.6055,  std:0.48874303064084706
@@ -136,6 +155,12 @@ mk_firsttoken_top10 mean:0.427,  std:0.494642294997102
 mk_firsttoken_top50 mean:0.593,  std:0.4912748721438947
 mk_firsttoken_top100 mean:0.675,  std:0.4683748498798798
 score_ed mean:0.7859721266816313,  std:0.35433476133879593
+
+distilGN+paraCqa+cdipC_mmswin_bart_PTfrom50i260k_79 365825
+mk_firsttoken_top10 mean:0.443,  std:0.49674037484384126
+mk_firsttoken_top50 mean:0.602,  std:0.4894854441145313
+mk_firsttoken_top100 mean:0.673,  std:0.46911725613112976
+score_ed mean:0.7767245871921454,  std:0.3457157871386456
 
 
 squad+iamqa+distil+paraCqa+cdipC_noDistill_mmswin_bart_PTfrom65i351k_73 63488
@@ -180,6 +205,7 @@ E_ANLS mean:0.6405274921852738,  std:0.432247051142594
 
 ==============================================
 ==DocVQA== (autoregressive)
+
 docvqa_mmswin_bart_PTfrom73i65k_74 419328
 natural_q~_ED mean:0.8264636540104815,  std:0.4834273488220953
 E_ANLS mean:0.20433641062716562,  std:0.3512761158530062
@@ -187,6 +213,10 @@ E_ANLS mean:0.20433641062716562,  std:0.3512761158530062
 docvqa_mmswin_bart_PTfrom73i219k_84 253440 (this actualy is better than above checkpoint in terms of teacher-froced ANLS)
 natural_q~_ED mean:0.8664983315791706,  std:0.48663643655558564
 E_ANLS mean:0.18667215168822252,  std:0.33922349901250715
+
+docvqa_mmswin_bart_PTfrom73i65k_74 153856
+natural_q~_ED mean:0.8377922347992975,  std:0.5075729827370611
+E_ANLS mean:0.2187804305257047,  std:0.35555366300280383
 
 ============================
 
@@ -210,6 +240,22 @@ for:ynthqa+paraqa+cdip_perceiverAutoR_3cF_PTfromFontsSmall
         I upped the virtual batchsize to 100 (from 40) at 1254169
 
 =======
+FUNSD
+
+funsd_mmswin_bart_PTfrom69i582k_82 401664
+old Total entity recall, prec, Fm:      0.71      0.65      0.68
+New Total entity recall, prec, Fm:      0.734      0.673202614379085       0.7022727272727273
+old Total rel recall, prec, Fm: 0.40891472868217055     0.3093841642228739      0.35225375626043404
+New Total rel recall, prec, Fm: 0.44573643410852715     0.31767955801104975     0.3709677419354839
+
+funsd+table_mmswin_bart_PTfrom69i580k_81 391168
+old Total entity recall, prec, Fm:      0.734   0.673   0.702
+New Total entity recall, prec, Fm:      0.727   0.667   0.695
+old Total rel recall, prec, Fm: 0.409   0.311   0.353
+New Total rel recall, prec, Fm: 0.424   0.341   0.378
+
+
+
 =======
 FUNSD valid for non-grid
 iter 150,000
