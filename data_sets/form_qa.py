@@ -356,7 +356,7 @@ class FormQA(QADataset):
         else:
             if 'full_json' in self.q_types:
                 q_types = [('full_json',None,None)]
-                son_text = self.makeJsonText(entities,entity_link,tables)
+                json_text = self.makeJsonText(entities,entity_link,tables)
             else:
                 q_types = []
                 for cls in all_of_cls:
