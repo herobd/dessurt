@@ -111,7 +111,7 @@ if __name__ == "__main__":
             },
         'questions':1,
         'max_qa_len': 506,
-        "image_size":[1000,700],
+        "image_size":[760,760],
         "prefetch_factor": 10,
         "persistent_workers": True
 
