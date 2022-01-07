@@ -340,6 +340,8 @@ class SynthQADocDataset(FormQA):
         #TABLE
         if self.tables and random.random()<self.tables:
             table_x,table_y,table_width,table_height,table = self.addTable(image)
+            while self.tables>=1 and table_x is None:
+                table_x,table_y,table_width,table_height,table = self.addTable(image)
             if table_x is None:
                 did_table=False
             else:

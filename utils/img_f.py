@@ -212,8 +212,8 @@ def warpAffine(img,M,shape=None):
     T = transform.AffineTransform(M)
     return transform.warp(img,T,output_shape=shape,preserve_range=True)
 
-def remap(img,map_x,map_y,interpolation=2,borderValue=None):
-    return transform.warp(img,np.stack((map_y,map_x),axis=0),order=interpolation,preserve_range=True)
+def remap(img,map_x,map_y,interpolation=1,borderValue=0):
+    return transform.warp(img,np.stack((map_y,map_x),axis=0),order=interpolation,preserve_range=True,cval=borderValue)
 
 ROTATE_90_COUNTERCLOCKWISE=1
 ROTATE_90_CLOCKWISE=3

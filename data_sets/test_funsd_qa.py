@@ -7,6 +7,7 @@ from matplotlib.patches import Polygon
 import numpy as np
 import torch
 import utils.img_f as cv2
+import json
 
 widths=[]
 
@@ -21,7 +22,8 @@ def display(data):
         mask = data['img'][b,1]<0
         img[:,:,0] *= ~mask
         img[:,:,1] *= ~show
-        img[:,:,2] *= 1-data['mask_label'][b,0]
+        if data['mask_label'] is not None:
+            img[:,:,2] *= 1-data['mask_label'][b,0]
         #label = data['label']
         #gt = data['gt'][b]
         #print(label[:data['label_lengths'][b],b])
@@ -35,15 +37,20 @@ def display(data):
         #print('answers: {}'.format(data['answers'][b]))
         print('questions and answers')
         for q,a in zip(data['questions'][b],data['answers'][b]):
+            if q=='json>':
+                a = json.loads(a)
+                a = json.dumps(a,indent=3)
             print(q+' : '+a)
 
         #widths.append(img.size(1))
         draw = False
-        for x in ['al~']:#['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
-            if x in q:
-                draw = True
-                break
+        #for x in ['json>']:#['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
+        #    if x in q and '<<' in a:
+        #        draw = True
+        #        break
         #draw = draw and '\\' in a
+        if 'json' not in q and ('>>' in a or '>>' in q):
+            draw = True
 
         #draw=True
         if draw :
@@ -58,7 +65,7 @@ def display(data):
 
             #cv2.waitKey()
 
-            cv2.imwrite('testsinglesize_1024.png',img.numpy()[:,:,0])
+            #cv2.imwrite('testsinglesize_1024.png',img.numpy()[:,:,0])
 
         #fig = plt.figure()
 
@@ -86,7 +93,7 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=funsd_qa.FUNSDQA(dirPath=dirPath,split='valid',config={
+    data=funsd_qa.FUNSDQA(dirPath=dirPath,split='train',config={
         '#rescale_range':[0.8,1.2],
         'rescale_range':[1,1],
         'crop_params': {
@@ -98,7 +105,10 @@ if __name__ == "__main__":
         'questions':1,
         'do_words': False,
         'char_qs': "full",
-        'max_qa_len': 26
+        'max_qa_len': 2000,
+        "cased": True,
+        "words": True,
+        "use_json": True
 
 })
 
@@ -108,7 +118,7 @@ if __name__ == "__main__":
         #if start==0:
         #display(data[0])
     for i in range(0,start):
-        print(i)
+        print('test {}'.format(i))
         dataLoaderIter.next()
         #display(data[i])
     try:

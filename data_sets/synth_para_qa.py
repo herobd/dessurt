@@ -39,14 +39,18 @@ class SynthParaQA(ParaQADataset):
         self.max_text_height = config['max_text_height'] if 'max_text_height' in config else 32
 
         self.images=[]
-        for i in range(config['batch_size']*100): #we just randomly generate instances on the fly
-            self.images.append({'id':'{}'.format(i), 'imagePath':None, 'annotationPath':0, 'rescaled':1.0, 'imageName':'0'})
+        for i in range(config['batch_size']*config.get('num_batches',100)): #we just randomly generate instances on the fly
+            self.images.append({'id':'{}'.format(i), 'imagePath':None, 'annotationPath':i, 'rescaled':1.0, 'imageName':'0'})
 
         self.held_instance=None
         self.used_held = 0
         self.max_used_held = config['prefetch_factor']//2 if 'prefetch_factor' in config else 2
 
-    def parseAnn(self,ocr,s):
+    def parseAnn(self,seed,s):
+        if not self.train:
+            random.seed(seed)
+            np.random.seed(seed)
+            torch.manual_seed(seed)
 
         image_h,image_w = self.image_size
 

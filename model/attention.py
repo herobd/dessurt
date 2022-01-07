@@ -167,11 +167,14 @@ class MultiHeadedAttention(nn.Module):
         self.fixed= 'fixed' in self.mod
         
         
-    def forward(self, query, key, value, mask=None):
+    def forward(self, query, key, value, mask=None,key_padding_mask=None):
         "Implements Figure 2"
         if mask is not None:
             # Same mask applied to all h heads.
-            mask = mask[None,None,...]#mask.unsqueeze(1)
+            if len(mask.size())==2:
+                mask = mask[None,None,...]#mask.unsqueeze(1)
+            else:
+                mask = mask[:,None,...]
         nbatches = query.size(0)
 
         if self.none:
@@ -186,8 +189,10 @@ class MultiHeadedAttention(nn.Module):
         
         # 2) Apply attention on all the projected vectors in batch. 
         if self.half:
-            x, self.attn = attention(query[...,:self.d_k//2], key[...,:self.d_k//2], value, mask=mask, 
-                                     dropout=self.dropout,fixed=self.fixed)
+            x, self.attn = attention(query[...,:self.d_k//2], key[...,:self.d_k//2], value, 
+                    mask=mask, 
+                    key_padding_mask = key_padding_mask,
+                    dropout=self.dropout,fixed=self.fixed)
         elif self.learned:
             x, self.attn = learned_attention(query, key, value, mask=mask, 
                                      dropout=self.dropout,network=self.attNet)

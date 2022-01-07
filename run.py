@@ -27,7 +27,8 @@ except:
 def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do_saliency=False,overwrite_char_prob=False):
     np.random.seed(1234)
     torch.manual_seed(1234)
-    no_mask_qs = ['fli:','fna:','re~','l~','v~']
+    no_mask_qs = ['fli:','fna:','re~','l~','v~', 'mm~','mk>','natrual_q~']
+    remove_qs = ['rm>','mlm>','mm~','mk>']
     if resume is not None:
         checkpoint = torch.load(resume, map_location=lambda storage, location: storage)
         print('loaded {} iteration {}'.format(checkpoint['config']['name'],checkpoint['iteration']))
@@ -99,6 +100,21 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do
                     (key[7:] if key.startswith('module.') else key):value for key,value in state_dict.items()
                     }
         model = eval(config['arch'])(config['model'])
+
+        #ugh
+        if 'answer_decode.0.weight' in new_state_dict and config['arch']=='MmSwin':
+            new_state_dict['answer_decode.weight'] = new_state_dict['answer_decode.0.weight']
+            del new_state_dict['answer_decode.0.weight'  ]
+
+        if 'query_special_start_token_embedder.emb.weight' in new_state_dict:
+            loading_special = new_state_dict['query_special_start_token_embedder.emb.weight']
+            model_special = model.state_dict()['query_special_start_token_embedder.emb.weight']
+
+            if loading_special.size(0) != model_special.size(0):
+                model_special[:loading_special.size(0)] = load_state_dict[:model_special.size(0)]
+                new_state_dict['query_special_start_token_embedder.emb.weight'  ] = model_special
+
+
         model.load_state_dict(new_state_dict)
 
         #if 'swa_state_dict' in checkpoint and checkpoint['iteration']>config['trainer']['swa_start']:
@@ -218,21 +234,37 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do
                     if question.startswith(q):
                         needs_input_mask=False
                         break
+                needs_remove_mask=False
+                for q in remove_qs:
+                    if question.startswith(q):
+                        needs_remove_mask=True
+                        break
                 if needs_input_mask:
                     # get input mask
+                    print('Select input mask')
                     mask = future.manual_lasso_segmentation(np_img)
                     if mask.sum()==0:
                         mask = np.zeros_like(mask)
-                    mask = torch.from_numpy(mask)[None,None,...].to(img.device) #add batch and color channel
+                    mask = torch.from_numpy(mask)[None,None,...].float().to(img.device) #add batch and color channel
                 else:
                     mask = torch.zeros_like(img)
-                in_img = torch.cat((img,mask),dim=1)
+                if needs_remove_mask:
+                    # get remove mask
+                    print('Select remove mask')
+                    rm_mask = future.manual_lasso_segmentation(np_img)
+                    rm_mask = torch.from_numpy(rm_mask)[None,None,...].to(img.device) #add batch and color channel
+                    #mask[rm_mask]=-1
+                    mask = torch.where(rm_mask==1,torch.FloatTensor(*mask.size()).fill_(-1).to(img.device),mask)
+                    rm_img = img*(1-rm_mask)
+                else:
+                    rm_img = img
+                in_img = torch.cat((rm_img,mask.to(img.device)),dim=1)
                 
                 if do_saliency:
                     answer,pred_mask = s_model.saliency(in_img,ocr,[[question]])
                 else:
                     answer,pred_mask = model(in_img,ocr,[[question]],RUN=run)
-                #pred_a, target_a, answer, pred_mask = model(img,ocr,[[question]],[['number']])
+                    #pred_a, target_a, answer, pred_mask = model(in_img,ocr,[[question]],[['number']])
                 print('Answer: {}      max mask={}'.format(answer,pred_mask.max()))
                 #show_mask = torch.cat((pred_mask,pred_mask>0.5).float()
                 draw_img = 0.5*(1-img)
