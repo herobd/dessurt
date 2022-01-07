@@ -98,6 +98,7 @@ def label_smoothing(x, target, padding_idx=0, smoothing=0.0): #huggingface padds
         lenn = x.size(1)
         x = x.contiguous().view(-1,x.size(2))
         target = target.contiguous().view(-1)
+        orig_sizes = 'x:{}, target:{}'.format(x.size(),target.size())
     else:
         batchsize=1
     
@@ -105,7 +106,14 @@ def label_smoothing(x, target, padding_idx=0, smoothing=0.0): #huggingface padds
     confidence = 1.0 - smoothing
     true_dist = x.data.clone()
     true_dist.fill_(smoothing / (size - 2))
-    true_dist.scatter_(1, target.data.unsqueeze(1), confidence)
+    try:
+        true_dist.scatter_(1, target.data.unsqueeze(1), confidence)
+    except RuntimeError as e:
+        print('scatter FAILED')
+        print('target.data.size = {}'.format(target.data.size()))
+        print('true_dist.size = {}'.format(true_dist.size()))
+        print(orig_sizes)
+        raise e
     true_dist[:, padding_idx] = 0
     mask = torch.nonzero(target.data == padding_idx)
     if mask.dim() > 0:

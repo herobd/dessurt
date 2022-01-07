@@ -1,28 +1,259 @@
-crash at 1121
-=======
-crashes:
-Q Lengths 7 97 912 .....................
-A Lengths 0 1 594 .....................
+mk> first token
+distil+paraCqa+cdipC_mmswin_bart_7w4,2_PTfrom54i225k_68 352768
+mk_firsttoken_top10 mean:0.402,  std:0.49030194778320024
+mk_firsttoken_top50 mean:0.5375,  std:0.49859176687947826
+mk_firsttoken_top100 mean:0.619,  std:0.4856325771609643
 
-Q Lengths 86 65 777 .....................
-A Lengths 623 62 9 .....................
+distil+paraCqa+cdipC_mmswin_bart_7w4,2_PTfrom54i225k_68 487936
+mk_firsttoken_top10 mean:0.392,  std:0.4881966816765555
+mk_firsttoken_top50 mean:0.5495,  std:0.4975437166722136
+mk_firsttoken_top100 mean:0.629,  std:0.4830724583331159
+score_ed mean:0.8491586501299924,  std:0.36885643043463934
+
+distil+paraCqa+cdipC_mmswin_bart_singleCross_PTfrom53i235k_66 322560
+mk_firsttoken_top10 mean:0.417,  std:0.4930628763149787
+mk_firsttoken_top50 mean:0.563,  std:0.49601512073726134
+mk_firsttoken_top100 mean:0.631,  std:0.482533936630368
+
+distil+paraCqa+cdipC_noDistill_mmswin_bart_singleCross_PTfrom66i332k_77 115712
+mk_firsttoken_top10 mean:0.425,  std:0.49434299833212975
+mk_firsttoken_top50 mean:0.5835,  std:0.4929784478047697
+mk_firsttoken_top100 mean:0.6605,  std:0.47353959707716103
+score_ed mean:0.7831807347493259,  std:0.3569769436418126
+
+distil+paraCqa+cdipC_noDistill_mmswin_bart_singleCross_PTfrom66i332k_77 121088
+mk_firsttoken_top10 mean:0.4145,  std:0.49263551435112757
+mk_firsttoken_top50 mean:0.583,  std:0.49306287631497864
+mk_firsttoken_top100 mean:0.6635,  std:0.47251216915546207
+score_ed mean:0.7959811096813275,  std:0.3708001563492403
+
+distil+paraCqa+cdipC_noDistill_mmswin_bart_singleCross_PTfrom66i332k_77
+mk_firsttoken_top10 mean:0.4335,  std:0.495558018803046
+mk_firsttoken_top50 mean:0.597,  std:0.49050076452539815
+mk_firsttoken_top100 mean:0.6755,  std:0.4681877294419408
+score_ed mean:0.7483019908769072,  std:0.36137053272375486
+
+iamqa+distil+paraCqa+cdipC_mmswin_bart_singleCross_PTfrom58i108k_64 333312
+mk_firsttoken_top10 mean:0.3865,  std:0.4869473790873095
+mk_firsttoken_top50 mean:0.553,  std:0.4971830648765101
+mk_firsttoken_top100 mean:0.6175,  std:0.48599768517967246
+
+iamqa+distil+paraCqa+cdipC_noCosine_mmswin_bart_PTfrom57i130k_63 338432
+mk_firsttoken_top10 mean:0.399,  std:0.48969276082049645
+mk_firsttoken_top50 mean:0.5545,  std:0.497020874813121
+mk_firsttoken_top100 mean:0.617,  std:0.4861182983595659
+
+iamqa_distil+paraCqa+cdipC_noDistill_mmswin_bart_PTfrom59i80k_65 404480
+mk_firsttoken_top10 mean:0.421,  std:0.49371955602345746
+mk_firsttoken_top50 mean:0.5795,  std:0.4936392913859269
+mk_firsttoken_top100 mean:0.6465,  std:0.47805622054314906
+
+IAMqa_distil+paraCqa_noDistill_mmswin_bart_PTfrom65i404k_75 163328
+mk_firsttoken_top10 mean:0.3985,  std:0.4895893687571248
+mk_firsttoken_top50 mean:0.5595,  std:0.49644712709411465
+mk_firsttoken_top100 mean:0.6315,  std:0.4823979166621681
+score_ed mean:0.7970945438413999,  std:0.33599622212578534
+
+iamqa_distil+paraCqa+cdipC_mmswin_bart_PTfrom56i98k_62 308992
+mk_firsttoken_top10 mean:0.3985,  std:0.4895893687571248
+mk_firsttoken_top50 mean:0.555,  std:0.4969657935914704
+mk_firsttoken_top100 mean:0.6245,  std:0.484251742381997
+score_ed mean:0.8171329309894866,  std:0.3457290401839791
 
 
-no crashes:
-Q Lengths 1021 118 1019 .....................
-A Lengths 6 0 4 .....................
+distil+paraCqa+cdipC_noDistill_mmswin_bart_deep_PTfrom69i328k_71 62720
+mk_firsttoken_top10 mean:0.4325,  std:0.49542279923313987
+mk_firsttoken_top50 mean:0.579,  std:0.49371955602345746
+mk_firsttoken_top100 mean:0.6505,  std:0.47681206989756464
 
-Q Lengths 33 1021 1020 .....................
-A Lengths 0 5 5 .....................
+distil+paraCqa+cdipC_noDistill_mmswin_bart_deep_PTfrom69i328k_71 184832
+mk_firsttoken_top10 mean:0.4495,  std:0.4974432128394155
+mk_firsttoken_top50 mean:0.5865,  std:0.4924609121544571
+mk_firsttoken_top100 mean:0.652,  std:0.47633601585435464
+score_ed mean:0.7778197481596221,  std:0.3471404048471401
 
-Q Lengths 3 329 510 .....................
-A Lengths 637 1 9 .....................
+distil+paraCqa+cdipC_noDistill_mmswin_bart_deep_PTfrom69i328k_71 458240
+mk_firsttoken_top10 mean:0.4655,  std:0.49880832992242624
+mk_firsttoken_top50 mean:0.601,  std:0.4896927608204965
+mk_firsttoken_top100 mean:0.6695,  std:0.4703931866003163
+score_ed mean:0.747294743200216,  std:0.35774736809725766
 
-Q Lengths 3 226 473 .....................
-A Lengths 1018 1 1 .....................
+distil+paraCqa+cdipC_noDistill_mmswin_bart_deep_PTfrom69i328k_71 556801
+mk_firsttoken_top10 mean:0.4635,  std:0.4986659703649328
+mk_firsttoken_top50 mean:0.6045,  std:0.4889578202667384
+mk_firsttoken_top100 mean:0.679,  std:0.4668607929565301
+score_ed mean:0.7479832648067508,  std:0.34476024273970995
 
-Q Lengths 3 3 1017 .....................
-A Lengths 1014 4 7 .....................
+distil+paraCqa+cdipC_noDistill_mmswin_bart_deep_PTfrom69i328k_71 560641
+mk_firsttoken_top10 mean:0.4505,  std:0.4975437166722136
+mk_firsttoken_top50 mean:0.6005,  std:0.48979562064191634
+mk_firsttoken_top100 mean:0.6815,  std:0.46589456961849207
+score_ed mean:0.7508156018786487,  std:0.36316984474437
+
+distilGN+paraCqa+cdipC_mmswin_bart_deep_PTfrom80_85 148736
+mk_firsttoken_top10 mean:0.447,  std:0.4971830648765101
+mk_firsttoken_top50 mean:0.602,  std:0.4894854441145313
+mk_firsttoken_top100 mean:0.672,  std:0.46948482403587877
+score_ed mean:0.7791385607882401,  std:0.3705854208433955
+
+distilGN+paraCqa+cdipC_mmswin_bart_deep_PTfrom80_85 236544
+mk_firsttoken_top10 mean:0.4505,  std:0.4975437166722136
+mk_firsttoken_top50 mean:0.5965,  std:0.4905993783118768
+mk_firsttoken_top100 mean:0.683,  std:0.4653074252577537
+score_ed mean:0.771295460046578,  std:0.3604420235537048
+
+distilGN+paraCqa+cdipC_mmswin_bart_deep_PTfrom80_85 241921
+mk_firsttoken_top10 mean:0.4435,  std:0.49679749395503187
+mk_firsttoken_top50 mean:0.603,  std:0.48927599573246994
+mk_firsttoken_top100 mean:0.6685,  std:0.47075232341434065
+score_ed mean:0.7736319315827956,  std:0.3591052741535349
+
+
+distil+paraCqa+cdipC_mmswin_bart_deep_PTfrom67i280k_70 67328
+mk_firsttoken_top10 mean:0.419,  std:0.493395378981198
+mk_firsttoken_top50 mean:0.5705,  std:0.49500479795654506
+mk_firsttoken_top100 mean:0.6495,  std:0.47712655553846506
+
+distil+paraCqa+cdipC_mmswin_bart_deep_PTfrom67i280k_70 187136
+mk_firsttoken_top10 mean:0.43,  std:0.4950757517794625
+mk_firsttoken_top50 mean:0.5715,  std:0.49486134421674116
+mk_firsttoken_top100 mean:0.648,  std:0.4775939698111775
+score_ed mean:0.8034585741246674,  std:0.34796335562518327
+
+distil+paraCqa+cdipC_mmswin_bart_PTfrom50i260k_67 355328
+mk_firsttoken_top10 mean:0.4225,  std:0.49395723499104655
+mk_firsttoken_top50 mean:0.5865,  std:0.4924609121544571
+mk_firsttoken_top100 mean:0.6575,  std:0.4745458355101222
+
+distil+paraCqa+cdipC_mmswin_bart_PTfrom50i260k_67 492800
+mk_firsttoken_top10 mean:0.4135,  std:0.4924609121544571
+mk_firsttoken_top50 mean:0.5865,  std:0.4924609121544571
+mk_firsttoken_top100 mean:0.6625,  std:0.47285700798444347
+score_ed mean:0.796691326853399,  std:0.3509178669670621
+
+
+distil+paraCqa+cdipC_noDistill_mmswin_bart_PTfrom50i260k_69 419328
+mk_firsttoken_top10 mean:0.452,  std:0.4976906669810074
+mk_firsttoken_top50 mean:0.6085,  std:0.4880858018832345
+mk_firsttoken_top100 mean:0.667,  std:0.4712865370451398
+*may be the best simply becuase it sees synthPara more often....
+
+distil+paraCqa+cdipC_noDistill_mmswin_bart_PTfrom50i260k_69 576256
+mk_firsttoken_top10 mean:0.4365,  std:0.4959513585020209
+mk_firsttoken_top50 mean:0.5995,  std:0.4899997448978928
+mk_firsttoken_top100 mean:0.6765,  std:0.4678116608208906
+score_ed mean:0.7715034449309027,  std:0.36651057251109637
+
+distil+paraCqa+cdipC_noDistill_mmswin_bart_PTfrom50i260k_69 868096
+mk_firsttoken_top10 mean:0.4545,  std:0.4979254462266414
+mk_firsttoken_top50 mean:0.615,  std:0.4865953144040744
+mk_firsttoken_top100 mean:0.689,  std:0.4629027975720173
+score_ed mean:0.7328137817041542,  std:0.3527827608664974
+
+distil+paraCqa+cdipC_noDistill_mmswin_bart_PTfrom50i260k_69 947456
+mk_firsttoken_top10 mean:0.456,  std:0.4980602373207483
+mk_firsttoken_top50 mean:0.6145,  std:0.4867132112445685
+mk_firsttoken_top100 mean:0.6855,  std:0.46431643304970366
+score_ed mean:0.7365669198273636,  std:0.35826154380120234
+
+distil+paraCqa+cdipC_noDistill_mmswin_bart_PTfrom50i260k_69 947457
+mk_firsttoken_top10 mean:0.465,  std:0.4987734956871706
+mk_firsttoken_top50 mean:0.6215,  std:0.4850131441517848
+mk_firsttoken_top100 mean:0.69,  std:0.462493243193887
+score_ed mean:0.7363613560797937,  std:0.35796520286115535
+
+distilGN+paraCqa+cdipC_mmswin_bart_PTfrom69i576k_78 283392
+mk_firsttoken_top10 mean:0.454,  std:0.49787950349457055
+mk_firsttoken_top50 mean:0.6055,  std:0.48874303064084706
+mk_firsttoken_top100 mean:0.6785,  std:0.4670521919443265
+score_ed mean:0.7426190186094709,  std:0.3563230506606811
+
+distilGN+paraCqa+cdipC_mmswin_bart_PTfrom69i576k_78 381184
+mk_firsttoken_top10 mean:0.454,  std:0.49787950349457055
+mk_firsttoken_top50 mean:0.6195,  std:0.48550978362953723
+mk_firsttoken_top100 mean:0.686,  std:0.4641163647190218
+score_ed mean:0.727127949476172,  std:0.3528612503635633
+
+distilGN+paraCqa+cdipC_mmswin_bart_PTfrom50i260k_79 272640
+mk_firsttoken_top10 mean:0.427,  std:0.494642294997102
+mk_firsttoken_top50 mean:0.593,  std:0.4912748721438947
+mk_firsttoken_top100 mean:0.675,  std:0.4683748498798798
+score_ed mean:0.7859721266816313,  std:0.35433476133879593
+
+distilGN+paraCqa+cdipC_mmswin_bart_PTfrom50i260k_79 362496
+mk_firsttoken_top10 mean:0.43,  std:0.4950757517794625
+mk_firsttoken_top50 mean:0.5925,  std:0.491369260332797
+mk_firsttoken_top100 mean:0.6595,  std:0.4738773575515082
+score_ed mean:0.775101131851733,  std:0.35926772884574476
+
+distilGN+paraCqa+cdipC_mmswin_bart_PTfrom50i260k_79 365825
+mk_firsttoken_top10 mean:0.443,  std:0.49674037484384126
+mk_firsttoken_top50 mean:0.602,  std:0.4894854441145313
+mk_firsttoken_top100 mean:0.673,  std:0.46911725613112976
+score_ed mean:0.7767245871921454,  std:0.3457157871386456
+
+
+squad+iamqa+distil+paraCqa+cdipC_noDistill_mmswin_bart_PTfrom65i351k_73 63488
+mk_firsttoken_top10 mean:0.408,  std:0.49146312170904544
+mk_firsttoken_top50 mean:0.556,  std:0.4968541033341679
+mk_firsttoken_top100 mean:0.6305,  std:0.48266940031454236a
+
+squad+iamqa+distil+paraCqa+cdipC_noDistill_mmswin_bart_PTfrom65i351k_73 207104
+mk_firsttoken_top10 mean:0.407,  std:0.4912748721438947
+mk_firsttoken_top50 mean:0.553,  std:0.4971830648765101
+mk_firsttoken_top100 mean:0.63,  std:0.4828043081829324
+score_ed mean:0.8060765490382191,  std:0.3429889434156084
+
+squad+iamqa+distil+paraCqa+cdipC_mmswin_bart_PTfrom62i256k_72 160768
+mk_firsttoken_top10 mean:0.379,  std:0.4851381246614206
+mk_firsttoken_top50 mean:0.537,  std:0.49862912068991716
+mk_firsttoken_top100 mean:0.6095,  std:0.4878624293794307
+score_ed mean:0.8537072223749094,  std:0.34007136704848206
+
+
+
+distil+paraCqa+cdipC_noCosine_mmswin_bart_PTfrom50i85k_57 130560
+mk_firsttoken_top10 mean:0.3865,  std:0.4869473790873095
+mk_firsttoken_top50 mean:0.5505,  std:0.4974432128394155
+mk_firsttoken_top100 mean:0.6195,  std:0.48550978362953723
+score_ed mean:0.856155872948224,  std:0.34250612119704366
+
+
+============================
+squad+iamqa+distil+paraCqa+cdipC_noDistill_mmswin_bart_PTfrom65i351k_73 64256
+natural_q~_ED mean:0.41547644475893875,  std:0.37199263020421713
+E_ANLS mean:0.6799759157686153,  std:0.4184802847945391
+**not auto-regressive
+
+squad+iamqa+distil+paraCqa+cdipC_noDistill_mmswin_bart_PTfrom65i351k_73 212992
+natural_q~_ED mean:0.4731656013323237,  std:0.624025360009492
+E_ANLS mean:0.6486701642466837,  std:0.4278429171166764
+
+squad+iamqa+distil+paraCqa+cdipC_mmswin_bart_PTfrom62i256k_72 162048
+natural_q~_ED mean:0.48452313633422356,  std:0.6293027521905793
+E_ANLS mean:0.6405274921852738,  std:0.432247051142594
+
+==============================================
+==DocVQA== (autoregressive)
+
+docvqa_mmswin_bart_PTfrom73i65k_74 153856
+natural_q~_ED mean:0.8377922347992975,  std:0.5075729827370611
+E_ANLS mean:0.2187804305257047,  std:0.35555366300280383
+
+docvqa_mmswin_bart_PTfrom73i65k_74 419328
+natural_q~_ED mean:0.8264636540104815,  std:0.4834273488220953
+E_ANLS mean:0.20433641062716562,  std:0.3512761158530062
+
+docvqa_mmswin_bart_PTfrom73i219k_84 253440 (this actualy is better than above checkpoint in terms of teacher-froced ANLS)
+natural_q~_ED mean:0.8664983315791706,  std:0.48663643655558564
+E_ANLS mean:0.18667215168822252,  std:0.33922349901250715
+
+docvqa_mmswin_bart_PTfrom73i219k_84 337408
+natural_q~_ED mean:0.9090783245575218,  std:0.4973133404078315
+E_ANLS mean:0.1755052386899585,  std:0.33325558094831037
+
+
+============================
 
 
 IAM pretrianing results
@@ -44,6 +275,58 @@ for:ynthqa+paraqa+cdip_perceiverAutoR_3cF_PTfromFontsSmall
         I upped the virtual batchsize to 100 (from 40) at 1254169
 
 =======
+FUNSD cased
+
+funsd+table_mmswin_bart_PTfrom69i580k_81 250000
+old Total entity recall, prec, Fm:      0.7363420427553444      0.6753812636165577      0.7045454545454545
+New Total entity recall, prec, Fm:      0.7446555819477435      0.6830065359477124      0.7125000000000001
+old Total rel recall, prec, Fm: 0.42441860465116277     0.31601731601731603     0.36228287841191065
+New Total rel recall, prec, Fm: 0.44573643410852715     0.31420765027322406     0.3685897435897436
+
+funsd+table_mmswin_bart_PTfrom69i580k_81 297216
+old Total entity recall, prec, Fm:      0.7315914489311164      0.6710239651416122      0.7000000000000001
+New Total entity recall, prec, Fm:      0.7375296912114014      0.6764705882352942      0.7056818181818182
+old Total rel recall, prec, Fm: 0.39728682170542634     0.3092006033182504      0.34775233248515686
+New Total rel recall, prec, Fm: 0.4418604651162791      0.3106267029972752      0.36479999999999996
+
+funsd_mmswin_bart_PTfrom69i582k_82 295424
+old Total entity recall, prec, Fm:  0.7173396674584323  0.6579520697167756  0.6863636363636363
+New Total entity recall, prec, Fm:  0.7410926365795725  0.6797385620915033  0.7090909090909092
+old Total rel recall, prec, Fm: 0.3992248062015504  0.329073482428115   0.36077057793345
+New Total rel recall, prec, Fm: 0.436046511627907   0.34829721362229105 0.387263339070568
+
+funsd_mmswin_bart_PTfrom69i582k_82 309248
+old Total entity recall, prec, Fm:      0.7197149643705463      0.6601307189542484      0.6886363636363637
+New Total entity recall, prec, Fm:      0.7304038004750594      0.6699346405228758      0.6988636363636364
+old Total rel recall, prec, Fm: 0.3875968992248062      0.31007751937984496     0.3445305770887166
+New Total rel recall, prec, Fm: 0.437984496124031       0.2961992136304063      0.3534010946051603
+
+funsd_mmswin_bart_singleCross_PTfrom77i133k_83 250000
+old Total entity recall, prec, Fm:      0.7185273159144893      0.659041394335512       0.6875000000000001
+New Total entity recall, prec, Fm:      0.7161520190023754      0.6568627450980392      0.6852272727272728
+old Total rel recall, prec, Fm: 0.3856589147286822      0.30568356374807987     0.3410454155955441
+New Total rel recall, prec, Fm: 0.4108527131782946      0.2756827048114434      0.3299610894941634
+
+funsd_mmswin_bart_singleCross_PTfrom77i133k_83 293376
+old Total entity recall, prec, Fm:      0.6983372921615202      0.6405228758169934      0.6681818181818181
+New Total entity recall, prec, Fm:      0.7066508313539193      0.6481481481481481      0.6761363636363636
+old Total rel recall, prec, Fm: 0.35658914728682173     0.28615863141524106     0.3175150992234685
+New Total rel recall, prec, Fm: 0.36627906976744184     0.2990506329113924      0.3292682926829268
+
+funsd_mmswin_bart_PTfrom69i582k_82 401664
+old Total entity recall, prec, Fm:      0.71      0.65      0.68
+New Total entity recall, prec, Fm:      0.734      0.673202614379085       0.7022727272727273
+old Total rel recall, prec, Fm: 0.40891472868217055     0.3093841642228739      0.35225375626043404
+New Total rel recall, prec, Fm: 0.44573643410852715     0.31767955801104975     0.3709677419354839
+
+funsd+table_mmswin_bart_PTfrom69i580k_81 391168
+old Total entity recall, prec, Fm:      0.734   0.673   0.702
+New Total entity recall, prec, Fm:      0.727   0.667   0.695
+old Total rel recall, prec, Fm: 0.409   0.311   0.353
+New Total rel recall, prec, Fm: 0.424   0.341   0.378
+
+
+
 =======
 FUNSD valid for non-grid
 iter 150,000

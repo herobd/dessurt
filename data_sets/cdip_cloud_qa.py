@@ -2,6 +2,7 @@
 #Dowloads a chunk to use and starts downloading another
 import numpy as np
 import os
+import shutil
 import math, random, string, re
 from collections import defaultdict, OrderedDict
 from utils.funsd_annotations import createLines
@@ -116,12 +117,6 @@ class CDIPCloudQA(ParaQADataset):
 
     def parseAnn(self,ocr,s):
         
-        self.calls += 1
-        #print('calls {} / {}'.format(self.calls,len(self.images)*self.reuse_factor))
-        if self.calls > len(self.images)*self.reuse_factor:
-            self.switch()
-        elif self.calls%100 == 0:
-            self.updateStatus(self.using,calls=self.calls)
             
 
         image_h=ocr['height']
@@ -159,6 +154,14 @@ class CDIPCloudQA(ParaQADataset):
         use_blocks = block_score>self.block_score_thresh
         #print('block_score: {} {}'.format(block_score,'good!' if use_blocks else 'bad'))
         qa, qa_bbs = self.makeQuestions(ocr,image_h,image_w,s,use_blocks)
+
+
+        self.calls += 1
+        #print('calls {} / {}'.format(self.calls,len(self.images)*self.reuse_factor))
+        if self.calls > len(self.images)*self.reuse_factor:
+            self.switch()
+        elif self.calls%100 == 0:
+            self.updateStatus(self.using,calls=self.calls)
 
 
         return qa_bbs, list(range(qa_bbs.shape[0])), None, {}, {}, qa
@@ -218,6 +221,7 @@ class CDIPCloudQA(ParaQADataset):
                                  }
                     ret.append(tar_info)
         return ret
+    
     def updateStatus(self,status_i,tar_name=None,downloaded=None,untared=None,list_path=None,calls=None):
         with self._lock:
             try:
@@ -292,10 +296,10 @@ def loader(dataset):
                     did_something = True
 
 def remove(dataset,tar_name):
-    print('CDIP removing dir for'+tar_name)
+    print('CDIP removing dir for '+tar_name)
     name = tar_name[:3]
     dir_path = os.path.join(dataset.cache_dir,name)
-    os.remove(dir_path)
+    shutil.rmtree(dir_path)
 
 def download(dataset,tar_name,i):
     outpath = os.path.join(dataset.tar_dir,tar_name)

@@ -1,13 +1,8 @@
-import utils.img_f as img_f
+import utils.img_f as cv2
 import numpy as np
 from scipy.interpolate import griddata
 import sys
 
-INTERPOLATION = {
-    "linear": 1,
-    "bilinear": 2,
-    "cubic": 2
-}
 
 def warp_image(img, random_state=None, **kwargs):
     if img.shape[0]<=5 or img.shape[1]<=5:
@@ -21,7 +16,7 @@ def warp_image(img, random_state=None, **kwargs):
     h_mesh_interval = kwargs.get('h_mesh_interval', 12)
     h_mesh_std = kwargs.get('h_mesh_std', 1.5)
 
-    interpolation_method = kwargs.get('interpolation', 'linear')
+    #interpolation_method = kwargs.get('interpolation', 'linear')
 
     h, w = img.shape[:2]
 
@@ -58,24 +53,27 @@ def warp_image(img, random_state=None, **kwargs):
 
     # Warp image
     grid_x, grid_y = np.mgrid[0:h, 0:w]
-    grid_z = griddata(destination, source, (grid_x, grid_y), method=interpolation_method).astype(np.float32)
+    grid_z = griddata(destination, source, (grid_x, grid_y), method='linear').astype(np.float32)
     map_x = grid_z[:,:,1]
     map_y = grid_z[:,:,0]
-    meanV = img.mean()
-    warped = img_f.remap(img, map_x, map_y, INTERPOLATION[interpolation_method], borderValue=(meanV,meanV,meanV))
+    #meanV = img.mean()
+    #we'll take the mean value from the border pixles only
+    meanV = (img[0].mean() + img[-1].mean() + img[:,0].mean() + img[:,-1].mean() )/4
+    #print('meanV {}'.format(meanV))
+    if len(img.shape)==3 and img.shape[2]==1:
+        removed_dim=True
+        img = img[:,:,0]
+    else:
+        removed_dim=False
+    warped = cv2.remap(img, map_x, map_y, borderValue=meanV)
+    if removed_dim:
+        warped = warped[:,:,None]
 
     return warped
 
 if __name__ == "__main__":
     input_image = sys.argv[1]
-    if len(sys.argv)>2:
-        output_image = sys.argv[2]
-    else:
-        output_image=None
-    img = img_f.imread(input_image)
+    output_image = sys.argv[2]
+    img = cv2.imread(input_image)
     img = warp_image(img, draw_grid_lines=True)
-    if output_image is None:
-        img_f.imshow('warped', img)
-        img_f.show()
-    else:
-        img_f.imwrite(output_image, img)
+    cv2.imwrite(output_image, img)

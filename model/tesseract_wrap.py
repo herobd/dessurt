@@ -1,4 +1,3 @@
-from base import BaseModel
 from PIL import Image
 import numpy as np
 from torch import nn

@@ -29,7 +29,7 @@ np_token = '№'
 blank_token = 'ø'
 
 def norm_ed(s1,s2):
-    return editdistance.eval(s1,s2)/max(len(s1),len(s2),1)
+    return editdistance.eval(s1.lower(),s2.lower())/max(len(s1),len(s2),1)
 
 def unrollList(model,img,ocr,prev_answer,query,count=10,quiet=False):
     if prev_answer[-1]!=end_token and prev_answer[-1]!=np_token and prev_answer[-1]!=blank_token:
@@ -149,7 +149,13 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             #if (add[-2]=='useDetections' or add[-2]=='useDetect') and 'gt' not in value:
             #    addDATASET=True
     if max_qa_len is None:
-        max_qa_len=config['data_loader']['max_qa_len']
+        #max_qa_len=config['data_loader']['max_qa_len'] if 'max_qa_len' in config['data_loader'] else config['data_loader']['max_qa_len_out']
+        max_qa_len_in = config['data_loader'].get('max_qa_len_in',640)
+        max_qa_len_out = config['data_loader'].get('max_qa_len_out',2560,)
+
+    cased = config['data_loader'].get('cased',True)
+    words = True
+    print('Assume cased and words (no backwards pred)')
         
     if checkpoint is not None:
         if 'swa_state_dict' in checkpoint and checkpoint['iteration']>config['trainer']['swa_start']:
@@ -163,7 +169,22 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             new_state_dict = {
                     (key[7:] if key.startswith('module.') else key):value for key,value in state_dict.items()
                     }
+
         model = eval(config['arch'])(config['model'])
+        if 'query_special_start_token_embedder.emb.weight' in new_state_dict:
+            loading_special = new_state_dict['query_special_start_token_embedder.emb.weight']
+            model_special = model.state_dict()['query_special_start_token_embedder.emb.weight']
+
+            if loading_special.size(0) != model_special.size(0):
+                model_special[:loading_special.size(0)] = loading_special[:model_special.size(0)]
+                new_state_dict['query_special_start_token_embedder.emb.weight'] = model_special
+        if 'query_special_token_embedder.emb.weight' in new_state_dict:
+            loading_special = new_state_dict['query_special_token_embedder.emb.weight']
+            model_special = model.state_dict()['query_special_token_embedder.emb.weight']
+
+            if loading_special.size(0) != model_special.size(0):
+                model_special[:loading_special.size(0)] = loading_special[:model_special.size(0)]
+                new_state_dict['query_special_token_embedder.emb.weight'] = model_special
         model.load_state_dict(new_state_dict)
     else:
         model = eval(config['arch'])(config['model'])
@@ -237,7 +258,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             bb_lines = instance['bb_gt'][0,:,[5,10,7,12]].long()
             pairs = instance['gt_groups_adj']
             transcription_lines = instance['transcription']
-            transcription_lines = [s.lower() for s in transcription_lines]
+            transcription_lines = [s if cased else s.lower() for s in transcription_lines]
             img = instance['img'][0]
             if not quiet:
                 print(instance['imgName'])
@@ -467,8 +488,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             for ti,textline in enumerate(transcription_lines):
                 if ti in used:
                     continue
-                if len(textline)>max_qa_len:
-                    textline=textline[-max_qa_len:]
+                if len(textline)>max_qa_len_in:
+                    textline=textline[-max_qa_len_in:]
                 question='f0~'+textline
                 if PREVENT_MULTILINE:
                     final_text=textline
@@ -582,7 +603,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             #Now get their class
             pred_classes = []
             for text,pred_group in zip(pred_inst,pred_groups):
-                text = text[:max_qa_len] #if it's really long, that probably won't help
+                text = text[:max_qa_len_in] #if it's really long, that probably won't help
                 question='c$~'+text
                 mask = torch.zeros_like(img[:,1])
                 for ti in pred_group:
@@ -643,8 +664,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             rel_score=defaultdict(int)
             inconsistent_class_count=0
             for pgi,text in enumerate(pred_inst):
-                short_text_front = text[:max_qa_len]
-                short_text_back = text[-max_qa_len:]
+                short_text_front = text[:max_qa_len_in]
+                short_text_back = text[-max_qa_len_in:]
 
                 mask = torch.zeros_like(img[:,1])
                 for ti in pred_groups[pgi]:
@@ -656,10 +677,10 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 if pred_classes[pgi]==0: #header
                     qs=[('h0~',short_text_back,False)]
                 elif pred_classes[pgi]==1: #question
-                    qs=[('q0~',short_text_front,True),('l0~',short_text_back,False)]
+                    qs=[('q0~',short_text_front,False if words else True),('l0~',short_text_back,False)]
                     #qs=['l~']
                 elif pred_classes[pgi]==2: #answer
-                    qs=[('v0~',short_text_front,True)]
+                    qs=[('v0~',short_text_front,False if words else True)]
 
                 for q,t,reverse in qs:
                     question=q+t
@@ -785,7 +806,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             pred_rel2 = []
             pred_links=[]
             for gi,(text,pred_group) in enumerate(zip(pred_inst,pred_groups)):
-                text = text[:max_qa_len] #if it's really long, that probably won't help
+                text = text[:max_qa_len_in] #if it's really long, that probably won't help
                 question='g0~'+text
                 mask = torch.zeros_like(img[:,1])
                 for ti in pred_group:
@@ -795,18 +816,22 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 answer, out_mask = model(torch.stack((img[:,0],mask),dim=1),ocr,[[question]],RUN=True)
                 if not quiet:
                     print(question+' {:} '+answer)
-                assert answer[0]=='['
-                assert answer[2]==']'
-                pcls = answer[1] #remove '[ ' & ' ]'
-                #expand from single letter, and get class index
-                for cls,icls in valid_data_loader.dataset.classMap.items():
-                    if cls[0]==pcls:
-                        pcls=cls
-                        icls-=16
-                        break
-                pred_classes2.append(icls)
-                
-                answer = answer[3:]
+                if answer == '№':
+                    print('TODO, force "[" prediction...')
+                    pred_classes2.append(-1)
+                else:
+                    assert answer[0]=='['
+                    assert answer[2]==']'
+                    pcls = answer[1] #remove '[ ' & ' ]'
+                    #expand from single letter, and get class index
+                    for cls,icls in valid_data_loader.dataset.classMap.items():
+                        if cls[0]==pcls:
+                            pcls=cls
+                            icls-=16
+                            break
+                    pred_classes2.append(icls)
+                    
+                    answer = answer[3:]
                 if answer==blank_token or answer==np_token:
                     links = []
                 else:
@@ -969,23 +994,23 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
         total_entity_recall = total_entity_true_pos/total_entity_gt
         total_entity_F = 2*total_entity_prec*total_entity_recall/(total_entity_recall+total_entity_prec) if total_entity_recall+total_entity_prec>0 else 0
 
-        print('old Total entity recall, prec, Fm:\t{}\t{}\t{}'.format(total_entity_recall,total_entity_prec,total_entity_F))
+        print('old Total entity recall, prec, Fm:\t{:.3}\t{:.3}\t{:.3}'.format(total_entity_recall,total_entity_prec,total_entity_F))
 
         total_entity_prec = total_entity_true_pos2/total_entity_pred2
         total_entity_recall = total_entity_true_pos2/total_entity_gt
         total_entity_F = 2*total_entity_prec*total_entity_recall/(total_entity_recall+total_entity_prec) if total_entity_recall+total_entity_prec>0 else 0
 
-        print('New Total entity recall, prec, Fm:\t{}\t{}\t{}'.format(total_entity_recall,total_entity_prec,total_entity_F))
+        print('New Total entity recall, prec, Fm:\t{:.3}\t{:.3}\t{:.3}'.format(total_entity_recall,total_entity_prec,total_entity_F))
 
         total_rel_prec = total_rel_true_pos/total_rel_pred
         total_rel_recall = total_rel_true_pos/total_rel_gt
         total_rel_F = 2*total_rel_prec*total_rel_recall/(total_rel_recall+total_rel_prec) if total_rel_recall+total_rel_prec>0 else 0
-        print('old Total rel recall, prec, Fm:\t{}\t{}\t{}'.format(total_rel_recall,total_rel_prec,total_rel_F))
+        print('old Total rel recall, prec, Fm:\t{:.3}\t{:.3}\t{:.3}'.format(total_rel_recall,total_rel_prec,total_rel_F))
 
         total_rel_prec = total_rel_true_pos2/total_rel_pred2
         total_rel_recall = total_rel_true_pos2/total_rel_gt
         total_rel_F = 2*total_rel_prec*total_rel_recall/(total_rel_recall+total_rel_prec) if total_rel_recall+total_rel_prec>0 else 0
-        print('New Total rel recall, prec, Fm:\t{}\t{}\t{}'.format(total_rel_recall,total_rel_prec,total_rel_F))
+        print('New Total rel recall, prec, Fm:\t{:.3}\t{:.3}\t{:.3}'.format(total_rel_recall,total_rel_prec,total_rel_F))
 
 if __name__ == '__main__':
     logger = logging.getLogger()

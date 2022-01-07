@@ -9,6 +9,8 @@ import time
 from utils.util import ensure_dir
 from collections import defaultdict
 from model import *
+import re
+import numpy as np
 try:
     from torch.optim.swa_utils import AveragedModel
 except ModuleNotFoundError:
@@ -303,7 +305,7 @@ class BaseTrainer:
         """
         Full training logic
         """
-        sumLog=defaultdict(lambda:0.0)
+        sumLog=defaultdict(list)
         sumTime=0
         #for metric in self.metrics:
         #    sumLog['avg_'+metric.__name__]=0
@@ -333,7 +335,7 @@ class BaseTrainer:
                 #raise lastErr
 
             elapsed_time = timeit.default_timer() - t
-            sumLog['sec_per_iter'] += elapsed_time
+            sumLog['sec_per_iter'].append( elapsed_time )
             #print('iter: '+str(elapsed_time))
 
             #Stochastic Weight Averaging    https://github.com/timgaripov/swa/blob/master/train.py
@@ -352,9 +354,9 @@ class BaseTrainer:
             for key, value in result.items():
                 if key == 'metrics':
                     for i, metric in enumerate(self.metrics):
-                        sumLog['avg_'+metric.__name__] += result['metrics'][i]
+                        sumLog['avg_'+metric.__name__].append(result['metrics'][i])
                 else:
-                    sumLog['avg_'+key] += value
+                    sumLog['avg_'+key].append(value)
             
             #log prep
             if (    self.iteration%self.log_step==0 or 
@@ -377,12 +379,12 @@ class BaseTrainer:
                 print('                   ', end='\r')
                 if self.iteration-self.start_iteration>=self.log_step: #skip avg if started in odd spot
                     for key in sumLog:
-                        sumLog[key] /= self.log_step
+                        sumLog[key] = np.mean(sumLog[key])
                     #self._minor_log(sumLog)
                     log = {**log, **sumLog}
                 self._minor_log(log)
                 for key in sumLog:
-                    sumLog[key] =0.0
+                    sumLog[key] = []
                 if self.iteration%self.val_step!=0: #we'll do it later if we have a validation pass
                     self.train_logger.add_entry(log)
 
@@ -408,7 +410,6 @@ class BaseTrainer:
                                 log['val_' + metric.__name__] = val_result[key][i]
                         else:
                             log[key] = value
-                            #sumLog['avg_'+key] += value
 
                 if self.train_logger is not None:
                     if self.iteration%self.log_step!=0:
@@ -492,7 +493,9 @@ class BaseTrainer:
                                     .format(iteration))
         else:
             filename = os.path.join(self.checkpoint_dir, 'checkpoint-latest.pth')
-                            
+            if os.path.exists(filename):
+                os.rename(filename,os.path.join(self.checkpoint_dir, 'checkpoint-prev.pth'))
+                                
         #print(self.module.state_dict().keys())
         torch.save(state, filename)
         if not minor:
@@ -527,7 +530,11 @@ class BaseTrainer:
         :param resume_path: Checkpoint path to be resumed
         """
         self.logger.info("Loading checkpoint: {} ...".format(resume_path))
-        checkpoint = torch.load(resume_path, map_location=lambda storage, location: storage)
+        try:
+            checkpoint = torch.load(resume_path, map_location=lambda storage, location: storage)
+        except:
+            resume_path = resume_path.replace('latest','prev')
+            checkpoint = torch.load(resume_path, map_location=lambda storage, location: storage)
         if 'override' not in self.config or not self.config['override']:
             self.config = checkpoint['config']
         if not self.reset_iteration:
@@ -541,6 +548,39 @@ class BaseTrainer:
             did_brain_surgery=False
             remove_keys=[]
             checkpoint['state_dict'] = {(k if not k.startswith('module') else k[7:]):v for k,v in checkpoint['state_dict'].items() if 'relative_position_index' not in k}
+
+            ##FIX
+            needs_fix=False
+            max_found_ele = defaultdict(int)
+            for key in checkpoint['state_dict'].keys():
+                r=re.match(r'perciever(.*)\.cross_blocks\.(\d+)\.(\d+)',key)
+                if r is not None:
+                    name = (r[1],r[2])
+                    max_found_ele[name] = max(max_found_ele[name],int(r[3]))
+            to_move={}
+            for name,max_ele in max_found_ele.items():
+                if max_ele<4: #pre-adding rev cross attention, needs fixed
+                    name,level = name
+                    for key in checkpoint['state_dict'].keys():
+                        r=re.match('perciever{}.cross_blocks\.{}\.(\d+)\.(.+)'.format(name,level),key)
+                        if r is not None:
+                            place = r[1]
+                            remainder = r[2]
+                            if place=='2':
+                                newplace=4
+                            elif place=='3':
+                                newplace=5
+                            else:
+                                continue #doesn't need adjusted
+                            to_move[key]='perciever{}.cross_blocks.{}.{}.{}'.format(name,level,newplace,remainder)
+            for old,new in to_move.items():
+                print('renaming {} to {}'.format(old,new))
+                checkpoint['state_dict'][new]=checkpoint['state_dict'][old]
+                del checkpoint['state_dict'][old]
+
+            ##END FIX
+
+
             keys=checkpoint['state_dict'].keys()
             init_state_dict = self.model.state_dict()
             for key in keys:

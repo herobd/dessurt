@@ -3,7 +3,7 @@ template= """#!/bin/bash
 #SBATCH --time=72:00:00   # walltime
 #SBATCH --ntasks={0}
 #SBATCH --gpus-per-task=1
-#SBATCH  --cpus-per-task=5
+#SBATCH  --cpus-per-task=7
 #SBATCH -J "{2}"
 #SBATCH --mem-per-cpu=4G
 #SBATCH --mail-user=herobd@gmail.com   # email address
@@ -68,8 +68,13 @@ done
 """
 
 import sys
+import os
 N=6
 def create(job_name):
+    try:
+        os.mkdir(os.path.join('saved',job_name))
+    except FileExistsError:
+        pass
     script = template.format(N,N-1,job_name)#,N-1,job_name,job_name,job_name,job_name)
     script=script.replace('~<','{')
     script=script.replace('~>','}')

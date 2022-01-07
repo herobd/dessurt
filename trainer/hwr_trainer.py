@@ -57,6 +57,8 @@ class HWRTrainer(BaseTrainer):
 
         self.casesensitive = config['trainer']['casesensitive'] if 'casesensitive' in config['trainer'] else True
 
+        self.do_ocr = config.get('do_ocr',False)
+
         #self.gen = config['gen_model$']
 
     def _to_tensor(self, instance):
@@ -107,23 +109,14 @@ class HWRTrainer(BaseTrainer):
         #print("WARNING EVAL")
 
         ##tic=timeit.default_timer()
-        if self.curriculum:
-            lesson =  self.curriculum.getLesson(iteration)
-        if self.curriculum and 'synth' in lesson:
-            if self.synth_data_loader_iter is None:
-                self.synth_data_loader_iter = self.refresh_synth_data()
-            try:
-                instance = self.synth_data_loader_iter.next()
-            except StopIteration:
-                #self.synth_data_loader.dataset.refresh()
-                self.synth_data_loader_iter = self.refresh_synth_data()
-                instance = self.synth_data_loader_iter.next()
-        else:
-            try:
-                instance = self.data_loader_iter.next()
-            except StopIteration:
-                self.data_loader_iter = iter(self.data_loader)
-                instance = self.data_loader_iter.next()
+        try:
+            instance = self.data_loader_iter.next()
+        except StopIteration:
+            self.data_loader_iter = iter(self.data_loader)
+            instance = self.data_loader_iter.next()
+
+        if instance is None:
+            return {}
         ##toc=timeit.default_timer()
         ##print('data: '+str(toc-tic))
         
@@ -157,15 +150,15 @@ class HWRTrainer(BaseTrainer):
                     p.grad[torch.isnan(p.grad)]=0
 
 
-            torch.nn.utils.clip_grad_value_(self.model.parameters(),2)
-            meangrad=0
-            count=0
-            for m in self.model.parameters():
-                if m.grad is None:
-                    continue
-                count+=1
-                meangrad+=m.grad.data.mean()
-            meangrad/=count
+            torch.nn.utils.clip_grad_value_(self.model.parameters(),1)
+            #meangrad=0
+            #count=0
+            #for m in self.model.parameters():
+            #    if m.grad is None:
+            #        continue
+            #    count+=1
+            #    meangrad+=m.grad.data.mean()
+            #meangrad/=count
 
             self.optimizer.step()
             loss = loss_item
@@ -189,7 +182,7 @@ class HWRTrainer(BaseTrainer):
                 #'pred_str': pred_str
 
                 'CER': cer,
-                'meangrad': meangrad,
+                #'meangrad': meangrad,
 
                 **metrics,
             }
@@ -298,7 +291,40 @@ class HWRTrainer(BaseTrainer):
 
         losses = {}
 
-        pred = self.model(image)
+        gt = instance['gt']
+
+        if self.do_ocr == 'no' or not self.do_ocr or (self.do_ocr == 'random' and random.random()<0.5):
+            ocr_res=[[]]*image.size(0)
+        elif self.do_ocr == 'json' or self.do_ocr == 'gt':
+            ocr_res = instance['pre-recognition']
+        else:
+            try:
+                ocr_res=[]
+                normal_img = (128*(image[:,0]+1)).cpu().numpy().astype(np.uint8)
+                for img in normal_img:
+                    ocr_res.append( self.ocr_reader.readtext(img,decoder='greedy+softmax') )
+                #m=max([len(c) for c in ocr_res])+max([len(q[0]) for q in questions])
+                #self.DEBUG_max_ocr_len = max(self.DEBUG_max_ocr_len,m)
+                #print('len OCR: {}, len qeu: {}, sum: {},  max: {}'.format([len(c) for c in ocr_res],[len(q[0]) for q in questions],m,self.DEBUG_max_ocr_len))
+
+            except Exception as e:
+                print("EasyOCR error:")
+                print(e)
+                if 'CUDNN' in str(e):
+                    print('resetting cuda memory')
+                    image=image.cpu()
+                    self.model = self.model.cpu()
+                    if gt_mask is not None:
+                        gt_mask=gt_mask.cpu()
+                    torch.cuda.empty_cache()
+                    image = image.to(device)
+                    self.model = self.model.to(device)
+                    if gt_mask is not None:
+                        gt_mask=gt_mask.to(device)
+
+                ocr_res=[[]]*image.size(0)
+
+        pred = self.model(image,ocr_res)
         if type(pred) is not list:
             batch_size = pred.size(1)
             pred_size = torch.IntTensor([pred.size(0)] * batch_size)
@@ -307,7 +333,7 @@ class HWRTrainer(BaseTrainer):
             
             pred_strs=[]
             for i,gt_line in enumerate(gt):
-                logits = pred[:,i]
+                logits = pred[:,i].cpu().detach().numpy()
                 pred_str, raw_pred = string_utils.naive_decode(logits)
                 pred_str = string_utils.label2str_single(pred_str, self.idx_to_char, False)
                 pred_strs.append(pred_str)

@@ -33,12 +33,14 @@ def threadFunction(self,nums):
         #print('{} finished gen pass'.format(nums))
 
 class GenDaemon:
-    def __init__(self,font_dir,out_dir=None,num_held=0):
-        self.gen = SyntheticWord(font_dir)
-        self.wiki_dataset = getWikiDataset()
+    def __init__(self,font_dir,out_dir=None,num_held=0,simple=False,no_wiki=False,clear_fonts=False):
+        self.gen = SyntheticWord(font_dir,clear=clear_fonts)
+        if not no_wiki:
+            self.wiki_dataset = getWikiDataset()
         self.used_thresh=-1
         self.multi_para = 0.1
         self.num_held = num_held
+        self.simple = simple #for debugging purposese
 
         self.locks = []
         self.dir_paths = []
@@ -85,14 +87,19 @@ class GenDaemon:
 
         return did
 
-    def generate(self):
-        words = self.getTextSample()
+    def generate(self,text=None):
+        if text is None:
+            words = self.getTextSample()
+        else:
+            words = text.split(' ')
         #text = re.sub(r'\s+',' ',text) #replace all whitespace with space
         #words = text.split(' ')
 
         font,font_name,fontN,fontN_name = self.gen.getFont()
         out_words = []   
         for word in words:
+            if len(word)==0:
+                continue
             if word[-1]=='\n':
                 newline=True
                 word = word[:-1]
@@ -100,7 +107,15 @@ class GenDaemon:
                 newline=False
             img = self.genImageForWord(word,font,fontN)
             if img is None:
-                continue
+                #try again, with different fonts
+                for retry in range(3):
+                    t_font,t_font_name,t_fontN,t_fontN_name = self.gen.getFont()
+                    img = self.genImageForWord(word,t_font,t_fontN)
+                    if img is not None:
+                        break
+
+                if img is None:
+                    continue
 
             if newline:
                 #f.write(word+'¶\n')
@@ -112,6 +127,7 @@ class GenDaemon:
         if len(words)>0:
             return out_words
         else:
+            assert text is None
             return self.generate()
 
     def generateLabelValuePairs(self,number):
@@ -215,7 +231,17 @@ class GenDaemon:
         return img
 
     def getTextSample(self):
-        paras = getWikiArticle(dataset=self.wiki_dataset)
+        if self.simple:
+            words = []
+            word_count = random.randint(3,10)
+            for w in range(word_count):
+                word=''
+                for i in range(random.randrange(1,6)):
+                    word += random.choice('abcde')
+                words.append(word)
+            paras = [' '.join(words)]
+        else:
+            paras = getWikiArticle(dataset=self.wiki_dataset)
 
         #select para or paras
         if self.multi_para<random.random():

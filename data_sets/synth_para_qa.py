@@ -25,7 +25,11 @@ class SynthParaQA(ParaQADataset):
         super(SynthParaQA, self).__init__(dirPath,split,config,images)
 
         font_dir = dirPath
-        self.gen_daemon = GenDaemon(font_dir)
+        self.simple_vocab = config.get('simple_vocab')
+        if self.simple_vocab:
+            self.min_read_start_no_mask=4
+            self.min_read_start_with_mask=4
+        self.gen_daemon = GenDaemon(font_dir,simple=self.simple_vocab)
         self.prev_words = None
 
         self.gt_ocr = config['gt_ocr'] if 'gt_ocr' in config else False
@@ -35,14 +39,18 @@ class SynthParaQA(ParaQADataset):
         self.max_text_height = config['max_text_height'] if 'max_text_height' in config else 32
 
         self.images=[]
-        for i in range(config['batch_size']*100): #we just randomly generate instances on the fly
-            self.images.append({'id':'{}'.format(i), 'imagePath':None, 'annotationPath':0, 'rescaled':1.0, 'imageName':'0'})
+        for i in range(config['batch_size']*config.get('num_batches',100)): #we just randomly generate instances on the fly
+            self.images.append({'id':'{}'.format(i), 'imagePath':None, 'annotationPath':i, 'rescaled':1.0, 'imageName':'0'})
 
         self.held_instance=None
         self.used_held = 0
         self.max_used_held = config['prefetch_factor']//2 if 'prefetch_factor' in config else 2
 
-    def parseAnn(self,ocr,s):
+    def parseAnn(self,seed,s):
+        if not self.train:
+            random.seed(seed)
+            np.random.seed(seed)
+            torch.manual_seed(seed)
 
         image_h,image_w = self.image_size
 
@@ -60,6 +68,8 @@ class SynthParaQA(ParaQADataset):
             while success:
                 #we'll add as many as we can fit (without trying too hard)
                 success = self.addBlock(ocr,image)
+                if success and self.simple_vocab:
+                    break
 
             self.held_instance= (image,ocr)
             self.used_held=1
@@ -100,12 +110,14 @@ class SynthParaQA(ParaQADataset):
             words = self.prev_words
             self.prev_words = None
         else:
-            words = self.gen_daemon.generate()
+            words = []
+            while len(words)==0:
+                words = self.gen_daemon.generate()
         word_height = random.randrange(self.min_text_height,self.max_text_height)
         scale = word_height / words[0][1].shape[0]
 
         #layout the Paragraph to find it's height
-        para_width = random.randrange(image_w/5,image_w-10)
+        para_width = random.randrange(image_w//5,image_w-10)
         em_approx = word_height*1.6 #https://en.wikipedia.org/wiki/Em_(typography)
         min_space = 0.2*em_approx #https://docs.microsoft.com/en-us/typography/develop/character-design-standards/whitespace
         max_space = 0.5*em_approx
@@ -228,8 +240,8 @@ class SynthParaQA(ParaQADataset):
                 if text[-1]=='¶':
                     text=text[:-1]
                 img = img_f.resize(img,fx=scale,fy=scale)
-                x1 = start_x+x_off
-                y1 = start_y+y_off
+                x1 = min(image.shape[1]-1,start_x+x_off)
+                y1 = min(image.shape[0]-1,start_y+y_off)
                 x2 = min(image.shape[1],x1+img.shape[1])
                 y2 = min(image.shape[0],y1+img.shape[0])
                 image[y1:y2,x1:x2]=img[:y2-y1,:x2-x1]

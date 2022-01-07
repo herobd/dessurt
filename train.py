@@ -70,7 +70,7 @@ def main(rank,config, resume,world_size=None):
                             init_method='file:///fslhome/brianld/job_comm/{}'.format(config['name']),
                             rank=rank,
                             world_size=world_size,
-                            timeout=datetime.timedelta(0, 3600))
+                            timeout=datetime.timedelta(0, 5600))
                             #timeout=datetime.timedelta(0, 22000))
             logger.info('{} finished dist.init_process_group() <<<<'.format(rank))
 
@@ -86,7 +86,8 @@ def main(rank,config, resume,world_size=None):
     #valid_data_loader = data_loader.split_validation()
 
     model = eval(config['arch'])(config['model'])
-    model.summary()
+    if config.get('PRINT_MODEL',False):
+        model.summary()
 
     if type(config['loss'])==dict:
         loss={}#[eval(l) for l in config['loss']]
@@ -147,6 +148,8 @@ if __name__ == '__main__':
                         help='Set worldsize (num tasks) in distributed training')
     parser.add_argument('-S', '--supercomputer', default=False, action='store_const', const=True,
                         help='This is on the supercomputer')
+    parser.add_argument('-P', '--printmodel', default=False, action='store_const', const=True,
+                        help='Print model')
 
     args = parser.parse_args()
 
@@ -164,7 +167,7 @@ if __name__ == '__main__':
     if args.resume is not None and (config is None or 'override' not in config or not config['override']):
         if args.config is not None:
             logger.warning('Warning: --config overridden by --resume')
-        config = torch.load(args.resume)['config']
+        config = torch.load(args.resume,map_location=torch.device('cpu'))['config']
     elif args.config is not None and args.resume is None:
         path = os.path.join(config['trainer']['save_dir'], config['name'])
         if os.path.exists(path):
@@ -183,6 +186,9 @@ if __name__ == '__main__':
             raise Exception('ERROR, name and file name do not match, {} != {} ({})'.format(name,file_name,args.config))
 
     assert config is not None
+
+    if args.printmodel:
+        config['PRINT_MODEL']=True
 
     if args.gpu is not None:
         if args.gpu>=0:

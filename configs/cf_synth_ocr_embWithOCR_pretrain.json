@@ -1,0 +1,66 @@
+{
+    "name": "synth_ocr_embWithOCR_pretrain",
+    "cuda": true,
+    "gpu": 0,
+    "save_mode": "state_dict",
+    "override": true,
+    "super_computer":true,
+    "data_loader": {
+        "data_set_name": "SynthOCRDataset",
+
+        "data_dir": "../data/fonts/",
+        "batch_size": 128,
+        "shuffle": true,
+        "num_workers": 10,
+
+        "img_height": 32,
+	"min_text_height": 10,
+	"max_width": 800,
+	"use_mask": true,
+        "char_file": "IAM_char_set.json"
+    },
+    "validation": {
+        "shuffle": false,
+        "batch_size": 32
+    },
+
+    
+    "lr_scheduler_type": "none",
+ 
+    "optimizer_type": "AdamW",
+    "optimizer": {
+        "lr": 0.0001,
+        "weight_decay": 0.01
+    },
+    "loss": {
+        "recog": "CTCLoss"
+    },
+    "loss_weights": {
+        "recog": 1
+    },
+    "loss_params": 
+        {
+        },
+    "metrics": [],
+    "trainer": {
+        "class": "HWRTrainer",
+        "iterations": 50000,
+        "save_dir": "saved/",
+        "val_step": 999999999999999,
+        "save_step": 25000,
+        "save_step_minor": 250,
+        "log_step": 100,
+        "verbosity": 1,
+        "monitor": "loss",
+        "monitor_mode": "none",
+        "skip_auto": true,
+        "do_ocr": "random",
+
+
+        "use_learning_schedule": false
+    },
+    "arch": "HWRWithEmbAndOCR", 
+    "model": {
+        "num_class": 80
+    }
+}
