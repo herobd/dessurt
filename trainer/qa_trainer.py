@@ -525,6 +525,8 @@ class QATrainer(BaseTrainer):
                 iou = None
             for b,(b_answers,b_pred,b_questions,b_metadata) in enumerate(zip(answers,string_a,questions,instance['form_metadata'])):
                 assert len(b_questions)==1
+                #print('pred '+b_pred[0])
+                #print('true '+b_answers[0])
                 answer = b_answers[0].lower()
                 pred = b_pred[0].lower()
                 question = b_questions[0]
@@ -606,6 +608,15 @@ class QATrainer(BaseTrainer):
                 elif question == 'read_block0>':
                     ed = editdistance.eval(answer,pred)
                     log['E_line_based_CER'].append(ed/len(answer) if len(answer)>0 else ed)
+                elif question.startswith('ne>'):
+                    pred_type,pred_word = processNER(pred)
+                    gt_type,gt_word = processNER(answer)
+                    log['E_NER_acc'].append(1 if pred_type==gt_type else 0)
+                    if gt_type!='o':
+                        log['F_recall_{}'.format(gt_type)].append(1 if pred_type==gt_type else 0)
+                    if pred_type!='o':
+                        log['F_prec_{}'.format(pred_type)].append(1 if pred_type==gt_type else   0)
+                    log['E_CER'] = editdistance.eval(gt_word,pred_word)/len(gt_word)
                 elif question.startswith('ne~'):
                     pred_type = pred[1]
                     gt_type = answer[1]
@@ -614,6 +625,63 @@ class QATrainer(BaseTrainer):
                         log['F_recall_{}'.format(gt_type)].append(1 if pred_type==gt_type else 0)
                     if pred_type!='o':
                         log['F_prec_{}'.format(pred_type)].append(1 if pred_type==gt_type else   0)
+                elif question.startswith('ner_line>'):
+                    pred_words = processNERLine(pred)#.split(' ')
+                    gt_words = processNERLine(answer)
+                    #we now step through at be sure we mactch the words up
+                    p=0 #pred index
+                    g=0 #gt index
+                    eds = [None]*len(pred_words)
+                    recalls = [None]*len(pred_words)
+                    precs = [None]*len(pred_words)
+                    total_gt_len=0
+                    for p in range(len(pred_words)):
+                        eds[p] = [None]*len(gt_words)
+                        recalls[p] = [defaultdict(list) for i in range(len(gt_words))]#[None]*len(gt_words)
+                        precs[p] = [defaultdict(list) for i in range(len(gt_words))]#[None]*len(gt_words)
+                        for g in range(len(gt_words)):
+                            ed = editdistance.eval(pred_words[p][0],gt_words[g][0])
+                            if p==0 and g==0:
+                                prev_ed=0
+                                prev_recall={}
+                                prev_prec={}
+                            else:
+                                step = []
+                                if p>0 and g>0:
+                                    step.append(((-1,-1),eds[p-1][g-1]))
+                                if p>0:
+                                    step.append(((-1,0),eds[p-1][g]))
+                                if g>0:
+                                    step.append(((0,-1),eds[p][g-1]))
+                                step.sort(key=lambda s:s[1])
+                                sp,sg = step[0][0]
+                                prev_ed = eds[p+sp][g+sg]
+                                prev_recall = recalls[p+sp][g+sg]
+                                prev_prec = precs[p+sp][g+sg]
+
+                            eds[p][g]=ed+prev_ed
+                            total_gt_len+=len(gt_words[g][0])
+
+                            #hit = gt_words[g][1] == pred_words[p][1]
+                            gt_cls = gt_words[g][1]
+                            pred_cls = pred_words[p][1]
+                            recalls[p][g].update(prev_recall)
+                            if gt_cls!='o':
+                                #recalls[p][g]=defaultdict(list)
+                                recalls[p][g][gt_cls]=recalls[p][g][gt_cls]+[1 if pred_cls==gt_cls else 0]
+                            precs[p][g].update(prev_prec)
+                            if pred_cls!='o':
+                                #precs[p][g]=defaultdict(list)
+                                precs[p][g][pred_cls]=precs[p][g][pred_cls]+[1 if pred_cls==gt_cls else 0]
+                    
+                    for cls,recall in recalls[-1][-1].items():
+                        log['F_recall_{}'.format(cls)]+=recall
+                        #print('recall {} added: {}'.format(cls,recall))
+                    for cls,prec in precs[-1][-1].items():
+                        log['F_prec_{}'.format(cls)]+=prec
+                        #print('prec {} added: {}'.format(cls,prec))
+                    log['E_approx_CER'].append(eds[-1][-1]/total_gt_len)
+
                 elif question.startswith('mk>'):
                     pass #handled earlier
                 elif question.startswith('natural_q~'):
@@ -625,6 +693,12 @@ class QATrainer(BaseTrainer):
                         NL = ed/max(len(ans),len(pred))
                         scores.append(1-NL if NL<0.5 else 0)
                     log['E_ANLS'].append(max(scores))
+
+                #elif question=='json>':
+                #    pred_data = fixLoadJSON(pred)
+                # 
+                #    #get predicted and gt entities
+               
                 else:
                     print('ERROR: missed question -- {}'.format(question))
                 
@@ -715,4 +789,40 @@ class QATrainer(BaseTrainer):
 
         #model.apply(lambda module: _set_momenta(module, momenta))
         #model.train(was_training)
+
+
+def processNERLine(line):
+    ret = []
+    for w in line.split(' '):
+        start_b = w.rfind('[')
+        end_b = w.rfind(']')
+        if start_b!=-1 and end_b!=-1:
+            if 'ne:'==w[start_b+1:start_b+4]:
+                cls = w[start_b+4:end_b]
+            else:
+                colon = w.rfind(':')
+                if colon!=-1:
+                    cls = w[colon+1:end_b]
+                else:
+                    cls = w[start_b+1:end_b]
+
+            word = w[:start_b]
+        elif start_b!=-1:
+            cls='o'
+            word = w[:start_b]
+        else:
+            cls='o'
+            word = line
+        #print('see class: '+cls)
+        ret.append((word,cls))
+    return ret
+
+def processNER(pred):
+    start_b = pred.find('[')
+    end_b = pred.find(']')
+    if start_b!=-1 and end_b!=-1:
+        cls = pred[start_b+1:end_b]
+        word = pred[end_b+1:]
+    
+    return cls,word
 

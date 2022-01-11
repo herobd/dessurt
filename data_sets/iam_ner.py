@@ -67,8 +67,8 @@ class IAMNER(QADataset):
                         qa['bb_ids']=None
                         self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':xml_path, 'rescaled':rescale,'qa':[qa]})
 
-        print('all classes')
-        print(all_classes)
+        #print('all classes')
+        #print(all_classes)
 
 
 
@@ -198,7 +198,7 @@ class IAMNER(QADataset):
                     bb = [lX*s, tY*s, rX*s, tY*s, rX*s, bY*s, lX*s, bY*s,
                                 s*lX, s*(tY+bY)/2.0, s*rX, s*(tY+bY)/2.0, s*(lX+rX)/2.0, s*tY, s*(rX+lX)/ 2.0, s*bY]
                     inmask = [bb]
-                    if self.train and random.random()<0.5:
+                    if not self.train or random.random()<0.5:
                         q='ne>'
                         a='['+cls+']'+word[1]
                     else:
