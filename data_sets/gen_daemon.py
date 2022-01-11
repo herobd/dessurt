@@ -87,15 +87,17 @@ class GenDaemon:
 
         return did
 
-    def generate(self,text=None):
+    def generate(self,text=None,font=None,ret_font=False):
         if text is None:
             words = self.getTextSample()
         else:
             words = text.split(' ')
         #text = re.sub(r'\s+',' ',text) #replace all whitespace with space
         #words = text.split(' ')
-
-        font,font_name,fontN,fontN_name = self.gen.getFont()
+        if font is None:
+            font,font_name,fontN,fontN_name = self.gen.getFont()
+        else:
+            font,fontN=font
         out_words = []   
         for word in words:
             if len(word)==0:
@@ -125,6 +127,8 @@ class GenDaemon:
                 out_words.append((word,img))
         
         if len(words)>0:
+            if ret_font:
+                return out_words,(font,fontN)
             return out_words
         else:
             assert text is None

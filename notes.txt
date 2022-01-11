@@ -264,6 +264,9 @@ Macro Fm = 0.7004263689612764
 iamNERfull_mmswin_bart_PTfrom75i550k_89 233k
 Macro Fm = 0.677763421320044
 
+iamNER_mmswin_bart_PTfrom75i400k_86 150000
+Macro Fm = 0.4347031506551097
+
 iamNER_mmswin_bart_PTfrom75i400k_86 308992
 Macro Fm = 0.5002126482391526
 
