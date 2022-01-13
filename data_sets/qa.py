@@ -450,7 +450,7 @@ class QADataset(torch.utils.data.Dataset):
                 #img[0,:-1,t:b+1,l:r+1]=0 #blank on image
                 #img[0,-1,t:b+1,l:r+1]=-1 #flip mask to indicate was blanked
             #img = addMask(img,new_q_outboxes[0])
-            if outmasks:
+            if outmasks and new_q_outboxes[0] is not None:
                 mask_label = getMask(img.shape,new_q_outboxes[0])
             else:
                 mask_label = None
