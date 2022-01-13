@@ -1639,6 +1639,8 @@ class FormQA(QADataset):
             elif entities[ei].cls=="question":
                 if not isinstance(children,(list,tuple)):
                     children = [children]
+                else:
+                    print('JSON SEES MULTI ANSWER {}'.format(entities[ei].text))
                 ret = []
                 for child in children:
                     if child is not None:
