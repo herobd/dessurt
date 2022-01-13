@@ -107,7 +107,7 @@ class MmSwin(BaseModel):
             init_emb = init_model.shared
 
 
-        self.text_embedding = nn.Embedding(self.tokenizer.vocab_size, d_model)
+        self.text_embedding = nn.Embedding(len(self.tokenizer), d_model)
         if init_from_pretrained:
             self.text_embedding.weight.data[:,:d_model] = init_emb.weight.data[:,:d_model]
 
@@ -237,7 +237,7 @@ class MmSwin(BaseModel):
         
         
 
-        self.answer_decode = nn.Linear(d_model,self.tokenizer.vocab_size,bias=False)
+        self.answer_decode = nn.Linear(d_model,len(self.tokenizer),bias=False)
         self.answer_decode.weight = self.text_embedding.weight #Tie weights
         self.answer_softmax = nn.LogSoftmax(dim=-1) #except
 

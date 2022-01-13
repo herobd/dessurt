@@ -128,6 +128,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     "data_set_name": "DocVQA",
                     "data_dir": "../data/DocVQA",
                     "batch_size": config['data_loader']['batch_size']*3 if not run else 1,
+                    "rescale_to_crop_size_first": True,
                     "rescale_range": [
                         1.0,
                         1.0
