@@ -44,12 +44,13 @@ class SynthFormDataset(FormQA):
         self.table_prob = config['tables'] if 'tables' in config else 0
         self.match_title_prob = 0.3
         self.match_label_prob = 0.5
-        self.blank_value_prob = 0.01
-        self.new_col_chance = 0.15
-        self.side_by_side_prob = 0.5
+        self.blank_value_prob = 0.1
+        self.new_col_chance = 0.3
+        self.side_by_side_prob = 0.66
         self.min_qa_sep = 10
         self.max_qa_sep = 250
         self.block_pad_max = 500
+        self.block_pad_min = 30
         with open(os.path.join(dirPath,'gpt2_generation.json')) as f:
             self.documents = json.load(f)
         #READ CSVs TODO
@@ -78,7 +79,7 @@ class SynthFormDataset(FormQA):
         image_h,image_w = self.image_size
         image = np.zeros([image_h,image_w],dtype=np.uint8)
         all_entities=[]
-        entity_link=[]
+        entity_link=defaultdict(list)
         tables=[]
 
         success=True
@@ -132,15 +133,18 @@ class SynthFormDataset(FormQA):
                 for ei,li in line_ids:
                     all_entities[ei].lines[li].ambiguous = True
 
+        link_dict=entity_link
+        entity_link=[(e1,list(e2s) if e2s is not None else None) for e1,e2s in link_dict.items()]
         #now set up a full linking dictionary
-        link_dict=defaultdict(list)
         for e1,e2s in entity_link:
             if e2s is not None:
-                if isinstance(e2s,int):
-                    e2s=[e2s]
-                link_dict[e1]+=e2s
                 for e2 in e2s:
-                    link_dict[e2].append(e1)
+                    if e2 is not None:
+                        if link_dict[e2] is None:
+                            link_dict[e2]=[]
+                        link_dict[e2].append(e1)
+            elif link_dict[e1] is None or len(link_dict[e1])==0:
+                del link_dict[e1]
         #Add all the link for tables
         for table in tables:
             for r,r_header in enumerate(table.row_headers):
@@ -420,8 +424,8 @@ class SynthFormDataset(FormQA):
             if len(new_pairs)>0:
                 pairs=new_pairs
                 break
-        print(title)
-        print(pairs)
+        #print(title)
+        #print(pairs)
 
         max_y = image.shape[0]
         label_matches_title = random.random()<self.match_title_prob and title is not None
@@ -450,9 +454,15 @@ class SynthFormDataset(FormQA):
             label_words,label_font = self.gen_daemon.generate(label+(':' if 'colon' in cue else ''),font=label_font,ret_font=True)
             if random.random()<self.blank_value_prob:
                 value_words = []
+                if cue=='none':
+                    cue = random.choice(options[:-1])
+
             elif isinstance(value,str):
                 value_words,value_font = self.gen_daemon.generate(value,font=value_font,ret_font=True)
                 value_words = [value_words]
+                #TEST
+                #value_wordsT,value_font = self.gen_daemon.generate('TEST_LIST',font=value_font,ret_font=True)
+                #value_words.append(value_wordsT)
             else:
                 #list answer
                 list_values=[]
@@ -469,17 +479,17 @@ class SynthFormDataset(FormQA):
         value_height = self.max_text_height
         num_pairs = len(pairs)
         for retry in range(5):
-            if start_x>init_x+1:
-                start_x = random.randrange(init_x+1,start_x)
-            if start_y>init_y+1:
-                start_y = random.randrange(init_y+1,start_y)
+            if start_x>init_x+self.block_pad_min:
+                start_x = random.randrange(init_x+self.block_pad_min,start_x)
+            if start_y>init_y+self.block_pad_min:
+                start_y = random.randrange(init_y+self.block_pad_min,start_y)
 
             if start_x>=image.shape[1]-16 or start_y>=image.shape[0]-10:
                 continue
             
             #setup text height and spacing
             if title is not None:
-                title_height = random.randrange(self.min_text_height,1+max(self.min_text_height+2,title_height))
+                title_height = random.randrange((self.min_text_height+title_height)//2,1+max(self.min_text_height+2,title_height))
             em_approx = title_height*1.6 #https://en.wikipedia.org/wiki/Em_(typography)
             min_space = 0.2*em_approx #https://docs.microsoft.com/en-us/typography/develop/chara  cter-design-standards/whitespace
             max_space = 0.5*em_approx
@@ -576,7 +586,7 @@ class SynthFormDataset(FormQA):
                 assert len(title_img_pos)>0
                 title_img_pos_lines.append(title_img_pos)
                 title_str_lines.append(title_str)
-                end_title_y=cur_y+title_newline_height
+                end_title_y=cur_y+title_newline_height+round(title_newline_height*random.random())
             else:
                 end_title_y=start_y
                 rightmost_title_x=start_x
@@ -587,48 +597,66 @@ class SynthFormDataset(FormQA):
 
             can_do_side_by_side = max_value_word_w+max_label_word_w+self.min_qa_sep < block_width
             
-            side_by_side = can_do_side_by_side and random.random()<self.side_by_side_prob
+            side_by_side = can_do_side_by_side and (random.random()<self.side_by_side_prob or cue=='none')
             if side_by_side:
                 aligned_cols = random.random()<0.5 or cue=='none'
+                if aligned_cols:
+                    fixed_value_width = random.randrange(max_value_word_w,(block_width)-(max_label_word_w+self.min_qa_sep))
+                    fixed_label_width = random.randrange(max_label_word_w,(block_width)-(fixed_value_width+self.min_qa_sep))
+                    sep = (block_width)-(fixed_value_width+fixed_label_width)
+                    max_qa_sep = self.max_qa_sep if start_y<image.shape[0]//2 else self.max_qa_sep//2
+                    if sep>self.min_qa_sep:
+                        sep = random.randrange(self.min_qa_sep,min(sep,self.max_qa_sep))
+                    all_value_x = start_x+fixed_label_width+sep
+                    max_label_x = start_x+fixed_label_width
+                else:
+                    if (block_width)-(max_label_word_w+max_value_word_w)<self.min_qa_sep:
+                        continue #restart, too narrow
+                    sep = random.randrange(self.min_qa_sep,min(self.max_qa_sep//2+1,1+(block_width)-(max_label_word_w+max_value_word_w)))
+                    max_label_x = max_x-(max_value_word_w+sep)
+                    all_value_x=None
             else:
                 aligned_cols = False
-                print('WARNING, non-side-by-side not implmented!!')
-                side_by_side=True
-            if aligned_cols:
-                value_width = random.randrange(max_value_word_w,(block_width)-(max_label_word_w+self.min_qa_sep))
-                label_width = random.randrange(max_label_word_w,(block_width)-(value_width+self.min_qa_sep))
-                sep = (block_width)-(value_width+label_width)
-                max_qa_sep = self.max_qa_sep if start_y<image.shape[0]//2 else self.max_qa_sep//2
-                if sep>self.min_qa_sep:
-                    sep = random.randrange(self.min_qa_sep,min(sep,self.max_qa_sep))
-                all_value_x = start_x+label_width+sep
-                max_label_x = start_x+label_width
-            else:
-                if (block_width)-(max_label_word_w+max_value_word_w)<self.min_qa_sep:
-                    continue #restart, too narrow
-                sep = random.randrange(self.min_qa_sep,min(self.max_qa_sep//2+1,1+(block_width)-(max_label_word_w+max_value_word_w)))
-                max_label_x = max_x-(max_value_word_w+sep)
+                #print('WARNING, non-side-by-side not implmented!!')
+                #side_by_side=True
+                try:
+                    sep=random.randrange(max(label_height,value_height)*3,min(max(label_height,value_height)*10,max_x-max(max_value_word_w,max_label_word_w)))//2
+                except ValueError:
+                    sep=max_x #can't do columns
+                max_label_x=max_x
+                all_value_x=None
+
 
             cur_x = start_x
             col_x = start_x
+            col_number = 0
             cur_y = end_title_y
             rightmost_x_so_far = cur_x
-            max_value_len=0
+            rightmost_value_x=defaultdict(int)
             pairs_to_draw = []
             num_pairs_to_draw_in_col =0 
+
+            def roomForNewCol(col_x,rightmost_x_so_far):
+                #if side_by_side:
+                room_for_new_col = (aligned_cols and col_x+sep+2*(fixed_label_width+sep+fixed_value_width)<max_x) or (not aligned_cols and col_x+2*sep+rightmost_x_so_far+max_label_word_w+sep+max_value_word_w<max_x)
+                #else:
+                #  room_for_new_col = col_x+2*sep+max(max_label_word_w,max_value_word_w)<max_x
+                return room_for_new_col
+            def shiftCol(col_number,col_x,all_value_x,max_label_x,cur_y,rightmost_x_so_far):
+                if aligned_cols:
+                    col_x += fixed_label_width+2*sep+fixed_value_width
+                    all_value_x += fixed_label_width+2*sep+fixed_value_width
+                    max_label_x += fixed_label_width+2*sep+fixed_value_width
+                    cur_y = end_title_y
+                else:
+                    col_x = rightmost_x_so_far+2*sep
+                    cur_y = end_title_y
+                num_pairs_to_draw_in_col=0
+                return col_number+1,col_x, all_value_x, max_label_x,cur_y,num_pairs_to_draw_in_col
+
             for (label_words,value_words),(label_word_ws_list,value_word_ws_list) in zip(image_pairs,w_pairs):
-                room_for_new_col = (aligned_cols and col_x+sep+2*(label_width+sep+value_width)<max_x) or (not aligned_cols and col_x+2*sep+rightmost_x_so_far+max_label_word_w+sep+max_value_word_w<max_x)
-                if room_for_new_col and (cur_y+value_height>=max_y or random.random()<self.new_col_chance*min(1,num_pairs_to_draw_in_col/3)):
-                    if aligned_cols:
-                        col_x += label_width+2*sep+value_width
-                        all_value_x += label_width+2*sep+value_width
-                        max_label_x += label_width+2*sep+value_width
-                        cur_y = end_title_y
-                    else:
-                        col_x += rightmost_x_so_far+2*sep
-                        #max_label_x += rightmost_x_so_far
-                        cur_y = end_title_y
-                    num_pairs_to_draw_in_col=0
+                if roomForNewCol(col_x,rightmost_x_so_far) and (cur_y+label_height>=max_y or random.random()<self.new_col_chance*min(1,num_pairs_to_draw_in_col/3)):
+                    col_number,col_x, all_value_x, max_label_x,cur_y,num_pairs_to_draw_in_col=shiftCol(col_number,col_x,all_value_x,max_label_x,cur_y,rightmost_x_so_far)
                 elif cur_y+label_height>=max_y:
                     break #cannot do pair
 
@@ -653,20 +681,8 @@ class SynthFormDataset(FormQA):
                             cur_y += label_newline_height
                             if cur_y+label_height>=max_y:
                                 #do we have room for another column?
-                                room_for_new_col = (aligned_cols and col_x+sep+2*(label_width+sep+value_width)<max_x) or (not aligned_cols and col_x+2*sep+rightmost_x_so_far+max_label_word_w+sep+max_value_word_w<max_x)
-                                if room_for_new_col:
-                                    #import pdb; pdb.set_trace()
-                                    if aligned_cols:
-                                        col_x += label_width+2*sep+value_width
-                                        all_value_x += label_width+2*sep+value_width
-                                        max_label_x += label_width+2*sep+value_width
-                                        cur_y = end_title_y
-                                    else:
-                                        col_x += rightmost_x_so_far+2*sep
-                                        cur_x = col_x
-                                        max_label_x += rightmost_x_so_far+2*sep
-                                        cur_y = end_title_y
-                                    num_pairs_to_draw_in_col=0
+                                if roomForNewCol(col_x,rightmost_x_so_far):
+                                    col_number,col_x, all_value_x, max_label_x,cur_y,num_pairs_to_draw_in_col=shiftCol(col_number,col_x,all_value_x,max_label_x,cur_y,rightmost_x_so_far)
                                     restart = True
                                     break
                                 else:
@@ -693,16 +709,31 @@ class SynthFormDataset(FormQA):
                         label_str_lines.append(label_str)
                         label_img_pos_lines.append(label_img_pos)
 
-                    if aligned_cols:
-                        value_start_x = all_value_x
-                    else:
-                        value_start_x = cur_x+sep
+                    if side_by_side:
+                        if aligned_cols:
+                            value_start_x = all_value_x
+                        else:
+                            value_start_x = cur_x+sep
 
-                    lowest_y = max_y-(value_height+1)
-                    cur_y = random.randrange(min(label_y,label_y+label_height-value_height)-4,min(max(label_y+value_height,label_y+label_height)+4,lowest_y))
+                        lowest_y = max_y-(value_height+1)
+                        cur_y = random.randrange(min(label_y-round(0.15*min(label_height,value_height)),label_y+label_height-value_height)-4,min(max(label_y+value_height,label_y+label_height)+4,lowest_y))
+                    else:
+                        value_start_x = col_x + random.randrange(-4,label_height)
+                        cur_y = label_y+round(label_newline_height+label_newline_height*random.random())
+
                     max_value_x = max_x
                     value_entities=[]
                     for value_word_ws_item,value_words_item in zip(value_word_ws_list,value_words):
+                        if cur_y+value_height>=max_y:
+                            #do we have room for another column?
+                            if roomForNewCol(col_x,rightmost_x_so_far):
+                                col_number,col_x, all_value_x, max_label_x,cur_y,num_pairs_to_draw_in_col=shiftCol(col_number,col_x,all_value_x,max_label_x,cur_y,rightmost_x_so_far)
+                                restart = True
+                                break
+                            else:
+                                cannot_do_pair=True
+                                #import pdb;pdb.set_trace()
+                                break
                         cur_x = value_start_x
                         value_str=''
                         value_str_lines_item=[]
@@ -712,7 +743,7 @@ class SynthFormDataset(FormQA):
 
                             
                             if cur_x+value_w>=max_value_x:
-                                if cur_x == value_start_x:
+                                if cur_x == value_start_x or value_start_x+value_w>=max_value_x:
                                     cannot_do_pair=True
                                     break
                                 #newline
@@ -726,18 +757,8 @@ class SynthFormDataset(FormQA):
 
                                 if cur_y+value_height>=max_y:
                                     #do we have room for another column?
-                                    room_for_new_col = (aligned_cols and col_x+sep+2*(label_width+sep+value_width)<max_x) or (not aligned_cols and col_x+2*sep+rightmost_x_so_far+max_label_word_w+sep+max_value_word_w<max_x)
-                                    if room_for_new_col:
-                                        #import pdb; pdb.set_trace()
-                                        if aligned_cols:
-                                            col_x += label_width+2*sep+value_width
-                                            all_value_x += label_width+2*sep+value_width
-                                            cur_y = end_title_y
-                                        else:
-                                            col_x += rightmost_x_so_far+2*sep
-                                            cur_x = col_x
-                                            cur_y = end_title_y
-                                        num_pairs_to_draw_in_col=0
+                                    if roomForNewCol(col_x,rightmost_x_so_far):
+                                        col_number,col_x, all_value_x, max_label_x,cur_y,num_pairs_to_draw_in_col=shiftCol(col_number,col_x,all_value_x,max_label_x,cur_y,rightmost_x_so_far)
                                         restart = True
                                         break
                                     else:
@@ -763,10 +784,8 @@ class SynthFormDataset(FormQA):
                             value_str_lines_item.append(value_str)
                             value_img_pos_lines_item.append(value_img_pos)
                         value_entities.append((value_str_lines_item,value_img_pos_lines_item))
-                        rightmost_x=0
                         for value_img_pos in value_img_pos_lines_item:
-                            rightmost_x= max(value_img_pos[-1][0]+value_img_pos[-1][-1],rightmost_x)
-                        max_value_len = max(max_value_len,rightmost_x-value_start_x)
+                            rightmost_value_x[col_number]= max(value_img_pos[-1][0]+value_img_pos[-1][-1],rightmost_value_x[col_number])
 
                         cur_y += value_list_newline_height
 
@@ -775,8 +794,10 @@ class SynthFormDataset(FormQA):
 
                     
                     #else add the info to be drawn
-                    pairs_to_draw.append((label_str_lines,label_img_pos_lines,value_entities))
+                    pairs_to_draw.append((label_str_lines,label_img_pos_lines,value_entities,col_number))
                     num_pairs_to_draw_in_col+=1
+
+                    cur_y += round(label_newline_height*random.random()) + (value_list_newline_height if len(value_words)==0 else 0) +3
 
                         
                 if cannot_do_pair:
@@ -820,68 +841,77 @@ class SynthFormDataset(FormQA):
                 entities.append(title_entity)
                 lowest_y = title_entity.box[-1]
 
-            for label_str_lines,label_img_pos_lines,value_entities in pairs_to_draw:
+            for label_str_lines,label_img_pos_lines,value_entities,col_number in pairs_to_draw:
                 label_entity = self.makeAndDrawEntity(image,'question',label_str_lines,label_img_pos_lines)
                 label_ei=len(entities)
                 entities.append(label_entity)
                 if title is not None:
-                    entity_link.append((title_ei,label_ei))
+                    entity_link[title_ei].append(label_ei)
                 lowest_y = max(lowest_y,label_entity.box[-1])
                 
 
                 for value_str_lines,value_img_pos_lines in value_entities:
-                    value_entity = self.makeAndDrawEntity(image,'answer',value_str_lines,value_img_pos_lines,max_value_len,cue)
+                    value_entity = self.makeAndDrawEntity(image,'answer',value_str_lines,value_img_pos_lines,rightmost_value_x[col_number],cue)
                     value_ei=len(entities)
                     entities.append(value_entity)
-                    entity_link.append((label_ei,value_ei))
+                    entity_link[label_ei].append(value_ei)
                     lowest_y = max(lowest_y,value_entity.box[-1])
 
-                if len(value_entities)>1:
-                    print('GENERATED MULTI ANSWER TO [{}] {}'.format(label_ei,label_entity.text))
                 
-                if len(value_entities)==0 and max_value_len>0: #blank
+                if len(value_entities)==0: #blank
+                    entity_link[label_ei]=None
                     #draw empty line
-                    assert side_by_side
                     line_thickness = random.randrange(1,5)
                     pad_w = random.randrange(1,5)
                     pad_h = random.randrange(1,5)
                     color = random.randrange(1,170)
-                    this_length = max_value_len
                     dotting = random.randrange(1,5)
-                    x = label_img_pos_lines[-1][-1][0]+label_img_pos_lines[-1][-1][-1]+sep
-                    y = label_img_pos_lines[-1][-1][1]
+                    if side_by_side:
+                        if aligned_cols:
+                            x = all_value_x
+                        else:
+                            x = label_img_pos_lines[-1][-1][0]+label_img_pos_lines[-1][-1][-1]+sep
+                        y = label_img_pos_lines[-1][-1][1]
+                        if rightmost_value_x[col_number]==0:
+                            rightmost_value_x[col_number] = x+6*value_height
+                            rightmost_x_so_far = max(rightmost_x_so_far,rightmost_value_x[col_number])
+                    else:
+                        x = col_x+random.randrange(-4,label_height)
+                        y = label_img_pos_lines[-1][-1][1] + label_newline_height + round(label_newline_height*random.random())
+                        if rightmost_value_x[col_number]==0:
+                            rightmost_value_x[col_number] = rightmost_x_so_far
+
                     img_h = label_img_pos_lines[-1][-1][-2]
-                    this_length = max_value_len
                     if 'dotted line' in cue:
-                        for x in range(max(0,x-pad_w),min(image.shape[1],x+this_length+pad_w)):
+                        for x in range(max(0,x-pad_w),min(max_x,rightmost_value_x[col_number]+pad_w)):
                             if math.sin(x*math.pi/dotting)>0:
                                 image[y+img_h+pad_h-line_thickness//2:1+y+img_h+pad_h+line_thickness//2,x]=color
 
                     elif 'line' in cue:
-                        img_f.line(image,(x-pad_w,y+img_h+pad_h),(x+this_length+pad_w,y+img_h+pad_h),color,line_thickness)
+                        img_f.line(image,(x-pad_w,y+img_h+pad_h),(rightmost_value_x[col_number]+pad_w,y+img_h+pad_h),color,line_thickness)
                     elif 'box' in cue:
-                        img_f.rectangle(image,(x-pad_w,y-pad_h),(x+this_length+pad_w,y+img_h+pad_h),color,line_thickness)
+                        img_f.rectangle(image,(x-pad_w,y-pad_h),(rightmost_value_x[col_number]+pad_w,y+img_h+pad_h),color,line_thickness)
+                    lowest_y = max(lowest_y,y+img_h+pad_h)
 
 
             return True,(init_x,init_y,max(rightmost_title_x,rightmost_x_so_far),lowest_y)
         return False,None
 
 
-    def makeAndDrawEntity(self,image,cls,str_lines,img_pos_lines,max_line_length=None,cue=None):
+    def makeAndDrawEntity(self,image,cls,str_lines,img_pos_lines,max_line_x=None,cue=None):
         lines=[]
         if cue is not None and any(prompt in cue for prompt in ['box','line']):
             if random.random()<0.4:
-                length = max_line_length
+                line_end_x = max_line_x
             elif random.random()<0.6:
-                length = 0
+                line_end_x = 0
                 for img_pos_words in img_pos_lines:
                     line_max_x=img_pos_words[-1][0]+img_pos_words[-1][-1]
-                    line_min_x=img_pos_words[0][0]
-                    length=max(length,line_max_x-line_min_x)
+                    line_end_x=max(line_end_x,line_max_x)
             else:
-                length=None
+                line_end_x=None
         else:
-            length=None
+            line_end_x=None
         max_x=max_y = 0
         min_x=min_y = 9999999999999999999
         if cue is not None:
@@ -903,21 +933,21 @@ class SynthFormDataset(FormQA):
 
 
             if cue is not None:
-                if length is not None:
-                    line_max_x += length-img_pos_words[-1][-1]
+                if line_end_x is not None:
+                    line_max_x = line_end_x
                 dotting = random.randrange(1,5)
                 if 'dotted line' in cue:
-                    for x in range(max(0,line_min_x-pad_w),min(image.shape[1],line_max_x+pad_w)):
+                    for x in range(max(0,line_min_x-pad_w),min(max_line_x,line_max_x+pad_w)):
                         if math.sin(x*math.pi/dotting)>0:
                             image[line_max_y+pad_h-line_thickness//2:1+line_max_y+pad_h+line_thickness//2,x]=color
 
                 elif 'line' in cue:
-                    img_f.line(image,(line_min_x-pad_w,line_max_y+pad_h),(line_max_x+pad_w,line_max_y+pad_h),color,line_thickness)
+                    img_f.line(image,(line_min_x-pad_w,line_max_y+pad_h),(min(max_line_x,line_max_x+pad_w),line_max_y+pad_h),color,line_thickness)
                 elif 'box' in cue:
                     min_x = min(line_min_x-pad_w,min_x)
                     min_y = min(line_min_y-pad_h,min_y)
                     max_x = max(line_max_x+pad_w,max_x)
                     max_y = max(line_max_y+pad_h,max_y)
         if cue is not None and 'box' in cue:
-            img_f.rectangle(image,(min_x,min_y),(max_x,max_y),color,line_thickness)
+            img_f.rectangle(image,(min_x,min_y),(min(max_line_x,max_x),max_y),color,line_thickness)
         return Entity(cls,lines)
