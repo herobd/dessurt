@@ -1691,8 +1691,8 @@ class FormQA(QADataset):
                         #assert entities[ei].cls=='other'
                         doc.append(formatOther(entities[ei]))
 
-        if len(doc)==0:
-            import pdb;pdb.set_trace()
+        #if len(doc)==0:
+        #    import pdb;pdb.set_trace()
         #TEST
         #found=False
         #for ele in doc:
