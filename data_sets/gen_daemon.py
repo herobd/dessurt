@@ -107,12 +107,12 @@ class GenDaemon:
                 word = word[:-1]
             else:
                 newline=False
-            img = self.genImageForWord(word,font,fontN)
+            img,word_new = self.genImageForWord(word,font,fontN)
             if img is None:
                 #try again, with different fonts
                 for retry in range(3):
                     t_font,t_font_name,t_fontN,t_fontN_name = self.gen.getFont()
-                    img = self.genImageForWord(word,t_font,t_fontN)
+                    img,word_new = self.genImageForWord(word,t_font,t_fontN)
                     if img is not None:
                         break
 
@@ -121,10 +121,10 @@ class GenDaemon:
 
             if newline:
                 #f.write(word+'¶\n')
-                out_words.append((word+'¶',img))
+                out_words.append((word_new+'¶',img))
             else:
                 #f.write(word+'\n'
-                out_words.append((word,img))
+                out_words.append((word_new,img))
         
         if len(words)>0:
             if ret_font:
@@ -193,13 +193,13 @@ class GenDaemon:
         for label,font,fontN,value,fontv,fontNv in pairs:
             out_label = []
             for word in label.split(' '):
-                img = self.genImageForWord(word,font,fontN)
+                img,word = self.genImageForWord(word,font,fontN)
                 if img is not None:
                     out_label.append((word,255-img))
 
             out_value = []
             for word in value.split(' '):
-                img = self.genImageForWord(word,fontv,fontNv)
+                img,word = self.genImageForWord(word,fontv,fontNv)
                 if img is not None:
                     out_value.append((word,255-img))
 
@@ -217,22 +217,22 @@ class GenDaemon:
             _font = fontN
         else:
             _font = font
-        img = self.gen.getRenderedText(_font,word)
+        img,word_new = self.gen.getRenderedText(_font,word)
         if img is None:
             #retry generation
             if _font!=fontN:
-                img = self.gen.getRenderedText(fontN,word)
+                img,word = self.gen.getRenderedText(fontN,word)
 
             if img is None:
                 _,_,font2,font2_name = self.gen.getFont()
-                img = self.gen.getRenderedText(font2,word)
+                img,word_new = self.gen.getRenderedText(font2,word)
 
             if img is None:
                 #print('no image for word: {}'.format(word))
-                return None
+                return None,None
         
         img = (img*255).astype(np.uint8)
-        return img
+        return img,word_new
 
     def getTextSample(self):
         if self.simple:
