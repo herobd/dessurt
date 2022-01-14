@@ -96,8 +96,11 @@ class GenDaemon:
         #words = text.split(' ')
         if font is None:
             font,font_name,fontN,fontN_name = self.gen.getFont()
+            #if font_name!=fontN_name:
+            #    print('@got font pair {} / {}'.format(font_name,fontN_name))
         else:
             font,fontN=font
+            font_name=fontN_name=None
         out_words = []   
         for word in words:
             if len(word)==0:
@@ -107,7 +110,7 @@ class GenDaemon:
                 word = word[:-1]
             else:
                 newline=False
-            img,word_new = self.genImageForWord(word,font,fontN)
+            img,word_new = self.genImageForWord(word,font,fontN,font_name,fontN_name)
             if img is None:
                 #try again, with different fonts
                 for retry in range(3):
@@ -212,19 +215,23 @@ class GenDaemon:
             return self.generateLabelValuePairs(number)
 
 
-    def genImageForWord(self,word,font,fontN):
-        if re.match(r'\d',word):
+    def genImageForWord(self,word,font,fontN,font_name=None,fontN_name=None):
+        if re.search(r'\d',word):
             _font = fontN
+            _font_name = fontN_name
         else:
             _font = font
+            _font_name = font_name
         img,word_new = self.gen.getRenderedText(_font,word)
         if img is None:
             #retry generation
             if _font!=fontN:
-                img,word = self.gen.getRenderedText(fontN,word)
+                _font_name = fontN_name
+                img,word_new = self.gen.getRenderedText(fontN,word)
 
             if img is None:
                 _,_,font2,font2_name = self.gen.getFont()
+                _font_name = font2_name
                 img,word_new = self.gen.getRenderedText(font2,word)
 
             if img is None:
@@ -232,6 +239,8 @@ class GenDaemon:
                 return None,None
         
         img = (img*255).astype(np.uint8)
+        #if _font_name is not None:
+        #    print('generated "{}" with [{}]'.format(word_new,_font_name))
         return img,word_new
 
     def getTextSample(self):
