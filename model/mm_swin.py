@@ -92,10 +92,13 @@ class MmSwin(BaseModel):
                 self.SEP_TOKEN= 102
                 self.CLS_TOKEN= 101
 
-
+        if config.get('form_tokens',True):
+            add = ['"answer"',"question","other","header","},{",'"answers":','"content":']
+            self.tokenizer.add_tokens(add, special_tokens=True)
         if config.get('NER_tokens',False):
             tokens = ["[NE:{}]".format(cls) for cls in ['N', 'C', 'L', 'T', 'O', 'P', 'G','NORP', 'LAW', 'PER', 'QUANTITY', 'MONEY', 'CARDINAL', 'LOCATION', 'LANGUAGE', 'ORG', 'DATE', 'FAC', 'ORDINAL', 'TIME', 'WORK_OF_ART', 'PERCENT', 'GPE', 'EVENT', 'PRODUCT']]
             self.tokenizer.add_tokens(tokens, special_tokens=True)
+        
 
 
 
