@@ -625,7 +625,7 @@ class QATrainer(BaseTrainer):
                         log['F_recall_{}'.format(gt_type)].append(1 if pred_type==gt_type else 0)
                     if pred_type!='o':
                         log['F_prec_{}'.format(pred_type)].append(1 if pred_type==gt_type else   0)
-                elif question.startswith('ner_line>'):
+                elif question.startswith('ner_'):
                     pred_words = processNERLine(pred)#.split(' ')
                     gt_words = processNERLine(answer)
                     #we now step through at be sure we mactch the words up

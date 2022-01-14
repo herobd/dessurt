@@ -257,9 +257,11 @@ E_ANLS mean:0.1755052386899585,  std:0.33325558094831037
 ==IAM NER===
 iamNERfull_mmswin_bart_PTfrom75i550k_89 100000
 Macro Fm = 0.6912570465965707
+Using ner_full> Fm = 0.6958049293912222
 
 iamNERfull_mmswin_bart_PTfrom75i550k_89 150000
 Macro Fm = 0.7004263689612764
+Using ner_full> Macro Fm = 0.6931861074637213
 
 iamNERfull_mmswin_bart_PTfrom75i550k_89 233k
 Macro Fm = 0.677763421320044

@@ -117,7 +117,7 @@ class IAMNER(QADataset):
 
 
         if self.full:
-            if self.train and random.random()<0.5:
+            if not self.train or random.random()<0.5:
                 q='ner_full>'
                 a=[]
                 for words in W_lines:
