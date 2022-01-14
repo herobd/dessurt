@@ -221,7 +221,7 @@ class GenDaemon:
         if img is None:
             #retry generation
             if _font!=fontN:
-                img,word = self.gen.getRenderedText(fontN,word)
+                img,word_new = self.gen.getRenderedText(fontN,word)
 
             if img is None:
                 _,_,font2,font2_name = self.gen.getFont()
