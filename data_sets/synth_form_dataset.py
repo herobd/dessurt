@@ -69,7 +69,7 @@ def resizeAndJoinImgs(word_imgs,height,space_width,boundary_x):
 class SynthFormDataset(FormQA):
     def __init__(self, dirPath, split, config):
         super(SynthFormDataset, self).__init__(dirPath,split,config)
-        font_dir = config.get('font_dir',dirPath)
+        font_dir = config['font_dir']
         self.gen_daemon = GenDaemon(font_dir)
         self.color=False
         self.image_size = config['image_size'] if 'image_size' in config else None
@@ -92,7 +92,7 @@ class SynthFormDataset(FormQA):
         self.max_table_colh_width=80
         self.max_table_rowh_width=200
 
-        with open(os.path.join('data_sets/gpt2_generation.json')) as f:
+        with open(os.path.join(dirPath,'gpt2_form_generation.json')) as f:
             self.documents = json.load(f)
 
         self.warp_freq = 1.0
