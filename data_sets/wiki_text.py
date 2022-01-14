@@ -71,4 +71,4 @@ def getWikiArticle(all_newline=False,dataset=None):
         print(text)
         print('------------')
         print(_text_data[instance_i]['text'])
-        return getWikiArticle()
+        return getWikiArticle(all_newline,dataset)

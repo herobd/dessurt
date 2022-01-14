@@ -1691,17 +1691,17 @@ class FormQA(QADataset):
                         #assert entities[ei].cls=='other'
                         doc.append(formatOther(entities[ei]))
 
-        if len(doc)==0:
-            import pdb;pdb.set_trace()
+        #if len(doc)==0:
+        #    import pdb;pdb.set_trace()
         #TEST
-        found=False
-        for ele in doc:
-            if old_entities[0].text in ele:
-                found=True
-                break
-        if not found:
-            print('Missing entity')
-            import pdb;pdb.set_trace()
+        #found=False
+        #for ele in doc:
+        #    if old_entities[0].text in ele:
+        #        found=True
+        #        break
+        #if not found:
+        #    print('Missing entity')
+        #    import pdb;pdb.set_trace()
         return json.dumps(doc,default=lambda a:a.text)
 
 
