@@ -37,7 +37,10 @@ class SpecialTokenEmbedder(nn.Module):
                 #NER
                 'ne>','ne~','ner_line>','ner_text~','ner_full>',
                 #Forms
-                'json>',
+                'json>','link-both~','link-box~','link-text~',
+                'linkdown-both~','linkdown-box~','linkdown-text~',
+                'linkup-both~','linkup-box~','linkup-text~',
+
                 #census TODO
                 ]
         self.get_index = {s:i for i,s in enumerate(tokens)}

@@ -212,14 +212,17 @@ class FormQA(QADataset):
         if self.train:
             if use_json:
                 self.q_types = {
-                        'full_json': 10,
-                        'np':0.2,
+                        'full_json': 12,
+                        'class-link-all': 1,
+                        'class-linkdown-all': 1,
+                        'class-linkup-all': 1,
+                        'np':0.1,
                         #'all':1.0,
                         #'class-link':1.3,
-                        'class':0.7,
-                        'down-pair':1.0,
-                        'up-pair':1.0,
-                        'read':1.0,
+                        #'class':0.7,
+                        #'down-pair':1.0,
+                        #'up-pair':1.0,
+                        'read':0.1,
                         'cell':1.1,
                         'row-header':1.1,
                         'col-header':1.1,
@@ -231,23 +234,27 @@ class FormQA(QADataset):
                         'highlight-table':1.1
                         }
                 self.q_types_no_table = {
-                        'full_json': 4,
-                        'np':0.2,
+                        'full_json': 3.3,
+                        'class-link-all': 1,
+                        'class-linkdown-all': 1,
+                        'class-linkup-all': 1,
+                        'np':0.1,
                         #'all':1.0,
                         #'class-link':1.3,
-                        'class':0.7,
-                        'down-pair':1.0,
-                        'up-pair':1.0,
-                        'read':1.0,
+                        #'class':0.7,
+                        #'down-pair':1.0,
+                        #'up-pair':1.0,
+                        'read':0.1,
                         'count-tables':0.01
                         }
                 self.q_types_only_table = {
-                        'full_json': 11,
-                        'np':0.2,
+                        'full_json': 10.7,
+                        'class-link-all': 0.8,
+                        'np':0.1,
                         #'all':1.0,
                         #'class-link':1.3,
-                        'class':0.7,
-                        'read':1.0,
+                        #'class':0.7,
+                        'read':0.1,
                         'cell':1.1,
                         'row-header':1.1,
                         'col-header':1.1,
@@ -258,6 +265,7 @@ class FormQA(QADataset):
                         'count-tables':0.9,
                         'highlight-table':1.1
                         }
+                self.q_types_for_np = ['class-link-all','class-linkdown-all','class-linkup-all','read','cell','row-header','col-header','all-row', 'list-row-headers','list-col-headers']
             else:
                 self.q_types = {
                         'np':0.2,
@@ -303,6 +311,7 @@ class FormQA(QADataset):
                         'count-tables':0.9,
                         'highlight-table':1.1
                         }
+            self.q_types_for_np = ['class-link','class','down-pair','up-pair','read','cell','row-header','col-header','all-row', 'list-row-headers','list-col-headers']
 
         else:
             #these are what we'll use to actually score
@@ -316,7 +325,6 @@ class FormQA(QADataset):
                 self.q_types_no_table =        ['all','class-link','read']
                 self.q_types_only_table =        ['all','class-link','read']
 
-        self.q_types_for_np = ['class-link','class','down-pair','up-pair','read','cell','row-header','col-header','all-row', 'list-row-headers','list-col-headers']
 
        
         self.np_token = '№'
@@ -331,7 +339,7 @@ class FormQA(QADataset):
         """
         Generates N questions from given docuemnt information:
          - entities: a list of Entity objects
-         - entity_link: a list of (entity_id, entity_id) tuples where its (header,question)/(question,answer)
+         - entity_link: a list of (entity_id, entity_id) tuples where its (header,question)/(question,answer) and value may be a list
          - tables: a list of Table objects
          """
         if len(entities)==0:
@@ -413,6 +421,82 @@ class FormQA(QADataset):
                     outmask += [self.convertBB(s,line.box) for line in entitiy.lines]
                 self.qaAdd(q_a_pairs,question,response_text,ids,[],outmask)
 
+
+            elif q_type in ['class-link-all','class-linkdown-all','class-linkup-all']:
+                if q_type == 'class-link-all':
+                    if self.train:
+                        if len(full_entities)==0:
+                            continue
+                        ei = random.randrange(len(full_entities))
+                    else:
+                        ei = instance
+                    entity = full_entities[ei]
+                    question = 'link-'
+                    linked = [full_entities[lei] for lei in full_entity_dict[ei]] if ei in full_entity_dict else None
+                else:
+                    down = 'down' in q_type
+                    prompt_id = None
+                    for i in range(min(10,len(entity_link))):
+                        if down:
+                            head_id, tail_id = random.choice(entity_link)
+                            prompt_id = head_id
+                            response_id = tail_id
+                        else:
+                            head_id, tail_id = random.choice(unrolled_entity_link)
+                            prompt_id = tail_id
+                            response_id = head_id
+                        if prompt_id is not None:
+                            break
+                    if prompt_id is None:
+                        continue
+
+                    entity = entities[prompt_id]
+                    question = 'linkdown-' if down else 'linkup-'
+                    if response_id is None:
+                        linked = None
+                    else:
+                        if not isinstance(response_id,(tuple,list)):
+                            response_id = [response_id]
+
+                        linked = [entities[lei] for lei in response_id]
+
+                cls = entity.cls 
+                
+
+                if random.random()<0.333 or not self.train: #full info for eval
+                    question+='both'
+                    prompt_text = self.selectPartTextForInput(entity.text)
+                    inmask = [self.convertBB(s,line.box) for line in entity.lines]
+                    mask=True
+                elif random.random()<0.5:
+                    question+='text'
+                    prompt_text = self.selectPartTextForInput(entity.text)
+                    inmask = []
+                    mask=False
+                else:
+                    question+='box'
+                    prompt_text=''
+                    inmask = [self.convertBB(s,line.box) for line in entity.lines]
+                    mask=True
+
+                question+='~'
+
+                ids = [line.bbid for line in entity.lines]
+                outmask = []
+                if linked is None or len(linked)==0:
+                    response_text=self.blank_token
+                else:
+
+                    linked_entities=[]
+                    for next_entity in linked:
+                        linked_entities.append(next_entity.text)
+                        ids += [line.bbid for line in next_entity.lines]
+                        outmask += [self.convertBB(s,line.box) for line in next_entity.lines]
+
+                    response_text = '|'.join(linked_entities)
+
+                response_text = '['+cls+']'+response_text
+                self.qaAdd(q_a_pairs,question+prompt_text,response_text,ids,inmask,outmask)
 
             elif q_type == 'class-link':
                 if self.train:
@@ -714,6 +798,12 @@ class FormQA(QADataset):
                         question='zs~{}'
                     else:
                         question='gs~{}'
+                elif sub_type == 'class-link-all':
+                    question = 'link-text~{}'
+                elif sub_type == 'class-linkdown-all':
+                    question = 'linkdown-text~{}'
+                elif sub_type == 'class-linkup-all':
+                    question = 'linkup-text~{}'
                 try:
                     self.qaAdd(q_a_pairs,question.format(prompt_text),self.np_token,[],[],[])
                 except ValueError as er:
@@ -1328,6 +1418,7 @@ class FormQA(QADataset):
     def makeJsonText(self,entities,entity_link,tables):
         #spits out json with all structure
 
+
         #entities = [Entity(e) for e in entities]
         claimed_by={} #used later to find which entities aren;t claimed
 
@@ -1559,6 +1650,9 @@ class FormQA(QADataset):
         #img_f.show()
 
         link_dict = {k:v for k,v in entity_link}
+        #link_dict = defaultdict(list)
+        #for k,v in entity_link:
+        #    link_dict[k].append(v)
 
         #First we need to identiy the "heads", which are unclained entities
         for ei,child in entity_link:
@@ -1570,6 +1664,7 @@ class FormQA(QADataset):
             
         #full={}
         doc=[] #do list of tuples (list) to allow duplicate keys
+
         for ei,entity in enumerate(entities):
 
             if ei not in claimed_by and entity not in table_entities:
@@ -1596,7 +1691,17 @@ class FormQA(QADataset):
                         #assert entities[ei].cls=='other'
                         doc.append(formatOther(entities[ei]))
 
-
+        #if len(doc)==0:
+        #    import pdb;pdb.set_trace()
+        #TEST
+        #found=False
+        #for ele in doc:
+        #    if old_entities[0].text in ele:
+        #        found=True
+        #        break
+        #if not found:
+        #    print('Missing entity')
+        #    import pdb;pdb.set_trace()
         return json.dumps(doc,default=lambda a:a.text)
 
 
@@ -1609,6 +1714,9 @@ class FormQA(QADataset):
                     }
         elif ei in link_dict:
             children = link_dict[ei]
+            if children is None:
+                children = []
+            #assert isinstance(children,list)
             if entities[ei].cls=="header":
                 if not isinstance(children,(list,tuple)):
                     children = [children]
@@ -1639,6 +1747,9 @@ class FormQA(QADataset):
             elif entities[ei].cls=="question":
                 if not isinstance(children,(list,tuple)):
                     children = [children]
+                #else:
+                #    print('JSON SEES MULTI ANSWER {}'.format(entities[ei].text))
+
                 ret = []
                 for child in children:
                     if child is not None:

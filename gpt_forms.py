@@ -65,7 +65,7 @@ def parseOutput(output):
 
     return pairs
 
-GOAL=100000 #till Monday
+GOAL=100000 
 gpuN=0
 if gpuN is not None:
     device = torch.device('cuda:' + str(gpuN))

@@ -160,7 +160,8 @@ class QADataset(torch.utils.data.Dataset):
             try: 
                 with open(annotationPath) as annFile:
                     annotations = json.loads(annFile.read())
-                    annotations['XX_imageName']=imageName
+                    if isinstance(annotations,dict):
+                        annotations['XX_imageName']=imageName
             except FileNotFoundError:
                 print("ERROR, could not open "+annotationPath)
                 return self.__getitem__((index+1)%self.__len__())
@@ -450,7 +451,7 @@ class QADataset(torch.utils.data.Dataset):
                 #img[0,:-1,t:b+1,l:r+1]=0 #blank on image
                 #img[0,-1,t:b+1,l:r+1]=-1 #flip mask to indicate was blanked
             #img = addMask(img,new_q_outboxes[0])
-            if outmasks:
+            if outmasks and new_q_outboxes[0] is not None:
                 mask_label = getMask(img.shape,new_q_outboxes[0])
             else:
                 mask_label = None
