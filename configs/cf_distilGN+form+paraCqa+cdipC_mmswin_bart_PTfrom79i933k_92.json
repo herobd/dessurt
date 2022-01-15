@@ -54,7 +54,8 @@
                     "image_size": [1150,760],
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 2560
+                    "max_qa_len_out": 2560,
+                    "batch_size": 1
                 }
             },
             {
@@ -179,7 +180,8 @@
         "init_from_pretrained": "bart",
         "use_special_question_tokens": true,
         "max_q_tokens": 20,
-        "max_a_tokens": 3400,
+        "#max_a_tokens": 3400,
+        "max_a_tokens": 800,
         "no_dropout": false,
         "window_size": 12,
         "decode_dim": 768,

@@ -449,11 +449,13 @@ class QATrainer(BaseTrainer):
                 teacher_last_hidden = instance['bart_last_hidden'].to(device)
                 teacher_logits = instance['bart_logits'].to(device)
                 teacher_len = teacher_last_hidden.size(1)
-                batch_mask = batch_mask[:,:,None] #add channel dim for broadcast
+                batch_mask = batch_mask[:,:teacher_logits.size(1),None] #add channel dim for broadcast
                 teacher_batch_mask = batch_mask[:,:teacher_len]
 
                 hidden_dim = teacher_last_hidden.size(-1)
                 logits_dim = teacher_logits.size(-1)
+
+                pred_logits = pred_logits[:,:teacher_logits.size(1),:logits_dim]
                 
 
                 #cosine loss
