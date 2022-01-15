@@ -12,6 +12,7 @@ from data_sets import multiple_dataset
 from data_sets import synth_qa_dataset
 from data_sets import synth_qadoc_dataset
 from data_sets import synth_para_qa
+from data_sets import synth_form_dataset
 from data_sets import squad
 from data_sets import docvqa
 from data_sets import test_qa
@@ -137,6 +138,8 @@ def getDataLoader(config,split,rank=None,world_size=None):
             return withCollate(synth_qadoc_dataset.SynthQADocDataset,synth_qadoc_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='SynthParaQA':
             return withCollate(synth_para_qa.SynthParaQA,synth_para_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='SynthFormDataset':
+            return withCollate(synth_form_dataset.SynthFormDataset,synth_form_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='SQuAD':
             return withCollate(squad.SQuAD,squad.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='DocVQA':

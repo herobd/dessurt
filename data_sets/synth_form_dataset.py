@@ -1149,7 +1149,10 @@ class SynthFormDataset(FormQA):
                 if 'dotted line' in cue:
                     for x in range(max(0,line_min_x-pad_w),min(max_line_x,line_max_x+pad_w)):
                         if math.sin(x*math.pi/dotting)>0:
-                            image[line_max_y+pad_h-line_thickness//2:1+line_max_y+pad_h+line_thickness//2,x]=color
+                            try:
+                                image[line_max_y+pad_h-line_thickness//2:1+line_max_y+pad_h+line_thickness//2,x]=color
+                            except IndexError:
+                                pass
 
                 elif 'line' in cue:
                     img_f.line(image,(line_min_x-pad_w,line_max_y+pad_h),(min(max_line_x,line_max_x+pad_w),line_max_y+pad_h),color,line_thickness)

@@ -92,7 +92,7 @@ class MmSwin(BaseModel):
                 self.SEP_TOKEN= 102
                 self.CLS_TOKEN= 101
 
-        if config.get('form_tokens',True):
+        if config.get('form_tokens',False):
             add = ['"answer"',"question","other","header","},{",'"answers":','"content":']
             self.tokenizer.add_tokens(add, special_tokens=True)
         if config.get('NER_tokens',False):
@@ -112,7 +112,7 @@ class MmSwin(BaseModel):
 
         self.text_embedding = nn.Embedding(len(self.tokenizer), d_model)
         if init_from_pretrained:
-            self.text_embedding.weight.data[:,:d_model] = init_emb.weight.data[:,:d_model]
+            self.text_embedding.weight.data[:init_emb.weight.size(0),:d_model] = init_emb.weight.data[:,:d_model]
 
         if use_special_question_tokens:
             self.query_special_token_embedder = SpecialTokenEmbedder(d_model)
