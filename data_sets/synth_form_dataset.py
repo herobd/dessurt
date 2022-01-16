@@ -123,13 +123,16 @@ class SynthFormDataset(FormQA):
         all_entities=[]
         entity_link=defaultdict(list)
         tables=[]
-
-        while len(all_entities)==0:
+        
+        debug=0
+        while len(all_entities)==0 and debug<200:
+            debug+=1
             success=True
             boxes = []
             prev_boxes=[(0,0,image_w,0)]
             furthest_right=0
-            while len(prev_boxes)>0:
+            while len(prev_boxes)>0 and debug<200:
+                debug+=1
                 #pick starting point
                 #x1,y1,x2,y2 = random.choice(prev_boxes)
                 x1,y1,x2,y2 = prev_boxes.pop(random.randrange(len(prev_boxes)))
@@ -224,7 +227,7 @@ class SynthFormDataset(FormQA):
             return False,None
 
         if random.random()<0.33:
-            if len(self.random_words)<2:
+            while len(self.random_words)<2:
                 self.addRandomWords()
             num_words = random.randrange(1,min(len(self.random_words),6))
             title = ' '.join(self.random_words[-num_words:])
@@ -346,9 +349,11 @@ class SynthFormDataset(FormQA):
         #table_entries = [(img_f.imread(os.path.join(self.header_dir,'{}.png'.format(e[0]))),e[1]) for e in table_entries]
         table_entries_1d = []
         font = None
+        debug=0
         for text in table_entries:
             word_imgs,font = self.gen_daemon.generate(text,font=font,ret_font=True)
-            while len(word_imgs)==0:
+            while len(word_imgs)==0 and debug<2000:
+                debug+=1
                 text=self.getTableValues(1)[0]
                 word_imgs,font = self.gen_daemon.generate(text,font=font,ret_font=True)
             img,label = resizeAndJoinImgs(word_imgs,value_height,value_space_width,self.max_table_cell_width)
@@ -357,7 +362,8 @@ class SynthFormDataset(FormQA):
         font = None
         for text in row_header_entries:
             word_imgs,font = self.gen_daemon.generate(text,font=font,ret_font=True)
-            while len(word_imgs)==0:
+            while len(word_imgs)==0 and debug<2000:
+                debug+=1
                 text=self.getTableHeaders(1)[0]
                 word_imgs,font = self.gen_daemon.generate(text,font=font,ret_font=True)
             img,label = resizeAndJoinImgs(word_imgs,label_height,label_space_width,self.max_table_rowh_width)
@@ -366,7 +372,8 @@ class SynthFormDataset(FormQA):
         font = None
         for text in col_header_entries:
             word_imgs,font = self.gen_daemon.generate(text,font=font,ret_font=True)
-            while len(word_imgs)==0:
+            while len(word_imgs)==0 and debug<2000:
+                debug+=1
                 text=self.getTableHeaders(1)[0]
                 word_imgs,font = self.gen_daemon.generate(text,font=font,ret_font=True)
             img,label = resizeAndJoinImgs(word_imgs,label_height,label_space_width,self.max_table_colh_width)
@@ -609,7 +616,9 @@ class SynthFormDataset(FormQA):
 
 
     def addForm(self,init_x,init_y,max_x,image,entities,entity_link):
-        while True:
+        debug=0
+        while debug<100:
+            debug+=1
             title,pairs = random.choice(self.documents)
 
             #fix bad parsing
@@ -864,7 +873,9 @@ class SynthFormDataset(FormQA):
 
                 cannot_do_pair = False
                 restart=True
-                while restart: #for restarting as new column
+                debug=0
+                while restart and debug<200: #for restarting as new column
+                    debug+=1
                     cur_x = col_x
                     restart=False
                     label_str=''
@@ -1095,7 +1106,10 @@ class SynthFormDataset(FormQA):
                     if 'dotted line' in cue:
                         for x in range(max(0,x-pad_w),min(max_x,rightmost_value_x[col_number]+pad_w)):
                             if math.sin(x*math.pi/dotting)>0:
-                                image[y+img_h+pad_h-line_thickness//2:1+y+img_h+pad_h+line_thickness//2,x]=color
+                                try:
+                                    image[y+img_h+pad_h-line_thickness//2:1+y+img_h+pad_h+line_thickness//2,x]=color
+                                except IndexError:
+                                    pass
 
                     elif 'line' in cue:
                         img_f.line(image,(x-pad_w,y+img_h+pad_h),(rightmost_value_x[col_number]+pad_w,y+img_h+pad_h),color,line_thickness)
@@ -1137,6 +1151,10 @@ class SynthFormDataset(FormQA):
 
             for x,y,img,img_h,img_w in img_pos_words:
                 img = img_f.resize(img,(img_h,img_w))
+                if x+img_w>image.shape[1]:
+                    img = img[:,:image.shape[1]-(x+img_w)]
+                if y+img_h>image.shape[0]:
+                    img = img[:image.shape[0]-(y+img_h),:]
                 image[y:y+img_h,x:x+img_w] = img
 
             lines.append(Line(text,(line_min_x,line_min_y,line_max_x,line_max_y)))
@@ -1220,7 +1238,13 @@ class SynthFormDataset(FormQA):
         return ret
 
     def addRandomWords(self):
-        words = self.gen_daemon.getTextSample()
-        words = [w for w in words if w.lower() not in self.stop_words]
-        random.shuffle(words)
-        self.random_words+=words
+        debug=0
+        while len(self.random_words)==0 and debug<200:
+            debug+=1
+            words = self.gen_daemon.getTextSample()
+            words = [w for w in words if w.lower() not in self.stop_words]
+            random.shuffle(words)
+            self.random_words+=words
+
+        if len(self.random_words)==0:
+            self.random_words+=['X']
