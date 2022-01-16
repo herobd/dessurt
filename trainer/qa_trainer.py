@@ -323,7 +323,7 @@ class QATrainer(BaseTrainer):
             for name in names:
                 p = F_measure_prec[name] if name in F_measure_prec else 1
                 r = F_measure_recall[name] if name in F_measure_recall else 1
-                f = 2*(p*r)/(p+r)
+                f = 2*(p*r)/(p+r) if (p+r) > 0 else 0
                 total_Fms+=f
                 val_metrics['val_F_Measure_{}'.format(name)]=f
             val_metrics['val_F_Measure_MACRO']=total_Fms/len(names)
@@ -446,20 +446,21 @@ class QATrainer(BaseTrainer):
 
             if distill:
                 #pred_len = batch_mask.size(1)
-                teacher_last_hidden = instance['bart_last_hidden'].to(device)
                 teacher_logits = instance['bart_logits'].to(device)
-                teacher_len = teacher_last_hidden.size(1)
-                batch_mask = batch_mask[:,:teacher_logits.size(1),None] #add channel dim for broadcast
+                teacher_len = teacher_logits.size(1)
+                batch_mask = batch_mask[:,:teacher_len,None] #add channel dim for broadcast
                 teacher_batch_mask = batch_mask[:,:teacher_len]
 
-                hidden_dim = teacher_last_hidden.size(-1)
                 logits_dim = teacher_logits.size(-1)
 
-                pred_logits = pred_logits[:,:teacher_logits.size(1),:logits_dim]
+                pred_logits = pred_logits[:,:teacher_len,:logits_dim]
                 
 
                 #cosine loss
                 if self.lossWeights['cosine']>0:
+                    teacher_last_hidden = instance['bart_last_hidden'].to(device)
+                    hidden_dim = teacher_last_hidden.size(-1)
+
                     pred_last_hidden = torch.masked_select(pred_last_hidden,batch_mask)
                     pred_last_hidden = pred_last_hidden.view(-1,hidden_dim)
                     teacher_last_hidden = torch.masked_select(teacher_last_hidden,teacher_batch_mask)

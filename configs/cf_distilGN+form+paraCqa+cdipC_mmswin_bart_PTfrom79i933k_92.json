@@ -11,7 +11,7 @@
         "prefetch_factor": 5,
         "persistent_workers": true,
         "batch_size": 1,
-        "num_workers": 4,
+        "num_workers": 8,
         "datasets": [
             {
                 "freq": 0.3,
