@@ -153,7 +153,7 @@ class QADataset(torch.utils.data.Dataset):
         imageName = self.images[index]['imageName']
         annotationPath = self.images[index]['annotationPath']
         #print(annotationPath)
-        rescaled = self.images[index]['rescaled']
+        rescaled = self.images[index].get('rescaled',1)
         if type(annotationPath) is int:
             annotations = annotationPath
         elif isinstance(annotationPath,str) and  annotationPath.endswith('.json'):
