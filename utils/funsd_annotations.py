@@ -121,6 +121,9 @@ def createLines(annotations,classMap,scale):
 
     return bbs, numNeighbors, trans, groups
 
+
+
+#These are manual corrections I'm making to some training set images
 rulebook={
         '0011838621': [ ('add link',29,32),
                          ('add link',29,7),

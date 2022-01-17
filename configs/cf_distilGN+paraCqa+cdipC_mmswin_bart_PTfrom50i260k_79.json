@@ -1,5 +1,5 @@
 {
-    "name": "test",
+    "name": "distilGN+paraCqa+cdipC_mmswin_bart_PTfrom50i260k_79",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -35,29 +35,7 @@
                     "no_distill": true
                 }
             },
-            {
-                "freq": 0.2,
-                "config": {
-                    "data_set_name": "SynthFormDataset",
-                    "data_dir": "../data",
-                    "font_dir": "../data/fonts",
-                    "cased": true,
-                    "use_json": true,
-                    "batch_size": 1,
-                    "rescale_range": [0.9,1.1],
-                    "crop_params": {
-                        "crop_size": [
-                            1152,768
-                        ],
-                        "pad": 0,
-                        "rot_degree_std_dev": 1
-                    },
-                    "image_size": [1150,760],
-                    "questions": 1,
-                    "max_qa_len_in": 640,
-                    "max_qa_len_out": 2560
-                }
-            },
+
             {
                 "freq": 0.1,
                 "config": {
@@ -87,7 +65,7 @@
                 }
             },
             {
-                "freq": 0.2,
+                "freq": 0.4,
                 "config": {
                     "data_set_name": "CDIPCloudQA",
                     "data_dir": "../data/CDIPCloud",
@@ -179,13 +157,12 @@
         "use_set_length": true,
         "init_from_pretrained": "bart",
         "use_special_question_tokens": true,
-        "max_q_tokens": 20,
-        "max_a_tokens": 800,
+        "max_q_tokens": 30,
         "no_dropout": false,
         "window_size": 12,
-        "decode_dim": 4,
-        "dim_ff": 4,
-        "decode_num_heads": 1,
+        "decode_dim": 768,
+        "dim_ff": 3072,
+        "decode_num_heads": 8,
         "blocks_per_level": [
             4,
             6
@@ -218,6 +195,6 @@
             4,
             8
         ],
-        "im_embed_dim": 4
+        "im_embed_dim": 128
     }
 }

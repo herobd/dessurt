@@ -69,6 +69,8 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
         
     #config['data_loader']['batch_size']=math.ceil(config['data_loader']['batch_size']/2)
     image_h,image_w = config['model']['image_size']
+    if data_set_name is None:
+        data_set_name = config['data_loader']['data_set_name']
     if data_set_name=='SynthParaQA':
         data_config={
                 "data_loader": {
@@ -128,6 +130,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     "data_set_name": "DocVQA",
                     "data_dir": "../data/DocVQA",
                     "batch_size": config['data_loader']['batch_size']*3 if not run else 1,
+                    "rescale_to_crop_size_first": True,
                     "rescale_range": [
                         1.0,
                         1.0
@@ -140,6 +143,33 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     },
                     "questions": 1,
                     "cased": True,
+                    "image_size": [
+                            image_h-4,image_w-4
+                    ],
+                    "shuffle": False
+                        },
+                "validation":{}
+                }
+    elif data_set_name=='IAMNER':
+        data_config={
+                "data_loader": {
+                    "data_set_name": "IAMNER",
+                    "data_dir": "../data/IAM",
+                    "batch_size": config['data_loader']['batch_size']*(3 if 'full' in config['data_loader'] else 2) if not run else 1,
+                    "full": config['data_loader'].get('full',False),
+                    "cased": config['data_loader'].get('cased',False),
+                    "rescale_to_crop_size_first": True,
+                    "rescale_range": [
+                        1.0,
+                        1.0
+                    ],
+                    "crop_params": {
+                        "crop_size": [
+                            image_h,image_w
+                        ],
+                        "random": False
+                    },
+                    "questions": 1,
                     "image_size": [
                             image_h-4,image_w-4
                     ],
@@ -194,8 +224,32 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                         metrics[name]+=value
                     else:
                         metrics[name].append(value)
+    F_measure_prec={}
+    F_measure_recall={}
     for name,values in metrics.items():
         print('{} mean:{},  std:{}'.format(name,np.mean(values),np.std(values)))
+        if 'F_prec' in name:
+            last_underscore = name.rfind('_')
+            var_name = name[last_underscore+1:]
+            if var_name != 'o':
+                F_measure_prec[var_name]=np.mean(values)
+        if 'F_recall' in name:
+            last_underscore = name.rfind('_')
+            var_name = name[last_underscore+1:]
+            if var_name != 'o':
+                F_measure_recall[var_name]=np.mean(values)
+                print('Class count [{}] = {}'.format(var_name,len(values)))
+    names = set(F_measure_prec.keys())
+    names.update(F_measure_recall.keys())
+    if len(names)>0:
+            total_Fms=0
+            for name in names:
+                p = F_measure_prec[name] if name in F_measure_prec else 1
+                r = F_measure_recall[name] if name in F_measure_recall else 1
+                f = 2*(p*r)/(p+r) if (p+r)>0 else 0
+                total_Fms+=f
+                print('{} Fm={},  P={},  R={}'.format(name,f,p,r))
+            print('Macro Fm = {}'.format(total_Fms/len(names)))
 
 if __name__ == '__main__':
     logger = logging.getLogger()

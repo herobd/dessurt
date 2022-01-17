@@ -31,6 +31,7 @@ class IAMNER(QADataset):
         self.full = config.get('full',False)
         if self.full:
             assert self.cased
+        self.eval_full = config.get('eval_full',True)
 
         task = config['task'] if 'task' in config else 6
         all_classes = set()
@@ -67,8 +68,8 @@ class IAMNER(QADataset):
                         qa['bb_ids']=None
                         self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':xml_path, 'rescaled':rescale,'qa':[qa]})
 
-        print('all classes')
-        print(all_classes)
+        #print('all classes')
+        #print(all_classes)
 
 
 
@@ -117,7 +118,7 @@ class IAMNER(QADataset):
 
 
         if self.full:
-            if self.train and random.random()<0.5:
+            if (self.eval_full and not self.train) or (not self.eval_full and random.random()<0.5):
                 q='ner_full>'
                 a=[]
                 for words in W_lines:
@@ -198,7 +199,7 @@ class IAMNER(QADataset):
                     bb = [lX*s, tY*s, rX*s, tY*s, rX*s, bY*s, lX*s, bY*s,
                                 s*lX, s*(tY+bY)/2.0, s*rX, s*(tY+bY)/2.0, s*(lX+rX)/2.0, s*tY, s*(rX+lX)/ 2.0, s*bY]
                     inmask = [bb]
-                    if self.train and random.random()<0.5:
+                    if not self.train or random.random()<0.5:
                         q='ne>'
                         a='['+cls+']'+word[1]
                     else:

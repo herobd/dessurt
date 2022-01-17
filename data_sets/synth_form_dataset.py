@@ -1,0 +1,1250 @@
+import json
+import timeit
+import torch
+from torch.utils.data import Dataset
+from torch.autograd import Variable
+
+from collections import defaultdict
+from glob import iglob
+import os
+import utils.img_f as img_f
+import numpy as np
+import math, time
+import random, string
+
+from utils import grid_distortion
+
+from utils import string_utils, augmentation
+from utils.util import ensure_dir
+from utils.yolo_tools import allIOU
+from .form_qa import FormQA, collate, Entity, Line, Table
+from .gen_daemon import GenDaemon
+
+
+import random, pickle
+PADDING_CONSTANT = -1
+
+
+def resizeAndJoinImgs(word_imgs,height,space_width,boundary_x):
+    full_text=''
+    newline = round(height*0.1+0.9*random.random()*height)
+    max_x=0
+    max_y=0
+    cur_x=0
+    cur_y=0
+    resized_words=[]
+
+    text,img = word_imgs[0]
+    width = max(1,round(img.shape[1]*height/img.shape[0]))
+    img = img_f.resize(img,(height,width))
+    resized_words.append((img,cur_x,cur_y))
+    full_text += text
+    cur_x+=width
+    max_x=max(max_x,cur_x)
+    max_y=max(max_y,cur_y+height)
+    
+    for text,img in word_imgs[1:]:
+        width = max(1,round(img.shape[1]*height/img.shape[0]))
+        img = img_f.resize(img,(height,width))
+        if cur_x+width<boundary_x:
+            full_text+=' '+text
+        else:
+            cur_x=0
+            cur_y+=newline+height
+            full_text+='\\'+text
+        resized_words.append((img,cur_x,cur_y))
+        cur_x+=space_width+width
+        max_x=max(max_x,cur_x)
+        max_y=max(max_y,cur_y+height)
+    
+    full_img = np.zeros([max_y,max_x],dtype=np.uint8)
+    for img,x,y in resized_words:
+        full_img[y:y+img.shape[0],x:x+img.shape[1]]=img
+
+    return full_img,full_text
+
+
+
+
+class SynthFormDataset(FormQA):
+    def __init__(self, dirPath, split, config):
+        super(SynthFormDataset, self).__init__(dirPath,split,config)
+        font_dir = config['font_dir']
+        self.gen_daemon = GenDaemon(font_dir)
+        self.color=False
+        self.image_size = config['image_size'] if 'image_size' in config else None
+        if type(self.image_size) is int:
+            self.image_size = (self.image_size,self.image_size)
+        self.min_text_height = config['min_text_height'] if 'min_text_height' in config else 8
+        self.max_text_height = config['max_text_height'] if 'max_text_height' in config else 32
+        self.table_prob = config['tables'] if 'tables' in config else 0.3
+        self.match_title_prob = 0.3
+        self.match_label_prob = 0.5
+        self.blank_value_prob = 0.1
+        self.new_col_chance = 0.3
+        self.side_by_side_prob = 0.66
+        self.min_qa_sep = 10
+        self.max_qa_sep = 250
+        self.block_pad_max = 500
+        self.block_pad_min = 30
+
+        self.max_table_cell_width=80
+        self.max_table_colh_width=80
+        self.max_table_rowh_width=200
+
+        with open(os.path.join(dirPath,'gpt2_form_generation.json')) as f:
+            self.documents = json.load(f)
+
+        self.warp_freq = 1.0
+        if split=='train':
+            self.augmentation = config['augmentation'] if 'augmentation' in config else None
+	    
+
+            
+        
+        self.images=[]
+        for i in range(config['batch_size']*400): #we just randomly generate instances on the fly
+            self.images.append({'id':'{}'.format(i), 'imagePath':None, 'annotationPath':0, 'rescaled':1.0, 'imageName':'0'})
+        
+        self.random_words = []
+        self.stop_words = set(["a","about","above","after","again","against","all","am","an","and","any","are","aren't","as","at","be","because","been","before","being","below","between","both","but","by","can't","cannot","could","couldn't","did","didn't","do","does","doesn't","doing","don't","down","during","each","few","for","from","further","had","hadn't","has","hasn't","have","haven't","having","he","he'd","he'll","he's","her","here","here's","hers","herself","him","himself","his","how","how's","i","i'd","i'll","i'm","i've","if","in","into","is","isn't","it","it's","its","itself","let's","me","more","most","mustn't","my","myself","no","nor","not","of","off","on","once","only","or","other","ought","our","ours","ourselves","out","over","own","same","shan't","she","she'd","she'll","she's","should","shouldn't","so","some","such","than","that","that's","the","their","theirs","them","themselves","then","there","there's","these","they","they'd","they'll","they're","they've","this","those","through","to","too","under","until","up","very","was","wasn't","we","we'd","we'll","we're","we've","were","weren't","what","what's","when","when's","where","where's","which","while","who","who's","whom","why","why's","with","won't","would","wouldn't","you","you'd","you'll","you're","you've","your","yours","yourself","yourselves"]) #from https://www.ranks.nl/stopwords
+
+
+
+
+    def parseAnn(self,annotations,s):
+        #This defines the creation of the image with its GT entities, boxes etc.
+        #Questions are generated by parent class with maskQuestions()
+
+
+
+        image_h,image_w = self.image_size
+        image = np.zeros([image_h,image_w],dtype=np.uint8)
+        all_entities=[]
+        entity_link=defaultdict(list)
+        tables=[]
+        
+        debug=0
+        while len(all_entities)==0 and debug<200:
+            debug+=1
+            success=True
+            boxes = []
+            prev_boxes=[(0,0,image_w,0)]
+            furthest_right=0
+            while len(prev_boxes)>0 and debug<200:
+                debug+=1
+                #pick starting point
+                #x1,y1,x2,y2 = random.choice(prev_boxes)
+                x1,y1,x2,y2 = prev_boxes.pop(random.randrange(len(prev_boxes)))
+                if image_h-y2<60 and random.random()<0.5:
+                    continue 
+                if x1>=furthest_right:
+                    x2 = image_w
+                if random.random()<self.table_prob:
+                    success,box = self.addTable(x1,y2,x2,image,tables,all_entities,entity_link)
+
+                else:
+                    success,box = self.addForm(x1,y2,x2,image,all_entities,entity_link)
+                
+                if success:
+                    prev_boxes.append(box)
+                    if box[2]>furthest_right:
+                        furthest_right = box[2]
+                        prev_boxes.append((furthest_right,0,image_w,0)) #add non-box, just to the right
+
+
+
+
+        
+
+        
+        #run through all entites to build bbs, assign bbid, and find ambiguity
+        boxes = []
+        text_line_counts = defaultdict(list)
+        for ei,entity in enumerate(all_entities):
+            for li,line in enumerate(entity.lines):
+                text = self.punc_regex.sub('',line.text.lower())
+                text_line_counts[text].append((ei,li))
+                bbid = len(boxes)
+                boxes.append(self.convertBB(s,line.box))
+                line.bbid = bbid
+
+        bbs = np.array(boxes)
+
+        #assign ambiguity
+        for line_ids in text_line_counts.values():
+            if len(line_ids)>1:
+                for ei,li in line_ids:
+                    all_entities[ei].lines[li].ambiguous = True
+
+        link_dict=entity_link
+        entity_link=[(e1,list(e2s) if e2s is not None else None) for e1,e2s in link_dict.items()]
+        #now set up a full linking dictionary
+        for e1,e2s in entity_link:
+            if e2s is not None:
+                for e2 in e2s:
+                    if e2 is not None:
+                        if link_dict[e2] is None:
+                            link_dict[e2]=[]
+                        link_dict[e2].append(e1)
+            elif link_dict[e1] is None or len(link_dict[e1])==0:
+                del link_dict[e1]
+        #Add all the link for tables
+        for table in tables:
+            for r,r_header in enumerate(table.row_headers):
+                r_index = all_entities.index(r_header)
+                for c,c_header in enumerate(table.col_headers):
+                    c_index = all_entities.index(c_header)
+                    v=table.cells[r][c]
+                    if v is not None:
+                        v_index = all_entities.index(v)
+                        link_dict[r_index].append(v_index)
+                        link_dict[c_index].append(v_index)
+                        link_dict[v_index].append(r_index)
+                        link_dict[v_index].append(c_index)
+        link_dict = self.sortLinkDict(all_entities,link_dict)
+
+        qa = self.makeQuestions(s,all_entities,entity_link,tables,all_entities,link_dict)
+
+        return bbs, list(range(bbs.shape[0])), None, {'image':255-image}, {}, qa
+
+    
+
+    def addTable(self,init_x,init_y,max_x,image,tables,entities,entity_link):
+        max_y = image.shape[0]
+        start_x = init_x+(self.block_pad_max if len(entities)>0 else self.block_pad_max//3)
+        start_y = init_y+(self.block_pad_max if len(entities)>0 else self.block_pad_max//3)
+        title_height = self.max_text_height
+        label_height = self.max_text_height
+        value_height = self.max_text_height
+        #while repeat if needed
+        if start_x>init_x+self.block_pad_min:
+            start_x = random.randrange(init_x+2*self.block_pad_min,start_x)
+        if start_y>init_y+self.block_pad_min:
+            start_y = random.randrange(init_y+2*self.block_pad_min,start_y)
+
+        if start_x>=image.shape[1]-16 or start_y>=image.shape[0]-10:
+            return False,None
+
+        if random.random()<0.33:
+            while len(self.random_words)<2:
+                self.addRandomWords()
+            num_words = random.randrange(1,min(len(self.random_words),6))
+            title = ' '.join(self.random_words[-num_words:])
+            self.random_words = self.random_words[:-num_words]
+            title_words,title_font = self.gen_daemon.generate(title,ret_font=True) 
+        else:
+            title = None
+
+        
+        
+        #setup text height and spacing
+        if title is not None:
+            title_height = random.randrange((self.min_text_height+title_height)//2,1+max(self.min_text_height+2,title_height))
+            em_approx = title_height*1.6 #https://en.wikipedia.org/wiki/Em_(typography)
+            min_space = 0.2*em_approx #https://docs.microsoft.com/en-us/typography/develop/chara  cter-design-standards/whitespace
+            max_space = 0.5*em_approx
+            title_space_width = round(random.random()*(max_space-min_space) + min_space)
+            title_newline_height = random.randrange(1,title_height) + title_height
+
+        label_height = random.randrange(self.min_text_height,1+max(self.min_text_height+2,min(label_height,title_height)))
+        em_approx = label_height*1.6 #https://en.wikipedia.org/wiki/Em_(typography)
+        min_space = 0.2*em_approx #https://docs.microsoft.com/en-us/typography/develop/chara  cter-design-standards/whitespace
+        max_space = 0.5*em_approx
+        label_space_width = round(random.random()*(max_space-min_space) + min_space)
+        label_newline_height = random.randrange(1,label_height) + label_height
+
+        value_height = random.randrange(self.min_text_height,1+max(self.min_text_height+2,min(value_height,title_height)))
+        em_approx = value_height*1.6 #https://en.wikipedia.org/wiki/Em_(typography)
+        min_space = 0.2*em_approx #https://docs.microsoft.com/en-us/typography/develop/chara  cter-design-standards/whitespace
+        max_space = 0.5*em_approx
+        value_space_width = round(random.random()*(max_space-min_space) + min_space)
+        value_newline_height = random.randrange(1,value_height) + value_height
+        value_list_newline_height = value_newline_height + round(value_newline_height*random.random())
+        
+        if title is not None:
+            title_word_ws = [max(1,round(img.shape[1]*(title_height/img.shape[0]))) for text,img in title_words]
+        
+
+        block_width = max_x-start_x
+
+
+        #how wide will the title be?
+        if title is not None:
+            if max(title_word_ws)>=block_width:
+                return False,None
+                #continue #not going to fit
+            max_title_width = block_width
+            max_title_x = start_x+max_title_width
+            #layout the title to see how tall it is
+            title_str=''
+            title_str_lines=[]
+            title_img_pos_lines=[]
+            title_img_pos=[]
+            cur_x=start_x
+            cur_y=start_y
+            rightmost_title_x=cur_x
+            restart=False
+            for title_w, (title_text,title_img) in zip(title_word_ws,title_words):
+                if cur_x+title_w>max_title_x:
+                    #newline
+                    title_str_lines.append(title_str)
+                    title_str=''
+                    title_img_pos_lines.append(title_img_pos)
+                    title_img_pos=[]
+                    cur_x = start_x
+                    cur_y += title_newline_height
+                    if cur_y+title_height>=max_y:
+                        #cannot fit
+                        restart=True
+                        break
+                elif len(title_str)>0:
+                    title_str+=' '#space
+                title_x = cur_x
+                title_y = cur_y
+                
+                cur_x+=title_w+title_space_width
+                title_str += title_text
+                title_img_pos.append((title_x,title_y,title_img,title_height,title_w))
+                rightmost_title_x = max(rightmost_title_x,title_x+title_w)
+            if restart:
+                title = None
+                end_title_y=start_y
+                rightmost_title_x=start_x
+                #return False,None,None
+                #continue #retry, not room for title
+            else:
+                if len(title_img_pos)==0:
+                    return False,None
+                title_img_pos_lines.append(title_img_pos)
+                title_str_lines.append(title_str)
+                end_title_y=cur_y+title_newline_height+round(title_newline_height*random.random())
+            
+        else:
+            end_title_y=start_y + random.randrange(70)
+            rightmost_title_x=start_x
+
+        if end_title_y+3*label_height>=max_y:
+            return False,None
+            #continue #no room for fields
+
+
+
+
+        #Taken from FUNSD_QA
+        num_rows=random.randrange(1,15)
+        num_cols=random.randrange(1,10)
+
+        if num_rows==1 and num_cols==1:
+            if random.random()<0.5:
+                num_rows=random.randrange(2,15)
+            else:
+                num_cols=random.randrange(2,10)
+
+        mean_height = random.randrange(self.min_text_height+1,self.max_text_height)
+
+        table_entries = self.getTableValues(num_rows*num_cols)#random.choices(self.table_labels,k=num_rows*num_cols)
+        row_header_entries = self.getTableHeaders(num_rows)#random.choices(self.table_labels,k=num_rows)
+        col_header_entries = self.getTableHeaders(num_cols)#random.choices(self.table_labels,k=num_cols)
+        #table_entries = [(img_f.imread(os.path.join(self.header_dir,'{}.png'.format(e[0]))),e[1]) for e in table_entries]
+        table_entries_1d = []
+        font = None
+        debug=0
+        for text in table_entries:
+            word_imgs,font = self.gen_daemon.generate(text,font=font,ret_font=True)
+            while len(word_imgs)==0 and debug<2000:
+                debug+=1
+                text=self.getTableValues(1)[0]
+                word_imgs,font = self.gen_daemon.generate(text,font=font,ret_font=True)
+            img,label = resizeAndJoinImgs(word_imgs,value_height,value_space_width,self.max_table_cell_width)
+            table_entries_1d.append((img,label))
+        row_header_entries_1d = []
+        font = None
+        for text in row_header_entries:
+            word_imgs,font = self.gen_daemon.generate(text,font=font,ret_font=True)
+            while len(word_imgs)==0 and debug<2000:
+                debug+=1
+                text=self.getTableHeaders(1)[0]
+                word_imgs,font = self.gen_daemon.generate(text,font=font,ret_font=True)
+            img,label = resizeAndJoinImgs(word_imgs,label_height,label_space_width,self.max_table_rowh_width)
+            row_header_entries_1d.append((img,label))
+        col_header_entries_1d = []
+        font = None
+        for text in col_header_entries:
+            word_imgs,font = self.gen_daemon.generate(text,font=font,ret_font=True)
+            while len(word_imgs)==0 and debug<2000:
+                debug+=1
+                text=self.getTableHeaders(1)[0]
+                word_imgs,font = self.gen_daemon.generate(text,font=font,ret_font=True)
+            img,label = resizeAndJoinImgs(word_imgs,label_height,label_space_width,self.max_table_colh_width)
+            col_header_entries_1d.append((img,label))
+        row_headers = row_header_entries_1d
+        col_headers = col_header_entries_1d
+        table_entries = table_entries_1d
+        table_entries_2d = []
+        for r in range(num_rows):
+            table_entries_2d.append(table_entries_1d[r*num_cols:(r+1)*num_cols])
+        table_entries = table_entries_2d
+
+
+        table_x = random.randrange(init_x,init_x+70)
+        table_y = end_title_y #random.randrange(end_title_y,end_title_y+20)
+
+        padding = random.randrange(0,30)
+
+        #find the height of each row and cut rows that spill off page
+        max_height=0
+        for c in range(num_cols):
+            max_height = max(max_height,col_headers[c][0].shape[0])
+        total_height = max_height+padding
+        height_col_heading = max_height+padding
+        
+        if total_height+table_y >= self.image_size[0]:
+            #NO TABLE
+            return False,None
+        height_row=[0]*num_rows
+        for r in range(num_rows):
+            max_height = row_headers[r][0].shape[0]
+            for c in range(num_cols):
+                max_height = max(max_height,table_entries[r][c][0].shape[0])
+            height_row[r] = max_height+padding
+            total_height+= max_height+padding
+
+            if total_height+table_y >= self.image_size[0]:
+                num_rows = r
+                if num_rows==0:
+                    return False,None
+                total_height -= height_row[r]
+                row_headers=row_headers[:num_rows]
+                height_row=height_row[:num_rows]
+                break
+
+        #find the width of each rowumn and cut rowumns that spill off page
+        max_width=0
+        for r in range(num_rows):
+            max_width = max(max_width,row_headers[r][0].shape[1])
+        total_width = max_width+padding
+        width_row_heading = max_width+padding
+        
+        if total_width+table_x >= max_x:
+            #NO TABLE
+            return False,None
+        width_col=[0]*num_cols
+        for c in range(num_cols):
+            max_width = col_headers[c][0].shape[1]
+            for r in range(num_rows):
+                max_width = max(max_width,table_entries[r][c][0].shape[1])
+            width_col[c] = max_width+padding
+            total_width+= max_width+padding
+
+            if total_width+table_x >= max_x:
+                num_cols = c
+                if num_cols==0:
+                    return False,None
+                total_width -= width_col[c]
+                col_headers=col_headers[:num_cols]
+                width_col=width_col[:num_cols]
+                break
+    
+
+        #put row headers in image
+        row_headers_e=[]
+        cur_y = height_col_heading+table_y
+        for r in range(num_rows):
+            if width_row_heading-padding==row_headers[r][0].shape[1]:
+                x=table_x
+            else:
+                x=table_x + random.randrange(0,width_row_heading-padding-row_headers[r][0].shape[1])
+            if height_row[r]-padding==row_headers[r][0].shape[0]:
+                y=cur_y
+            else:
+                y=cur_y + random.randrange(0,height_row[r]-padding-row_headers[r][0].shape[0])
+            cur_y += height_row[r]
+
+            image[y:y+row_headers[r][0].shape[0],x:x+row_headers[r][0].shape[1]] = row_headers[r][0]
+            box = [x,y,x+row_headers[r][0].shape[1],y+row_headers[r][0].shape[0]]
+            if row_headers[r][1] == '':
+                string='-'
+            else:
+                string=row_headers[r][1]
+            row_headers_e.append( Entity('answer',[Line(string,box)]) )
+            #if boxes is not None:
+            #    self.addText(row_headers[r][1],x,y,row_headers[r][0].shape[1],row_headers[r][0].shape[0],boxes=boxes,trans=trans)
+
+        #put col headers in image
+        col_headers_e=[]
+        cur_x = width_row_heading+table_x
+        for c in range(num_cols):
+            if height_col_heading-padding==col_headers[c][0].shape[0]:
+                y=table_y
+            else:
+                y=table_y + random.randrange(0,height_col_heading-padding-col_headers[c][0].shape[0])
+            if width_col[c]-padding==col_headers[c][0].shape[1]:
+                x=cur_x
+            else:
+                x=cur_x + random.randrange(0,width_col[c]-padding-col_headers[c][0].shape[1])
+            cur_x += width_col[c]
+
+            image[y:y+col_headers[c][0].shape[0],x:x+col_headers[c][0].shape[1]] = col_headers[c][0]
+            box = [x,y,x+col_headers[c][0].shape[1],y+col_headers[c][0].shape[0]]
+            if col_headers[c][1] == '':
+                string='-'
+            else:
+                string=col_headers[c][1]
+            col_headers_e.append( Entity('answer',[Line(string,box)]) )
+            #if boxes is not None:
+            #    self.addText(col_headers[c][1],x,y,col_headers[c][0].shape[1],col_headers[c][0].shape[0],boxes=boxes,trans=trans)
+
+        table = Table(row_headers_e,col_headers_e)
+
+        #put in entries
+        cur_x = width_row_heading+table_x
+        for c in range(num_cols):
+            cur_y = height_col_heading+table_y
+            for r in range(num_rows):
+                if random.random()>0.15 and len(table_entries[r][c][1])>0: #sometimes skip an entry
+                    if width_col[c]-padding==table_entries[r][c][0].shape[1]:
+                        x=cur_x
+                    else:
+                        x=cur_x + random.randrange(0,width_col[c]-padding-table_entries[r][c][0].shape[1])
+                    if height_row[r]-padding==table_entries[r][c][0].shape[0]:
+                        y=cur_y
+                    else:
+                        y=cur_y + random.randrange(0,height_row[r]-padding-table_entries[r][c][0].shape[0])
+
+                    image[y:y+table_entries[r][c][0].shape[0],x:x+table_entries[r][c][0].shape[1]] = table_entries[r][c][0]
+                    #table_values.append((col_headers[c][1],row_headers[r][1],table_entries[r][c][1],x,y))
+                    box = [x,y,x+table_entries[r][c][0].shape[1],y+table_entries[r][c][0].shape[0]]
+                    table.cells[r][c]=Entity('answer',[Line(table_entries[r][c][1],box)])
+                    #if boxes is not None:
+                    #    self.addText(table_entries[r][c][1],x,y,table_entries[r][c][0].shape[1],table_entries[r][c][0].shape[0],boxes=boxes,trans=trans)
+                
+                cur_y += height_row[r]
+            cur_x += width_col[c]
+
+        #add lines for headers
+        line_thickness_h = random.randrange(1,max(2,min(10,padding)))
+        #top
+        img_f.line(image,
+                (max(0,table_x+random.randrange(-5,5)),table_y+height_col_heading-random.randrange(0,1+padding)),
+                (min(max_x-1,table_x+total_width+random.randrange(-5,5)),table_y+height_col_heading-random.randrange(0,1+padding)),
+                random.randrange(0,100),
+                line_thickness_h
+                )
+        #side
+        img_f.line(image,
+                (table_x+width_row_heading-random.randrange(0,padding+1),max(0,table_y+random.randrange(-5,5))),
+                (table_x+width_row_heading-random.randrange(0,padding+1),min(self.image_size[0]-1,table_y+total_height+random.randrange(-5,5))),
+                random.randrange(0,100),
+                line_thickness_h
+                )
+
+        #outside of headers?
+        if random.random()<0.5:
+            line_thickness = random.randrange(1,max(2,min(10,padding)))
+            #top
+            img_f.line(image,
+                    (max(0,table_x+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)),
+                    (min(max_x-1,table_x+total_width+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)),
+                    random.randrange(0,100),
+                    line_thickness
+                    )
+            #side
+            img_f.line(image,
+                    (table_x-random.randrange(0,padding+1),max(0,table_y+random.randrange(-5,5))),
+                    (table_x-random.randrange(0,padding+1),min(self.image_size[0]-1,table_y+total_height+random.randrange(-5,5))),
+                    random.randrange(0,100),
+                    line_thickness
+                    )
+
+        #value outline?
+        if random.random()<0.5:
+            line_thickness = random.randrange(1,max(2,min(10,padding)))
+            #bot
+            img_f.line(image,
+                    (max(0,table_x+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)+total_height),
+                    (min(max_x-1,table_x+total_width+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)+total_height),
+                    random.randrange(0,100),
+                    line_thickness
+                    )
+            #right
+            img_f.line(image,
+                    (table_x-random.randrange(0,padding+1)+total_width,max(0,table_y+random.randrange(-5,5))),
+                    (table_x-random.randrange(0,padding+1)+total_width,min(self.image_size[0]-1,table_y+total_height+random.randrange(-5,5))),
+                    random.randrange(0,100),
+                    line_thickness
+                    )
+
+        #all inbetween lines?
+        if random.random()<0.5:
+            line_thickness = random.randrange(1,max(2,line_thickness_h))
+            #horz
+            cur_height = height_col_heading
+            for r in range(num_rows-1):
+                cur_height += height_row[r]
+                img_f.line(image,
+                        (max(0,table_x+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)+cur_height),
+                        (min(max_x-1,table_x+total_width+random.randrange(-5,5)),table_y-random.randrange(0,padding+1)+cur_height),
+                        random.randrange(0,100),
+                        line_thickness
+                        )
+            #right
+            cur_width = width_row_heading
+            for c in range(num_cols-1):
+                cur_width += width_col[c]
+                img_f.line(image,
+                        (table_x-random.randrange(0,padding+1)+cur_width,max(0,table_y+random.randrange(-5,5))),
+                        (table_x-random.randrange(0,padding+1)+cur_width,min(self.image_size[0]-1,table_y+total_height+random.randrange(-5,5))),
+                        random.randrange(0,100),
+                        line_thickness
+                        )
+
+        
+        tables.append(table)
+
+        first_index = len(entities)
+        entities += tables[-1].allEntities()
+
+        if title is not None:
+            title_entity = self.makeAndDrawEntity(image,'header',title_str_lines,title_img_pos_lines)
+            title_index= len(entities)
+            entities.append(title_entity)
+            entity_link[title_index] += range(first_index,first_index+len(table.row_headers)+len(table.col_headers))
+
+        return True,(init_x, init_y, table_x+total_width+10, table_y+total_height+10)
+
+
+
+    def addForm(self,init_x,init_y,max_x,image,entities,entity_link):
+        debug=0
+        while debug<100:
+            debug+=1
+            title,pairs = random.choice(self.documents)
+
+            #fix bad parsing
+            new_pairs = []
+            for label,value in pairs:
+                if not label.endswith('http'):
+                    new_pairs.append((label,value))
+            if len(new_pairs)>0:
+                pairs=new_pairs
+                break
+        #print(title)
+        #print(pairs)
+
+        max_y = image.shape[0]
+        label_matches_title = random.random()<self.match_title_prob and title is not None
+        value_matches_label = random.random()<self.match_label_prob
+
+        
+        label_height = None
+
+        #generate text images
+        if title is not None:
+            title_words,title_font = self.gen_daemon.generate(title,ret_font=True) #(text,img)
+        if label_matches_title:
+            label_font = title_font
+        else:
+            label_font = None
+        if value_matches_label:
+            value_font = label_font
+        else:
+            value_font = None
+        options=['colon','line','line+colon','dotted line','dotted line+colon','box','box+colon','none']
+        cue = random.choice(options)
+        image_pairs = []
+        for label,value in pairs:
+            if label.endswith('http') and len(pairs)>0:
+                continue #bad parsing of gpt ouput
+            label_words,label_font = self.gen_daemon.generate(label+(':' if 'colon' in cue else ''),font=label_font,ret_font=True)
+            if random.random()<self.blank_value_prob:
+                value_words = []
+                if cue=='none':
+                    cue = random.choice(options[:-1])
+
+            elif isinstance(value,str):
+                value_words,value_font = self.gen_daemon.generate(value,font=value_font,ret_font=True)
+                value_words = [value_words]
+                #TEST
+                #value_wordsT,value_font = self.gen_daemon.generate('TEST_LIST',font=value_font,ret_font=True)
+                #value_words.append(value_wordsT)
+            else:
+                #list answer
+                list_values=[]
+                for value_item in value:
+                    value_words,value_font = self.gen_daemon.generate(value_item,font=value_font,ret_font=True)
+                    list_values.append(value_words)
+                value_words = list_values
+            image_pairs.append((label_words,value_words))
+        
+        start_x = init_x+(self.block_pad_max if len(entities)>0 else self.block_pad_max//3)
+        start_x = min(start_x,max_x-60)
+        start_y = init_y+(self.block_pad_max if len(entities)>0 else self.block_pad_max//3)
+        start_x = min(start_y,max_y-60)
+        title_height = self.max_text_height
+        label_height = self.max_text_height
+        value_height = self.max_text_height
+        num_pairs = len(pairs)
+        for retry in range(5):
+            if start_x>init_x+self.block_pad_min:
+                start_x = random.randrange(init_x+self.block_pad_min,start_x)
+            if start_y>init_y+self.block_pad_min:
+                start_y = random.randrange(init_y+self.block_pad_min,start_y)
+
+            if start_x>=image.shape[1]-16 or start_y>=image.shape[0]-10:
+                continue
+            
+            #setup text height and spacing
+            if title is not None:
+                title_height = random.randrange((self.min_text_height+title_height)//2,1+max(self.min_text_height+2,title_height))
+            em_approx = title_height*1.6 #https://en.wikipedia.org/wiki/Em_(typography)
+            min_space = 0.2*em_approx #https://docs.microsoft.com/en-us/typography/develop/chara  cter-design-standards/whitespace
+            max_space = 0.5*em_approx
+            title_space_width = round(random.random()*(max_space-min_space) + min_space)
+            title_newline_height = random.randrange(1,title_height) + title_height
+
+            if label_matches_title:
+                label_height = title_height
+            else:
+                label_height = random.randrange(self.min_text_height,1+max(self.min_text_height+2,min(label_height,title_height)))
+            em_approx = label_height*1.6 #https://en.wikipedia.org/wiki/Em_(typography)
+            min_space = 0.2*em_approx #https://docs.microsoft.com/en-us/typography/develop/chara  cter-design-standards/whitespace
+            max_space = 0.5*em_approx
+            label_space_width = round(random.random()*(max_space-min_space) + min_space)
+            label_newline_height = random.randrange(1,label_height) + label_height
+
+            if value_matches_label:
+                value_height = label_height
+            else:
+                value_height = random.randrange(self.min_text_height,1+max(self.min_text_height+2,min(value_height,title_height)))
+            em_approx = value_height*1.6 #https://en.wikipedia.org/wiki/Em_(typography)
+            min_space = 0.2*em_approx #https://docs.microsoft.com/en-us/typography/develop/chara  cter-design-standards/whitespace
+            max_space = 0.5*em_approx
+            value_space_width = round(random.random()*(max_space-min_space) + min_space)
+            value_newline_height = random.randrange(1,value_height) + value_height
+            value_list_newline_height = value_newline_height + round(value_newline_height*random.random())
+            
+            max_word_width = 0
+            if title is not None:
+                title_word_ws = [max(1,round(img.shape[1]*(title_height/img.shape[0]))) for text,img in title_words]
+                max_word_width = max(title_word_ws)
+            
+            new_image_pairs = []
+            w_pairs = []
+            max_value_word_w=max_label_word_w=0
+            for label_words,value_words in image_pairs:
+                if len(label_words)==0:
+                    continue
+                label_word_ws = [max(1,round(img.shape[1]*(label_height/img.shape[0]))) for text,img in label_words]
+                max_label_word_w = max(max_label_word_w,*label_word_ws)
+                value_word_ws = []
+                for value_words_item in value_words:
+                    value_word_ws_item = [max(1,round(img.shape[1]*(value_height/img.shape[0]))) for text,img in value_words_item]
+                    max_word_width = max(max_word_width,*label_word_ws,*value_word_ws_item)
+                    max_value_word_w = max([max_value_word_w,*value_word_ws_item])
+                    value_word_ws.append(value_word_ws_item)
+
+                new_image_pairs.append((label_words,value_words))
+                w_pairs.append((label_word_ws,value_word_ws))
+            image_pairs = new_image_pairs
+
+            block_width = max_x-start_x
+            if max_word_width>block_width:
+                continue #retry, we need to shrink things
+
+
+            #how wide will the title be?
+            if title is not None:
+                if max(title_word_ws)>=block_width:
+                    continue #not going to fit
+                if int(block_width*0.66)<=max(title_word_ws):
+                    max_title_width = block_width
+                else:
+                    max_title_width = random.randrange(max(title_word_ws),int(block_width*0.66))
+                max_title_x = start_x+max_title_width
+                #layout the title to see how tall it is
+                title_str=''
+                title_str_lines=[]
+                title_img_pos_lines=[]
+                title_img_pos=[]
+                cur_x=start_x
+                cur_y=start_y
+                rightmost_title_x=cur_x
+                restart=False
+                for title_w, (title_text,title_img) in zip(title_word_ws,title_words):
+                    if cur_x+title_w>max_title_x:
+                        #newline
+                        title_str_lines.append(title_str)
+                        title_str=''
+                        title_img_pos_lines.append(title_img_pos)
+                        title_img_pos=[]
+                        cur_x = start_x
+                        cur_y += title_newline_height
+                        if cur_y+title_height>=max_y:
+                            #cannot fit
+                            restart=True
+                            break
+                    elif len(title_str)>0:
+                        title_str+=' '#space
+                    title_x = cur_x
+                    title_y = cur_y
+                    
+                    cur_x+=title_w+title_space_width
+                    title_str += title_text
+                    title_img_pos.append((title_x,title_y,title_img,title_height,title_w))
+                    rightmost_title_x = max(rightmost_title_x,title_x+title_w)
+                if restart or len(title_img_pos)==0:
+                    continue #retry, not room for title
+                title_img_pos_lines.append(title_img_pos)
+                title_str_lines.append(title_str)
+                end_title_y=cur_y+title_newline_height+round(title_newline_height*random.random())
+            else:
+                end_title_y=start_y
+                rightmost_title_x=start_x
+
+            if end_title_y+label_height>=max_y:
+                continue #no room for fields
+
+
+            can_do_side_by_side = 2+max_value_word_w+max_label_word_w+self.min_qa_sep < block_width
+            
+            side_by_side = can_do_side_by_side and (random.random()<self.side_by_side_prob or cue=='none')
+            if side_by_side:
+                aligned_cols = random.random()<0.5 or cue=='none'
+                if aligned_cols:
+                    fixed_value_width = random.randrange(1+max_value_word_w,(block_width)-(max_label_word_w+1+self.min_qa_sep))
+                    fixed_label_width = random.randrange(1+max_label_word_w,(block_width)-(fixed_value_width+self.min_qa_sep))
+                    sep = (block_width)-(fixed_value_width+fixed_label_width)
+                    max_qa_sep = self.max_qa_sep if start_y<image.shape[0]//2 else self.max_qa_sep//2
+                    if sep>self.min_qa_sep:
+                        sep = random.randrange(self.min_qa_sep,min(sep,self.max_qa_sep))
+                    all_value_x = start_x+fixed_label_width+sep
+                    max_label_x = start_x+fixed_label_width
+                else:
+                    if (block_width)-(max_label_word_w+max_value_word_w)<self.min_qa_sep:
+                        continue #restart, too narrow
+                    sep = random.randrange(self.min_qa_sep,min(self.max_qa_sep//2+1,1+(block_width)-(max_label_word_w+max_value_word_w)))
+                    max_label_x = max_x-(max_value_word_w+sep+1)
+                    all_value_x=None
+            else:
+                aligned_cols = False
+                #print('WARNING, non-side-by-side not implmented!!')
+                #side_by_side=True
+                try:
+                    sep=random.randrange(max(label_height,value_height)*3,min(max(label_height,value_height)*10,max_x-max(max_value_word_w,max_label_word_w)))//2
+                except ValueError:
+                    sep=max_x #can't do columns
+                max_label_x=max_x-1
+                all_value_x=None
+
+
+            cur_x = start_x
+            col_x = start_x
+            col_number = 0
+            cur_y = end_title_y
+            rightmost_x_so_far = cur_x
+            rightmost_value_x=defaultdict(int)
+            pairs_to_draw = []
+            num_pairs_to_draw_in_col =0 
+
+            def roomForNewCol(col_x,rightmost_x_so_far):
+                #if side_by_side:
+                room_for_new_col = (aligned_cols and col_x+sep+2*(fixed_label_width+sep+fixed_value_width)<max_x) or (not aligned_cols and col_x+2*sep+rightmost_x_so_far+max_label_word_w+sep+max_value_word_w<max_x)
+                #else:
+                #  room_for_new_col = col_x+2*sep+max(max_label_word_w,max_value_word_w)<max_x
+                return room_for_new_col
+            def shiftCol(col_number,col_x,all_value_x,max_label_x,cur_y,rightmost_x_so_far):
+                if aligned_cols:
+                    col_x += fixed_label_width+2*sep+fixed_value_width
+                    all_value_x += fixed_label_width+2*sep+fixed_value_width
+                    max_label_x += fixed_label_width+2*sep+fixed_value_width
+                    cur_y = end_title_y
+                else:
+                    col_x = rightmost_x_so_far+2*sep
+                    cur_y = end_title_y
+                num_pairs_to_draw_in_col=0
+                return col_number+1,col_x, all_value_x, max_label_x,cur_y,num_pairs_to_draw_in_col
+
+            for (label_words,value_words),(label_word_ws_list,value_word_ws_list) in zip(image_pairs,w_pairs):
+                if roomForNewCol(col_x,rightmost_x_so_far) and (cur_y+label_height>=max_y or random.random()<self.new_col_chance*min(1,num_pairs_to_draw_in_col/3)):
+                    col_number,col_x, all_value_x, max_label_x,cur_y,num_pairs_to_draw_in_col=shiftCol(col_number,col_x,all_value_x,max_label_x,cur_y,rightmost_x_so_far)
+                elif cur_y+label_height>=max_y:
+                    break #cannot do pair
+
+                cannot_do_pair = False
+                restart=True
+                debug=0
+                while restart and debug<200: #for restarting as new column
+                    debug+=1
+                    cur_x = col_x
+                    restart=False
+                    label_str=''
+                    label_str_lines=[]
+                    label_img_pos=[]
+                    label_img_pos_lines=[]
+                    for label_w,(label_text,label_img) in zip(label_word_ws_list,label_words):
+                        if cur_x+label_w>max_label_x:
+                            if len(label_img_pos)==0:
+                                cannot_do_pair=True
+                                break
+                            #newline
+                            label_str_lines.append(label_str)
+                            label_str=''
+                            label_img_pos_lines.append(label_img_pos)
+                            label_img_pos=[]
+                            cur_x = col_x
+                            cur_y += label_newline_height
+                            if cur_y+label_height>=max_y:
+                                #do we have room for another column?
+                                if roomForNewCol(col_x,rightmost_x_so_far):
+                                    col_number,col_x, all_value_x, max_label_x,cur_y,num_pairs_to_draw_in_col=shiftCol(col_number,col_x,all_value_x,max_label_x,cur_y,rightmost_x_so_far)
+                                    restart = True
+                                    break
+                                else:
+                                    #import pdb;pdb.set_trace()
+                                    cannot_do_pair=True
+                                    break
+                        elif len(label_str)>0:
+                            label_str+=' '#space
+                        label_x = cur_x
+                        label_y = cur_y
+                        
+                        cur_x+=label_w+label_space_width
+                        label_str += label_text
+                        label_img_pos.append((label_x,label_y,label_img,label_height,label_w))
+                        if label_x+label_w>max_x or label_y+label_height>max_y:
+                            cannot_do_pair=True
+                            break
+
+                        rightmost_x_so_far = max(rightmost_x_so_far,label_x+label_w)
+
+                    if cannot_do_pair:
+                        break
+                    
+                    if len(label_img_pos)>0:
+                        label_str_lines.append(label_str)
+                        label_img_pos_lines.append(label_img_pos)
+
+                    if side_by_side:
+                        if aligned_cols:
+                            value_start_x = all_value_x
+                        else:
+                            value_start_x = cur_x+sep
+
+                        lowest_y = max_y-(value_height+1)
+                        cur_y = random.randrange(min(label_y-round(0.15*min(label_height,value_height)),label_y+label_height-value_height)-4,min(max(label_y+value_height,label_y+label_height)+4,lowest_y))
+                    else:
+                        value_start_x = col_x + random.randrange(-4,label_height)
+                        cur_y = label_y+round(label_newline_height+label_newline_height*random.random())
+
+                    max_value_x = max_x
+                    value_entities=[]
+                    for value_word_ws_item,value_words_item in zip(value_word_ws_list,value_words):
+                        if cur_y+value_height>=max_y:
+                            #do we have room for another column?
+                            if roomForNewCol(col_x,rightmost_x_so_far):
+                                col_number,col_x, all_value_x, max_label_x,cur_y,num_pairs_to_draw_in_col=shiftCol(col_number,col_x,all_value_x,max_label_x,cur_y,rightmost_x_so_far)
+                                restart = True
+                                break
+                            else:
+                                cannot_do_pair=True
+                                #import pdb;pdb.set_trace()
+                                break
+                        cur_x = value_start_x
+                        value_str=''
+                        value_str_lines_item=[]
+                        value_img_pos_lines_item=[]
+                        value_img_pos = []
+                        for value_w,(value_text,value_img) in zip(value_word_ws_item,value_words_item):
+
+                            
+                            if cur_x+value_w>=max_value_x:
+                                if cur_x == value_start_x or value_start_x+value_w>=max_value_x or len(value_img_pos)==0:
+                                    cannot_do_pair=True
+                                    break
+                                #newline
+                                value_str_lines_item.append(value_str)
+                                value_str=''
+                                value_img_pos_lines_item.append(value_img_pos)
+                                value_img_pos=[]
+                                cur_x = value_start_x
+                                cur_y += value_newline_height
+
+                                if cur_y+value_height>=max_y:
+                                    #do we have room for another column?
+                                    if roomForNewCol(col_x,rightmost_x_so_far):
+                                        col_number,col_x, all_value_x, max_label_x,cur_y,num_pairs_to_draw_in_col=shiftCol(col_number,col_x,all_value_x,max_label_x,cur_y,rightmost_x_so_far)
+                                        restart = True
+                                        break
+                                    else:
+                                        cannot_do_pair=True
+                                        #import pdb;pdb.set_trace()
+                                        break
+                            elif len(value_str)>0:
+                                value_str+=' '#space
+                            value_x = cur_x
+                            value_y = cur_y
+                            
+                            cur_x+=value_w+value_space_width
+                            value_str += value_text
+                            value_img_pos.append((value_x,value_y,value_img,value_height,value_w))
+                            if value_x+value_w>max_x or value_y+value_height>max_y:
+                                cannot_do_pair=True
+                                break
+
+                            rightmost_x_so_far = max(rightmost_x_so_far,value_x+value_w)
+
+                        if cannot_do_pair or restart:
+                            break
+                        if len(value_img_pos)>0:
+                            value_str_lines_item.append(value_str)
+                            value_img_pos_lines_item.append(value_img_pos)
+                        if len(value_str_lines_item)>0:
+                            value_entities.append((value_str_lines_item,value_img_pos_lines_item))
+                        for value_img_pos in value_img_pos_lines_item:
+                            rightmost_value_x[col_number]= max(value_img_pos[-1][0]+value_img_pos[-1][-1],rightmost_value_x[col_number])
+
+                        cur_y += value_list_newline_height
+
+                    if cannot_do_pair or restart:
+                        break
+
+                    
+                    #else add the info to be drawn
+                    pairs_to_draw.append((label_str_lines,label_img_pos_lines,value_entities,col_number))
+                    num_pairs_to_draw_in_col+=1
+
+                    cur_y += round(label_newline_height*random.random()) + (value_list_newline_height if len(value_words)==0 else 0) +3
+
+                        
+                if cannot_do_pair:
+                    break
+
+                
+            if len(pairs_to_draw)==0:
+                #couldn't add this document
+                #import pdb;pdb.set_trace()
+                x=1
+                continue #retry
+
+
+
+            #place the header
+            actual_block_width = max(rightmost_x_so_far,rightmost_title_x)-start_x
+            title_width = rightmost_title_x-start_x
+            wiggle = min(100,actual_block_width-title_width)
+            if title is not None:
+                if random.random()<0.5:
+                    #left
+                    if wiggle>0:
+                        title_x_offset = random.randrange(wiggle)
+                    else:
+                        title_x_offset=0
+                else:
+                    #middle
+                    title_x_offset = (actual_block_width//2)-(title_width//2) + (random.randrange(-wiggle//2,wiggle//2) if wiggle>0 else 0)
+                rightmost_title_x+=title_x_offset
+                #update title position
+                for title_img_pos in title_img_pos_lines:
+                    for i in range(len(title_img_pos)):
+                        x,y,img,h,w = title_img_pos[i]
+                        title_img_pos[i] = (x+title_x_offset,y,img,h,w)
+
+            #draw and and the entities + links
+            lowest_y=0
+            rightmost_x=0
+            if title is not None:
+                title_entity = self.makeAndDrawEntity(image,'header',title_str_lines,title_img_pos_lines)
+                title_ei = len(entities)
+                entities.append(title_entity)
+                lowest_y = title_entity.box[-1]
+                rightmost_x = title_entity.box[-2]
+
+            for label_str_lines,label_img_pos_lines,value_entities,col_number in pairs_to_draw:
+                label_entity = self.makeAndDrawEntity(image,'question',label_str_lines,label_img_pos_lines)
+                label_ei=len(entities)
+                entities.append(label_entity)
+                if title is not None:
+                    entity_link[title_ei].append(label_ei)
+                lowest_y = max(lowest_y,label_entity.box[-1])
+                rightmost_x = max(rightmost_x,label_entity.box[-2])
+                
+
+                for value_str_lines,value_img_pos_lines in value_entities:
+                    value_entity = self.makeAndDrawEntity(image,'answer',value_str_lines,value_img_pos_lines,rightmost_value_x[col_number],cue)
+                    value_ei=len(entities)
+                    entities.append(value_entity)
+                    entity_link[label_ei].append(value_ei)
+                    lowest_y = max(lowest_y,value_entity.box[-1])
+                    rightmost_x = max(rightmost_x,value_entity.box[-2])
+
+                
+                if len(value_entities)==0: #blank
+                    entity_link[label_ei]=None
+                    #draw empty line
+                    line_thickness = random.randrange(1,5)
+                    pad_w = random.randrange(1,5)
+                    pad_h = random.randrange(1,5)
+                    color = random.randrange(1,170)
+                    dotting = random.randrange(1,5)
+                    if side_by_side:
+                        if aligned_cols:
+                            x = all_value_x
+                        else:
+                            x = label_img_pos_lines[-1][-1][0]+label_img_pos_lines[-1][-1][-1]+sep
+                        y = label_img_pos_lines[-1][-1][1]
+                        if rightmost_value_x[col_number]==0:
+                            rightmost_value_x[col_number] = x+6*value_height
+                            rightmost_x_so_far = max(rightmost_x_so_far,rightmost_value_x[col_number])
+                    else:
+                        x = col_x+random.randrange(-4,label_height)
+                        y = label_img_pos_lines[-1][-1][1] + label_newline_height + round(label_newline_height*random.random())
+                        if rightmost_value_x[col_number]==0:
+                            rightmost_value_x[col_number] = rightmost_x_so_far
+
+                    img_h = label_img_pos_lines[-1][-1][-2]
+                    if 'dotted line' in cue:
+                        for x in range(max(0,x-pad_w),min(max_x,rightmost_value_x[col_number]+pad_w)):
+                            if math.sin(x*math.pi/dotting)>0:
+                                try:
+                                    image[y+img_h+pad_h-line_thickness//2:1+y+img_h+pad_h+line_thickness//2,x]=color
+                                except IndexError:
+                                    pass
+
+                    elif 'line' in cue:
+                        img_f.line(image,(x-pad_w,y+img_h+pad_h),(rightmost_value_x[col_number]+pad_w,y+img_h+pad_h),color,line_thickness)
+                    elif 'box' in cue:
+                        img_f.rectangle(image,(x-pad_w,y-pad_h),(rightmost_value_x[col_number]+pad_w,y+img_h+pad_h),color,line_thickness)
+                    lowest_y = max(lowest_y,y+img_h+pad_h)
+
+
+            return True,(init_x,init_y,rightmost_x,lowest_y)
+        return False,None
+
+
+    def makeAndDrawEntity(self,image,cls,str_lines,img_pos_lines,max_line_x=None,cue=None):
+        lines=[]
+        if cue is not None and any(prompt in cue for prompt in ['box','line']):
+            if random.random()<0.4:
+                line_end_x = max_line_x
+            elif random.random()<0.6:
+                line_end_x = 0
+                for img_pos_words in img_pos_lines:
+                    line_max_x=img_pos_words[-1][0]+img_pos_words[-1][-1]
+                    line_end_x=max(line_end_x,line_max_x)
+            else:
+                line_end_x=None
+        else:
+            line_end_x=None
+        max_x=max_y = 0
+        min_x=min_y = 9999999999999999999
+        if cue is not None:
+            line_thickness = random.randrange(1,5)
+            pad_w = random.randrange(1,5)
+            pad_h = random.randrange(1,5)
+            color = random.randrange(1,170)
+        for text,img_pos_words in zip(str_lines,img_pos_lines):
+            line_max_x=img_pos_words[-1][0]+img_pos_words[-1][-1]
+            line_max_y=img_pos_words[-1][1]+img_pos_words[-1][-2]
+            line_min_x=img_pos_words[0][0]
+            line_min_y=img_pos_words[0][1]
+
+            for x,y,img,img_h,img_w in img_pos_words:
+                img = img_f.resize(img,(img_h,img_w))
+                if x+img_w>image.shape[1]:
+                    img = img[:,:image.shape[1]-(x+img_w)]
+                if y+img_h>image.shape[0]:
+                    img = img[:image.shape[0]-(y+img_h),:]
+                image[y:y+img_h,x:x+img_w] = img
+
+            lines.append(Line(text,(line_min_x,line_min_y,line_max_x,line_max_y)))
+
+
+            if cue is not None:
+                if line_end_x is not None:
+                    line_max_x = line_end_x
+                dotting = random.randrange(1,5)
+                if 'dotted line' in cue:
+                    for x in range(max(0,line_min_x-pad_w),min(max_line_x,line_max_x+pad_w)):
+                        if math.sin(x*math.pi/dotting)>0:
+                            try:
+                                image[line_max_y+pad_h-line_thickness//2:1+line_max_y+pad_h+line_thickness//2,x]=color
+                            except IndexError:
+                                pass
+
+                elif 'line' in cue:
+                    img_f.line(image,(line_min_x-pad_w,line_max_y+pad_h),(min(max_line_x,line_max_x+pad_w),line_max_y+pad_h),color,line_thickness)
+                elif 'box' in cue:
+                    min_x = min(line_min_x-pad_w,min_x)
+                    min_y = min(line_min_y-pad_h,min_y)
+                    max_x = max(line_max_x+pad_w,max_x)
+                    max_y = max(line_max_y+pad_h,max_y)
+        if cue is not None and 'box' in cue:
+            img_f.rectangle(image,(min_x,min_y),(min(max_line_x,max_x),max_y),color,line_thickness)
+        return Entity(cls,lines)
+    
+    def getTableValues(self,num):
+        ret=[]
+        for n in range(num):
+            if random.random()<0.5:
+                r = random.random()
+                #number
+                if r<0.1:
+                    #percent
+                    ret.append('{}%'.format(random.randrange(101)))
+                elif r<0.2:
+                    #percent
+                    ret.append('{:.4}%'.format(random.random()*100))
+                elif r<0.3:
+                    ret.append('{}'.format(random.randrange(10000)))
+                elif r<0.4:
+                    ret.append('{:.4}'.format(random.random()*100))
+                elif r<0.5:
+                    ret.append('{}'.format(random.randrange(-1000,1000)))
+                elif r<0.6:
+                    ret.append('{:.3}'.format(random.random()))
+                elif r<0.7:
+                    ret.append('-{:.3}'.format(random.random()))
+                elif r<0.8:
+                    ret.append('${}'.format(random.randrange(10000)))
+                elif r<0.9:
+                    ret.append('${}'.format(random.randrange(1000)))
+                else:
+                    ret.append('{}'.format(random.randrange(101)))
+            else:
+                #words
+                if len(self.random_words)==0:
+                    self.addRandomWords()
+                ret.append(self.random_words.pop())
+        return ret
+
+    def getTableHeaders(self,num):
+        ret=[]
+        for n in range(num):
+            #words
+            if len(self.random_words)==0:
+                self.addRandomWords()
+            if len(self.random_words)>4 and random.random()<0.02:
+                ret.append(' '.join(self.random_words[-4:]))
+                self.random_words = self.random_words[:-4]
+            elif len(self.random_words)>3 and random.random()<0.07:
+                ret.append(' '.join(self.random_words[-3:]))
+                self.random_words = self.random_words[:-3]
+            elif len(self.random_words)>2 and random.random()<0.2:
+                ret.append(' '.join(self.random_words[-2:]))
+                self.random_words = self.random_words[:-2]
+            else:
+                ret.append(self.random_words.pop())
+        return ret
+
+    def addRandomWords(self):
+        debug=0
+        while (len(self.random_words)==0 or debug==0) and debug<200:
+            debug+=1
+            words = self.gen_daemon.getTextSample()
+            words = [w for w in words if w.lower() not in self.stop_words]
+            random.shuffle(words)
+            self.random_words+=words
+
+        if debug==200:
+            self.random_words+=['X']
