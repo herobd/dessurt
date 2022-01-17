@@ -793,12 +793,24 @@ class QATrainer(BaseTrainer):
         #model.apply(lambda module: _set_momenta(module, momenta))
         #model.train(was_training)
 
-
+ner_classes=set(cls.lower() for cls in ['N', 'C', 'L', 'T', 'O', 'P', 'G','NORP', 'LAW', 'PER', 'QUANTITY', 'MONEY', 'CARDINAL', 'LOCATION', 'LANGUAGE', 'ORG', 'DATE', 'FAC', 'ORDINAL', 'TIME', 'WORK_OF_ART', 'PERCENT', 'GPE', 'EVENT', 'PRODUCT'])
 def processNERLine(line):
     ret = []
-    for w in line.split(' '):
+    words = line.split(' ')
+    words2 = line.split(']')
+    if len(words2)>len(words):
+        words = words2
+        spaced=False
+    else:
+        spaced=True
+    for w in words:
+        if len(w)==0:
+            continue
         start_b = w.rfind('[')
-        end_b = w.rfind(']')
+        if spaced:
+            end_b = w.rfind(']')
+        else:
+            end_b = len(w)
         if start_b!=-1 and end_b!=-1:
             if 'ne:'==w[start_b+1:start_b+4]:
                 cls = w[start_b+4:end_b]
@@ -817,6 +829,8 @@ def processNERLine(line):
             cls='o'
             word = line
         #print('see class: '+cls)
+        if cls not in ner_classes:
+            cls = 'o'
         ret.append((word,cls))
     return ret
 

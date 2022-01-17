@@ -31,6 +31,7 @@ class IAMNER(QADataset):
         self.full = config.get('full',False)
         if self.full:
             assert self.cased
+        self.eval_full = config.get('eval_full',True)
 
         task = config['task'] if 'task' in config else 6
         all_classes = set()
@@ -117,7 +118,7 @@ class IAMNER(QADataset):
 
 
         if self.full:
-            if not self.train or random.random()<0.5:
+            if (self.eval_full and not self.train) or (not self.eval_full and random.random()<0.5):
                 q='ner_full>'
                 a=[]
                 for words in W_lines:
