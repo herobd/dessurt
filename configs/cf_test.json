@@ -43,6 +43,7 @@
                     "font_dir": "../data/fonts",
                     "cased": true,
                     "use_json": true,
+                    "batch_size": 1,
                     "rescale_range": [0.9,1.1],
                     "crop_params": {
                         "crop_size": [
@@ -179,12 +180,12 @@
         "init_from_pretrained": "bart",
         "use_special_question_tokens": true,
         "max_q_tokens": 20,
-        "max_a_tokens": 3400,
+        "max_a_tokens": 800,
         "no_dropout": false,
         "window_size": 12,
-        "decode_dim": 128,
-        "dim_ff": 100,
-        "decode_num_heads": 8,
+        "decode_dim": 4,
+        "dim_ff": 4,
+        "decode_num_heads": 1,
         "blocks_per_level": [
             4,
             6
@@ -217,6 +218,6 @@
             4,
             8
         ],
-        "im_embed_dim": 128
+        "im_embed_dim": 4
     }
 }

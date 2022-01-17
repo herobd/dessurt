@@ -1239,12 +1239,12 @@ class SynthFormDataset(FormQA):
 
     def addRandomWords(self):
         debug=0
-        while len(self.random_words)==0 and debug<200:
+        while (len(self.random_words)==0 or debug==0) and debug<200:
             debug+=1
             words = self.gen_daemon.getTextSample()
             words = [w for w in words if w.lower() not in self.stop_words]
             random.shuffle(words)
             self.random_words+=words
 
-        if len(self.random_words)==0:
+        if debug==200:
             self.random_words+=['X']
