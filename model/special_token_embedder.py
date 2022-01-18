@@ -40,6 +40,7 @@ class SpecialTokenEmbedder(nn.Module):
                 'json>','link-both~','link-box~','link-text~',
                 'linkdown-both~','linkdown-box~','linkdown-text~',
                 'linkup-both~','linkup-box~','linkup-text~',
+                'json~',
 
                 #census TODO
                 ]
