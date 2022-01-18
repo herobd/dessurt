@@ -91,7 +91,7 @@ if __name__ == "__main__":
     if len(sys.argv)>1:
         dirPath = sys.argv[1]
     else:
-        dirPath = '../data/synth_hw'
+        dirPath = '../data/synth_hw_wiki'
     if len(sys.argv)>2:
         start = int(sys.argv[2])
     else:
@@ -103,6 +103,7 @@ if __name__ == "__main__":
     data=synth_hw_qa.SynthHWQA(dirPath=dirPath,split='train',config={
         'batch_size':1,
         #'gt_ocr': True,
+        'cased': True,
         'rescale_range':[0.9,1.1],
         'crop_hwms': {
             "crop_size":[768,768],

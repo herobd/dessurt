@@ -1,5 +1,5 @@
 {
-    "name": "distilGN+form+paraCqa+cdipC_mmswin_bart_PTfrom79i933k_92",
+    "name": "distilGN+form+syhw+paraCqa+cdipC_mmswin_bart_PTfrom79i1.2m_94",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -59,7 +59,34 @@
                 }
             },
             {
-                "freq": 0.1,
+                "freq": 0.005,
+                "config": {
+                    "data_set_name": "SynthHWQA",
+                    "data_dir": "../data/synth_hw_wiki",
+                    "cased": true,
+                    "batch_size": 1,
+                    "num_workers": 4,
+                    "rescale_range": [
+                        0.9,
+                        1.1
+                    ],
+                    "crop_params": {
+                        "crop_size": [
+                            1152,768
+                        ],
+                        "pad": 0,
+                        "rot_degree_std_dev": 1
+                    },
+                    "questions": 1,
+                    "max_qa_len_in": 640,
+                    "max_qa_len_out": 2560,
+                    "image_size": [1150,760],
+                    "prefetch_factor": 10,
+                    "persistent_workers": true
+                }
+            },
+            {
+                "freq": 0.095,
                 "config": {
                     "data_set_name": "SynthParaQA",
                     "data_dir": "../data/fonts",
