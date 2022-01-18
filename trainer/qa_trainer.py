@@ -528,8 +528,8 @@ class QATrainer(BaseTrainer):
                 iou = None
             for b,(b_answers,b_pred,b_questions,b_metadata) in enumerate(zip(answers,string_a,questions,instance['form_metadata'])):
                 assert len(b_questions)==1
-                print('pred '+b_pred[0])
-                print('true '+b_answers[0])
+                #print('pred '+b_pred[0])
+                #print('true '+b_answers[0])
                 answer = b_answers[0].lower()
                 pred = b_pred[0].lower()
                 question = b_questions[0]
