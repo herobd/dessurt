@@ -68,19 +68,27 @@ class SynthHWQA(ParaQADataset):
 
         num_lines = random.randrange(1,image_h//(text_height+newline_height))
 
-        lines = self.images[index:index+num_lines]
 
         ocr_lines=[]
         image = np.full([image_h,image_w],253,dtype=np.uint8)
         
         read_lines=[]
         max_width=0
-        for line in lines:
-            index,text = line[  'annotationPath']
-            line_img = img_f.imread(os.path.join(self.image_dir,'sample_{}.png'.format(index)))
-            new_width = round(line_img.shape[1]*(text_height/line_img.shape[0]))
-            read_lines.append([text,line_img,new_width])
-            max_width = max(max_width,new_width)
+        while len(read_lines)==0:
+            lines = self.images[index:index+num_lines]
+            for line in lines:
+                index,text = line[  'annotationPath']
+                try:
+                    line_img = img_f.imread(os.path.join(self.image_dir,'sample_{}.png'.format(index)))
+                except FileNotFoundError:
+                    continue
+                new_width = round(line_img.shape[1]*(text_height/line_img.shape[0]))
+                read_lines.append([text,line_img,new_width])
+                max_width = max(max_width,new_width)
+
+            if len(lines)==0:
+                index=random.randrange(len(self.images)-1)
+
 
         if max_width>(image_w-1):
             #change resize to fit imagesize
@@ -128,4 +136,4 @@ class SynthHWQA(ParaQADataset):
 
         qa, qa_bbs = self.makeQuestions(ocr,image_h,image_w,s)
         metadata={}
-        return None, list(range(qa_bbs.shape[0])), None, {'image':image}, metadata, qa
+        return None,[], None, {'image':image}, metadata, qa

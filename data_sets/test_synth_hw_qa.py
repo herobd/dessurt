@@ -58,7 +58,7 @@ def display(data):
 
         #widths.append(img.size(1))
         
-        draw=True#'mk>' in q
+        draw=False#'mk>' in q
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
