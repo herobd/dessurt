@@ -233,6 +233,8 @@ class SynthFormDataset(FormQA):
             title = ' '.join(self.random_words[-num_words:])
             self.random_words = self.random_words[:-num_words]
             title_words,title_font = self.gen_daemon.generate(title,ret_font=True) 
+            if len(title_words)==0:
+                title=None
         else:
             title = None
 
@@ -461,6 +463,12 @@ class SynthFormDataset(FormQA):
                 y=cur_y + random.randrange(0,height_row[r]-padding-row_headers[r][0].shape[0])
             cur_y += height_row[r]
 
+            diff = image.shape[0]-y+row_headers[r][0].shape[0]
+            if diff<0:
+                row_headers[r][0] = row_headers[r][0][:diff]
+            diff = image.shape[1]-x+row_headers[r][0].shape[1]
+            if diff<0:
+                row_headers[r][0] = row_headers[r][0][:,:diff]
             image[y:y+row_headers[r][0].shape[0],x:x+row_headers[r][0].shape[1]] = row_headers[r][0]
             box = [x,y,x+row_headers[r][0].shape[1],y+row_headers[r][0].shape[0]]
             if row_headers[r][1] == '':
@@ -484,7 +492,13 @@ class SynthFormDataset(FormQA):
             else:
                 x=cur_x + random.randrange(0,width_col[c]-padding-col_headers[c][0].shape[1])
             cur_x += width_col[c]
-
+            
+            diff = image.shape[0]-y+col_headers[c][0].shape[0]
+            if diff<0:
+                col_headers[c][0] = col_headers[c][0][:diff]
+            diff = image.shape[1]-x+col_headers[c][0].shape[1]
+            if diff<0:
+                col_headers[c][0] = col_headers[c][0][:,:diff]
             image[y:y+col_headers[c][0].shape[0],x:x+col_headers[c][0].shape[1]] = col_headers[c][0]
             box = [x,y,x+col_headers[c][0].shape[1],y+col_headers[c][0].shape[0]]
             if col_headers[c][1] == '':
@@ -511,7 +525,11 @@ class SynthFormDataset(FormQA):
                         y=cur_y
                     else:
                         y=cur_y + random.randrange(0,height_row[r]-padding-table_entries[r][c][0].shape[0])
-
+                    if y+table_entries[r][c][0].shape[0]>image.shape[0]:
+                        diff = image.shape[0]-y+table_entries[r][c][0].shape[0]
+                    if x+table_entries[r][c][0].shape[1]>image.shape[1]:
+                        diff = image.shape[1]-x+table_entries[r][c][0].shape[1]
+                        table_entries[r][c][0] = table_entries[r][c][0][:,:diff]
                     image[y:y+table_entries[r][c][0].shape[0],x:x+table_entries[r][c][0].shape[1]] = table_entries[r][c][0]
                     #table_values.append((col_headers[c][1],row_headers[r][1],table_entries[r][c][1],x,y))
                     box = [x,y,x+table_entries[r][c][0].shape[1],y+table_entries[r][c][0].shape[0]]

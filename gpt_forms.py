@@ -11,16 +11,24 @@ import json
 #warnings.filterwarnings("ignore")
 import timeit
 
-def addPair(q,a,pairs,seen_pairs,seen_qs):
+def addPair(q,a,pairs,seen_pairs,seen_qs,seen_as):
     pair = q+':'+a
     if pair in seen_pairs:
         return False #done, repeating
     for sq in range(len(seen_qs)-1):
         if seen_qs[sq]==seen_qs[-1] and seen_qs[sq+1]==q:
             return False #repeating fields
+    all_same_a=len(seen_as)>=3
+    for sa in seen_as[-3:]:
+        if sa!=a:
+            all_same_a=False
+            break
+    if all_same_a:
+        return False
     pairs.append((q,a))
     seen_pairs.add(pair)
     seen_qs.append(q)
+    seen_as.append(a)
     return True
 
 def parseOutput(output):
@@ -36,6 +44,7 @@ def parseOutput(output):
     pairs=[]
     seen_pairs=set()
     seen_qs=[]
+    seen_as=[]
     i=0
     while i < len(lines):
         qa = lines[i].split(':')
@@ -51,13 +60,13 @@ def parseOutput(output):
                     else:
                         q = qa[0].strip()
                         a = next_line.strip()
-                        if not addPair(q,a,pairs,seen_pairs,seen_qs):
+                        if not addPair(q,a,pairs,seen_pairs,seen_qs,seen_as):
                             break
                         i+=2
                 else:
                     i+=1
             else:
-                if not addPair(q,a,pairs,seen_pairs,seen_qs):
+                if not addPair(q,a,pairs,seen_pairs,seen_qs,seen_as):
                     break
                 i+=1
         else:
@@ -65,7 +74,7 @@ def parseOutput(output):
 
     return pairs
 
-GOAL=300000 #till Monday
+GOAL=200000 
 gpuN=0
 if gpuN is not None:
     device = torch.device('cuda:' + str(gpuN))
@@ -101,6 +110,10 @@ documents=[]
 all_pairs = set()
 all_qs = set()
 
+num_pair_with_number = 0
+num_q_with_number = 0
+most_with_number = 0.002
+
 #init
 heads = [
         'This form is to be filled out.',
@@ -109,7 +122,7 @@ heads = [
         'This form is to be filled out regarding {}.',
         'This form contains information about {}.',
         ]
-for q in ['Location','Name','Details',]:
+for q in ['Location','Name','Details']:
     all_qs.add(q)
 n=6
 months=['January','February','March','April','May','June','July','August','September','October','November','December','Jan','Feb','Mar','Apr','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -197,9 +210,23 @@ while len(documents)<GOAL:
         #print('=== PAIRS ===')
         #for q,a in pairs:
         #    print(q+':'+(' '*max(1,20-len(q)))+' '+a)
-        all_pairs.update(pairs)
+        #all_pairs.update(pairs)
         for q,a in pairs:
-            all_qs.add(q)
+            if re.search(r'\d',q):
+                if num_pair_with_number/len(all_pairs)<most_with_number:
+                    l=len(all_pairs)
+                    all_pairs.add((q,a))
+                    if len(all_pairs)>l:
+                        num_pair_with_number+=1
+
+                if num_q_with_number/len(all_qs)<most_with_number:
+                    l=len(all_qs)
+                    all_qs.add(q)
+                    if len(all_qs)>l:
+                        num_q_with_number+=1
+            else:
+                all_pairs.add((q,a))
+                all_qs.add(q)
         if topic is not None:
             #be sure we're on topic
             pairs = pairs[1:]
@@ -208,6 +235,8 @@ while len(documents)<GOAL:
 
 
     print('{}/{}'.format(len(documents),GOAL))
+    print('num pair {}/{}'.format(num_pair_with_number,len(all_pairs)))
+    print('num q {}/{}'.format(num_q_with_number,len(all_qs)))
 
 #check for possible lists
 for topic,qas in documents:

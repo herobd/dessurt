@@ -397,9 +397,9 @@ class ParaQADataset(QADataset):
 
     def makeQuestions(self,ocr,image_h,image_w,s,use_blocks=True):
         wordmap = makeWordmap(ocr)
-        if len(wordmap)==0:
-            return [],np.array([])
         linemap = makeLinemap(ocr)
+        if len(wordmap)==0 and len(linemap)==0:
+            return [],np.array([])
         if use_blocks:
             q_types = random.choices(list(self.q_types.keys()),self.q_types.values(),k=self.questions*50)
         else:
@@ -1170,8 +1170,9 @@ def makeWordmap(ocr):
     for b,block in enumerate(ocr):
         for p,para in enumerate(block['paragraphs']):
             for l,line in enumerate(para['lines']):
-                for w in range(len(line['words'])):
-                    wordmap.append((b,p,l,w))
+                if line['words'] is not None:
+                    for w in range(len(line['words'])):
+                        wordmap.append((b,p,l,w))
     return wordmap
 def makeLinemap(ocr):
     linemap=[]
