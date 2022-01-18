@@ -86,7 +86,7 @@ class SynthHWQA(ParaQADataset):
                 read_lines.append([text,line_img,new_width])
                 max_width = max(max_width,new_width)
 
-            if len(lines)==0:
+            if len(read_lines)==0:
                 pos=random.randrange(len(self.images)-1)
 
 
