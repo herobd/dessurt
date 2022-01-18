@@ -13,6 +13,7 @@ from data_sets.qa import QADataset,collate
 from data_sets.wiki_text import getWikiArticle,getWikiDataset
 
 import utils.img_f as img_f
+from transformers import BartTokenizer
 
 
 class Table:
@@ -205,6 +206,13 @@ class FormQA(QADataset):
         self.do_masks=True
         self.words = config.get('words',False)
         use_json = config.get('use_json',False)
+        self.shorten_text_in_json = config.get('shorten_json',False)
+        self.max_json_words=5
+
+        self.max_q_tokens = config.get('max_q_tokens',20)
+        self.max_a_tokens = config.get('max_q_tokens',800)
+        if use_json:
+            self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
 
         #self.corruption_p = config['text_corruption'] if 'text_corruption' in config else 0.15
         #self.do_words = config['do_words']
@@ -350,6 +358,7 @@ class FormQA(QADataset):
             all_of_cls[entity.cls].append(entity)
 
         q_a_pairs = []
+        json_text=None
         if self.train:
             if len(tables)>0:
                 if len(entity_link)>0:
@@ -389,6 +398,20 @@ class FormQA(QADataset):
                 unrolled_entity_link.append((head,tail))
 
         #import pdb;pdb.set_trace()
+        if json_text is not None:
+            json_tokens = self.tokenizer(json_text,return_tensors="pt")['input_ids']
+            tok_len = json_tokens.shape[1]
+            if tok_len>self.max_a_tokens:
+                r = random.randrange(tok_len-(self.max_q_tokens+self.max_a_tokens))
+                q_json_tokens = json_tokens[0,r:r+self.max_q_tokens]
+                json_tokens = json_tokens[0,r+self.max_q_tokens:]
+
+                json_text = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(json_tokens,skip_special_tokens=True))
+                q_json_text = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(q_json_tokens,skip_special_tokens=True))
+            else:
+                q_json_text = None
+
+
 
 
         for q_type in q_types:
@@ -400,7 +423,10 @@ class FormQA(QADataset):
             if q_type == 'full_json':
                 #if json_text is None:
                 #    json_text = self.makeJsonText(entities,entity_link,tables)
-                self.qaAdd(q_a_pairs,'json>',json_text)
+                if q_json_text is None:
+                    self.qaAdd(q_a_pairs,'json>',json_text)
+                else:
+                    self.qaAdd(q_a_pairs,'json~'+q_json_text,json_text)
             elif q_type == 'all':
                 if self.train:
                     if len(entities)>0:
@@ -1702,8 +1728,40 @@ class FormQA(QADataset):
         #if not found:
         #    print('Missing entity')
         #    import pdb;pdb.set_trace()
+        if self.shorten_text_in_json:
+            doc = self.shortenElement(doc)
         return json.dumps(doc,default=lambda a:a.text)
 
+    def shortenElement(self, ele):
+        if isinstance(ele,str):
+            new_lines=[]
+            lines = ele.split('\\')
+            w_count = 0
+            new_lines=[]
+            for line in lines:
+                words = line.split(' ')
+                new_words=words[:self.max_json_words-w_count]
+                w_count+=len(new_words)
+                new_lines.append(' '.join(new_words))
+                if w_count>=self.max_json_words:
+                    break
+
+
+            return '\\'.join(new_lines)
+        elif isinstance(ele,Entity):
+            return self.shortenElement( ele.text)
+        elif isinstance(ele,list):
+            return [self.shortenElement(lv) for lv in ele]
+        elif ele is None:
+            return None
+
+        assert isinstance(ele,dict)
+        new_ele={}
+        for k,v in ele.items():
+            k=self.shortenElement(k)
+            v = self.shortenElement(v)
+            new_ele[k]=v
+        return new_ele
 
     def getChildren(self,ei,entities,link_dict):
         if isinstance(entities[ei],Table):

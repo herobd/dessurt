@@ -128,7 +128,7 @@ def parseDict(header,entities,links):
                 links.append((row_ids[r],c_id))
                 links.append((col_ids[c],c_id))
 
-        return row_ids+col_ids:w
+        return row_ids+col_ids
 
 
 
@@ -361,6 +361,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     parseDict(thing,pred_entities,pred_links)
                 else:
                     print('non-dict at document level: {}'.format(thing))
+                    import pdb;pdb.set_trace()
                 
             #align entities to GT ones
             #pred_to_gt={}
@@ -379,6 +380,9 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 best_score = 99999
                 best_gt_pair = -1
                 for pairs_i,(g_a,g_b) in enumerate(pairs):
+                    #can't match to a gt pair twice
+                    if gt_pair_hit[pairs_i]:
+                        continue
                     dist_aa = norm_ed(transcription_groups[g_a],e_a.text)
                     dist_bb = norm_ed(transcription_groups[g_b],e_b.text)
                     dist_ab = norm_ed(transcription_groups[g_a],e_b.text)
@@ -401,8 +405,16 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     gt_pair_hit[best_gt_pair]=True
                     pred_to_gt[p_a] = matching[0]
                     pred_to_gt[p_b] = matching[1]
-                    rel_TP+=1
+                    rel_truepos+=1
+                #else:
+                #    rel_FP+=1
+            
+            rel_recall = sum(gt_pair_hit)/len(pairs)
+            rel_prec = rel_truepos/len(pred_links)
 
+            #Now look at the entities. We have some aligned already, do the rest
+            for p_i in range(len(pred_entities)):
+                if pred_to_gt
             #TODO
 
             entity_recall = true_pos/len(groups) if len(groups)>0 else 1
