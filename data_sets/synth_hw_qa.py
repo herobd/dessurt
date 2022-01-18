@@ -41,7 +41,7 @@ class SynthHWQA(ParaQADataset):
             text = l[loc+1:].strip()
             #image_path = os.path.join(dirPath,'sample_{}.png'.format(index))
             #if self.train:
-            self.images.append({'imageName':index, 'imagePath':None, 'annotationPath':(index,text)})
+            self.images.append({'imageName':index, 'imagePath':None, 'annotationPath':(len(self.images),index,text)})
                 #else:
                 #    _,_,_,_,_,qa = self.parseAnn(xml_path,rescale)
                 #    #qa = self.makeQuestions(rescale,entries))
@@ -60,7 +60,7 @@ class SynthHWQA(ParaQADataset):
 
 
     def parseAnn(self,data,s):
-        index = data[0]
+        pos = data[0]
         image_h,image_w = self.image_size
         
         text_height = random.randrange(self.min_text_height,self.max_text_height)
@@ -68,7 +68,7 @@ class SynthHWQA(ParaQADataset):
 
         num_lines = random.randrange(1,image_h//(text_height+newline_height))
 
-        lines = self.images[index:index+num_lines]
+        lines = self.images[pos:pos+num_lines]
 
         ocr_lines=[]
         image = np.full([image_h,image_w],253,dtype=np.uint8)
@@ -76,7 +76,7 @@ class SynthHWQA(ParaQADataset):
         read_lines=[]
         max_width=0
         for line in lines:
-            index,text = line[  'annotationPath']
+            pos,index,text = line[  'annotationPath']
             line_img = img_f.imread(os.path.join(self.image_dir,'sample_{}.png'.format(index)))
             new_width = round(line_img.shape[1]*(text_height/line_img.shape[0]))
             read_lines.append([text,line_img,new_width])
@@ -126,6 +126,7 @@ class SynthHWQA(ParaQADataset):
               'box': [min_x,start_y,max_x,cur_y-newline_height]
               }]
 
+
         qa, qa_bbs = self.makeQuestions(ocr,image_h,image_w,s)
         metadata={}
-        return None, list(range(qa_bbs.shape[0])), None, {'image':image}, metadata, qa
+        return np.array([]), [], None, {'image':image}, metadata, qa

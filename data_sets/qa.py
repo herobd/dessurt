@@ -320,7 +320,7 @@ class QADataset(torch.utils.data.Dataset):
                 crop_bbs = np.concatenate([bbs,prep_word_bbs],axis=1)
                 crop_ids=ids+['word{}'.format(i) for i in range(word_bbs.shape[0])]
             elif self.do_masks and len(mask_bbs.shape)==2:
-                if bbs.shape[0]>0 and mask_bbs.shape[0]>0:
+                if (bbs is not None and bbs.shape[0]>0) and mask_bbs.shape[0]>0:
                     crop_bbs = np.concatenate([bbs,mask_bbs])
                 elif mask_bbs.shape[0]>0:
                     crop_bbs = mask_bbs
