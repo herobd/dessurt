@@ -60,7 +60,7 @@ def fixLoadJSON(pred):
                 pred+='"'
             elif 'Expecting value' in typ:
                 pred+='""'
-            elif 'Expecting ':' delimiter' in typ:
+            elif "Expecting ':' delimiter" in typ:
                 pred+=':'
             elif 'Expecting property name enclosed in double quotes' in typ:
                 if pred[-1]==',':
@@ -349,6 +349,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 img = img.cuda()
             
             #First find tables, as those are done seperately (they should do multiline things alread)
+            #TODO multi-step pred for long forms
             question='json>'
             answer,out_mask = model(img,ocr,[[question]],RUN=True)
             pred_data = fixLoadJSON(answer)
@@ -377,29 +378,74 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 e_a = pred_entities[p_a]
                 e_b = pred_entities[p_b]
 
+                a_aligned = pred_to_gt.get(p_a,-1)
+                b_aligned = pred_to_gt.get(p_b,-1)
+
                 best_score = 99999
                 best_gt_pair = -1
                 for pairs_i,(g_a,g_b) in enumerate(pairs):
                     #can't match to a gt pair twice
                     if gt_pair_hit[pairs_i]:
                         continue
-                    dist_aa = norm_ed(transcription_groups[g_a],e_a.text)
-                    dist_bb = norm_ed(transcription_groups[g_b],e_b.text)
-                    dist_ab = norm_ed(transcription_groups[g_a],e_b.text)
-                    dist_ba = norm_ed(transcription_groups[g_b],e_a.text)
-                    
-                    if dist_aa+dist_bb < dist_ab+dist_ba and dist_aa<match_thresh and dist_bb<match_thresh:
-                        score = dist_aa+dist_bb
-                        if score<best_score:
-                            best_score = score
-                            best_gt_pair = pairs_i
+
+                    if a_aligned==-1 and b_aligned==-1:
+
+                        dist_aa = norm_ed(transcription_groups[g_a],e_a.text)
+                        dist_bb = norm_ed(transcription_groups[g_b],e_b.text)
+                        dist_ab = norm_ed(transcription_groups[g_a],e_b.text)
+                        dist_ba = norm_ed(transcription_groups[g_b],e_a.text)
+                        
+                        if dist_aa+dist_bb < dist_ab+dist_ba and dist_aa<match_thresh and dist_bb<match_thresh:
+                            score = dist_aa+dist_bb
+                            if score<best_score:
+                                best_score = score
+                                best_gt_pair = pairs_i
+                                matching = (g_a,g_b)
+                        elif dist_ab<match_thresh and dist_ba<match_thresh:
+                            score = dist_ab+dist_ba
+                            if score<best_score:
+                                best_score = score
+                                best_gt_pair = pairs_i
+                                matching = (g_b,g_b)
+                    elif a_aligned!=-1 and b_aligned!=-1:
+                        if g_a == a_aligned and g_b == b_aligned:
                             matching = (g_a,g_b)
-                    elif dist_ab<match_thresh and dist_ba<match_thresh:
-                        score = dist_ab+dist_ba
-                        if score<best_score:
-                            best_score = score
                             best_gt_pair = pairs_i
-                            matching = (g_b,g_b)
+                            break #can't get better than this if restricting alignment
+                        elif g_a == b_aligned and g_b == a_aligned:
+                            matching = (g_b,g_a)
+                            best_gt_pair = pairs_i
+                            break #can't get better than this if restricting alignment
+                    else:
+                        #only one is aligned
+                        if a_aligned!=-1:
+                            p_loose = p_b
+                            e_loose = e_b
+                            if g_a == a_aligned:
+                                g_have = g_a
+                                g_other = g_b
+                            elif g_b == a_algined:
+                                g_have = g_b
+                                g_other = g_a
+                            else:
+                                continue #not match for aligned
+                        else:
+                            p_loose = p_a
+                            e_loose = e_a
+                            if g_a == b_aligned:
+                                g_have = g_a
+                                g_other = g_b
+                            elif g_b == b_aligned:
+                                g_have = g_b
+                                g_other = g_a
+                            else:
+                                continue
+
+                        score = norm_ed(transcription_groups[g_other],e_loose.text)
+                        if score<best_score:
+                            matching = (g_have,g_other) if a_aligned!=-1 else (g_other,g_have)
+                            best_gt_pair = pairs_i
+
 
                 if best_gt_pair!=-1:
                     gt_pair_hit[best_gt_pair]=True
