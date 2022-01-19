@@ -402,7 +402,10 @@ class FormQA(QADataset):
             json_tokens = self.tokenizer(json_text,return_tensors="pt")['input_ids']
             tok_len = json_tokens.shape[1]
             if tok_len>self.max_a_tokens:
-                r = random.randrange(tok_len-(self.max_q_tokens+self.max_a_tokens))
+                if tok_len-(self.max_q_tokens+self.max_a_tokens)>0:
+                    r = random.randrange(tok_len-(self.max_q_tokens+self.max_a_tokens))
+                else:
+                    r=0
                 q_json_tokens = json_tokens[0,r:r+self.max_q_tokens]
                 json_tokens = json_tokens[0,r+self.max_q_tokens:]
 

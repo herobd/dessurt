@@ -528,8 +528,8 @@ class QATrainer(BaseTrainer):
                 iou = None
             for b,(b_answers,b_pred,b_questions,b_metadata) in enumerate(zip(answers,string_a,questions,instance['form_metadata'])):
                 assert len(b_questions)==1
-                print('pred '+b_pred[0])
-                print('true '+b_answers[0])
+                #print('pred '+b_pred[0])
+                #print('true '+b_answers[0])
                 answer = b_answers[0].lower()
                 pred = b_pred[0].lower()
                 question = b_questions[0]
@@ -677,14 +677,26 @@ class QATrainer(BaseTrainer):
                             if pred_cls!='o':
                                 #precs[p][g]=defaultdict(list)
                                 precs[p][g][pred_cls]=precs[p][g][pred_cls]+[1 if pred_cls==gt_cls else 0]
-                    
-                    for cls,recall in recalls[-1][-1].items():
-                        log['F_recall_{}'.format(cls)]+=recall
-                        #print('recall {} added: {}'.format(cls,recall))
-                    for cls,prec in precs[-1][-1].items():
-                        log['F_prec_{}'.format(cls)]+=prec
-                        #print('prec {} added: {}'.format(cls,prec))
-                    log['E_approx_CER'].append(eds[-1][-1]/total_gt_len)
+                    if len(recalls)>0 and len(recalls[-1])>0:
+                        for cls,recall in recalls[-1][-1].items():
+                            log['F_recall_{}'.format(cls)]+=recall
+                            #print('recall {} added: {}'.format(cls,recall))
+                    else:
+                        for word,cls in gt_words:
+                            log['F_recall_{}'.format(cls)]+=0
+
+                    if len(precs)>0 and len(precs[-1])>0:
+                        for cls,prec in precs[-1][-1].items():
+                            log['F_prec_{}'.format(cls)]+=prec
+                            #print('prec {} added: {}'.format(cls,prec))
+                    else:
+                        for word,cls in gt_words:
+                            log['F_prec_{}'.format(cls)]+=1
+                    if len(pred_words)>0:
+                        log['E_approx_CER'].append(eds[-1][-1]/total_gt_len)
+                    elif len(gt_words)>0:
+                        log['E_approx_CER'].append(1)
+
 
                 elif question.startswith('mk>'):
                     pass #handled earlier
