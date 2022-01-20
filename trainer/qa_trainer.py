@@ -683,7 +683,7 @@ class QATrainer(BaseTrainer):
                             #print('recall {} added: {}'.format(cls,recall))
                     else:
                         for word,cls in gt_words:
-                            log['F_recall_{}'.format(cls)]+=0
+                            log['F_recall_{}'.format(cls)].append(0)
 
                     if len(precs)>0 and len(precs[-1])>0:
                         for cls,prec in precs[-1][-1].items():
@@ -691,7 +691,7 @@ class QATrainer(BaseTrainer):
                             #print('prec {} added: {}'.format(cls,prec))
                     else:
                         for word,cls in gt_words:
-                            log['F_prec_{}'.format(cls)]+=1
+                            log['F_prec_{}'.format(cls)].append(1)
                     if len(pred_words)>0:
                         log['E_approx_CER'].append(eds[-1][-1]/total_gt_len)
                     elif len(gt_words)>0:
