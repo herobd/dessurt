@@ -38,12 +38,15 @@ class DistilBartDataset(torch.utils.data.Dataset):
         super(DistilBartDataset, self).__init__()
 
         if split=='train':
-            if not config.get('no_distill',False):
+            no_distill = config.get('no_distill',False)
+            self.loss_mask = config.get('loss_mask',False)
+            if not no_distill or self.loss_mask:
                 self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/bart-large')
+            if not no_distill:
                 self.model = BartForConditionalGeneration.from_pretrained('./cache_huggingface/bart-large')
                 self.model.eval()
             else:
-                self.tokenizer = None
+                self.model = None
         self.max_auto_tokens = config['max_auto_tokens']
 
         self.augment_shade = config.get('augment_shade',True)
@@ -139,7 +142,7 @@ class DistilBartDataset(torch.utils.data.Dataset):
                     bot_y = max(w['box'][3] for w in line) +1
                     to_remove.append((left_x,top_y,right_x,bot_y))
 
-        if self.tokenizer is not None:
+        if self.model is not None or self.loss_mask:
             bart_input_string = []
             for word in words:
                 if word is not None:
@@ -147,10 +150,13 @@ class DistilBartDataset(torch.utils.data.Dataset):
                 else:
                     bart_input_string.append('<mask>')
             bart_input_string = ' '.join(bart_input_string)
+
             #print('Start BART '+bart_input_string[:20])
             input_ids = self.tokenizer([bart_input_string], return_tensors='pt')['input_ids']
             gt_input_ids = self.tokenizer([target_string], return_tensors='pt')['input_ids']
             gt_input_ids = gt_input_ids[:,:self.max_auto_tokens]
+
+        if self.model is not None:
             with torch.no_grad():
                 try:
                     bart_out = self.model(input_ids, labels=gt_input_ids,output_hidden_states=True)
@@ -166,6 +172,45 @@ class DistilBartDataset(torch.utils.data.Dataset):
         else:
             logits = None
             last_hidden = None
+
+        if self.loss_mask:
+            #Ideally, we only compute the loss on masked tokens
+            #however, we have to break the masks on words (for visual masking) which doesn't correspond to the tokenization
+            #So we'll compute the insertions and deletions in the Levenstein distance betweem the target and input
+            #From there we'll imply which tokens in the target are important and shouldn't be masked.
+            #This isn't perfect, but should be closer than no mask at all
+            dynamic_prog=[None]*input_ids.shape(1)
+            for ii,input_id in enumerate(input_ids[0)]:
+                dynamic_prog[target_id] = [None]*gt_input_ids.shape(1)
+
+                for ti,targ_id in enumerate(gt_input_ids[0]):
+                    same = input_id==targ_id
+                    if same:
+                        past_score,past_path = dynamic_prog[ii-1][ti-1]
+                        possible_paths=[(past_score,past_path+[False])]
+                    else:
+                        possible_paths = []
+                        if ii>0 and not same:
+                            past_score,past_path = dynamic_prog[ii-1][ti]
+                            possible_paths.append((past_score+1,past_path+['next']))
+                        if ti>0 and not same:
+                            past_score,past_path = dynamic_prog[ii][ti-1]
+                            possible_paths.append((past_score+1,past_path+['here']))
+                        possible_paths.sort(key=lambda a:a[0])
+                    
+                    dynamic_prog[ii][ti] = possible_paths[0]
+            path = dynamic_prog[-1][-1][1]
+            loss_mask = []
+            next_step=False
+            for step in path:
+                if not step:
+                    loss_mask.append(next_step)
+                    next_step=False
+                elif step=='here':
+                    loss_mask.append(True)
+                else:
+                    next_step=True
+            assert len(loss_mask) == gt_input_ids.shape(1)
 
 
         image = 255-image

@@ -631,6 +631,7 @@ class QATrainer(BaseTrainer):
                 elif question.startswith('ner_'):
                     pred_words = processNERLine(pred)#.split(' ')
                     gt_words = processNERLine(answer)
+                    #import pdb;pdb.set_trace()
                     #we now step through at be sure we mactch the words up
                     p=0 #pred index
                     g=0 #gt index

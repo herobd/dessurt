@@ -158,6 +158,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     "batch_size": config['data_loader']['batch_size']*(3 if 'full' in config['data_loader'] else 2) if not run else 1,
                     "full": config['data_loader'].get('full',False),
                     "cased": config['data_loader'].get('cased',False),
+                    "eval_full": False,
                     "rescale_to_crop_size_first": True,
                     "rescale_range": [
                         1.0,

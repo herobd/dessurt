@@ -344,6 +344,19 @@ Macro Fm = 0.5140060804780759
 iamNERfull_mmswin_bart_nertok_PTfrom75i550k_90 150000
 Macro Fm = 0.377364316250
 
+iamNERfull_mmswin_bart_nertok_PTfrom75i550k_90 407k
+(line)Macro Fm = 0.5474813829948751
+
+iamNERfull_mmswin_bart_nertok_PTfrom75i550k_90 100k
+(line) Macro Fm = 0.538130593321904
+
+iamNERfull_mmswin_bart_nertok_PTfrom89i100k_95 99841
+(line)Macro Fm = 0.6079255478987206
+
+iamNERfull_mmswin_bart_nertok_PTfrom89i100k_95 50k
+(line)Macro Fm=0.5292571407576296
+
+
 ============================
 
 
