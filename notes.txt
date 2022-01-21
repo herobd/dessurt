@@ -356,6 +356,9 @@ iamNERfull_mmswin_bart_nertok_PTfrom89i100k_95 99841
 iamNERfull_mmswin_bart_nertok_PTfrom89i100k_95 50k
 (line)Macro Fm=0.5292571407576296
 
+iamNERfull_mmswin_bart_nertok_PTfrom89i100k_95 189kk
+Macro Fm = 0.468709774974224
+
 
 ============================
 

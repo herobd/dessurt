@@ -825,7 +825,7 @@ class GraphPairTrainer(BaseTrainer):
 
             #get information for that subset of nodes
             compute = [(
-                len(predGroupsT[n0]),
+                len(predGroupsT[n0]), #how many lines are aligned to GT lines
                 len(predGroups[n0]),
                 getGTGroup(predGroupsT[n0],targetIndexToGroup),
                 purity(predGroupsT[n0],targetIndexToGroup),
@@ -891,7 +891,7 @@ class GraphPairTrainer(BaseTrainer):
             
 
             #common conditions
-            bothTarged = (g_target_len_R>0)*(g_target_len_L>0)
+            bothTarged = (g_target_len_R>0)*(g_target_len_L>0) #both nodes each matched a GT node
             badTarged = (g_target_len_R==0)+(g_target_len_L==0)
             bothPure = (purity_R>0.8)*(purity_L>0.8)
             

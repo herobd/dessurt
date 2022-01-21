@@ -180,7 +180,7 @@ class DistilBartDataset(torch.utils.data.Dataset):
             #From there we'll imply which tokens in the target are important and shouldn't be masked.
             #This isn't perfect, but should be closer than no mask at all
             dynamic_prog=[None]*input_ids.shape(1)
-            for ii,input_id in enumerate(input_ids[0)]:
+            for ii,input_id in enumerate(input_ids[0]):
                 dynamic_prog[target_id] = [None]*gt_input_ids.shape(1)
 
                 for ti,targ_id in enumerate(gt_input_ids[0]):
