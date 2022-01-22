@@ -359,7 +359,7 @@ class SynthFormDataset(FormQA):
                 text=self.getTableValues(1)[0]
                 word_imgs,font = self.gen_daemon.generate(text,font=font,ret_font=True)
             img,label = resizeAndJoinImgs(word_imgs,value_height,value_space_width,self.max_table_cell_width)
-            table_entries_1d.append((img,label))
+            table_entries_1d.append([img,label])
         row_header_entries_1d = []
         font = None
         for text in row_header_entries:
@@ -369,7 +369,7 @@ class SynthFormDataset(FormQA):
                 text=self.getTableHeaders(1)[0]
                 word_imgs,font = self.gen_daemon.generate(text,font=font,ret_font=True)
             img,label = resizeAndJoinImgs(word_imgs,label_height,label_space_width,self.max_table_rowh_width)
-            row_header_entries_1d.append((img,label))
+            row_header_entries_1d.append([img,label])
         col_header_entries_1d = []
         font = None
         for text in col_header_entries:
@@ -379,7 +379,7 @@ class SynthFormDataset(FormQA):
                 text=self.getTableHeaders(1)[0]
                 word_imgs,font = self.gen_daemon.generate(text,font=font,ret_font=True)
             img,label = resizeAndJoinImgs(word_imgs,label_height,label_space_width,self.max_table_colh_width)
-            col_header_entries_1d.append((img,label))
+            col_header_entries_1d.append([img,label])
         row_headers = row_header_entries_1d
         col_headers = col_header_entries_1d
         table_entries = table_entries_1d
@@ -463,10 +463,10 @@ class SynthFormDataset(FormQA):
                 y=cur_y + random.randrange(0,height_row[r]-padding-row_headers[r][0].shape[0])
             cur_y += height_row[r]
 
-            diff = image.shape[0]-y+row_headers[r][0].shape[0]
+            diff = image.shape[0]-(y+row_headers[r][0].shape[0])
             if diff<0:
                 row_headers[r][0] = row_headers[r][0][:diff]
-            diff = image.shape[1]-x+row_headers[r][0].shape[1]
+            diff = image.shape[1]-(x+row_headers[r][0].shape[1])
             if diff<0:
                 row_headers[r][0] = row_headers[r][0][:,:diff]
             image[y:y+row_headers[r][0].shape[0],x:x+row_headers[r][0].shape[1]] = row_headers[r][0]
@@ -493,10 +493,10 @@ class SynthFormDataset(FormQA):
                 x=cur_x + random.randrange(0,width_col[c]-padding-col_headers[c][0].shape[1])
             cur_x += width_col[c]
             
-            diff = image.shape[0]-y+col_headers[c][0].shape[0]
+            diff = image.shape[0]-(y+col_headers[c][0].shape[0])
             if diff<0:
                 col_headers[c][0] = col_headers[c][0][:diff]
-            diff = image.shape[1]-x+col_headers[c][0].shape[1]
+            diff = image.shape[1]-(x+col_headers[c][0].shape[1])
             if diff<0:
                 col_headers[c][0] = col_headers[c][0][:,:diff]
             image[y:y+col_headers[c][0].shape[0],x:x+col_headers[c][0].shape[1]] = col_headers[c][0]
@@ -526,9 +526,9 @@ class SynthFormDataset(FormQA):
                     else:
                         y=cur_y + random.randrange(0,height_row[r]-padding-table_entries[r][c][0].shape[0])
                     if y+table_entries[r][c][0].shape[0]>image.shape[0]:
-                        diff = image.shape[0]-y+table_entries[r][c][0].shape[0]
+                        diff = image.shape[0]-(y+table_entries[r][c][0].shape[0])
                     if x+table_entries[r][c][0].shape[1]>image.shape[1]:
-                        diff = image.shape[1]-x+table_entries[r][c][0].shape[1]
+                        diff = image.shape[1]-(x+table_entries[r][c][0].shape[1])
                         table_entries[r][c][0] = table_entries[r][c][0][:,:diff]
                     image[y:y+table_entries[r][c][0].shape[0],x:x+table_entries[r][c][0].shape[1]] = table_entries[r][c][0]
                     #table_values.append((col_headers[c][1],row_headers[r][1],table_entries[r][c][1],x,y))
