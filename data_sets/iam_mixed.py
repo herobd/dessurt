@@ -79,6 +79,7 @@ class IAMMixed(ParaQADataset):
                     'read_block':0.5,
                     'read_block0':0.5
                     }
+        else:
             self.q_types = {
                     'read_block0':1
                     }
@@ -137,6 +138,8 @@ class IAMMixed(ParaQADataset):
                 text_height = (self.min_text_height+self.max_text_height)//2
 
             w_img = images[image_id][minY:maxY,minX:maxX]
+            if w_img.shape[0]==0:
+                continue #skip
             if text_height != w_img.shape[0]:
                 n_width = round(w_img.shape[1]*text_height/w_img.shape[0])
                 w_img = img_f.resize(w_img,(text_height,n_width))

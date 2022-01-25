@@ -403,7 +403,10 @@ class FormQA(QADataset):
             tok_len = json_tokens.shape[1]
             if tok_len>self.max_a_tokens:
                 if tok_len-(self.max_q_tokens+self.max_a_tokens)>0:
-                    r = random.randrange(tok_len-(self.max_q_tokens+self.max_a_tokens))
+                    if self.train:
+                        r = random.randrange(tok_len-(self.max_q_tokens+self.max_a_tokens))
+                    else:
+                        r = tok_len-(self.max_q_tokens+self.max_a_tokens)
                 else:
                     r=0
                 q_json_tokens = json_tokens[0,r:r+self.max_q_tokens]
@@ -1733,7 +1736,7 @@ class FormQA(QADataset):
         #    import pdb;pdb.set_trace()
         if self.shorten_text_in_json:
             doc = self.shortenElement(doc)
-        return json.dumps(doc,default=lambda a:a.text)
+        return json.dumps(doc,default=lambda a:a.text)+self.end_token
 
     def shortenElement(self, ele):
         if isinstance(ele,str):

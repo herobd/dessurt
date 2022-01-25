@@ -77,6 +77,7 @@ class QATrainer(BaseTrainer):
         self.data_loader_iter = iter(data_loader)
         self.valid_data_loader = valid_data_loader
 
+
         self.ocr_word_bbs = config['trainer']['word_bbs'] if 'word_bbs' in config['trainer'] else False
 
         self.debug = 'DEBUG' in  config['trainer']
@@ -342,11 +343,17 @@ class QATrainer(BaseTrainer):
         ocrBoxes = instance['bb_gt']
         questions = instance['questions']
         answers = instance['answers']
-        #print('Q Lengths '+' '.join([str(len(a[0])) for a in questions])+' .....................')
-        #print('A Lengths '+' '.join([str(len(a[0])) for a in answers])+' .....................')
+        if self.debug:
+            print('=========')
+            print(questions)
+            print(' - - - -')
+            print(answers)
+            print('Q Lengths '+' '.join([str(len(a[0])) for a in questions])+' .....................')
+            print('A Lengths '+' '.join([str(len(a[0])) for a in answers])+' .....................')
         gt_mask = instance['mask_label']
         if gt_mask is not None:
             gt_mask = gt_mask.to(device)
+
 
         distill= 'bart_logits' in instance and instance['bart_logits'] is not None
 
@@ -439,6 +446,8 @@ class QATrainer(BaseTrainer):
         if not run:
             if 'answer' in self.loss:
                 losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
+                if self.debug:
+                    print('answer size: {}'.format(pred_a.size()))
             #losses['answerLoss'] = pred_a.sum()
             if 'mask' in self.loss and gt_mask is not None and pred_mask is not None: #we allow gt_mask to be none to not supervise
                 mask_labels_batch_mask = instance['mask_labels_batch_mask'].to(device)
@@ -468,7 +477,10 @@ class QATrainer(BaseTrainer):
 
                     target = pred_last_hidden.new(pred_last_hidden.size(0)).fill_(1)
                     losses['cosineLoss'] = F.cosine_embedding_loss(pred_last_hidden, teacher_last_hidden, target,reduction="mean")
-
+                
+                if self.debug:
+                    print('batch_mask sum: {}'.format(batch_mask.sum()))
+                    print('teacher batch_mask sum: {}'.format(teacher_batch_mask.sum()))
                 pred_logits = torch.masked_select(pred_logits,batch_mask)
                 pred_logits = pred_logits.view(-1,logits_dim)
                 teacher_logits = torch.masked_select(teacher_logits,teacher_batch_mask)

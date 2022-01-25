@@ -126,6 +126,18 @@ mk_firsttoken_top50 mean:0.6505,  std:0.47681206989756464
 mk_firsttoken_top100 mean:0.7195,  std:0.4492435308382303
 score_ed mean:0.6886722446943893,  std:0.3568412575493168
 
+distilGN+form+paraCqa+cdipC_mmswin_bart_deep_PTfrom85i777k_93 236545
+mk_firsttoken_top10 mean:0.486,  std:0.4998039615689336
+mk_firsttoken_top50 mean:0.6505,  std:0.47681206989756464
+mk_firsttoken_top100 mean:0.72,  std:0.44899888641287294
+score_ed mean:0.7117370093501273,  std:0.3512742208051487
+
+distilGN+syhw+form+paraCqa+cdipC_mmswin_bart_deep_PTfrom85i1.7m_97
+mk_firsttoken_top10 mean:0.4975,  std:0.4999937499609369
+mk_firsttoken_top50 mean:0.6585,  std:0.47421276870198253
+mk_firsttoken_top100 mean:0.727,  std:0.44550084175004656
+score_ed mean:0.6939529501072552,  std:0.3529913201523475
+
 
 distil+paraCqa+cdipC_mmswin_bart_deep_PTfrom67i280k_70 67328
 mk_firsttoken_top10 mean:0.419,  std:0.493395378981198
@@ -240,6 +252,18 @@ mk_firsttoken_top50 mean:0.667,  std:0.4712865370451398
 mk_firsttoken_top100 mean:0.734,  std:0.44186423254207846
 score_ed mean:0.6939050028073238,  std:0.34597430293027265
 
+distilGN+form+paraCqa+cdipC_mmswin_bart_PTfrom79i933k_92 227073
+mk_firsttoken_top10 mean:0.4945,  std:0.4999697490848822
+mk_firsttoken_top50 mean:0.6645,  std:0.47216496058051577
+mk_firsttoken_top100 mean:0.734,  std:0.44186423254207846
+score_ed mean:0.7066821986644833,  std:0.3617990940615286`
+
+distilGN+form+syhw+paraCqa+cdipC_mmswin_bart_PTfrom79i1.2m_94 133888
+mk_firsttoken_top10 mean:0.5065,  std:0.4999577482147866
+mk_firsttoken_top50 mean:0.6625,  std:0.4728570079844434
+mk_firsttoken_top100 mean:0.7405,  std:0.43836029701605045
+score_ed mean:0.703695667499973,  std:0.36165268547754403
+
 
 
 squad+iamqa+distil+paraCqa+cdipC_noDistill_mmswin_bart_PTfrom65i351k_73 63488
@@ -273,6 +297,12 @@ mk_firsttoken_top10 mean:0.483,  std:0.49971091643068993
 mk_firsttoken_top50 mean:0.6375,  std:0.4807221130757352
 mk_firsttoken_top100 mean:0.71,  std:0.4537620521815371
 score_ed mean:0.7074021265492993,  std:0.3432389419282364
+
+distilGN+syhw+form+paraCqa+cdipC_mmswin_bart_singleCrsDp_PTfrom91i506k_96 131841
+mk_firsttoken_top10 mean:0.4735,  std:0.4992972561510828
+mk_firsttoken_top50 mean:0.635,  std:0.4814301610825811
+mk_firsttoken_top100 mean:0.7065,  std:0.45536551252812285
+score_ed mean:0.717233478885329,  std:0.3555030567282636
 
 
 ============================
@@ -312,6 +342,27 @@ docvqa_mmswin_bart_PTfrom73i219k_84 604160
 natural_q~_ED mean:0.45327360763605895,  std:0.48021861156787526
 E_ANLS mean:0.5148844286500002,  std:0.41728367604513317
 
+docvqa_mmswin_bart_PTfrom94i222k_102 215040
+natural_q~_ED mean:0.39342717574240293,  std:0.4622965231522144
+E_ANLS mean:0.5720655325905365,  std:0.40926403565075636
+
+
+half docvqa_mmswin_bart_PTfrom94i222k_102 217088
+natural_q~_ED mean:0.40725064576723274,  std:0.4722775947079554
+E_ANLS mean:0.5639314174818711,  std:0.41151000093166495
+
+docvqa_mmswin_bart_PTfrom98i87k_104 217344
+natural_q~_ED mean:0.4005758546234704,  std:0.4659416666568346
+E_ANLS mean:0.5647671016263905,  std:0.4116721164521224
+
+half docvqa_mmswin_bart_PTfrom98i87k_104 219136
+natural_q~_ED mean:0.38253102428989416,  std:0.44273165196235303
+E_ANLS mean:0.5728649025006802,  std:0.40622329615947494
+
+docvqa_mmswin_bart_PTfrom98i87k_104 100000
+natural_q~_ED mean:0.39090575856778365,  std:0.44783577527008434
+E_ANLS mean:0.5676065432537071,  std:0.40684078770667953
+
 ===========================================
 ==IAM NER===
 iamNERfull_mmswin_bart_PTfrom75i550k_89 100000
@@ -324,6 +375,20 @@ Using ner_full> Macro Fm = 0.6931861074637213
 
 iamNERfull_mmswin_bart_PTfrom75i550k_89 233k
 Macro Fm = 0.677763421320044
+
+iamNER_mmswin_bart_PTfrom99i69k_103 200k
+Macro Fm = 0.6734035270340595 (full)
+
+iamNER_mmswin_bart_PTfrom94i222k_101 200k
+Macro Fm = 0.6506582846365455 (full)
+
+iamNER_mmswin_bart_nertok_PTfrom99i69k_105 200k
+Macro Fm = 0.40800080905456754
+
+iamNER_mmswin_bart_nertok_PTfrom99i69k_105 220160
+Macro Fm = 0.46602064097986107
+
+
 
 iamNER_mmswin_bart_PTfrom75i400k_86 150000
 Macro Fm = 0.4347031506551097
@@ -361,6 +426,12 @@ iamNERfull_mmswin_bart_nertok_PTfrom89i100k_95 50k
 
 
 IAM pretrianing results
+
+
+distilGN+form+syhw+paraCqa+cdipC_mmswin_bart_PTfrom79i1.2m_94 147968 (Synth only)
+read_block0>_ED mean:0.21446708719569446,  std:0.11495937306311414
+E_line_based_CER mean:0.20895401140618947,  std:0.10665572174266998
+
 100k CER ~0.38
 At about 200k: CER (per line)=0.296
 300k: CER=0.32

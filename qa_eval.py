@@ -15,7 +15,7 @@ from trainer import QATrainer
 logging.basicConfig(level=logging.INFO, format='')
 
 
-def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, config=None, thresh=None, addToConfig=None, test=False,verbose=2,run=False):
+def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, config=None, thresh=None, addToConfig=None, test=False,verbose=2,run=False,smaller_set=False):
     random.seed(1234)
     np.random.seed(1234)
     torch.manual_seed(1234)
@@ -105,6 +105,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     "data_set_name": "SQuAD",
                     "data_dir": "../data/SQuAD",
                     "batch_size": config['data_loader']['batch_size']*3 if not run else 1,
+                    "half": smaller_set,
                     "rescale_range": [
                         1.0,
                         1.0
@@ -116,6 +117,8 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                         "random": False
                     },
                     "questions": 1,
+                        "max_qa_len_in": 640,
+                        "max_qa_len_out": 2560,
                     "cased": True,
                     "image_size": [
                             image_h-4,image_w-4
@@ -142,6 +145,8 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                         "random": False
                     },
                     "questions": 1,
+                        "max_qa_len_in": 640,
+                        "max_qa_len_out": 2560,
                     "cased": True,
                     "image_size": [
                             image_h-4,image_w-4
@@ -158,7 +163,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     "batch_size": config['data_loader']['batch_size']*(3 if 'full' in config['data_loader'] else 2) if not run else 1,
                     "full": config['data_loader'].get('full',False),
                     "cased": config['data_loader'].get('cased',False),
-                    "eval_full": False,
+                    "eval_full": True,
                     "rescale_to_crop_size_first": True,
                     "rescale_range": [
                         1.0,
@@ -171,6 +176,38 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                         "random": False
                     },
                     "questions": 1,
+                        "max_qa_len_in": 640,
+                        "max_qa_len_out": 2560,
+                    "image_size": [
+                            image_h-4,image_w-4
+                    ],
+                    "shuffle": False
+                        },
+                "validation":{}
+                }
+    elif data_set_name=='IAMQA':
+        data_config={
+                "data_loader": {
+                    "data_set_name": "IAMQA",
+                    "data_dir": "../data/IAM",
+                    "batch_size": config['data_loader']['batch_size']*(3 if 'full' in config['data_loader'] else 2) if not run else 1,
+                    "full": config['data_loader'].get('full',False),
+                    "cased": config['data_loader'].get('cased',False),
+                    "mode": "IAM_valid",
+                    "rescale_to_crop_size_first": True,
+                    "rescale_range": [
+                        1.0,
+                        1.0
+                    ],
+                    "crop_params": {
+                        "crop_size": [
+                            image_h,image_w
+                        ],
+                        "random": False
+                    },
+                    "questions": 1,
+                        "max_qa_len_in": 640,
+                        "max_qa_len_out": 2560,
                     "image_size": [
                             image_h-4,image_w-4
                     ],
@@ -282,6 +319,8 @@ if __name__ == '__main__':
                         help='Run test set')
     parser.add_argument('-A', '--autoregressive', default=False, action='store_const', const=True,
                         help='Run with autoregressive prediction')
+    parser.add_argument('-S', '--smaller_set', default=False, action='store_const', const=True,
+                        help='Use less of val set')
     parser.add_argument('-v', '--verbosity', default=1, type=int,
                         help='How much stuff to print [0,1,2] (default: 2)')
 
@@ -303,6 +342,6 @@ if __name__ == '__main__':
     #    index = args.imgname
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=args.autoregressive)
+            main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=args.autoregressive,smaller_set=args.smaller_set)
     else:
-        main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=args.autoregressive)
+        main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=args.autoregressive,smaller_set=args.smaller_set)

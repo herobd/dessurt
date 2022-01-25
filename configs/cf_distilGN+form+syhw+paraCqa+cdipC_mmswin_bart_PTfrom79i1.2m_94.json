@@ -36,7 +36,7 @@
                 }
             },
             {
-                "freq": 0.2,
+                "freq": 0.1,
                 "config": {
                     "data_set_name": "SynthFormDataset",
                     "data_dir": "../data",
@@ -114,7 +114,7 @@
                 }
             },
             {
-                "freq": 0.2,
+                "freq": 0.3,
                 "config": {
                     "data_set_name": "CDIPCloudQA",
                     "data_dir": "../data/CDIPCloud",
