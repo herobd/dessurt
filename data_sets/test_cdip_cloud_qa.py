@@ -100,8 +100,8 @@ if __name__ == "__main__":
         '#rescale_to_crop_width_first': True,
         'crop_params': {
             "#crop_size":[960,1280],
-            "#crop_size":[1152,768],
-            "crop_size":[768,768],
+            "crop_size":[1152,768],
+            "#crop_size":[768,768],
             "pad":0,
             "rot_degree_std_dev": 1
             },
@@ -109,6 +109,7 @@ if __name__ == "__main__":
         "max_qa_len_in": 640,
         "max_qa_len_out": 2560,
         "cased": True,
+        "mode": "hard_word",
         'reuse_factor': 0.0001, #about 5 images
 
 })

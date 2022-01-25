@@ -12,6 +12,22 @@ import timeit
 from data_sets.qa import QADataset, collate
 
 #used by distillation dataset too
+def getMinMaxWidth(words):
+    max_w=0
+    min_w=99999999
+    x_diffs=[]
+    last_x=None
+    for w in words:
+        if w is not None:
+            lx,ty,rx,by = w[0]['box']
+            w=rx-lx
+            max_w = max(max_w,w)
+            min_w = min(min_w,w)
+            if last_x is not None and last_x<lx:
+                x_diffs.append(lx-last_x)
+            last_x = rx
+    space = np.mean(x_diffs) if len(x_diffs)>1 else 10
+    return min_w,max_w,space
 def makeMLMInstance(ocr):           
     ##Make mlm instances
     words = []
@@ -35,31 +51,92 @@ def makeMLMInstance(ocr):
     for i in range(num_spans):
         num = np.random.poisson(3)
         num = min(num,len(words)-1)
-        for i in range(50):
+        #print('DEDEBUGG')
+        #num=0
+        #if num==0:
+        #    print('num is 0')
+        good_spot = False
+        for i in range(50 if num>0 else 20):
             loc = random.randrange(0,len(words)-num)
-            before=max(0,loc-1)
-            after=min(len(words),loc+num+1)
-            good_spot = all((w is not None) for w in words[before:after])
-            if good_spot:
-                break
+            if num==0:
+                if (loc==0 and words[0] is not None) or (loc==len(words)-1 and words[-1] is not None):
+                    good_spot = True
+                    break
+                elif words[0] is None and words[-1] is None:
+                    good_spot = False
+                    break
+            else:
+                before=max(0,loc-1)
+                after=min(len(words),loc+num+1)
+                good_spot = all((w is not None) for w in words[before:after])
+                if good_spot:
+                    break
+        
+        #if num==0 and good_spot:
+        #    print('got spot {}'.format(loc))
 
         if good_spot:
             #get the bounding box to mask out of image
             rm_words = words[loc:loc+num]
+            pre_add_none = words
             words = words[:loc]+[None]+words[loc+num:]
 
-            #group the words by line
-            lines=defaultdict(list)
-            for word,p,l in rm_words:
-                lines[(p,l)].append(word)
-            for line in lines.values():
-                #get bb. We can assume words are in read order
-                #I'll assume left-right read order
-                left_x = line[0]['box'][0] -1
-                right_x = line[-1]['box'][2] +1
-                top_y = min(w['box'][1] for w in line) -1
-                bot_y = max(w['box'][3] for w in line) +1
-                to_remove.append((left_x,top_y,right_x,bot_y))
+            if len(rm_words)>0:
+                #group the words by line
+                lines=defaultdict(list)
+                for word,p,l in rm_words:
+                    lines[(p,l)].append(word)
+                for line in lines.values():
+                    #get bb. We can assume words are in read order
+                    #I'll assume left-right read order
+                    left_x = line[0]['box'][0] -1
+                    right_x = line[-1]['box'][2] +1
+                    top_y = min(w['box'][1] for w in line) -1
+                    bot_y = max(w['box'][3] for w in line) +1
+                    to_remove.append((left_x,top_y,right_x,bot_y))
+            else:
+                #import pdb; pdb.set_trace()
+                if pre_add_none[loc] is not None:
+                    word_min_w,word_max_w,space = getMinMaxWidth(pre_add_none)
+                    word,p,l = pre_add_none[loc]
+                    line=block['paragraphs'][p]['lines'][l]
+                    line_x1,line_y1,line_x2,line_y2 = line['box']
+                    if loc == 0:
+                        right_x,top_y,_,bot_y = word['box']
+                        right_x -= space
+                        left_x = max(0,right_x - random.randrange(word_min_w,word_max_w))
+                        line['box'] = (left_x,line_y1,line_x2,line_y2)
+                    else:
+                        assert loc == len(pre_add_none)-1
+                        _,top_y,left_x,bot_y = word['box']
+                        left_x += space
+                        right_x = left_x + random.randrange(word_min_w,word_max_w)
+                        line['box'] = (line_x1,line_y1,right_x,line_y2)
+                    to_remove.append((left_x,top_y,right_x,bot_y))
+
+                #if random.random()<0.5:
+                #    loc-=1
+                ##how to we falsify a removed word?
+                ##we'll put a blank box over the space between the words...
+                ## Not the best, but it's something
+                #if loc==-1:
+                #    if pre_add_none[loc+1] is not None:
+                #        word_min_w,word_max_w = getMinMaxWidth(pre_add_none)
+                #        right_x,top_y,_,bot_y = pre_add_none[loc+1][0]['box']
+                #        left_x = max(0,right_x - random.randrange(5+word_min_w,5+word_max_w))
+                #        to_remove.append((left_x,top_y,right_x,bot_y))
+                #elif pre_add_none[loc] is not None:
+                #    _,top_y1,left_x,bot_y1 = pre_add_none[loc][0]['box']
+                #    if len(pre_add_none)>loc+1:
+                #        if  pre_add_none[loc+1] is not None:
+                #            right_x,top_y2,_,bot_y2 = pre_add_none[loc+1][0]['box']
+
+                #            to_remove.append((left_x,min(top_y1,top_y2),right_x,max(bot_y1,bot_y2)))
+                #    else:
+                #        #interesting, this is the end of the line
+                #        word_min_w,word_max_w = getMinMaxWidth(pre_add_none)
+                #        right_x = left_x + random.randrange(5+word_min_w,5+word_max_w)
+                #        to_remove.append((left_x,top_y1,right_x,top_y1))
     
     return words,to_remove,target_string,block
 
@@ -385,24 +462,24 @@ class ParaQADataset(QADataset):
             self.q_types = {
                     'read_blanked':0.5,
                     'proper_read_replaced':0.5,
-                    'read_with_masked':1.0,
+                    #'read_with_masked':1.0, supersceeded by mlm>
                     'read_line':0.1,
                     'highlight_text': 0.1,
                     'read_highlighted':0.1,
                     'masked_lm':4.0,
-                    'long_mlm':18.0,
+                    'long_mlm':16.0,
                     'put_in_place':1.0,
                     'read_on':0.9,
                     'highlight_block':1.0}
             self.q_types_noblock = {
                     'read_blanked':0.5,
                     'proper_read_replaced':0.5,
-                    'read_with_masked':1.0,
+                    #'read_with_masked':1.0, supersceeded by mlm>
                     'read_line':0.1,
                     'highlight_text': 0.1,
                     'read_highlighted':0.1,
                     'masked_lm':4.0,
-                    'long_mlm':14.0,
+                    'long_mlm':12.0,
                     'put_in_place':1.0}
         elif mode == 'mk_only':
             self.q_types = {'masked_lm':4.0}
