@@ -32,6 +32,7 @@ def makeMLMInstance(ocr):
     ##Make mlm instances
     words = []
     while len(words)<4 and len(ocr)>1:
+        words = []
         #block = random.choice(ocr)
         block_i = random.randrange(len(ocr))
         block = ocr[block_i]
@@ -137,6 +138,7 @@ def makeMLMInstance(ocr):
                 #        word_min_w,word_max_w = getMinMaxWidth(pre_add_none)
                 #        right_x = left_x + random.randrange(5+word_min_w,5+word_max_w)
                 #        to_remove.append((left_x,top_y1,right_x,top_y1))
+
     
     return words,to_remove,target_string,block
 
