@@ -698,7 +698,7 @@ class SynthFormDataset(FormQA):
         start_x = init_x+(self.block_pad_max if len(entities)>0 else self.block_pad_max//3)
         start_x = min(start_x,max_x-60)
         start_y = init_y+(self.block_pad_max if len(entities)>0 else self.block_pad_max//3)
-        start_x = min(start_y,max_y-60)
+        start_y = min(start_y,max_y-60)
         title_height = self.max_text_height
         label_height = self.max_text_height
         value_height = self.max_text_height
