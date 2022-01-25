@@ -12,6 +12,7 @@ from data_sets import multiple_dataset
 from data_sets import synth_qa_dataset
 from data_sets import synth_qadoc_dataset
 from data_sets import synth_para_qa
+from data_sets import synth_form_dataset
 from data_sets import squad
 from data_sets import docvqa
 from data_sets import test_qa
@@ -19,6 +20,7 @@ from data_sets import funsd_qa
 from data_sets import cdip_qa
 from data_sets import cdip_cloud_qa
 from data_sets import iam_qa
+from data_sets import iam_mixed
 from data_sets import iam_ner
 from data_sets import census_qa
 from data_sets import distil_bart
@@ -137,6 +139,8 @@ def getDataLoader(config,split,rank=None,world_size=None):
             return withCollate(synth_qadoc_dataset.SynthQADocDataset,synth_qadoc_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='SynthParaQA':
             return withCollate(synth_para_qa.SynthParaQA,synth_para_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='SynthFormDataset':
+            return withCollate(synth_form_dataset.SynthFormDataset,synth_form_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='SQuAD':
             return withCollate(squad.SQuAD,squad.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='DocVQA':
@@ -163,6 +167,8 @@ def getDataLoader(config,split,rank=None,world_size=None):
             return withCollate(cdip_cloud_qa.CDIPCloudQA,cdip_cloud_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='IAMQA':
             return withCollate(iam_qa.IAMQA,iam_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='IAMMixed':
+            return withCollate(iam_mixed.IAMMixed,iam_mixed.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='IAMNER':
             return withCollate(iam_ner.IAMNER,iam_ner.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='SynthOCRDataset':

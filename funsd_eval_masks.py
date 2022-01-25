@@ -169,7 +169,22 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             new_state_dict = {
                     (key[7:] if key.startswith('module.') else key):value for key,value in state_dict.items()
                     }
+
         model = eval(config['arch'])(config['model'])
+        if 'query_special_start_token_embedder.emb.weight' in new_state_dict:
+            loading_special = new_state_dict['query_special_start_token_embedder.emb.weight']
+            model_special = model.state_dict()['query_special_start_token_embedder.emb.weight']
+
+            if loading_special.size(0) != model_special.size(0):
+                model_special[:loading_special.size(0)] = loading_special[:model_special.size(0)]
+                new_state_dict['query_special_start_token_embedder.emb.weight'] = model_special
+        if 'query_special_token_embedder.emb.weight' in new_state_dict:
+            loading_special = new_state_dict['query_special_token_embedder.emb.weight']
+            model_special = model.state_dict()['query_special_token_embedder.emb.weight']
+
+            if loading_special.size(0) != model_special.size(0):
+                model_special[:loading_special.size(0)] = loading_special[:model_special.size(0)]
+                new_state_dict['query_special_token_embedder.emb.weight'] = model_special
         model.load_state_dict(new_state_dict)
     else:
         model = eval(config['arch'])(config['model'])
@@ -979,23 +994,23 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
         total_entity_recall = total_entity_true_pos/total_entity_gt
         total_entity_F = 2*total_entity_prec*total_entity_recall/(total_entity_recall+total_entity_prec) if total_entity_recall+total_entity_prec>0 else 0
 
-        print('old Total entity recall, prec, Fm:\t{}\t{}\t{}'.format(total_entity_recall,total_entity_prec,total_entity_F))
+        print('old Total entity recall, prec, Fm:\t{:.3}\t{:.3}\t{:.3}'.format(total_entity_recall,total_entity_prec,total_entity_F))
 
         total_entity_prec = total_entity_true_pos2/total_entity_pred2
         total_entity_recall = total_entity_true_pos2/total_entity_gt
         total_entity_F = 2*total_entity_prec*total_entity_recall/(total_entity_recall+total_entity_prec) if total_entity_recall+total_entity_prec>0 else 0
 
-        print('New Total entity recall, prec, Fm:\t{}\t{}\t{}'.format(total_entity_recall,total_entity_prec,total_entity_F))
+        print('New Total entity recall, prec, Fm:\t{:.3}\t{:.3}\t{:.3}'.format(total_entity_recall,total_entity_prec,total_entity_F))
 
         total_rel_prec = total_rel_true_pos/total_rel_pred
         total_rel_recall = total_rel_true_pos/total_rel_gt
         total_rel_F = 2*total_rel_prec*total_rel_recall/(total_rel_recall+total_rel_prec) if total_rel_recall+total_rel_prec>0 else 0
-        print('old Total rel recall, prec, Fm:\t{}\t{}\t{}'.format(total_rel_recall,total_rel_prec,total_rel_F))
+        print('old Total rel recall, prec, Fm:\t{:.3}\t{:.3}\t{:.3}'.format(total_rel_recall,total_rel_prec,total_rel_F))
 
         total_rel_prec = total_rel_true_pos2/total_rel_pred2
         total_rel_recall = total_rel_true_pos2/total_rel_gt
         total_rel_F = 2*total_rel_prec*total_rel_recall/(total_rel_recall+total_rel_prec) if total_rel_recall+total_rel_prec>0 else 0
-        print('New Total rel recall, prec, Fm:\t{}\t{}\t{}'.format(total_rel_recall,total_rel_prec,total_rel_F))
+        print('New Total rel recall, prec, Fm:\t{:.3}\t{:.3}\t{:.3}'.format(total_rel_recall,total_rel_prec,total_rel_F))
 
 if __name__ == '__main__':
     logger = logging.getLogger()

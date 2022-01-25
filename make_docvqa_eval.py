@@ -1,6 +1,6 @@
 template= """#!/bin/bash
 
-#SBATCH --time=24:00:00   # walltime
+#SBATCH --time=8:00:00   # walltime
 #SBATCH --ntasks=5
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1

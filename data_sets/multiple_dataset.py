@@ -14,6 +14,7 @@ import random
 
 from .qa import collate
 from .synth_qadoc_dataset import SynthQADocDataset
+from .synth_form_dataset import SynthFormDataset
 from .synth_para_qa import SynthParaQA
 from .funsd_qa import FUNSDQA
 from .cdip_qa import CDIPQA
@@ -21,6 +22,7 @@ from .cdip_cloud_qa import CDIPCloudQA
 from .distil_bart import DistilBartDataset
 from .squad import SQuAD
 from .iam_qa import IAMQA
+from .synth_hw_qa import SynthHWQA
 from .test_qa import TestQA
 
 

@@ -135,15 +135,15 @@ class QADataset(torch.utils.data.Dataset):
 
 
     def qaAdd(self,qa,question,answer,bb_ids=None,in_bbs=[],out_bbs=None,mask_bbs=[]):
-        if all([pair['question']!=question for pair in qa]): #prevent duplicate q
-            qa.append({
-                'question':question,
-                'answer':answer,
-                'bb_ids':bb_ids,
-                'in_bbs':in_bbs,
-                'out_bbs':out_bbs,
-                'mask_bbs':mask_bbs
-                })
+        #aif all([(pair['question']!=question or  for pair in qa]): #prevent duplicate q
+        qa.append({
+            'question':question,
+            'answer':answer,
+            'bb_ids':bb_ids,
+            'in_bbs':in_bbs,
+            'out_bbs':out_bbs,
+            'mask_bbs':mask_bbs
+            })
 
     def __getitem__(self,index):
         return self.getitem(index)
@@ -153,14 +153,15 @@ class QADataset(torch.utils.data.Dataset):
         imageName = self.images[index]['imageName']
         annotationPath = self.images[index]['annotationPath']
         #print(annotationPath)
-        rescaled = self.images[index]['rescaled']
+        rescaled = self.images[index].get('rescaled',1)
         if type(annotationPath) is int:
             annotations = annotationPath
         elif isinstance(annotationPath,str) and  annotationPath.endswith('.json'):
             try: 
                 with open(annotationPath) as annFile:
                     annotations = json.loads(annFile.read())
-                    annotations['XX_imageName']=imageName
+                    if isinstance(annotations,dict):
+                        annotations['XX_imageName']=imageName
             except FileNotFoundError:
                 print("ERROR, could not open "+annotationPath)
                 return self.__getitem__((index+1)%self.__len__())
@@ -319,7 +320,7 @@ class QADataset(torch.utils.data.Dataset):
                 crop_bbs = np.concatenate([bbs,prep_word_bbs],axis=1)
                 crop_ids=ids+['word{}'.format(i) for i in range(word_bbs.shape[0])]
             elif self.do_masks and len(mask_bbs.shape)==2:
-                if bbs.shape[0]>0 and mask_bbs.shape[0]>0:
+                if (bbs is not None and bbs.shape[0]>0) and mask_bbs.shape[0]>0:
                     crop_bbs = np.concatenate([bbs,mask_bbs])
                 elif mask_bbs.shape[0]>0:
                     crop_bbs = mask_bbs
@@ -450,7 +451,7 @@ class QADataset(torch.utils.data.Dataset):
                 #img[0,:-1,t:b+1,l:r+1]=0 #blank on image
                 #img[0,-1,t:b+1,l:r+1]=-1 #flip mask to indicate was blanked
             #img = addMask(img,new_q_outboxes[0])
-            if outmasks:
+            if outmasks and new_q_outboxes[0] is not None:
                 mask_label = getMask(img.shape,new_q_outboxes[0])
             else:
                 mask_label = None

@@ -1,4 +1,4 @@
-from data_sets import synth_para_qa
+from data_sets import synth_hw_qa
 import math
 import sys
 from matplotlib import pyplot as plt
@@ -23,9 +23,9 @@ def display(data):
         img = torch.cat((img,img,img),dim=2)
         show = data['img'][b,1]>0
         mask = data['img'][b,1]<0
-        img[:,:,0] *= ~mask
-        img[:,:,1] *= ~show
-        img[:,:,2] *= 1-data['mask_label'][b,0]
+        #img[:,:,0] *= ~mask
+        #img[:,:,1] *= ~show
+        #img[:,:,2] *= 1-data['mask_label'][b,0]
         #img[2,img[2]<1]=0
 
         #label = data['label']
@@ -58,7 +58,7 @@ def display(data):
 
         #widths.append(img.size(1))
         
-        draw=True#'mk>' in q
+        draw=False#'mk>' in q
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -69,7 +69,7 @@ def display(data):
             #plt.imshow(img.numpy()[:,:,0], cmap='gray')
             #plt.show()
             img = (img*255).numpy().astype(np.uint8)
-            cv2.imwrite('test_paraSmaller.png',img)
+            #cv2.imwrite('test_hwSmaller.png',img)
             cv2.imshow('x',img)
             cv2.show()
 
@@ -91,7 +91,7 @@ if __name__ == "__main__":
     if len(sys.argv)>1:
         dirPath = sys.argv[1]
     else:
-        dirPath = '../data/fonts'
+        dirPath = '../data/synth_hw_wiki'
     if len(sys.argv)>2:
         start = int(sys.argv[2])
     else:
@@ -100,32 +100,26 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=synth_para_qa.SynthParaQA(dirPath=dirPath,split='train',config={
+    data=synth_hw_qa.SynthHWQA(dirPath=dirPath,split='train',config={
         'batch_size':1,
         #'gt_ocr': True,
-        'rescale_range':[0.9,1.1],
-        '#mode': 'hard_word',
-        'mode': 'test',
         'cased': True,
-        'crop_params': {
-            "#crop_size":[96,384],
-            "crop_size":[1152,768],
+        'rescale_range':[0.9,1.1],
+        'crop_hwms': {
+            "crop_size":[768,768],
             "pad":0,
             "rot_degree_std_dev": 1
             },
         'questions':1,
-        "max_qa_len_in": 640,
-        "max_qa_len_out": 2560,
-        "#image_size":[96,384],
-        "image_size":[1148,764],
-        "prefetch_factor": 2,
+        "max_qa_len_in": 64000,
+        "max_qa_len_out": 256000,
+        "image_size":[768,768],
+        "prefetch_factor": 10,
         "persistent_workers": True
 
 })
-    print('max_qa_len_in: {}'.format(data.max_qa_len_in))
-    print('max_qa_len_out: {}'.format(data.max_qa_len_out))
 
-    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=synth_para_qa.collate)
+    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=synth_hw_qa.collate)
     dataLoaderIter = iter(dataLoader)
 
         #if start==0:
@@ -141,8 +135,8 @@ if __name__ == "__main__":
             q_t=display(dataLoaderIter.next())
             for q in q_t:
                 question_types[q]+=1
-            print('question_types:')
-            print(question_types)
+            #print('question_types:')
+            #print(question_types)
     except StopIteration:
         print('done')
 

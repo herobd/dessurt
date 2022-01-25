@@ -94,7 +94,7 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=iam_ner.IAMNER(dirPath=dirPath,split='train',config={
+    data=iam_ner.IAMNER(dirPath=dirPath,split='valid',config={
         'rescale_range': [0.75,1],
         '#rescale_range': [0.9,0.9],
         'rescale_to_crop_size_first': True,
@@ -106,11 +106,12 @@ if __name__ == "__main__":
             "#random": False
             },
         'questions':1,
-        'max_ner_len': 26
+        'full': True,
+        'cased': True
 
 })
 
-    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=iam_ner.collate)
+    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False, num_workers=0, collate_fn=iam_ner.collate)
     print('dataset size: {}'.format(len(dataLoader)))
     dataLoaderIter = iter(dataLoader)
 

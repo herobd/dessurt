@@ -88,10 +88,12 @@ def createLines(annotations,classMap,scale):
         for idx in range(startIdx,endIdx-1):
             annotations['linking'][idx].append(idx+1) #we link them in read order. The group supervises dense connections. Read order is how the NAF dataset is labeled.
         origIdToIndexes[j]=(startIdx,endIdx-1)
-
+    
+    annotations['linking_groups']=[]
     for j,boxinfo in enumerate(boxes):
-        for linkId in boxinfo['linking']:
-            linkId = linkId[0] if linkId[1]==j else linkId[1]
+        for linkIds in boxinfo['linking']:
+            linkId = linkIds[0] if linkIds[1]==j else linkIds[1]
+            annotations['linking_groups'].append((linkId,j))
             j_first_x = np.mean(bbs[origIdToIndexes[j][0]][0:8:2])
             j_first_y = np.mean(bbs[origIdToIndexes[j][0]][1:8:2])
             link_first_x = np.mean(bbs[origIdToIndexes[linkId][0]][0:8:2])
@@ -115,12 +117,16 @@ def createLines(annotations,classMap,scale):
                 print("trans:{}, ({},{}), trans:{}, ({},{})   , trans:{}, ({},{}), trans:{}, ({},{})".format(trans[origIdToIndexes[j][0]],j_first_x,j_first_y,trans[origIdToIndexes[j][1]],j_last_x,j_last_y,trans[origIdToIndexes[linkId][0]],link_first_x,link_first_y,trans[origIdToIndexes[linkId][1]],link_last_x,link_last_y))
                 import pdb;pdb.set_trace()
                 #annotations['linking'][origIdToIndexes[j][1]].append(origIdToIndexes[linkId][0])
+    #import pdb;pdb.set_trace()
     numNeighbors = [len(annotations['linking'][index]) for index in range(len(bbs))]
     bbs = np.stack(bbs,axis=0)
     bbs = bbs[None,...] #add batch dim
 
     return bbs, numNeighbors, trans, groups
 
+
+
+#These are manual corrections I'm making to some training set images
 rulebook={
         '0011838621': [ ('add link',29,32),
                          ('add link',29,7),

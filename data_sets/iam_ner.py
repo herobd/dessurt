@@ -28,8 +28,13 @@ class IAMNER(QADataset):
         split_by = 'rwth'
         self.cache_resized = False
         self.warp_lines = None
+        self.full = config.get('full',False)
+        if self.full:
+            assert self.cased
+        self.eval_full = config.get('eval_full',True)
 
         task = config['task'] if 'task' in config else 6
+        all_classes = set()
 
         self.current_crop=None
         self.word_id_to_cls={}
@@ -49,6 +54,7 @@ class IAMNER(QADataset):
 
                     word_id, cls = line.strip().split(' ')
                     self.word_id_to_cls[word_id]=cls
+                    all_classes.add(cls)
             rescale=1.0
             self.images=[]
             for name in doc_set:
@@ -62,7 +68,8 @@ class IAMNER(QADataset):
                         qa['bb_ids']=None
                         self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':xml_path, 'rescaled':rescale,'qa':[qa]})
 
-
+        #print('all classes')
+        #print(all_classes)
 
 
 
@@ -107,9 +114,79 @@ class IAMNER(QADataset):
         self.current_crop = None
         qa_by_class = defaultdict(list)
         bbs = []
+        qas=[]
 
-        if self.full_lines:
-            TODO
+
+        if self.full:
+            if (self.eval_full and not self.train) or (self.train and random.random()<0.5):
+                q='ner_full>'
+                a=[]
+                for words in W_lines:
+                    minX=minY = 9999999999
+                    maxX=maxY = -1
+                    for word in words:
+                        cls = self.word_id_to_cls[word[2]]
+                        tY,bY,lX,rX = word[0]
+                        tY-=crop_y
+                        bY-=crop_y
+                        lX-=crop_x
+                        rX-=crop_x
+
+                        minX = min(minX,lX)
+                        maxX = max(maxX,rX)
+                        minY = min(minY,tY)
+                        maxY = max(maxY,bY)
+
+                        a.append(word[1]+'[NE:'+cls+']')
+
+
+                    lX=minX
+                    rX=maxX
+                    tY=minY
+                    bY=maxY
+                    bb = [lX*s, tY*s, rX*s, tY*s, rX*s, bY*s, lX*s, bY*s,
+                            s*lX, s*(tY+bY)/2.0, s*rX, s*(tY+bY)/2.0, s*(lX+rX)/2.0, s*tY, s*(rX+lX)/ 2.0, s*bY]
+                    bbs.append(bb)
+                a = ' '.join(a)
+                self.qaAdd(qas,q,a,None,bbs)
+            else:
+                #line
+
+                for words in W_lines:
+                    q='ner_line>'
+                    a=[]
+                    minX=minY = 9999999999
+                    maxX=maxY = -1
+                    all_O = True
+                    for word in words:
+                        cls = self.word_id_to_cls[word[2]]
+                        if cls != 'O':
+                            all_O=False
+                        tY,bY,lX,rX = word[0]
+                        tY-=crop_y
+                        bY-=crop_y
+                        lX-=crop_x
+                        rX-=crop_x
+
+                        minX = min(minX,lX)
+                        maxX = max(maxX,rX)
+                        minY = min(minY,tY)
+                        maxY = max(maxY,bY)
+
+                        a.append(word[1]+'[NE:'+cls+']')
+
+                    if self.train and all_O and random.random()<0.5:
+                        continue #skip this so we see more instances of Named Entities
+
+                    lX=minX
+                    rX=maxX
+                    tY=minY
+                    bY=maxY
+                    bb = [lX*s, tY*s, rX*s, tY*s, rX*s, bY*s, lX*s, bY*s,
+                            s*lX, s*(tY+bY)/2.0, s*rX, s*(tY+bY)/2.0, s*(lX+rX)/2.0, s*tY, s*(rX+lX)/ 2.0, s*bY]
+                    a=' '.join(a)
+                    self.qaAdd(qas,q,a,[len(bbs)],[bb])
+                    bbs.append(bb)
         else:
             for words in W_lines:
                 for word in words:
@@ -122,7 +199,7 @@ class IAMNER(QADataset):
                     bb = [lX*s, tY*s, rX*s, tY*s, rX*s, bY*s, lX*s, bY*s,
                                 s*lX, s*(tY+bY)/2.0, s*rX, s*(tY+bY)/2.0, s*(lX+rX)/2.0, s*tY, s*(rX+lX)/ 2.0, s*bY]
                     inmask = [bb]
-                    if self.train and random.random()<0.5:
+                    if not self.train or random.random()<0.5:
                         q='ne>'
                         a='['+cls+']'+word[1]
                     else:
@@ -132,7 +209,6 @@ class IAMNER(QADataset):
                     #self.qaAdd(qas,q,a,[len(bbs)],inmask)
                     bbs.append(bb)
 
-            qas=[]
             if self.train:
                 #balance by class
                 classes = list(qa_by_class.keys())

@@ -11,7 +11,57 @@ from utils.funsd_annotations import createLines
 import timeit
 from data_sets.qa import QADataset, collate
 
+#used by distillation dataset too
+def makeMLMInstance(ocr):           
+    ##Make mlm instances
+    words = []
+    while len(words)<4 and len(ocr)>1:
+        #block = random.choice(ocr)
+        block_i = random.randrange(len(ocr))
+        block = ocr[block_i]
+        ocr = ocr[:block_i]+ocr[block_i+1:] #remove
+        target_string = []
+        for p,para in enumerate(block['paragraphs']):
+            for l,line in enumerate(para['lines']):
+                for word in line['words']:
+                    words.append((word,p,l))
+                    target_string.append(word['text'])
+        target_string = ' '.join(target_string)
+    if len(words)<4:
+        return None,None,None,None#self.__getitem__(index)
 
+    num_spans=random.randrange(1,max(len(words)//8,2))
+    to_remove=[]
+    for i in range(num_spans):
+        num = np.random.poisson(3)
+        num = min(num,len(words)-1)
+        for i in range(50):
+            loc = random.randrange(0,len(words)-num)
+            before=max(0,loc-1)
+            after=min(len(words),loc+num+1)
+            good_spot = all((w is not None) for w in words[before:after])
+            if good_spot:
+                break
+
+        if good_spot:
+            #get the bounding box to mask out of image
+            rm_words = words[loc:loc+num]
+            words = words[:loc]+[None]+words[loc+num:]
+
+            #group the words by line
+            lines=defaultdict(list)
+            for word,p,l in rm_words:
+                lines[(p,l)].append(word)
+            for line in lines.values():
+                #get bb. We can assume words are in read order
+                #I'll assume left-right read order
+                left_x = line[0]['box'][0] -1
+                right_x = line[-1]['box'][2] +1
+                top_y = min(w['box'][1] for w in line) -1
+                bot_y = max(w['box'][3] for w in line) +1
+                to_remove.append((left_x,top_y,right_x,bot_y))
+    
+    return words,to_remove,target_string,block
 
 class ParaQADataset(QADataset):
     """
@@ -340,6 +390,7 @@ class ParaQADataset(QADataset):
                     'highlight_text': 0.1,
                     'read_highlighted':0.1,
                     'masked_lm':4.0,
+                    'long_mlm':18.0,
                     'put_in_place':1.0,
                     'read_on':0.9,
                     'highlight_block':1.0}
@@ -351,10 +402,14 @@ class ParaQADataset(QADataset):
                     'highlight_text': 0.1,
                     'read_highlighted':0.1,
                     'masked_lm':4.0,
+                    'long_mlm':14.0,
                     'put_in_place':1.0}
         elif mode == 'mk_only':
             self.q_types = {'masked_lm':4.0}
             self.q_types_noblock = {'masked_lm':4.0}
+        elif mode == 'test':
+            self.q_types = {'long_mlm':4.0}
+            self.q_types_noblock = {'long_mlm':4.0}
         else:
             raise ValueError('Unknown para qa mode: {}'.format(mode))
 
@@ -397,9 +452,9 @@ class ParaQADataset(QADataset):
 
     def makeQuestions(self,ocr,image_h,image_w,s,use_blocks=True):
         wordmap = makeWordmap(ocr)
-        if len(wordmap)==0:
-            return [],np.array([])
         linemap = makeLinemap(ocr)
+        if len(wordmap)==0 and len(linemap)==0:
+            return [],np.array([])
         if use_blocks:
             q_types = random.choices(list(self.q_types.keys()),self.q_types.values(),k=self.questions*50)
         else:
@@ -1075,6 +1130,20 @@ class ParaQADataset(QADataset):
                         inmask = None
                     qa.append([question_type+'>',response,all_lines,inmask,None,None])
 
+            elif question_type == 'long_mlm':
+                words,to_remove,target_string,block = makeMLMInstance(ocr)
+                if words is None:
+                    continue
+
+                inmask=[]
+                for para in block['paragraphs']:
+                    inmask += [line['id'] for line in para['lines']]
+                all_words=[w[0]['id'] for w in words if w is not None]
+
+                to_remove = [bb+(None,) for bb in to_remove] #ugh, special "marker" that this is a bb not id into ocr
+
+                qa.append(['mlm>',target_string,all_words,inmask,None,to_remove])
+
 
             #else:
             #    raise NotImplementedError('Unknown question type: {}'.format(question_type))
@@ -1170,8 +1239,10 @@ def makeWordmap(ocr):
     for b,block in enumerate(ocr):
         for p,para in enumerate(block['paragraphs']):
             for l,line in enumerate(para['lines']):
-                for w in range(len(line['words'])):
-                    wordmap.append((b,p,l,w))
+                if line['words'] is not None:
+                    for w in range(len(line['words'])):
+                        wordmap.append((b,p,l,w))
+                        line['words'][w]['id']=(b,p,l,w)
     return wordmap
 def makeLinemap(ocr):
     linemap=[]
@@ -1179,23 +1250,28 @@ def makeLinemap(ocr):
         for p,para in enumerate(block['paragraphs']):
             for l in range(len(para['lines'])):
                 linemap.append((b,p,l))
+                para['lines'][l]['id'] = (b,p,l,None)
     return linemap
 
 def getAllBBs(ocr,t_ids,s,expand=False):
     bbs=[]
     if t_ids is not None:
         for t_id in t_ids:
-            b,p,l,w = t_id
-            inst = ocr[b]
-            if p is not None:
-                inst = inst['paragraphs'][p]
-                if l is not None:
-                    inst = inst['lines'][l]
-                    if w is not None:
-                        inst = inst['words'][w]
-            
-            box = inst['box']
-            lX,tY,rX,bY = box
+            if len(t_id)==4:
+                b,p,l,w = t_id
+                inst = ocr[b]
+                if p is not None:
+                    inst = inst['paragraphs'][p]
+                    if l is not None:
+                        inst = inst['lines'][l]
+                        if w is not None:
+                            inst = inst['words'][w]
+                
+                box = inst['box']
+                lX,tY,rX,bY = box
+            else:
+                lX,tY,rX,bY,_ = t_id
+                assert _ is None
             if expand:
                 lX-=2
                 tY-=2
