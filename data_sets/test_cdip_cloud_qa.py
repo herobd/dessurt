@@ -1,4 +1,4 @@
-from data_sets import squad
+from data_sets import cdip_cloud_qa
 import math
 import sys
 from matplotlib import pyplot as plt
@@ -25,13 +25,23 @@ def display(data):
         mask = data['img'][b,1]<0
         img[:,:,0] *= ~mask
         img[:,:,1] *= ~show
-        if data['mask_label'] is not None:
-            img[:,:,2] *= 1-data['mask_label'][b,0]
+        img[:,:,2] *= 1-data['mask_label'][b,0]
         #img[2,img[2]<1]=0
 
+        #label = data['label']
+        #gt = data['gt'][b]
+        #print(label[:data['label_lengths'][b],b])
+        print(data['imgName'][b])
+        #if data['spaced_label'] is not None:
+        #    print('spaced label:')
+        #    print(data['spaced_label'][:,b])
+        #for bb,text in zip(data['bb_gt'][b],data['transcription'][b]):
+        #    print('ocr: {} {}'.format(text,bb))
+        #print('questions: {}'.format(data['questions'][b]))
+        #print('answers: {}'.format(data['answers'][b]))
         print('questions and answers')
         for q,a in zip(data['questions'][b],data['answers'][b]):
-            print(q+' [:] '+a)
+            print(q+' : '+a)
             
             loc = q.find('~')
             if loc ==-1:
@@ -42,7 +52,7 @@ def display(data):
 
         #widths.append(img.size(1))
         
-        draw=True#'0w' in q or 'w0' in q or 'l0' in q
+        draw=True#q.startswith('mm')
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -52,11 +62,10 @@ def display(data):
             #cv2.imwrite('out/changed_img{}.png'.format(b),changed_img.numpy()*255)
             #plt.imshow(img.numpy()[:,:,0], cmap='gray')
             #plt.show()
-            img = (img*255).numpy().astype(np.uint8)
-            cv2.imwrite('test_paraSmaller.png',img)
-            cv2.imshow('x',img)
+            cv2.imshow('x',(img*255).numpy().astype(np.uint8))
             cv2.show()
 
+            #cv2.imwrite('testsinglesize_1024.png',img.numpy()[:,:,0])
 
         #fig = plt.figure()
 
@@ -75,7 +84,7 @@ if __name__ == "__main__":
     if len(sys.argv)>1:
         dirPath = sys.argv[1]
     else:
-        dirPath = '../data/SQuAD'
+        dirPath = '../data/CDIPCloud'
     if len(sys.argv)>2:
         start = int(sys.argv[2])
     else:
@@ -84,25 +93,27 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=squad.SQuAD(dirPath=dirPath,split='valid',config={
-        'batch_size':1,
-        #'gt_ocr': True,
-        'rescale_range':[0.9,1.1],
+    data=cdip_cloud_qa.CDIPCloudQA(dirPath=dirPath,split='train',config={
+        'super_computer': False,
+        'rescale_range': [0.9,1.1],
+        'rescale_to_crop_size_first': True,
+        '#rescale_to_crop_width_first': True,
         'crop_params': {
+            "#crop_size":[960,1280],
+            "#crop_size":[1152,768],
             "crop_size":[768,768],
             "pad":0,
             "rot_degree_std_dev": 1
             },
         'questions':1,
-        "image_size":[768,768],
-        "prefetch_factor": 5,
-        "persistent_workers": True,
-        "cased": True
+        "max_qa_len_in": 640,
+        "max_qa_len_out": 2560,
+        "cased": True,
+        'reuse_factor': 0.0001, #about 5 images
 
 })
 
-    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=squad.collate)
-    print('dataset size: {}'.format(len(dataLoader)))
+    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=cdip_cloud_qa.collate)
     dataLoaderIter = iter(dataLoader)
 
         #if start==0:
