@@ -48,16 +48,28 @@ def findUnmatched(s):
 
 def fixLoadJSON(pred):
     pred_data = None
+    start_len = len(pred)
+    end_token = pred.find('‡')
+    if end_token != -1:
+        pred = pred[:end_token]
+    counter=2000
     while pred_data is None:
+        counter -=1
+        if len(pred)>start_len+20 or counter==0:
+            assert False
+        pred = pred.replace(',,',',')
+        pred = pred.replace('{{','{')
         try:
             pred_data = json.loads(pred)
         except json.decoder.JSONDecodeError as e:
-            print(e)
-            sections = '{}'.format(e).split(':')
-            if len(sections)==3:
-                err,typ,loc =sections
-            else:
-                typ,loc = sections
+            sections = '{}'.format(e)
+            print(sections)
+            sections=sections.replace("':'","';'")
+            sections = sections.split(':')
+            #if len(sections)==3:
+            #    err,typ,loc =sections
+            #else:
+            typ,loc = sections
 
             assert 'line 1' in loc
             loc_char = loc.find('char ')
@@ -75,26 +87,92 @@ def fixLoadJSON(pred):
                         pred+=']'
                     else:
                         pred+='}'
+                elif pred[char]==':':
+                    #it didn't close a list
+                    assert pred[:char-1].rfind('[')>pred[:char-1].rfind('{')
+                    assert pred[char-1]=='"'
+                    open_quote = pred[:char-1].rfind('"')
+                    assert open_quote!=-1
+                    comma = pred[:open_quote].rfind(',')
+                    bracket = pred[:open_quote].rfind('[')
+                    #assert comma != -1
+                    if comma>bracket:
+                        pred = pred[:comma]+']},{'+pred[comma+1:]
+                    else:
+                        pred = pred[:bracket+1]+'],'+pred[bracket+1]
+                elif pred[char]==']' and pred[char-1]=='"':
+                    assert pred[:char-1].rfind('[')<pred[:char-1].rfind('{')
+                    pred = pred[:char]+'}'+pred[char:]
                 else:
                     #pred+=','
                     assert False
             elif 'Unterminated string starting at' in typ:
                 pred+='"'
             elif 'Expecting value' in typ:
-                pred+='""'
-            elif "Expecting ':' delimiter" in typ:
-                pred+=':'
-            elif 'Expecting property name enclosed in double quotes' in typ:
-                if pred[-1]==',':
-                    pred=pred[-1]
-                pred+='}'
-            elif 'Expecting value' in typ:
-                if pred[-1]==',':
-                    pred=pred[-1]
+                if char==len(pred) and pred[char-1]==':':
+                    #We'll just remove this incomplete prediction
+                    bracket = pred.rfind('{')
+                    assert bracket > pred.rfind('}')
+                    comma = pred[:bracket].rfind(',')
+                    pred = pred[:comma]
+                elif char==len(pred) and pred[char-1]!='"':
+                    pred+='""'
+                elif char==len(pred)-1 and pred[char]!='"':
+                    pred+='""'
+                elif pred[char]=='}' and pred[:char].rfind('{')<pred[:char].rfind('}'):
+                    #random extra close curelybrace
+                    pred = pred[:char]+pred[char+1:]
                 else:
                     assert False
+            elif "Expecting ';' delimiter" in typ:
+                if char==len(pred):
+                    pred+=':'
+                else:
+                    bracket = pred[:char-1].rfind('{')
+                    colon = pred[:char-1].rfind(':')
+                    if bracket>colon:
+                        #this is missing the class prediction
+                        pred = pred[:char]+':"other"'+pred[char:]
+                    else:
+                        #extra data?
+                        open_quote= pred[colon:].find('"')
+                        assert open_quote!=-1
+                        open_quote += colon
+                        close_quote= pred[open_quote+1:].find('"')
+                        assert close_quote!=-1
+                        close_quote += open_quote+1
+
+                        pred =pred[:close_quote+1]+pred[char:] #REMOVE
+                        
+            elif 'Expecting property name enclosed in double quotes' in typ:
+                if char==len(pred) or char==len(pred)-1:
+                    if pred[-1]=='"':
+                        pred = pred[:-1]
+                        bracket = pred.rfind('{')
+                        if bracket>pred.rfind('"'):
+                            pred = pred[:bracket]
+                    else:
+                        if pred[-1]==',':
+                            pred=pred[:-1]
+                        pred+='}'
+                else:
+                    assert False
+            elif 'Expecting value' in typ:
+                if pred[-1]==',':
+                    pred=pred[:-1]
+                else:
+                    assert False
+            elif 'Extra data' in typ :
+                if len(pred)==char:
+                    assert pred[-1]==','
+                    pred = pred[:-1]
+                elif pred[char-1]==']':
+                    #closed bracket too early?
+                    pred = pred[:char-1]+','+pred[char:]
             else:
                 assert False
+
+            print('corrected pred: '+pred)
     return pred_data
 
 class Entity():
@@ -335,6 +413,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
     total_rel_true_pos2 =0
     total_rel_pred2 =0
     total_rel_gt2 =0
+
+    going_DEBUG=False
     with torch.no_grad():
         for instance in valid_iter:
             groups = instance['gt_groups']
@@ -346,7 +426,12 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             #transcription_lines = [s if cased else s for s in transcription_lines]
             img = instance['img'][0]
             if not quiet:
+                print()
                 print(instance['imgName'])
+
+            if not going_DEBUG and instance['imgName']!='92314414':
+                continue
+            going_DEBUG=True
 
             gt_line_to_group = instance['targetIndexToGroup']
 
@@ -526,8 +611,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
 
                 #    rel_FP+=1
             assert rel_truepos==sum(gt_pair_hit)
-            rel_recall = sum(gt_pair_hit)/len(pairs)
-            rel_prec = rel_truepos/len(pred_links)
+            rel_recall = sum(gt_pair_hit)/len(pairs) if len(pairs)>0 else 1
+            rel_prec = rel_truepos/len(pred_links) if len(pred_links)>0 else 1
 
             #Now look at the entities. We have some aligned already, do the rest
             gt_entities_hit = [[] for i in range(len(transcription_groups))]
@@ -632,7 +717,15 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                         mid_points.append(((x1+x2)//2,(y1+y2)//2))
                     else:
                         print('unmatched entity: {}'.format(entity.text))
-                        mid_points.append((0,0))
+                        best=9999999999
+                        for g_i,g_text in enumerate(transcription_groups):
+                            s = norm_ed(g_text,entity.text)
+                            if s<best:
+                                best=s
+                                best_g = g_i
+
+                        x1,y1,x2,y2 = bb_lines[groups[best_g][0]]
+                        mid_points.append((x1,(y1+y2)//2))
 
                 for p_a,p_b in good_pred_pairs:
                     x1,y1 = mid_points[p_a]

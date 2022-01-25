@@ -9,6 +9,7 @@ import math, random, string, re
 from collections import defaultdict, OrderedDict
 import timeit
 from data_sets.gen_daemon import GenDaemon
+from data_sets.para_qa_dataset import makeMLMInstance
 from utils import augmentation
 
 from transformers import BartTokenizer, BartForConditionalGeneration
@@ -94,53 +95,12 @@ class DistilBartDataset(torch.utils.data.Dataset):
             self.held_instance= (image,ocr)
             self.used_held=1
         
-        ##Make mlm instances
-        words = []
-        while len(words)<4 and len(ocr)>1:
-            #block = random.choice(ocr)
-            block_i = random.randrange(len(ocr))
-            block = ocr[block_i]
-            ocr = ocr[:block_i]+ocr[block_i+1:] #remove
-            target_string = []
-            for p,para in enumerate(block['paragraphs']):
-                for l,line in enumerate(para['lines']):
-                    for word in line['words']:
-                        words.append((word,p,l))
-                        target_string.append(word['text'])
-            target_string = ' '.join(target_string)
-        if len(words)<4:
+
+        words,to_remove,target_string,block = makeMLMInstance(ocr)
+        if words is None:
             return self.__getitem__(index)
 
-        num_spans=random.randrange(1,max(len(words)//8,2))
-        to_remove=[]
-        for i in range(num_spans):
-            num = np.random.poisson(3)
-            num = min(num,len(words)-1)
-            for i in range(50):
-                loc = random.randrange(0,len(words)-num)
-                before=max(0,loc-1)
-                after=min(len(words),loc+num+1)
-                good_spot = all((w is not None) for w in words[before:after])
-                if good_spot:
-                    break
 
-            if good_spot:
-                #get the bounding box to mask out of image
-                rm_words = words[loc:loc+num]
-                words = words[:loc]+[None]+words[loc+num:]
-
-                #group the words by line
-                lines=defaultdict(list)
-                for word,p,l in rm_words:
-                    lines[(p,l)].append(word)
-                for line in lines.values():
-                    #get bb. We can assume words are in read order
-                    #I'll assume left-right read order
-                    left_x = line[0]['box'][0] -1
-                    right_x = line[-1]['box'][2] +1
-                    top_y = min(w['box'][1] for w in line) -1
-                    bot_y = max(w['box'][3] for w in line) +1
-                    to_remove.append((left_x,top_y,right_x,bot_y))
 
         if self.model is not None or self.loss_mask:
             bart_input_string = []
@@ -461,4 +421,3 @@ class DistilBartDataset(torch.utils.data.Dataset):
                      'lines':ocr_lines
                      }]
                 }
-                
