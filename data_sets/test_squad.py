@@ -84,7 +84,7 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=squad.SQuAD(dirPath=dirPath,split='train',config={
+    data=squad.SQuAD(dirPath=dirPath,split='valid',config={
         'batch_size':1,
         #'gt_ocr': True,
         'rescale_range':[0.9,1.1],
@@ -102,6 +102,7 @@ if __name__ == "__main__":
 })
 
     dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=squad.collate)
+    print('dataset size: {}'.format(len(dataLoader)))
     dataLoaderIter = iter(dataLoader)
 
         #if start==0:
