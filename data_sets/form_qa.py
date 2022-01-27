@@ -468,21 +468,46 @@ class FormQA(QADataset):
                 else:
                     down = 'down' in q_type
                     prompt_id = None
-                    for i in range(min(10,len(entity_link))):
-                        if down:
-                            head_id, tail_id = random.choice(entity_link)
-                            prompt_id = head_id
-                            response_id = tail_id
+                    if random.random()<0.5 and self.train:
+                        #select valid relationship
+                        for i in range(min(10,len(entity_link))):
+                            if down:
+                                head_id, tail_id = random.choice(entity_link)
+                                prompt_id = head_id
+                                response_id = tail_id
+                            else:
+                                head_id, tail_id = random.choice(unrolled_entity_link)
+                                prompt_id = tail_id
+                                response_id = head_id
+                            if prompt_id is not None:
+                                break
+                    else:
+                        #select random entitiy
+                        if self.train:
+                            if len(full_entities)==0:
+                                continue
+                            prompt_id = random.randrange(len(full_entities))
                         else:
-                            head_id, tail_id = random.choice(unrolled_entity_link)
-                            prompt_id = tail_id
-                            response_id = head_id
-                        if prompt_id is not None:
-                            break
+                            prompt_id = instance
+
+                        response_id = None
+                        if down:
+                            for head,tail in entity_link:
+                                if head==prompt_id:
+                                    response_id = tail
+                                    break
+                        else:
+                            for head,tail in unrolled_entity_link:
+                                if tail==prompt_id:
+                                    response_id = head
+                                    break
+
+
+
                     if prompt_id is None:
                         continue
-
                     entity = entities[prompt_id]
+
                     question = 'linkdown-' if down else 'linkup-'
                     if response_id is None:
                         linked = None

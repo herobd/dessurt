@@ -107,6 +107,7 @@ if __name__ == "__main__":
         '#mode': 'hard_word',
         'mode': 'test',
         'cased': True,
+        'augment_shade': 1,
         'crop_params': {
             "#crop_size":[96,384],
             "crop_size":[1152,768],
