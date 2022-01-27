@@ -246,7 +246,8 @@ class ParaQADataset(QADataset):
             self.q_types = {
                     'read_blanked':1,
                     'proper_read_replaced':1,
-                    'read_with_masked':1,
+                    #'read_with_masked':1,
+                    'long_mlm':1.0,
                     'read_line':1,
                     'highlight_text':1.0,
                     'read_highlighted':1,
@@ -257,7 +258,8 @@ class ParaQADataset(QADataset):
             self.q_types_noblock = {
                     'read_blanked':1,
                     'proper_read_replaced':1,
-                    'read_with_masked':1.0,
+                    #'read_with_masked':1.0,
+                    'long_mlm':1.0,
                     'read_line':1,
                     'highlight_text':1.0,
                     'read_highlighted':1,

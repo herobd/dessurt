@@ -132,7 +132,7 @@ class SynthFormDataset(FormQA):
             prev_boxes=[(0,0,image_w,0)]
             furthest_right=0
             while len(prev_boxes)>0 and debug<200:
-                print(prev_boxes)
+                #print(prev_boxes)
                 debug+=1
                 #pick starting point
                 #x1,y1,x2,y2 = random.choice(prev_boxes)
@@ -140,10 +140,10 @@ class SynthFormDataset(FormQA):
                 if image_h-y2<60 and random.random()<0.5:
                     continue 
                 if x1>=furthest_right:
-                    print('popped furthest right: {}'.format((x1,y1,x2,y2)))
+                    #print('popped furthest right: {}'.format((x1,y1,x2,y2)))
                     x2 = image_w
-                else:
-                    print('popped : {}'.format((x1,y1,x2,y2)))
+                #else:
+                    #print('popped : {}'.format((x1,y1,x2,y2)))
                 if random.random()<self.table_prob:
                     success,box = self.addTable(x1,y2,x2,image,tables,all_entities,entity_link)
 
@@ -151,7 +151,7 @@ class SynthFormDataset(FormQA):
                     success,box = self.addForm(x1,y2,x2,image,all_entities,entity_link)
                 
                 if success:
-                    print('added: {}'.format(box))
+                    #print('added: {}'.format(box))
                     prev_boxes.append(box)
                     if box[2]>furthest_right:
                         furthest_right = box[2]
@@ -709,7 +709,6 @@ class SynthFormDataset(FormQA):
                     else:
                         cue+=' line'
                 else:
-                    continue#######
                     cue = random.choice(options[:-3])
             else:
                 image_pairs.append((label_words,value_words))
@@ -784,7 +783,8 @@ class SynthFormDataset(FormQA):
             max_value_word_w=max_label_word_w=0
             for label_words,value_words in image_pairs:
                 if 'to left' in cue:
-                    assert len(value_words)==1
+                    if len(value_words)>1:
+                        continue
                 if len(label_words)==0:
                     continue
                 label_word_ws = [max(1,round(img.shape[1]*(label_height/img.shape[0]))) for text,img in label_words]
@@ -1128,10 +1128,11 @@ class SynthFormDataset(FormQA):
             for label_str_lines,label_img_pos_lines,value_entities,col_number in pairs_to_draw:
                 if 'to left' in cue or 'below' in cue:
                     #switch back!
-                    assert len(value_entities)==1
+                    #assert len(value_entities)==1
                     value_str_lines = label_str_lines
                     value_img_pos_lines = label_img_pos_lines
-
+                    if len(value_entities)==0:
+                        continue #something's wrong and we don't have a label anymore
                     label_str_lines,label_img_pos_lines = value_entities[0]
                     value_entities[0]=(value_str_lines,value_img_pos_lines)
                 
