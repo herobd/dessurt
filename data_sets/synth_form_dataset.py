@@ -132,7 +132,7 @@ class SynthFormDataset(FormQA):
             prev_boxes=[(0,0,image_w,0)]
             furthest_right=0
             while len(prev_boxes)>0 and debug<200:
-                print(prev_boxes)
+                #print(prev_boxes)
                 debug+=1
                 #pick starting point
                 #x1,y1,x2,y2 = random.choice(prev_boxes)
@@ -140,10 +140,10 @@ class SynthFormDataset(FormQA):
                 if image_h-y2<60 and random.random()<0.5:
                     continue 
                 if x1>=furthest_right:
-                    print('popped furthest right: {}'.format((x1,y1,x2,y2)))
+                    #print('popped furthest right: {}'.format((x1,y1,x2,y2)))
                     x2 = image_w
-                else:
-                    print('popped : {}'.format((x1,y1,x2,y2)))
+                #else:
+                    #print('popped : {}'.format((x1,y1,x2,y2)))
                 if random.random()<self.table_prob:
                     success,box = self.addTable(x1,y2,x2,image,tables,all_entities,entity_link)
 
@@ -151,7 +151,7 @@ class SynthFormDataset(FormQA):
                     success,box = self.addForm(x1,y2,x2,image,all_entities,entity_link)
                 
                 if success:
-                    print('added: {}'.format(box))
+                    #print('added: {}'.format(box))
                     prev_boxes.append(box)
                     if box[2]>furthest_right:
                         furthest_right = box[2]
@@ -652,8 +652,10 @@ class SynthFormDataset(FormQA):
             if len(new_pairs)>0:
                 pairs=new_pairs
                 break
+        #print('-----')
         #print(title)
         #print(pairs)
+        #print('==')
 
         max_y = image.shape[0]
         label_matches_title = random.random()<self.match_title_prob and title is not None
@@ -673,13 +675,19 @@ class SynthFormDataset(FormQA):
             value_font = label_font
         else:
             value_font = None
-        #options=['colon','line','line+colon','dotted line','dotted line+colon','box','box+colon','to left line','below','none']
-        options=['colon','line','line+colon','dotted line','dotted line+colon','box','box+colon','to left','none']
+        options=['colon','line','line+colon','dotted line','dotted line+colon','box','box+colon','to left line','below','none']
+        #options=['colon','line','line+colon','dotted line','dotted line+colon','box','box+colon','to left','none']
         #options=['below']
         cue = random.choice(options)
+        if 'to left' in cue or 'below' in cue:
+            if random.random()<0.5:
+                cue+=' box'
+            else:
+                cue+=' line'
         image_pairs = []
         for label,value in pairs:
-            if label.endswith('http') and len(pairs)>0:
+            label_lower = label.lower()
+            if (label_lower.endswith('http') or label_lower.endswith('https')) and len(pairs)>0:
                 continue #bad parsing of gpt ouput
             label_words,label_font = self.gen_daemon.generate(label+(':' if 'colon' in cue else ''),font=label_font,ret_font=True)
             if random.random()<self.blank_value_prob and 'to left' not in cue and 'below' not in cue:
@@ -701,15 +709,11 @@ class SynthFormDataset(FormQA):
                     list_values.append(value_words)
                 value_words = list_values
 
-            if 'to left' in cue or cue=='below':
+            if 'to left' in cue or 'below' in cue:
                 if len(value_words)>0:
                     image_pairs.append((value_words[0],[label_words])) #switched! only allow one answer for ease of implementation
-                    if random.random()<0.5:
-                        cue+=' box'
-                    else:
-                        cue+=' line'
+                    #print('switched to, {} : {}'.format(*image_pairs[-1]))
                 else:
-                    continue#######
                     cue = random.choice(options[:-3])
             else:
                 image_pairs.append((label_words,value_words))
@@ -943,6 +947,7 @@ class SynthFormDataset(FormQA):
                     label_str_lines=[]
                     label_img_pos=[]
                     label_img_pos_lines=[]
+                    label_max_x = cur_x
                     for label_w,(label_text,label_img) in zip(label_word_ws_list,label_words):
                         if cur_x+label_w>max_label_x:
                             if len(label_img_pos)==0:
@@ -978,6 +983,7 @@ class SynthFormDataset(FormQA):
                             break
 
                         rightmost_x_so_far = max(rightmost_x_so_far,label_x+label_w)
+                        label_max_x = max(label_max_x,cur_x)
 
                     if cannot_do_pair:
                         break
@@ -990,7 +996,7 @@ class SynthFormDataset(FormQA):
                         if aligned_cols:
                             value_start_x = all_value_x
                         else:
-                            value_start_x = cur_x+sep
+                            value_start_x = label_max_x+sep
 
                         lowest_y = max_y-(value_height+1)
                         if 'to left' in cue:
@@ -1000,7 +1006,10 @@ class SynthFormDataset(FormQA):
                             cur_y = random.randrange(min(label_y-round(0.15*min(label_height,value_height)),label_y+label_height-value_height)-4,min(max(label_y+value_height,label_y+label_height)+4,lowest_y))
                     else:
                         value_start_x = col_x + random.randrange(-4,label_height)
-                        cur_y = label_y+round(label_newline_height+label_newline_height*random.random())
+                        if 'below' in cue:
+                            cur_y = label_y+round(label_height+5+label_height*random.random()*0.5)
+                        else:
+                            cur_y = label_y+round(label_newline_height+label_newline_height*random.random())
 
                     max_value_x = max_x
                     value_entities=[]
@@ -1134,6 +1143,7 @@ class SynthFormDataset(FormQA):
 
                     label_str_lines,label_img_pos_lines = value_entities[0]
                     value_entities[0]=(value_str_lines,value_img_pos_lines)
+                    #print('swapped back to, {} : {}'.format(label_str_lines,value_str_lines))
                 
                 label_entity = self.makeAndDrawEntity(image,'question',label_str_lines,label_img_pos_lines)
                 label_ei=len(entities)
@@ -1143,9 +1153,10 @@ class SynthFormDataset(FormQA):
                 lowest_y = max(lowest_y,label_entity.box[-1])
                 rightmost_x = max(rightmost_x,label_entity.box[-2])
                 
-
+                if not side_by_side:
+                    rightmost_value_x[col_number] = max(rightmost_value_x[col_number],label_max_x)
                 for value_str_lines,value_img_pos_lines in value_entities:
-                    value_entity = self.makeAndDrawEntity(image,'answer',value_str_lines,value_img_pos_lines,rightmost_value_x[col_number],cue)
+                    value_entity = self.makeAndDrawEntity(image,'answer',value_str_lines,value_img_pos_lines,rightmost_value_x[col_number],cue,side_by_side)
                     if value_entity is not None:
                         value_ei=len(entities)
                         entities.append(value_entity)
@@ -1179,7 +1190,7 @@ class SynthFormDataset(FormQA):
 
                     img_h = label_img_pos_lines[-1][-1][-2]
                     if 'dotted line' in cue:
-                        for x in range(max(0,x-pad_w),min(max_x,rightmost_value_x[col_number]+pad_w)):
+                        for x in range(max(0,x-pad_w),min(max_x,rightmost_value_x[col_number]+pad_w)) or 'below' in cue:
                             if math.sin(x*math.pi/dotting)>0:
                                 try:
                                     image[y+img_h+pad_h-line_thickness//2:1+y+img_h+pad_h+line_thickness//2,x]=color
@@ -1197,13 +1208,13 @@ class SynthFormDataset(FormQA):
         return False,None
 
 
-    def makeAndDrawEntity(self,image,cls,str_lines,img_pos_lines,max_line_x=None,cue=None):
+    def makeAndDrawEntity(self,image,cls,str_lines,img_pos_lines,max_line_x=None,cue=None,side_by_side=False):
         lines=[]
         blank = cue is not None and ('to left' in cue or 'below' in cue) and random.random()<self.blank_value_prob
-        if cue is not None and any(prompt in cue for prompt in ['box','line']) and 'to left' not in cue:
-            if random.random()<0.4:
+        if cue is not None and any(prompt in cue for prompt in ['box','line']):
+            if random.random()<0.2 and 'to left' not in cue:
                 line_end_x = max_line_x
-            elif random.random()<0.6:
+            elif random.random()<0.8 or 'below' in cue:
                 line_end_x = 0
                 for img_pos_words in img_pos_lines:
                     line_max_x=img_pos_words[-1][0]+img_pos_words[-1][-1]
@@ -1215,15 +1226,18 @@ class SynthFormDataset(FormQA):
         max_x=max_y = 0
         min_x=min_y = 9999999999999999999
         if cue is not None:
-            line_thickness = random.randrange(1,5)
             pad_w = random.randrange(1,5)
             pad_h = random.randrange(1,5)
             color = random.randrange(100,255)
+        lines_to_draw=[]
+        heights = []
         for i,(text,img_pos_words) in enumerate(zip(str_lines,img_pos_lines)):
             line_max_x=img_pos_words[-1][0]+img_pos_words[-1][-1]
             line_max_y=img_pos_words[-1][1]+img_pos_words[-1][-2]
             line_min_x=img_pos_words[0][0]
             line_min_y=img_pos_words[0][1]
+
+            heights.append(line_max_y-line_min_y)
             
             if not blank:
                 for x,y,img,img_h,img_w in img_pos_words:
@@ -1241,24 +1255,36 @@ class SynthFormDataset(FormQA):
                 if line_end_x is not None:
                     line_max_x = line_end_x
                 dotting = random.randrange(1,5)
-                if 'dotted line' in cue:
-                    for x in range(max(0,line_min_x-pad_w),min(max_line_x,line_max_x+pad_w)):
-                        if math.sin(x*math.pi/dotting)>0:
-                            try:
-                                image[line_max_y+pad_h-line_thickness//2:1+line_max_y+pad_h+line_thickness//2,x]=color
-                            except IndexError:
-                                pass
-
-                elif 'line' in cue:
-                    if 'below' not in cue or i==len(str_lines)-1:
-                        img_f.line(image,(line_min_x-pad_w,line_max_y+pad_h),(min(max_line_x,line_max_x+pad_w),line_max_y+pad_h),color,line_thickness)
+                if 'line' in cue:
+                    lines_to_draw.append((max(0,line_min_x-pad_w),min(max_line_x,line_max_x+pad_w),line_max_y+pad_h))
                 elif 'box' in cue:
                     min_x = min(line_min_x-pad_w,min_x)
                     min_y = min(line_min_y-pad_h,min_y)
                     max_x = max(line_max_x+pad_w,max_x)
                     max_y = max(line_max_y+pad_h,max_y)
+
+        if cue is not None:
+            #print('line th range ({}):  {} , {}'.format(np.mean(heights),1,
+            line_thickness = random.randrange(1,min(5,max(2,math.ceil(.25*np.mean(heights)))))
+
         if cue is not None and 'box' in cue:
             img_f.rectangle(image,(min_x,min_y),(min(max_line_x,max_x),max_y),color,line_thickness)
+        elif cue is not None and 'dotted line' in cue:
+            if 'below' in cue or random.random()<0.1:
+                lines_to_draw = lines_to_draw[-1:] #only do last line
+            for x1,x2,y in lines_to_draw:
+                for x in range(x1,x2):
+                    if math.sin(x*math.pi/dotting)>0:
+                        try:
+                            image[y-line_thickness//2:1+y+line_thickness//2,x]=color
+                        except IndexError:
+                            pass
+
+        elif cue is not None and 'line' in cue:
+            if 'below' in cue or random.random()<0.1:
+                lines_to_draw = lines_to_draw[-1:] #only do last line
+            for x1,x2,y in lines_to_draw:
+                img_f.line(image,(x1,y),(x2,y),color,line_thickness)
         return Entity(cls,lines) if not blank else None
     
     def getTableValues(self,num):
