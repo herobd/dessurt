@@ -98,6 +98,7 @@ class SynthFormDataset(FormQA):
         self.warp_freq = 1.0
         if split=='train':
             self.augmentation = config['augmentation'] if 'augmentation' in config else None
+        self.augment_shade = config.get('augment_shade',1)
 	    
 
             
