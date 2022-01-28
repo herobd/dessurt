@@ -11,7 +11,7 @@
         "prefetch_factor": 2,
         "persistent_workers": false,
         "batch_size": 1,
-        "num_workers": 8,
+        "num_workers": 6,
         "datasets": [
             {
                 "freq": 0.25,
@@ -41,7 +41,7 @@
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
-                    "image_size": [1150,760],
+                    "image_size": [1148,760],
                     "questions": 1,
                     "max_qa_len_in": 640,
                     "max_qa_len_out": 4000,
@@ -70,7 +70,7 @@
                     "questions": 1,
                     "max_qa_len_in": 640,
                     "max_qa_len_out": 4000,
-                    "image_size": [1150,760],
+                    "image_size": [1148,760],
                     "prefetch_factor": 10,
                     "persistent_workers": true
                 }
@@ -98,7 +98,7 @@
                     "questions": 1,
                     "max_qa_len_in": 640,
                     "max_qa_len_out": 4000,
-                    "image_size": [1150,760],
+                    "image_size": [1148,760],
                     "prefetch_factor": 10,
                     "persistent_workers": true
                 }

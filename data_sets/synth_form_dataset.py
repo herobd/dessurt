@@ -1193,7 +1193,7 @@ class SynthFormDataset(FormQA):
 
                     img_h = label_img_pos_lines[-1][-1][-2]
                     if 'dotted line' in cue:
-                        for x in range(max(0,x-pad_w),min(max_x,rightmost_value_x[col_number]+pad_w)) or 'below' in cue:
+                        for x in range(max(0,x-pad_w),min(max_x,rightmost_value_x[col_number]+pad_w)):
                             if math.sin(x*math.pi/dotting)>0:
                                 try:
                                     image[y+img_h+pad_h-line_thickness//2:1+y+img_h+pad_h+line_thickness//2,x]=color

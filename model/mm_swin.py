@@ -38,6 +38,8 @@ class MmSwin(BaseModel):
         self.max_q_tokens = config.get('max_q_tokens',32)
         self.max_a_tokens = config.get('max_a_tokens',512)
 
+        mask_output = config.get('do_mask_output',True)
+
         blocks_per_level = config['blocks_per_level'] #[2,2,6,2] -> in:512,emb:64 then 64,32,16,8
         use_swin = config.get('use_swin',[True]*sum(blocks_per_level  ))
         use_auto = config.get('use_auto',[True]*sum(blocks_per_level  ))
@@ -207,36 +209,39 @@ class MmSwin(BaseModel):
 
 
         self.final_resolution = cur_resolution
-        upsample_net = [nn.ConvTranspose2d(d_im,d_im//2,4,2,1),
-                        nn.InstanceNorm2d(d_im//2),
-                        nn.Dropout2d(p=0.125,inplace=True),
-                        nn.ReLU(inplace=True),
-                        nn.Conv2d(d_im//2,d_im//4,3,1,1),
-                        nn.InstanceNorm2d(d_im//4),
-                        nn.Dropout2d(p=0.125,inplace=True),
-                        nn.ReLU(inplace=True)]
-        d_im = d_im//4
-        #upsample for rest of Swin blocks
-        for i in range(len(blocks_per_level)-1):
-            upsample_net+=[ nn.ConvTranspose2d(d_im,d_im//2,4,2,1),
+        if mask_output:
+            upsample_net = [nn.ConvTranspose2d(d_im,d_im//2,4,2,1),
                             nn.InstanceNorm2d(d_im//2),
                             nn.Dropout2d(p=0.125,inplace=True),
-                            nn.ReLU(inplace=True)]
-            d_im = d_im//2
-        #upsample for original CNN encoding
-        for i in range(2):
-            if d_im>16:
-                d_im_out = d_im//2
-            else:
-                d_im_out = d_im
-            upsample_net+=[ nn.ConvTranspose2d(d_im,d_im_out,4,2,1),
-                            nn.InstanceNorm2d(d_im_out),
+                            nn.ReLU(inplace=True),
+                            nn.Conv2d(d_im//2,d_im//4,3,1,1),
+                            nn.InstanceNorm2d(d_im//4),
                             nn.Dropout2d(p=0.125,inplace=True),
                             nn.ReLU(inplace=True)]
-            d_im = d_im_out
-        upsample_net.append(nn.Conv2d(d_im,1,1,1,0))
-        upsample_net.append(nn.Sigmoid())
-        self.upsample_net= nn.Sequential(*upsample_net)
+            d_im = d_im//4
+            #upsample for rest of Swin blocks
+            for i in range(len(blocks_per_level)-1):
+                upsample_net+=[ nn.ConvTranspose2d(d_im,d_im//2,4,2,1),
+                                nn.InstanceNorm2d(d_im//2),
+                                nn.Dropout2d(p=0.125,inplace=True),
+                                nn.ReLU(inplace=True)]
+                d_im = d_im//2
+            #upsample for original CNN encoding
+            for i in range(2):
+                if d_im>16:
+                    d_im_out = d_im//2
+                else:
+                    d_im_out = d_im
+                upsample_net+=[ nn.ConvTranspose2d(d_im,d_im_out,4,2,1),
+                                nn.InstanceNorm2d(d_im_out),
+                                nn.Dropout2d(p=0.125,inplace=True),
+                                nn.ReLU(inplace=True)]
+                d_im = d_im_out
+            upsample_net.append(nn.Conv2d(d_im,1,1,1,0))
+            upsample_net.append(nn.Sigmoid())
+            self.upsample_net= nn.Sequential(*upsample_net)
+        else:
+            self.upsample_net=None
         
         
 
@@ -451,10 +456,13 @@ class MmSwin(BaseModel):
 
         ##############
         #Visual output
-        H,W = self.final_resolution
-        #reshape and permute to convert to image
-        im_feats = im_tokens.view(new_batch_size,H,W,im_tokens.size(2)).permute(0,3,1,2)
-        out_mask = self.upsample_net(im_feats)
+        if self.upsample_net is not None:
+            H,W = self.final_resolution
+            #reshape and permute to convert to image
+            im_feats = im_tokens.view(new_batch_size,H,W,im_tokens.size(2)).permute(0,3,1,2)
+            out_mask = self.upsample_net(im_feats)
+        else:
+            out_mask = None
 
                     
 
