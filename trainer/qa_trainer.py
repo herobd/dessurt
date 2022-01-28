@@ -477,6 +477,11 @@ class QATrainer(BaseTrainer):
 
                     target = pred_last_hidden.new(pred_last_hidden.size(0)).fill_(1)
                     losses['cosineLoss'] = F.cosine_embedding_loss(pred_last_hidden, teacher_last_hidden, target,reduction="mean")
+
+                if 'distill_loss_mask' in instance and instance['distill_loss_mask'] is not None:
+                    distill_loss_mask = instance['distill_loss_mask'][...,None].to(batch_mask.device)
+                    batch_mask *= distill_loss_mask
+                    teacher_batch_mask *= distill_loss_mask
                 
                 if self.debug:
                     print('batch_mask sum: {}'.format(batch_mask.sum()))

@@ -6,7 +6,7 @@ import numpy as np
 from model.pairing_g_graph_layoutlm import  runLayoutLM
 from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding, BartLearnedPositionalEmbedding
 from model.rel_pos_im_transformer import QTransformerLayer
-from model.swin_transformer import ConvPatchEmbed, SwinTransformerBlock, PatchMerging
+from model.swin_transformer import ConvPatchEmbed, SwinTransformerBlock, PatchMerging, PatchEmbed
 from model.trans_pooling import QPooler
 try:
     from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
@@ -31,6 +31,7 @@ class MmSwin(BaseModel):
         super(MmSwin, self).__init__(config)
         self.image_size = config['image_size'] #start at 512?
         dropout = 0 if 'no_dropout' in config and  config['no_dropout'] else 0.1
+        self.conv_patch_emb = config.get('conv_patch_emb',True)
         lighter_conv_patch_emb = config['lighter_conv_patch_emb'] if 'lighter_conv_patch_emb' in config else False
         init_from_pretrained = config.get('init_from_pretrained',True)
         use_special_question_tokens = config.get('use_special_question_tokens',True)
@@ -132,13 +133,19 @@ class MmSwin(BaseModel):
             self.a_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000,offset_start=1000)
 
 
-
-        self.patch_embed =  ConvPatchEmbed(
-                img_size=self.image_size, 
-                embed_dim=im_embed_dim,
-                norm_layer=nn.LayerNorm,
-                lighter=lighter_conv_patch_emb,
-                in_chans=2) #now includes the mask channel
+        if self.conv_patch_emb:
+            self.patch_embed =  ConvPatchEmbed(
+                    img_size=self.image_size, 
+                    embed_dim=im_embed_dim,
+                    norm_layer=nn.LayerNorm,
+                    lighter=lighter_conv_patch_emb,
+                    in_chans=2) #now includes the mask channel
+        else:
+            self.patch_embed =  PatchEmbed(
+                    img_size=self.image_size, 
+                    embed_dim=im_embed_dim,
+                    norm_layer=nn.LayerNorm,
+                    in_chans=2) #now includes the mask channel
         if pre_trained_patch_emb is not None:
             checkpoint = torch.load(pre_trained_patch_emb, map_location=lambda storage, location: storage)
             pe_state_dict=self.patch_embed.state_dict()

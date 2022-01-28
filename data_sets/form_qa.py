@@ -486,7 +486,7 @@ class FormQA(QADataset):
                         if self.train:
                             if len(full_entities)==0:
                                 continue
-                            prompt_id = random.randrange(len(full_entities))
+                            prompt_id = random.randrange(len(entities))
                         else:
                             prompt_id = instance
 

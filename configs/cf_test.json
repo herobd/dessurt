@@ -8,19 +8,22 @@
         "data_set_name": "MultipleDataset",
         "data_dir": "",
         "shuffle": true,
-        "prefetch_factor": 5,
-        "persistent_workers": true,
+        "prefetch_factor": 2,
+        "persistent_workers": false,
         "batch_size": 1,
         "num_workers": 2,
         "datasets": [
             {
-                "freq": 0.2,
+                "freq": 0.3,
                 "config": {
                     "data_set_name": "DistilBartDataset",
                     "data_dir": "../data/fonts",
                     "image_size": [1152,768],
                     "max_auto_tokens": 512,
-                    "no_distill": true
+                    "clear_fonts": true,
+                    "loss_mask": true,
+                    "min_text_height": 14,
+                    "min_para_width": 0.65
                 }
             }
         ]
@@ -35,10 +38,14 @@
         "weight_decay": 0.01
     },
     "loss": {
-        "answer": "label_smoothing"
+        "#answer": "padded_seq_cross_entropy",
+        "answer": "label_smoothing",
+	"#mask": "sigmoid_BCE_mask_loss",
+	"mask": "focalLoss"
     },
     "loss_weights": {
         "answer": 1,
+	"mask": 1,
         "cosine": 0,
         "distillation": 2.5
     },
@@ -53,7 +60,7 @@
     "trainer": {
         "class": "QATrainer",
         "iterations": 4000000,
-        "accum_grad_steps": 1,
+        "accum_grad_steps": 128,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
@@ -85,16 +92,17 @@
         "use_set_length": true,
         "init_from_pretrained": "bart",
         "use_special_question_tokens": true,
-        "no_dropout": false,
         "max_q_tokens": 20,
-        "max_a_tokens": 800,
+        "#max_a_tokens": 3400,
+        "max_a_tokens": 512,
+        "no_dropout": false,
         "window_size": 12,
         "decode_dim": 768,
-        "dim_ff": 3072,
+        "dim_ff": 8,
         "decode_num_heads": 8,
         "blocks_per_level": [
             4,
-            8
+            6
         ],
         "use_swin":[
             true,
@@ -106,21 +114,17 @@
             true,
             true,
             false,
-            false,
-            false,
             false
         ],
         "swin_cross_attention":[
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
             false,
             false
         ],

@@ -187,6 +187,7 @@ def parseDict(header,entities,links):
     is_table=False
     row_headers = None
     col_headers = None
+    cells = None
     for text,value in header.items():
         if text=='content':
             if isinstance(value,list):
@@ -234,15 +235,17 @@ def parseDict(header,entities,links):
             col_ids = list(range(len(entities),len(entities)+len(col_headers)))
             for ch in col_headers:
                 entities.append(Entity(ch,'question',len(entities)))
-
-        for r,row in enumerate(cells):
-            for c,cell in enumerate(row):
-                c_id = len(entities)
-                entities.append(Entity(cell,'answer',c_id))
-                if row_headers is not None and len(row_ids)>r:
-                    links.append((row_ids[r],c_id))
-                if col_headers is not None and len(col_ids)>c:
-                    links.append((col_ids[c],c_id))
+    
+        if cells is not None:
+            for r,row in enumerate(cells):
+                for c,cell in enumerate(row):
+                    if cell is not None:
+                        c_id = len(entities)
+                        entities.append(Entity(cell,'answer',c_id))
+                        if row_headers is not None and len(row_ids)>r:
+                            links.append((row_ids[r],c_id))
+                        if col_headers is not None and len(col_ids)>c:
+                            links.append((col_ids[c],c_id))
 
         return row_ids+col_ids
 
@@ -628,7 +631,9 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             for p_is in gt_entities_hit:
                 if len(p_is)>1:
                     #can only align one
-                    assert False
+                    cls= pred_entities[p_is[0]].cls
+                    for e_i in p_is[1:]:
+                        assert pred_entities[e_i].cls == cls
 
             for p_i in to_align:
                 e_i = pred_entities[p_i]
@@ -673,9 +678,11 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             entity_recall = entities_truepos/len(transcription_groups)
             entity_prec = entities_truepos/len(pred_entities)
 
-            total_entity_true_pos += len(gt_entities_hit)
+            total_entity_true_pos += entities_truepos
             total_entity_pred += len(pred_entities)
             total_entity_gt += len(groups)
+            assert entities_truepos<=len(pred_entities)
+            assert entities_truepos<=len(groups)
             if not quiet:
                 print('Entity precision: {}'.format(entity_prec))
                 print('Entity recall:    {}'.format(entity_recall))
@@ -738,6 +745,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
 
                 img_f.imshow('f',draw_img)
                 img_f.show()
+        print('======================')
+
 
         total_entity_prec = total_entity_true_pos/total_entity_pred
         total_entity_recall = total_entity_true_pos/total_entity_gt

@@ -11,6 +11,7 @@ from utils.funsd_annotations import createLines
 import timeit
 from data_sets.qa import QADataset, collate
 
+#The creates a MLM run instance (based on BART)
 #used by distillation dataset too
 def getMinMaxWidth(words):
     max_w=0
@@ -58,9 +59,9 @@ def makeMLMInstance(ocr):
         #    print('num is 0')
         good_spot = False
         for i in range(50 if num>0 else 20):
-            loc = random.randrange(0,len(words)-num)
+            loc = random.randrange(0,1+len(words)-num)
             if num==0:
-                if (loc==0 and words[0] is not None) or (loc==len(words)-1 and words[-1] is not None):
+                if (loc==0 and words[0] is not None) or (loc==len(words) and words[-1] is not None):
                     good_spot = True
                     break
                 elif words[0] is None and words[-1] is None:
@@ -97,9 +98,10 @@ def makeMLMInstance(ocr):
                     to_remove.append((left_x,top_y,right_x,bot_y))
             else:
                 #import pdb; pdb.set_trace()
-                if pre_add_none[loc] is not None:
+                word = pre_add_none[loc] if loc==0 else pre_add_none[loc-1]
+                if word is not None:
                     word_min_w,word_max_w,space = getMinMaxWidth(pre_add_none)
-                    word,p,l = pre_add_none[loc]
+                    word,p,l = word
                     line=block['paragraphs'][p]['lines'][l]
                     line_x1,line_y1,line_x2,line_y2 = line['box']
                     if loc == 0:
@@ -108,7 +110,7 @@ def makeMLMInstance(ocr):
                         left_x = max(0,right_x - random.randrange(word_min_w,word_max_w))
                         line['box'] = (left_x,line_y1,line_x2,line_y2)
                     else:
-                        assert loc == len(pre_add_none)-1
+                        assert loc == len(pre_add_none)
                         _,top_y,left_x,bot_y = word['box']
                         left_x += space
                         right_x = left_x + random.randrange(word_min_w,word_max_w)
