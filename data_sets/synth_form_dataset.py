@@ -789,7 +789,8 @@ class SynthFormDataset(FormQA):
             max_value_word_w=max_label_word_w=0
             for label_words,value_words in image_pairs:
                 if 'to left' in cue:
-                    assert len(value_words)==1
+                    if len(value_words)>1:
+                        continue
                 if len(label_words)==0:
                     continue
                 label_word_ws = [max(1,round(img.shape[1]*(label_height/img.shape[0]))) for text,img in label_words]
@@ -1138,10 +1139,11 @@ class SynthFormDataset(FormQA):
             for label_str_lines,label_img_pos_lines,value_entities,col_number in pairs_to_draw:
                 if 'to left' in cue or 'below' in cue:
                     #switch back!
-                    assert len(value_entities)==1
+                    #assert len(value_entities)==1
                     value_str_lines = label_str_lines
                     value_img_pos_lines = label_img_pos_lines
-
+                    if len(value_entities)==0:
+                        continue #something's wrong and we don't have a label anymore
                     label_str_lines,label_img_pos_lines = value_entities[0]
                     value_entities[0]=(value_str_lines,value_img_pos_lines)
                     #print('swapped back to, {} : {}'.format(label_str_lines,value_str_lines))

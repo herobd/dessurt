@@ -14,7 +14,7 @@
         "num_workers": 8,
         "datasets": [
             {
-                "freq": 0.3,
+                "freq": 0.25,
                 "config": {
                     "data_set_name": "DistilBartDataset",
                     "data_dir": "../data/fonts",
@@ -26,17 +26,7 @@
                 }
             },
             {
-                "freq": 0.2,
-                "config": {
-                    "data_set_name": "DistilBartDataset",
-                    "data_dir": "../data/fonts",
-                    "image_size": [1152,768],
-                    "max_auto_tokens": 512,
-                    "no_distill": true
-                }
-            },
-            {
-                "freq": 0.1,
+                "freq": 0.05,
                 "config": {
                     "data_set_name": "SynthFormDataset",
                     "data_dir": "../data",
@@ -54,7 +44,7 @@
                     "image_size": [1150,760],
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 2560,
+                    "max_qa_len_out": 4000,
                     "batch_size": 1
                 }
             },
@@ -79,14 +69,14 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 2560,
+                    "max_qa_len_out": 4000,
                     "image_size": [1150,760],
                     "prefetch_factor": 10,
                     "persistent_workers": true
                 }
             },
             {
-                "freq": 0.095,
+                "freq": 0.295,
                 "config": {
                     "data_set_name": "SynthParaQA",
                     "data_dir": "../data/fonts",
@@ -107,14 +97,14 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 2560,
+                    "max_qa_len_out": 4000,
                     "image_size": [1150,760],
                     "prefetch_factor": 10,
                     "persistent_workers": true
                 }
             },
             {
-                "freq": 0.3,
+                "freq": 0.4,
                 "config": {
                     "data_set_name": "CDIPCloudQA",
                     "data_dir": "../data/CDIPCloud",
@@ -136,7 +126,7 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 2560,
+                    "max_qa_len_out": 4000,
                     "reuse_factor": 1.0
                 }
             }
@@ -196,7 +186,8 @@
             1000
         ],
         "#ramp_down_steps": 10000,
-        "#swa_lr_mul": 0.01
+        "#swa_lr_mul": 0.01,
+        "DEBUG":"DEBUG"
     },
     "arch": "MmSwin",
     "model": {
