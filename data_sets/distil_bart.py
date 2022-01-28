@@ -186,6 +186,11 @@ class DistilBartDataset(torch.utils.data.Dataset):
             assert len(loss_mask) == gt_input_ids.shape[1]
             loss_mask = torch.BoolTensor(loss_mask)[None,:] #tensor and add batch dim
 
+            if not loss_mask.any():
+                #get a new batch
+                return self.__getitem__(index)
+
+
 
         image = 255-image
         if len(image.shape)==2:
