@@ -100,6 +100,7 @@ class DistilBartDataset(torch.utils.data.Dataset):
 
         words,to_remove,target_string,block = makeMLMInstance(ocr)
         if words is None:
+            image=None
             return self.__getitem__(index)
 
 
@@ -188,6 +189,13 @@ class DistilBartDataset(torch.utils.data.Dataset):
 
             if not loss_mask.any():
                 #get a new batch
+                image=None
+                dynamic_prog=None
+                gt_input_ids=None
+                input_ids=None
+                loss_mask=None
+                words=None
+                ocr=None
                 return self.__getitem__(index)
 
 

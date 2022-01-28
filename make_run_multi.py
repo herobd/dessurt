@@ -5,7 +5,7 @@ template= """#!/bin/bash
 #SBATCH --gpus-per-task=1
 #SBATCH  --cpus-per-task=7
 #SBATCH -J "{2}"
-#SBATCH --mem-per-cpu=4G
+#SBATCH --mem-per-cpu=4400M
 #SBATCH --mail-user=herobd@gmail.com   # email address
 #SBATCH --mail-type=END
 #SBATCH --mail-type=FAIL

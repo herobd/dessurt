@@ -1,5 +1,5 @@
 {
-    "name": "distilGN+form+syhw+paraCqa+cdipC_mmswin_bart_PTfrom79i1.2m_94",
+    "name": "syhw+para+cdip_mmswin_bart_PTfrom109i200k_117",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -13,41 +13,6 @@
         "batch_size": 1,
         "num_workers": 6,
         "datasets": [
-            {
-                "freq": 0.2,
-                "config": {
-                    "data_set_name": "DistilBartDataset",
-                    "data_dir": "../data/fonts",
-                    "image_size": [1152,768],
-                    "max_auto_tokens": 512,
-                    "clear_fonts": true,
-                    "min_text_height": 14,
-                    "min_para_width": 0.65
-                }
-            },
-            {
-                "freq": 0.05,
-                "config": {
-                    "data_set_name": "SynthFormDataset",
-                    "data_dir": "../data",
-                    "font_dir": "../data/fonts",
-                    "cased": true,
-                    "use_json": true,
-                    "rescale_range": [0.9,1.1],
-                    "crop_params": {
-                        "crop_size": [
-                            1152,768
-                        ],
-                        "pad": 0,
-                        "rot_degree_std_dev": 1
-                    },
-                    "image_size": [1148,760],
-                    "questions": 1,
-                    "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
-                    "batch_size": 1
-                }
-            },
             {
                 "freq": 0.005,
                 "config": {
@@ -69,7 +34,7 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "image_size": [1148,760],
                     "prefetch_factor": 10,
                     "persistent_workers": true
@@ -97,7 +62,7 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "image_size": [1148,760],
                     "prefetch_factor": 10,
                     "persistent_workers": true
@@ -126,7 +91,7 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "reuse_factor": 1.0
                 }
             }

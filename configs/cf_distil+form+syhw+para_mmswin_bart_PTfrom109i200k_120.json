@@ -1,5 +1,5 @@
 {
-    "name": "distilGN+form+syhw+paraCqa+cdipC_mmswin_bart_PTfrom79i1.2m_94",
+    "name": "distil+form+syhw+para_mmswin_bart_PTfrom109i200k_120",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -44,7 +44,7 @@
                     "image_size": [1148,760],
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "batch_size": 1
                 }
             },
@@ -69,7 +69,7 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "image_size": [1148,760],
                     "prefetch_factor": 10,
                     "persistent_workers": true
@@ -97,37 +97,10 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "image_size": [1148,760],
                     "prefetch_factor": 10,
                     "persistent_workers": true
-                }
-            },
-            {
-                "freq": 0.45,
-                "config": {
-                    "data_set_name": "CDIPCloudQA",
-                    "data_dir": "../data/CDIPCloud",
-                    "mode": "hard_word",
-                    "cased": true,
-                    "batch_size": 1,
-                    "num_workers": 4,
-                    "rescale_range": [
-                        0.9,
-                        1.1
-                    ],
-		    "rescale_to_crop_size_first": true,
-                    "crop_params": {
-                        "crop_size": [
-                            1152,768
-                        ],
-                        "pad": 0,
-                        "rot_degree_std_dev": 1
-                    },
-                    "questions": 1,
-                    "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
-                    "reuse_factor": 1.0
                 }
             }
         ]
