@@ -48,6 +48,7 @@ def collate(batch):
             'pre-recognition': [b.get('pre-recognition') for b in batch],
             "bart_logits": torch.cat([b['bart_logits'] for b in batch],dim=0) if 'bart_logits' in batch[0] else None,
             "bart_last_hidden": torch.cat([b['bart_last_hidden'] for b in batch],dim=0) if 'bart_last_hidden' in batch[0] else None,
+            "distill_loss_mask": torch.cat([b['distill_loss_mask'] for b in batch],dim=0) if 'distill_loss_mask' in batch[0] and batch[0]['distill_loss_mask'] is not None else None,
             }
 
 def getMask(shape,boxes):
