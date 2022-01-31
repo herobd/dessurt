@@ -37,7 +37,7 @@
                 }
             },
             {
-                "freq": 0.005,
+                "freq": 0.01,
                 "config": {
                     "data_set_name": "SynthHWQA",
                     "data_dir": "../data/synth_hw_wiki",
@@ -64,7 +64,7 @@
                 }
             },
             {
-                "freq": 0.295,
+                "freq": 0.29,
                 "config": {
                     "data_set_name": "SynthParaQA",
                     "data_dir": "../data/fonts",

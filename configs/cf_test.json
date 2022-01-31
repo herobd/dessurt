@@ -11,19 +11,123 @@
         "prefetch_factor": 2,
         "persistent_workers": false,
         "batch_size": 1,
-        "num_workers": 2,
+        "num_workers": 6,
         "datasets": [
             {
-                "freq": 0.3,
+                "freq": 0.2,
                 "config": {
                     "data_set_name": "DistilBartDataset",
                     "data_dir": "../data/fonts",
                     "image_size": [1152,768],
                     "max_auto_tokens": 512,
                     "clear_fonts": true,
-                    "loss_mask": true,
                     "min_text_height": 14,
                     "min_para_width": 0.65
+                }
+            },
+            {
+                "freq": 0.05,
+                "config": {
+                    "data_set_name": "SynthFormDataset",
+                    "data_dir": "../data",
+                    "font_dir": "../data/fonts",
+                    "cased": true,
+                    "use_json": true,
+                    "rescale_range": [0.9,1.1],
+                    "crop_params": {
+                        "crop_size": [
+                            1152,768
+                        ],
+                        "pad": 0,
+                        "rot_degree_std_dev": 1
+                    },
+                    "image_size": [1148,760],
+                    "questions": 1,
+                    "max_qa_len_in": 640,
+                    "max_qa_len_out": 4000,
+                    "batch_size": 1
+                }
+            },
+            {
+                "freq": 0.01,
+                "config": {
+                    "data_set_name": "SynthHWQA",
+                    "data_dir": "../data/synth_hw_wiki",
+                    "cased": true,
+                    "batch_size": 1,
+                    "num_workers": 4,
+                    "rescale_range": [
+                        0.9,
+                        1.1
+                    ],
+                    "crop_params": {
+                        "crop_size": [
+                            1152,768
+                        ],
+                        "pad": 0,
+                        "rot_degree_std_dev": 1
+                    },
+                    "questions": 1,
+                    "max_qa_len_in": 640,
+                    "max_qa_len_out": 4000,
+                    "image_size": [1148,760],
+                    "prefetch_factor": 10,
+                    "persistent_workers": true
+                }
+            },
+            {
+                "freq": 0.29,
+                "config": {
+                    "data_set_name": "SynthParaQA",
+                    "data_dir": "../data/fonts",
+                    "mode": "hard_word",
+                    "cased": true,
+                    "batch_size": 1,
+                    "num_workers": 4,
+                    "rescale_range": [
+                        0.9,
+                        1.1
+                    ],
+                    "crop_params": {
+                        "crop_size": [
+                            1152,768
+                        ],
+                        "pad": 0,
+                        "rot_degree_std_dev": 1
+                    },
+                    "questions": 1,
+                    "max_qa_len_in": 640,
+                    "max_qa_len_out": 4000,
+                    "image_size": [1148,760],
+                    "prefetch_factor": 10,
+                    "persistent_workers": true
+                }
+            },
+            {
+                "freq": 0.45,
+                "config": {
+                    "data_set_name": "CDIPCloudQA",
+                    "data_dir": "../data/CDIPCloud",
+                    "mode": "hard_word",
+                    "cased": true,
+                    "batch_size": 1,
+                    "num_workers": 4,
+                    "rescale_range": [
+                        0.9,
+                        1.1
+                    ],
+		    "rescale_to_crop_size_first": true,
+                    "crop_params": {
+                        "crop_size": [
+                            1152,768
+                        ],
+                        "pad": 0,
+                        "rot_degree_std_dev": 1
+                    },
+                    "questions": 1,
+                    "max_qa_len_in": 640,
+                    "max_qa_len_out": 4000,
+                    "reuse_factor": 1.0
                 }
             }
         ]
@@ -82,7 +186,8 @@
             1000
         ],
         "#ramp_down_steps": 10000,
-        "#swa_lr_mul": 0.01
+        "#swa_lr_mul": 0.01,
+        "DEBUG":"DEBUG"
     },
     "arch": "MmSwin",
     "model": {
@@ -94,11 +199,11 @@
         "use_special_question_tokens": true,
         "max_q_tokens": 20,
         "#max_a_tokens": 3400,
-        "max_a_tokens": 512,
+        "max_a_tokens": 800,
         "no_dropout": false,
         "window_size": 12,
         "decode_dim": 768,
-        "dim_ff": 8,
+        "dim_ff": 30,
         "decode_num_heads": 8,
         "blocks_per_level": [
             4,

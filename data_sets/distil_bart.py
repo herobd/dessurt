@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import json
+import logging
 #from skimage import io
 #from skimage import draw
 #import skimage.transform as sktransform
@@ -71,11 +72,18 @@ class DistilBartDataset(torch.utils.data.Dataset):
         self.held_instance=None
         self.used_held = 0
         self.max_used_held = config['prefetch_factor']//2 if 'prefetch_factor' in config else 2
+        self.logger = logging.getLogger(self.__class__.__name__)
 
     def __len__(self):
         return 1000
 
     def __getitem__(self,index):
+        return self.getitem(index)
+    def getitem(self,index,recur=0):
+        if recur>1:
+            self.logger.info('Repeating if distill dataset {}'.format(recur))
+        if recur>15:
+            return None
 
         image_h,image_w = self.image_size
 
@@ -101,7 +109,7 @@ class DistilBartDataset(torch.utils.data.Dataset):
         words,to_remove,target_string,block = makeMLMInstance(ocr)
         if words is None:
             image=None
-            return self.__getitem__(index)
+            return self.getitem(index,recur+1)
 
 
 
@@ -128,7 +136,8 @@ class DistilBartDataset(torch.utils.data.Dataset):
                     print('bad index, probably: {} or {}'.format(input_ids.max(),gt_input_ids.max()))
                     print(bart_input_string)
                     print(target_string)
-                    return self.__getitem__(index)
+                    image=None
+                    return self.getitem(index,recur+1)
             logits = bart_out.logits
             last_hidden = bart_out.decoder_hidden_states[-1]
             #print('End BART '+bart_input_string)
@@ -153,34 +162,38 @@ class DistilBartDataset(torch.utils.data.Dataset):
                     blank = input_id.item()==self.blank_token and ii>1 and ii<input_ids.shape[1]-1
                     possible_paths = []
                     if ii>0 and ti>0:
-                        past_score,mask,past_path = dynamic_prog[ii-1][ti-1]
+                        past_score,mask = dynamic_prog[ii-1][ti-1]
                         possible_paths.append(
                                 (past_score+(0 if same else (1 if blank else 1.1)),
                                     mask+[blank],
-                                    past_path+[(ii,ti)]))
+                                    #past_path+[(ii,ti)]
+                                    ))
                     elif ii==0 and ti==0:
                         possible_paths.append(
                                 ((0 if same else 1),
                                     [blank],
-                                    [(0,0)]))
+                                    #[(0,0)]
+                                    ))
     
                     if ii>0:
-                        past_score,mask,past_path = dynamic_prog[ii-1][ti]
+                        past_score,mask = dynamic_prog[ii-1][ti]
                         possible_paths.append(
                                 (past_score+1.2,
                                     mask,#+['skip'],
-                                    past_path+[(ii,ti)]))
+                                    #past_path+[(ii,ti)]
+                                    ))
                     if ti>0:
-                        past_score,mask,past_path = dynamic_prog[ii][ti-1]
+                        past_score,mask = dynamic_prog[ii][ti-1]
                         possible_paths.append(
                                 (past_score+(0.9 if blank else 1.1),
                                     mask+[blank],
-                                    past_path+[(ii,ti)]))
+                                    #past_path+[(ii,ti)]
+                                    ))
 
                     possible_paths.sort(key=lambda a:a[0])
                     
                     dynamic_prog[ii][ti] = possible_paths[0]
-            score,loss_mask,path = dynamic_prog[-1][-1]
+            score,loss_mask = dynamic_prog[-1][-1]
             #for mask,(ii,ti) in zip(loss_mask,path):
             #    print('{}:{}, {}:{}, {}'.format(ii,input_ids[0,ii].item(),ti,gt_input_ids[0,ti].item(),mask))
             #assert all(m!='bad' for m in loss_mask)
@@ -188,15 +201,17 @@ class DistilBartDataset(torch.utils.data.Dataset):
             loss_mask = torch.BoolTensor(loss_mask)[None,:] #tensor and add batch dim
 
             if not loss_mask.any():
-                #get a new batch
-                image=None
-                dynamic_prog=None
-                gt_input_ids=None
-                input_ids=None
-                loss_mask=None
-                words=None
-                ocr=None
-                return self.__getitem__(index)
+                loss_mask = None
+            #    #get a new batch
+            #    image=None
+            #    dynamic_prog=None
+            #    gt_input_ids=None
+            #    input_ids=None
+            #    loss_mask=None
+            #    words=None
+            #    ocr=None
+            #    return self.getitem(index,recur+1)
+
 
 
 
@@ -267,10 +282,10 @@ class DistilBartDataset(torch.utils.data.Dataset):
                 "answers": [target_string],
                 "mask_label": None,
                 }
-        if logits is not None:
+        if logits is not None and (not self.loss_mask or loss_mask is not None):
             ret["bart_logits"] = logits
             ret["bart_last_hidden"] = last_hidden
-        if self.loss_mask:
+        if self.loss_mask and loss_mask is not None:
             ret['distill_loss_mask'] = loss_mask
 
         return ret
