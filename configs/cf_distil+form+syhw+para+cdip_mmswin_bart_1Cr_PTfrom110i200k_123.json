@@ -1,5 +1,5 @@
 {
-    "name": "distil+form+syhw+para_mmswin_bart_PTfrom109i200k_120",
+    "name": "distil+form+syhw+para+cdip_mmswin_bart_1Cr_PTfrom110i200k_123",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -102,6 +102,33 @@
                     "prefetch_factor": 10,
                     "persistent_workers": true
                 }
+            },
+            {
+                "freq": 0.45,
+                "config": {
+                    "data_set_name": "CDIPCloudQA",
+                    "data_dir": "../data/CDIPCloud",
+                    "mode": "hard_word",
+                    "cased": true,
+                    "batch_size": 1,
+                    "num_workers": 4,
+                    "rescale_range": [
+                        0.9,
+                        1.1
+                    ],
+		    "rescale_to_crop_size_first": true,
+                    "crop_params": {
+                        "crop_size": [
+                            1152,768
+                        ],
+                        "pad": 0,
+                        "rot_degree_std_dev": 1
+                    },
+                    "questions": 1,
+                    "max_qa_len_in": 640,
+                    "max_qa_len_out": 400000,
+                    "reuse_factor": 1.0
+                }
             }
         ]
     },
@@ -166,12 +193,11 @@
         "image_size": [
             1152,768
         ],
+        "max_q_tokens": 20,
+        "max_a_tokens": 800,
         "use_set_length": true,
         "init_from_pretrained": "bart",
         "use_special_question_tokens": true,
-        "max_q_tokens": 20,
-        "#max_a_tokens": 3400,
-        "max_a_tokens": 800,
         "no_dropout": false,
         "window_size": 12,
         "decode_dim": 768,
@@ -194,14 +220,14 @@
             false
         ],
         "swin_cross_attention":[
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
             false,
             false
         ],
