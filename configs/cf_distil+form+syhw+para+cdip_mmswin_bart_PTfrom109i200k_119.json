@@ -168,6 +168,7 @@
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "/fslhome/dmh1993/saved/",
+        "seperate_log_at": "logs",
         "val_step": 999999999999999,
         "save_step": 200000,
         "save_step_minor": 256,
