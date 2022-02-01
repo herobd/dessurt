@@ -159,7 +159,11 @@ def resize(img,dim=None,fx=None,fy=None,order=3): #remove ",interpolation = cv2.
     if dim is None or dim[0]==0:
         downsize = fx<1 and fy<1
         try:
-            return transform.rescale(img,(fy,fx),order,anti_aliasing=downsize,preserve_range=True,multichannel=hasColor)
+            if not hasColor:
+                return transform.rescale(img,(fy,fx),order,anti_aliasing=downsize,preserve_range=True)
+            else:
+                #return transform.rescale(img,(fy,fx),order,anti_aliasing=downsize,preserve_range=True,channel_axis=(2 if hasColor else None))
+                return transform.rescale(img,(fy,fx),order,anti_aliasing=downsize,preserve_range=True,multichannel=True)
         except OverflowError:
             h = max(1,round(img.shape[0]*fy))
             w = max(1,round(img.shape[1]*fx))
