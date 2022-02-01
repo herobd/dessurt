@@ -31,6 +31,13 @@ blank_token = 'ø'
 def norm_ed(s1,s2):
     return editdistance.eval(s1.lower(),s2.lower())/max(len(s1),len(s2),1)
 
+def derepeat(s):
+    #very rough
+    test_len=8
+    for start in range(0,len(s),test_len):
+        test_str = s[start:start+test_len]
+
+
 def findUnmatched(s):
     b_stack=[]
     c_stack=[]
@@ -49,9 +56,9 @@ def findUnmatched(s):
 def fixLoadJSON(pred):
     pred_data = None
     start_len = len(pred)
-    end_token = pred.find('‡')
-    if end_token != -1:
-        pred = pred[:end_token]
+    end_token_loc = pred.find(end_token)
+    if end_token_loc != -1:
+        pred = pred[:end_token_loc]
     counter=2000
     while pred_data is None:
         counter -=1
@@ -417,6 +424,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
     total_rel_pred2 =0
     total_rel_gt2 =0
 
+    tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
+
     going_DEBUG=False
     with torch.no_grad():
         for instance in valid_iter:
@@ -492,7 +501,23 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             question='json>'
             answer,out_mask = model(img,None,[[question]],RUN=True)
             print(answer)
-            pred_data = fixLoadJSON(answer)
+            answer = derepeat(answer)
+            total_answer = answer
+            for i in range(3): #shouldn't need to be more than 4 calls for test set
+                if end_token in total_answer:
+                    break
+                
+                #how much of a lead? Need it to fit tokenwise in the 20 limit
+                tokens = tokenizer.encode(tokens)
+                tokens = tokens[-20:]
+                prompt = tokenizer.decode(tokens,skip_special_tokens=True)
+                question = 'json~'+prompt
+                answer,out_mask = model(img,None,[[question]],RUN=True)
+                answer = derepeat(answer)
+
+                total_answer+=answer
+            
+            pred_data = fixLoadJSON(total_answer)
 
             print('==Corrected==')
             print(json.dumps(pred_data,indent=2))
