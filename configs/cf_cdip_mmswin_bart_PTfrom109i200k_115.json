@@ -77,7 +77,7 @@
         "accum_grad_steps": 128,
         "#swa": true,
         "#swa_start": 200000,
-        "save_dir": "saved/",
+        "save_dir": "/fslhome/dmh1993/saved/",
         "val_step": 999999999999999,
         "save_step": 200000,
         "save_step_minor": 256,
