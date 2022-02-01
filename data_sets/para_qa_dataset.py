@@ -167,7 +167,7 @@ class ParaQADataset(QADataset):
 
 
         self.punc_regex = re.compile('[%s]' % re.escape(string.punctuation))
-        sub_vocab_file = config['sub_vocab_file'] if 'sub_vocab_file' in config else '../data/wordsEn.txt'
+        sub_vocab_file = config['sub_vocab_file'] if 'sub_vocab_file' in config else 'data_sets/wordsEn.txt'
         with open(sub_vocab_file) as f:
             #self.vocab = [w.strip() for w in f.readlines()]
             self.vocab = defaultdict(list)

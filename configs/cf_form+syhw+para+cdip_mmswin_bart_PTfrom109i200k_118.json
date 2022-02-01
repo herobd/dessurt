@@ -1,5 +1,5 @@
 {
-    "name": "test",
+    "name": "form+syhw+para+cdip_mmswin_bart_PTfrom109i200k_118",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -13,18 +13,6 @@
         "batch_size": 1,
         "num_workers": 6,
         "datasets": [
-            {
-                "freq": 0.2,
-                "config": {
-                    "data_set_name": "DistilBartDataset",
-                    "data_dir": "../data/fonts",
-                    "image_size": [1152,768],
-                    "max_auto_tokens": 512,
-                    "clear_fonts": true,
-                    "min_text_height": 14,
-                    "min_para_width": 0.65
-                }
-            },
             {
                 "freq": 0.05,
                 "config": {
@@ -44,7 +32,7 @@
                     "image_size": [1148,760],
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "batch_size": 1
                 }
             },
@@ -69,7 +57,7 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "image_size": [1148,760],
                     "prefetch_factor": 10,
                     "persistent_workers": true
@@ -97,7 +85,7 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "image_size": [1148,760],
                     "prefetch_factor": 10,
                     "persistent_workers": true
@@ -126,7 +114,7 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "reuse_factor": 1.0
                 }
             }
@@ -167,7 +155,7 @@
         "accum_grad_steps": 128,
         "#swa": true,
         "#swa_start": 200000,
-        "save_dir": "saved/",
+        "save_dir": "/fslhome/dmh1993/saved/",
         "val_step": 999999999999999,
         "save_step": 200000,
         "save_step_minor": 256,
@@ -186,8 +174,7 @@
             1000
         ],
         "#ramp_down_steps": 10000,
-        "#swa_lr_mul": 0.01,
-        "DEBUG":"DEBUG"
+        "#swa_lr_mul": 0.01
     },
     "arch": "MmSwin",
     "model": {
@@ -203,7 +190,7 @@
         "no_dropout": false,
         "window_size": 12,
         "decode_dim": 768,
-        "dim_ff": 30,
+        "dim_ff": 3072,
         "decode_num_heads": 8,
         "blocks_per_level": [
             4,

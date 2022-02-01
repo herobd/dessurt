@@ -15,10 +15,21 @@ Don't use conda for the following libraries:
 * timm
 * editdistance
 
-`conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-lts -c nvidia`
+Actually it's kind of important to do it in this order:
+
+###Environment setup
+
+`conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch`
 `conda install scikit-image`
 `conda install shapely`
 `pip install editdistance timm datasets transformers`
+
+synthetic_text_gen
+`python setup.py install`
+
+Not this:
+`conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-lts -c nvidia`
+
 
 
 If doing FUDGE stuff:

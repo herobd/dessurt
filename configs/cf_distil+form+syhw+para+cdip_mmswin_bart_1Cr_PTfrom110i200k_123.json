@@ -1,5 +1,5 @@
 {
-    "name": "test",
+    "name": "distil+form+syhw+para+cdip_mmswin_bart_1Cr_PTfrom110i200k_123",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -44,7 +44,7 @@
                     "image_size": [1148,760],
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "batch_size": 1
                 }
             },
@@ -69,7 +69,7 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "image_size": [1148,760],
                     "prefetch_factor": 10,
                     "persistent_workers": true
@@ -97,7 +97,7 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "image_size": [1148,760],
                     "prefetch_factor": 10,
                     "persistent_workers": true
@@ -126,7 +126,7 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "reuse_factor": 1.0
                 }
             }
@@ -186,24 +186,22 @@
             1000
         ],
         "#ramp_down_steps": 10000,
-        "#swa_lr_mul": 0.01,
-        "DEBUG":"DEBUG"
+        "#swa_lr_mul": 0.01
     },
     "arch": "MmSwin",
     "model": {
         "image_size": [
             1152,768
         ],
+        "max_q_tokens": 20,
+        "max_a_tokens": 800,
         "use_set_length": true,
         "init_from_pretrained": "bart",
         "use_special_question_tokens": true,
-        "max_q_tokens": 20,
-        "#max_a_tokens": 3400,
-        "max_a_tokens": 800,
         "no_dropout": false,
         "window_size": 12,
         "decode_dim": 768,
-        "dim_ff": 30,
+        "dim_ff": 3072,
         "decode_num_heads": 8,
         "blocks_per_level": [
             4,
@@ -222,14 +220,14 @@
             false
         ],
         "swin_cross_attention":[
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
             false,
             false
         ],

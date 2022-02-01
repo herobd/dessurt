@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from model.pairing_g_graph_layoutlm import  runLayoutLM
 from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding, BartLearnedPositionalEmbedding
 from model.rel_pos_im_transformer import QTransformerLayer
 from model.swin_transformer import ConvPatchEmbed, SwinTransformerBlock, PatchMerging, PatchEmbed
