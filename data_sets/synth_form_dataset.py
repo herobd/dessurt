@@ -1206,7 +1206,8 @@ class SynthFormDataset(FormQA):
                         img_f.rectangle(image,(x-pad_w,y-pad_h),(rightmost_value_x[col_number]+pad_w,y+img_h+pad_h),color,line_thickness)
                     lowest_y = max(lowest_y,y+img_h+pad_h)
 
-            assert rightmost_x>init_x
+            if rightmost_x<init_x:
+                continue
             return True,(init_x,init_y,rightmost_x,lowest_y)
         return False,None
 

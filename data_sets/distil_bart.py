@@ -80,8 +80,8 @@ class DistilBartDataset(torch.utils.data.Dataset):
     def __getitem__(self,index):
         return self.getitem(index)
     def getitem(self,index,recur=0):
-        if recur>1:
-            self.logger.info('Repeating if distill dataset {}'.format(recur))
+        #if recur>1:
+        #    self.logger.info('Repeating if distill dataset {}'.format(recur))
         if recur>15:
             return None
 
