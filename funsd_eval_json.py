@@ -19,6 +19,8 @@ from utils import img_f
 from utils.util import pointDistance
 import editdistance
 import random
+import re
+from transformers import BartTokenizer
 try:
     import easyocr
 except:
@@ -33,10 +35,15 @@ def norm_ed(s1,s2):
 
 def derepeat(s):
     #very rough
-    test_len=8
-    for start in range(0,len(s),test_len):
-        test_str = s[start:start+test_len]
+    while True:
+        m = re.search(r'(.......+)\1\1\1\1\1\1\1+',s)
+        if m is None:
+            break
 
+        start,end = m.span()
+        end-=len(m[1])
+        s = s[:start]+s[end:]
+    return s
 
 def findUnmatched(s):
     b_stack=[]
@@ -106,7 +113,14 @@ def fixLoadJSON(pred):
                     if comma>bracket:
                         pred = pred[:comma]+']},{'+pred[comma+1:]
                     else:
-                        pred = pred[:bracket+1]+'],'+pred[bracket+1]
+                        #unless this is a table, we want seperate objects
+                        curley = pred[:bracket].rfind('{')
+                        sub = pred[curley+1:bracket]
+                        if 'headers' in sub or 'cells' in sub:
+                            #table
+                            pred = pred[:bracket+1]+'],'+pred[bracket+1:]
+                        else:
+                            pred = pred[:bracket+1]+']},{'+pred[bracket+1:]
                 elif pred[char]==']' and pred[char-1]=='"':
                     assert pred[:char-1].rfind('[')<pred[:char-1].rfind('{')
                     pred = pred[:char]+'}'+pred[char:]
@@ -195,6 +209,8 @@ def parseDict(header,entities,links):
     row_headers = None
     col_headers = None
     cells = None
+    my_text = None
+    return_ids=[]
     for text,value in header.items():
         if text=='content':
             if isinstance(value,list):
@@ -221,6 +237,14 @@ def parseDict(header,entities,links):
             is_table = True
         else:
             if isinstance(value,str):
+                if my_text is not None:
+                    #merged entity?
+                    my_id=len(entities)
+                    entities.append(Entity(my_text,my_class,my_id))
+                    for other_id in to_link:
+                        links.append((my_id,other_id))
+                    to_link = []
+                    return_ids.append(my_id)
                 my_text = text
                 my_class = value
             elif isinstance(value,list) and text=='cells':
@@ -231,7 +255,7 @@ def parseDict(header,entities,links):
         entities.append(Entity(my_text,my_class,my_id))
         for other_id in to_link:
             links.append((my_id,other_id))
-        return [my_id]
+        return_ids.append(my_id)
     else:
         #a table
         if row_headers is not None:
@@ -254,7 +278,9 @@ def parseDict(header,entities,links):
                         if col_headers is not None and len(col_ids)>c:
                             links.append((col_ids[c],c_id))
 
-        return row_ids+col_ids
+        return_ids+=row_ids+col_ids
+
+    return return_ids
 
 
 

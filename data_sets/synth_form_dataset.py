@@ -667,6 +667,8 @@ class SynthFormDataset(FormQA):
 
         #generate text images
         if title is not None:
+            if random.random()<0.02 and title[-1]!=':':
+                title+=':'
             title_words,title_font = self.gen_daemon.generate(title,ret_font=True) #(text,img)
         if label_matches_title:
             label_font = title_font

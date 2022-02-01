@@ -1,14 +1,26 @@
-from transformers import BartTokenizer
-tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
+import re
+from funsd_eval_json import derepeat
 
-print(tokenizer('This is a sentence[NE:O]'))
+a ='bkd dfkljrgt fkldsf something sdjff something dkf something sdkf something defsdfdsfds something sdfd something s something {bad: class}, {bad: class}, {bad: class}, {bad: class}, {bad: class}, {bad: class}, {bad: class}, {bad: class}, {bad: cl something dfl;jsdklgdfjklg {bad: class} something'
 
-tokens = ["[NE:{}]".format(cls) for cls in ['N', 'C', 'L', 'T', 'O', 'P', 'G','N  ORP', 'LAW', 'PER', 'QUANTITY', 'MONEY', 'CARDINAL', 'LOCATION', 'LANGUAGE', 'ORG', 'DATE',   'FAC', 'ORDINAL', 'TIME', 'WORK_OF_ART', 'PERCENT', 'GPE', 'EVENT', 'PRODUCT']]
-tokenizer.add_tokens(tokens, special_tokens=True)
+print(derepeat(a))
 
-print(tokens)
 
-print(tokenizer('This is a sentence[NE:O]'))
+
+
+
+
+#from transformers import BartTokenizer
+#tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
+#
+#print(tokenizer('This is a sentence[NE:O]'))
+#
+#tokens = ["[NE:{}]".format(cls) for cls in ['N', 'C', 'L', 'T', 'O', 'P', 'G','N  ORP', 'LAW', 'PER', 'QUANTITY', 'MONEY', 'CARDINAL', 'LOCATION', 'LANGUAGE', 'ORG', 'DATE',   'FAC', 'ORDINAL', 'TIME', 'WORK_OF_ART', 'PERCENT', 'GPE', 'EVENT', 'PRODUCT']]
+#tokenizer.add_tokens(tokens, special_tokens=True)
+#
+#print(tokens)
+#
+#print(tokenizer('This is a sentence[NE:O]'))
 
 
 
