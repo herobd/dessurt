@@ -203,6 +203,9 @@ class Entity():
         self.text_lines = text.split('\\')
         self.cls=cls
         self.id=identity
+
+    def __repr__(self):
+        return '({} :: {})'.format(self.text,self.cls)
 def parseDict(header,entities,links):
     to_link=[]
     is_table=False
@@ -211,6 +214,7 @@ def parseDict(header,entities,links):
     cells = None
     my_text = None
     return_ids=[]
+    double_entity=[]
     for text,value in header.items():
         if text=='content':
             if isinstance(value,list):
@@ -239,12 +243,13 @@ def parseDict(header,entities,links):
             if isinstance(value,str):
                 if my_text is not None:
                     #merged entity?
-                    my_id=len(entities)
-                    entities.append(Entity(my_text,my_class,my_id))
-                    for other_id in to_link:
-                        links.append((my_id,other_id))
+                    double_entity.append((my_text,my_class,to_link))
+                    #my_id=len(entities)
+                    #entities.append(Entity(my_text,my_class,my_id))
+                    #for other_id in to_link:
+                    #    links.append((my_id,other_id))
+                    #return_ids.append(my_id)
                     to_link = []
-                    return_ids.append(my_id)
                 my_text = text
                 my_class = value
             elif isinstance(value,list) and text=='cells':
@@ -280,12 +285,20 @@ def parseDict(header,entities,links):
 
         return_ids+=row_ids+col_ids
 
+    for my_text,my_class,to_link in double_entity:
+        my_id=len(entities)
+        entities.append(Entity(my_text,my_class,my_id))
+        for other_id in to_link:
+            links.append((my_id,other_id))
+        return_ids.append(my_id)
+
     return return_ids
 
 
 
 
 def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False,max_qa_len=None,quiet=False,BROS=False):
+    TRUER=True #False makes this do pair-first alignment, which is kind of cheating
     np.random.seed(1234)
     torch.manual_seed(1234)
     DEBUG=True
@@ -467,7 +480,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if not going_DEBUG and instance['imgName']!='92314414':
+            if not going_DEBUG and instance['imgName']!='92657391':
                 continue
             going_DEBUG=True
 
@@ -475,9 +488,11 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
 
             transcription_groups = []
             transcription_firstline = []
+            pos_groups = []
             for group in groups:
                 transcription_groups.append('\\'.join([transcription_lines[t] for t in group]))
                 transcription_firstline.append(transcription_lines[group[0]])
+                pos_groups.append(loc_lines[group[0]])
 
 
             classes = [classes_lines[group[0]].argmax() for group in groups]
@@ -539,6 +554,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 prompt = tokenizer.decode(tokens,skip_special_tokens=True)
                 question = 'json~'+prompt
                 answer,out_mask = model(img,None,[[question]],RUN=True)
+                print(answer)
                 answer = derepeat(answer)
 
                 total_answer+=answer
@@ -551,12 +567,35 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             #get entities and links
             pred_entities=[]
             pred_links=[]
-            for thing in pred_data:
+            for thing in pred_data[::-1]: #build pred_entities in reverse
                 if isinstance(thing,dict):
                     parseDict(thing,pred_entities,pred_links)
                 else:
                     print('non-dict at document level: {}'.format(thing))
                     import pdb;pdb.set_trace()
+
+
+            #we're going to do a check for repeats of the last entity. This frequently happens
+            last_entity = pred_entities[-1]
+            remove = None
+            entities_with_link = None
+            for i in range(len(pred_entities)-2,0,-1):
+                if pred_entities[i].text==last_entity.text and pred_entities[i].cls==last_entity.cls:
+                    if entities_with_link is None:
+                        entities_with_link = set()
+                        for a,b in pred_links:
+                            entities_with_link.add(a)
+                            entities_with_link.add(b)
+
+                    if i not in entities_with_link:
+                        remove=i+1
+                    else:
+                        break
+                else:
+                    break
+            if remove is not None:
+                print('removing duplicate end entities: {}'.format(pred_entities[remove:]))
+                pred_entities = pred_entities[:remove]
                 
             #align entities to GT ones
             #pred_to_gt={}
@@ -565,169 +604,302 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             #    closest_e_i=-1
             #    for e_i,entity in pred_entities:
             #        dist
-            #TODO should find pairs in GT with matching text and handle these seperately/after
+            #should find pairs in GT with matching text and handle these seperately/after
             match_thresh = 0.6
-            gt_pair_hit=[False]*len(pairs)
-            rel_truepos=0
-            pred_to_gt=defaultdict(list)
-            good_pred_pairs = []
-            bad_pred_pairs = []
-            for p_a,p_b in pred_links:
-                e_a = pred_entities[p_a]
-                e_b = pred_entities[p_b]
 
-                a_aligned = pred_to_gt.get(p_a,-1)
-                b_aligned = pred_to_gt.get(p_b,-1)
+            if TRUER:
+                DIST_SCORE=600
+                #order entities by y
+                gt_entities = []
+                for i,(text,text_firstline,(x,y),cls) in enumerate(zip(transcription_groups,transcription_firstline,pos_groups,gt_classes)):
+                    gt_entities.append((i,x,y,text_firstline if BROS else text,cls))
+                #gt_entities.sort(key=lambda a:a[2])
 
-                best_score = 99999
-                best_gt_pair = -1
-                for pairs_i,(g_a,g_b) in enumerate(pairs):
-                    #can't match to a gt pair twice
-                    if gt_pair_hit[pairs_i]:
-                        continue
-
-                    if a_aligned==-1 and b_aligned==-1:
-
+                pos_in_gt=0
+                last_x=0
+                last_y=0
+                gt_to_pred = defaultdict(list)
+                all_scores = defaultdict(dict)
+                for p_i,entity in enumerate(pred_entities)[::-1]:
+                    #if 'NAME' in entity.text:
+                    #    import pdb; pdb.set_trace()
+                    best_score=9999999
+                    for g_i,x,y,g_text,cls in gt_entities:
                         if BROS:
-                            dist_aa = norm_ed(transcription_firstline[g_a],e_a.text_lines[0]) if e_a.cls==gt_classes[g_a] else 99
-                            dist_bb = norm_ed(transcription_firstline[g_b],e_b.text_lines[0]) if e_b.cls==gt_classes[g_b] else 99
-                            dist_ab = norm_ed(transcription_firstline[g_a],e_b.text_lines[0]) if e_b.cls==gt_classes[g_a] else 99
-                            dist_ba = norm_ed(transcription_firstline[g_b],e_a.text_lines[0]) if e_a.cls==gt_classes[g_b] else 99
-                        else:
-                            dist_aa = norm_ed(transcription_groups[g_a],e_a.text) if e_a.cls==gt_classes[g_a] else 99
-                            dist_bb = norm_ed(transcription_groups[g_b],e_b.text) if e_b.cls==gt_classes[g_b] else 99
-                            dist_ab = norm_ed(transcription_groups[g_a],e_b.text) if e_b.cls==gt_classes[g_a] else 99
-                            dist_ba = norm_ed(transcription_groups[g_b],e_a.text) if e_a.cls==gt_classes[g_b] else 99
-                        
-                        if dist_aa+dist_bb < dist_ab+dist_ba and dist_aa<match_thresh and dist_bb<match_thresh:
-                            score = dist_aa+dist_bb
+                            p_text = entity.text_lines[0]
+                        else: 
+                            p_text = entity.text
+
+                        text_dist = norm_ed(p_text,g_text)
+                        if text_dist<match_thresh:# and cls==entity.cls: cheating a little if we use class
+
+                            dist = abs(last_y-y) + 0.1*abs(last_x-x)#math.sqrt((last_y-y)**2)+((last_x-x)**2))
+                            #TODO asymetric, penalize up alignment more than down
+                            score = text_dist + dist/DIST_SCORE
+
+                            all_scores[p_i][g_i]=score
+
                             if score<best_score:
+                                align_g_i = g_i
+                                align_x = x
+                                align_y = y
                                 best_score = score
-                                best_gt_pair = pairs_i
-                                matching = (g_a,g_b)
-                        elif dist_ab<match_thresh and dist_ba<match_thresh:
-                            score = dist_ab+dist_ba
-                            if score<best_score:
-                                best_score = score
-                                best_gt_pair = pairs_i
-                                matching = (g_b,g_a)
-                    elif a_aligned!=-1 and b_aligned!=-1:
-                        if g_a == a_aligned and g_b == b_aligned:
-                            matching = (g_a,g_b)
-                            best_gt_pair = pairs_i
-                            break #can't get better than this if restricting alignment
-                        elif g_a == b_aligned and g_b == a_aligned:
-                            matching = (g_b,g_a)
-                            best_gt_pair = pairs_i
-                            break #can't get better than this if restricting alignment
+                    if best_score<9999999:
+                        gt_to_pred[align_g_i].append((p_i,best_score))
+                        last_x=align_x
+                        last_y=align_y
+
+                #Now, we potentially aligned multiple pred entities to gt entities
+                #We need to resolve these by finding the best alternate match for the worse match
+                new_gt_to_pred={}#[None]*len(groups)
+                new_gt_to_pred_scores={}
+                to_realign=[]
+                for g_i,p_is in gt_to_pred.items():
+                    if len(p_is)==1:
+                        new_gt_to_pred[g_i]=p_is[0][0]
+                        new_gt_to_pred_scores[g_i]=p_is[0][1]
                     else:
-                        #only one is aligned
-                        if a_aligned!=-1:
-                            p_loose = p_b
-                            e_loose = e_b
-                            if g_a == a_aligned:
-                                g_have = g_a
-                                g_other = g_b
-                            elif g_b == a_aligned:
-                                g_have = g_b
-                                g_other = g_a
-                            else:
-                                continue #not match for aligned
-                        else:
-                            p_loose = p_a
-                            e_loose = e_a
-                            if g_a == b_aligned:
-                                g_have = g_a
-                                g_other = g_b
-                            elif g_b == b_aligned:
-                                g_have = g_b
-                                g_other = g_a
-                            else:
-                                continue
+                        p_is.sort(key=lambda a:a[1])
+                        new_gt_to_pred[g_i]=p_is[0][0] #best score gets it
+                        new_gt_to_pred_scores[g_i]=p_is[0][1]
+                        for p_i,_ in p_is[1:]:
+                            to_realign.append(p_i)
+                            #scores = [(g_i,score) for g_i,score in all_scores[p_i].items()]
+                            #best_score=9999999
+                            #for g_i,score in all_scores[p_i].items():
+                            #    if score<best_score:
+                            #        can_match = True
+                            #        if g_i in gt_to_pred:
+                            #            for p_i,score_other in gt_to_pred[g_i]:
+                            #                if score>score_other:
+                            #                    can_match=False
+                            #                    break
+                            #        if can_match:
+                            #            align_g_i=g_i
+                            #            best_score=score
+                            #if best_score<9999999:
+                            #    if  len(gt_to_pred[align_g_i])>0:
+                            #        to_realign+=gt_to_pred[align_g_i]
+                            #    new_gt_to_pred[align_g_i]=p_i
+                debug_count=0
+                while len(to_realign)>0:
+                    if debug_count>50:
+                        print('infinite loop')
+                        import pdb;pdb.set_trace()
+                    debug_count+=1
 
-                        if BROS:
-                            score = norm_ed(transcription_firstline[g_other],e_loose.text_lines[0]) if e_loose.cls==gt_classes[g_other] else 99
-                        else:
-                            score = norm_ed(transcription_groups[g_other],e_loose.text) if e_loose.cls==gt_classes[g_other] else 99
-                        if score<best_score and score<match_thresh:
-                            matching = (g_have,g_other) if a_aligned!=-1 else (g_other,g_have)
-                            best_gt_pair = pairs_i
+                    doing = to_realign
+                    to_realign = []
+                    for p_i in doing:
+                        scores = [(g_i,score) for g_i,score in all_scores[p_i].items()]
+                        best_score=9999999
+                        for g_i,score in all_scores[p_i].items():
+                            if score<best_score:
+                                can_match = g_i not in new_gt_to_pred or score<new_gt_to_pred_scores[g_i]
+                                if can_match:
+                                    align_g_i=g_i
+                                    best_score=score
+                        if best_score<9999999:
+                            if align_g_i in new_gt_to_pred:
+                                to_realign.append(new_gt_to_pred[align_g_i])
+                            new_gt_to_pred[align_g_i]=p_i
+                            new_gt_to_pred_scores[align_g_i]=best_score
+                        #else:
+                            #unmatched
 
-
-                if best_gt_pair!=-1:
-                    gt_pair_hit[best_gt_pair]=True
-                    pred_to_gt[p_a] = matching[0]
-                    pred_to_gt[p_b] = matching[1]
-                    rel_truepos+=1
-                    good_pred_pairs.append((p_a,p_b))
-                else:
-                    bad_pred_pairs.append((p_a,p_b))
-
-                #    rel_FP+=1
-            assert rel_truepos==sum(gt_pair_hit)
-            rel_recall = sum(gt_pair_hit)/len(pairs) if len(pairs)>0 else 1
-            rel_prec = rel_truepos/len(pred_links) if len(pred_links)>0 else 1
-
-            #Now look at the entities. We have some aligned already, do the rest
-            gt_entities_hit = [[] for i in range(len(transcription_groups))]
-            to_align = []
-            for p_i in range(len(pred_entities)):
-                if p_i in pred_to_gt:
-                    gt_entities_hit[pred_to_gt[p_i]].append(p_i)
-                else:
-
-                    to_align.append(p_i)
-
-            #resolve ambiguiotity
-            for p_is in gt_entities_hit:
-                if len(p_is)>1:
-                    #can only align one
-                    cls= pred_entities[p_is[0]].cls
-                    for e_i in p_is[1:]:
-                        assert pred_entities[e_i].cls == cls
-
-            for p_i in to_align:
-                e_i = pred_entities[p_i]
-                best_score = 999999999
-                match = None
-                for g_i,p_is in enumerate(gt_entities_hit):
-                    if len(p_is)==0:
-                        if BROS:
-                            score = norm_ed(transcription_firstline[g_i],e_i.text_lines[0]) if e_i.cls==gt_classes[g_i] else 99
-                        else:
-                            score = norm_ed(transcription_groups[g_i],e_i.text) if e_i.cls==gt_classes[g_i] else 99
-                        if score<match_thresh and score<best_score:
-                            best_score = score
-                            match = g_i
-
-                if match is None:
-                    #false positive? Split entity?
-                    print('No match found for pred entitiy: {}'.format(e_i.text))
-                    #import pdb;pdb.set_trace()
-                    pass
-                else:
-                    gt_entities_hit[match].append(p_i)
-                    pred_to_gt[p_i]=match
-
-            #check completion of entities (pred have all the lines)
-            entities_truepos=0
-            for g_i,p_i in enumerate(gt_entities_hit):
-                if len(p_i)>0:
-                    p_i=p_i[0]
-                    p_lines = pred_entities[p_i].text_lines
-                    g_lines = transcription_groups[g_i].split('\\')
-
-                    if len(p_lines)==len(g_lines):
+                
+                entities_truepos = 0
+                for g_i,p_i in new_gt_to_pred.items():
+                    if gt_classes[g_i]==pred_entities[p_i].cls:
                         entities_truepos+=1
+                        #print('A hit G:{} <> P:{}'.format(transcription_groups[g_i],pred_entities[p_i].text))
+
+                rel_truepos = 0
+                good_pred_pairs = set()
+                for g_i1,g_i2 in pairs:
+                    if g_i1 in new_gt_to_pred and g_i2 in new_gt_to_pred:
+                        p_i1 = new_gt_to_pred[g_i1]
+                        p_i2 = new_gt_to_pred[g_i2]
+                        if gt_classes[g_i1]==pred_entities[p_i1].cls and gt_classes[g_i2]==pred_entities[p_i2].cls:
+                            if (p_i1,p_i2) in pred_links or (p_i2,p_i1) in pred_links:
+                                rel_truepos+=1
+                                if draw:
+                                    if (p_i1,p_i2) in pred_links:
+                                        good_pred_pairs.add((p_i1,p_i2))
+                                    else:
+                                        good_pred_pairs.add((p_i2,p_i1))
+                    
+                        
+                if draw:
+                    pred_to_gt = {p_i:g_i for g_i,p_i in new_gt_to_pred.items()}
+                    #for p_i,g_i in pred_to_gt.items():
+                    #    print('algind G:{} <> P:{}'.format(transcription_groups[g_i],pred_entities[p_i].text))
+                    bad_pred_pairs=set(pred_links)-good_pred_pairs
+                ############
+            else:
+                gt_pair_hit=[False]*len(pairs)
+                rel_truepos=0
+                pred_to_gt=defaultdict(list)
+                good_pred_pairs = []
+                bad_pred_pairs = []
+                for p_a,p_b in pred_links:
+                    e_a = pred_entities[p_a]
+                    e_b = pred_entities[p_b]
+
+                    a_aligned = pred_to_gt.get(p_a,-1)
+                    b_aligned = pred_to_gt.get(p_b,-1)
+
+                    best_score = 99999
+                    best_gt_pair = -1
+                    for pairs_i,(g_a,g_b) in enumerate(pairs):
+                        #can't match to a gt pair twice
+                        if gt_pair_hit[pairs_i]:
+                            continue
+
+                        if a_aligned==-1 and b_aligned==-1:
+
+                            if BROS:
+                                dist_aa = norm_ed(transcription_firstline[g_a],e_a.text_lines[0]) if e_a.cls==gt_classes[g_a] else 99
+                                dist_bb = norm_ed(transcription_firstline[g_b],e_b.text_lines[0]) if e_b.cls==gt_classes[g_b] else 99
+                                dist_ab = norm_ed(transcription_firstline[g_a],e_b.text_lines[0]) if e_b.cls==gt_classes[g_a] else 99
+                                dist_ba = norm_ed(transcription_firstline[g_b],e_a.text_lines[0]) if e_a.cls==gt_classes[g_b] else 99
+                            else:
+                                dist_aa = norm_ed(transcription_groups[g_a],e_a.text) if e_a.cls==gt_classes[g_a] else 99
+                                dist_bb = norm_ed(transcription_groups[g_b],e_b.text) if e_b.cls==gt_classes[g_b] else 99
+                                dist_ab = norm_ed(transcription_groups[g_a],e_b.text) if e_b.cls==gt_classes[g_a] else 99
+                                dist_ba = norm_ed(transcription_groups[g_b],e_a.text) if e_a.cls==gt_classes[g_b] else 99
+                            
+                            if dist_aa+dist_bb < dist_ab+dist_ba and dist_aa<match_thresh and dist_bb<match_thresh:
+                                score = dist_aa+dist_bb
+                                if score<best_score:
+                                    best_score = score
+                                    best_gt_pair = pairs_i
+                                    matching = (g_a,g_b)
+                            elif dist_ab<match_thresh and dist_ba<match_thresh:
+                                score = dist_ab+dist_ba
+                                if score<best_score:
+                                    best_score = score
+                                    best_gt_pair = pairs_i
+                                    matching = (g_b,g_a)
+                        elif a_aligned!=-1 and b_aligned!=-1:
+                            if g_a == a_aligned and g_b == b_aligned:
+                                matching = (g_a,g_b)
+                                best_gt_pair = pairs_i
+                                break #can't get better than this if restricting alignment
+                            elif g_a == b_aligned and g_b == a_aligned:
+                                matching = (g_b,g_a)
+                                best_gt_pair = pairs_i
+                                break #can't get better than this if restricting alignment
+                        else:
+                            #only one is aligned
+                            if a_aligned!=-1:
+                                p_loose = p_b
+                                e_loose = e_b
+                                if g_a == a_aligned:
+                                    g_have = g_a
+                                    g_other = g_b
+                                elif g_b == a_aligned:
+                                    g_have = g_b
+                                    g_other = g_a
+                                else:
+                                    continue #not match for aligned
+                            else:
+                                p_loose = p_a
+                                e_loose = e_a
+                                if g_a == b_aligned:
+                                    g_have = g_a
+                                    g_other = g_b
+                                elif g_b == b_aligned:
+                                    g_have = g_b
+                                    g_other = g_a
+                                else:
+                                    continue
+
+                            if BROS:
+                                score = norm_ed(transcription_firstline[g_other],e_loose.text_lines[0]) if e_loose.cls==gt_classes[g_other] else 99
+                            else:
+                                score = norm_ed(transcription_groups[g_other],e_loose.text) if e_loose.cls==gt_classes[g_other] else 99
+                            if score<best_score and score<match_thresh:
+                                matching = (g_have,g_other) if a_aligned!=-1 else (g_other,g_have)
+                                best_gt_pair = pairs_i
+
+
+                    if best_gt_pair!=-1:
+                        gt_pair_hit[best_gt_pair]=True
+                        pred_to_gt[p_a] = matching[0]
+                        pred_to_gt[p_b] = matching[1]
+                        rel_truepos+=1
+                        good_pred_pairs.append((p_a,p_b))
                     else:
-                        print('Incomplete entity')
-                        print('    GT:{}'.format(g_lines))
-                        print('  pred:{}'.format(p_lines))
+                        bad_pred_pairs.append((p_a,p_b))
+
+                    #    rel_FP+=1
+                assert rel_truepos==sum(gt_pair_hit)
+                rel_recall = sum(gt_pair_hit)/len(pairs) if len(pairs)>0 else 1
+                rel_prec = rel_truepos/len(pred_links) if len(pred_links)>0 else 1
+
+                #Now look at the entities. We have some aligned already, do the rest
+                gt_entities_hit = [[] for i in range(len(transcription_groups))]
+                to_align = []
+                for p_i in range(len(pred_entities)):
+                    if p_i in pred_to_gt:
+                        gt_entities_hit[pred_to_gt[p_i]].append(p_i)
+                    else:
+
+                        to_align.append(p_i)
+
+                #resolve ambiguiotity
+                for p_is in gt_entities_hit:
+                    if len(p_is)>1:
+                        #can only align one
+                        cls= pred_entities[p_is[0]].cls
+                        for e_i in p_is[1:]:
+                            assert pred_entities[e_i].cls == cls
+
+                for p_i in to_align:
+                    e_i = pred_entities[p_i]
+                    best_score = 999999999
+                    match = None
+                    for g_i,p_is in enumerate(gt_entities_hit):
+                        if len(p_is)==0:
+                            if BROS:
+                                score = norm_ed(transcription_firstline[g_i],e_i.text_lines[0]) if e_i.cls==gt_classes[g_i] else 99
+                            else:
+                                score = norm_ed(transcription_groups[g_i],e_i.text) if e_i.cls==gt_classes[g_i] else 99
+                            if score<match_thresh and score<best_score:
+                                best_score = score
+                                match = g_i
+
+                    if match is None:
+                        #false positive? Split entity?
+                        print('No match found for pred entitiy: {}'.format(e_i.text))
+                        #import pdb;pdb.set_trace()
+                        pass
+                    else:
+                        gt_entities_hit[match].append(p_i)
+                        pred_to_gt[p_i]=match
+
+                #check completion of entities (pred have all the lines)
+                entities_truepos=0
+                for g_i,p_i in enumerate(gt_entities_hit):
+                    if len(p_i)>0:
+                        p_i=p_i[0]
+                        p_lines = pred_entities[p_i].text_lines
+                        g_lines = transcription_groups[g_i].split('\\')
+
+                        if len(p_lines)==len(g_lines):
+                            entities_truepos+=1
+                        else:
+                            print('Incomplete entity')
+                            print('    GT:{}'.format(g_lines))
+                            print('  pred:{}'.format(p_lines))
                     
 
                     
             entity_recall = entities_truepos/len(transcription_groups)
             entity_prec = entities_truepos/len(pred_entities)
+            rel_recall = rel_truepos/len(pairs) if len(pairs)>0 else 1
+            rel_prec = rel_truepos/len(pred_links) if len(pred_links)>0 else 1
 
             total_entity_true_pos += entities_truepos
             total_entity_pred += len(pred_entities)
@@ -770,9 +942,13 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                             y1=min(y1,y1_)
                             x2=max(x2,x2_)
                             y2=max(y2,y2_)
-
-                        img_f.rectangle(draw_img,(x1,y1),(x2,y2),color,2)
                         mid_points.append(((x1+x2)//2,(y1+y2)//2))
+                        if cls == gt_classes[g_i]:
+                            img_f.rectangle(draw_img,(x1,y1),(x2,y2),color,2)
+                        else:
+                            x,y = mid_points[-1]
+                            draw_img[y-3:y+3,x-3:x+3]=color
+
                     else:
                         print('unmatched entity: {}'.format(entity.text))
                         best=9999999999
