@@ -36,12 +36,13 @@ def norm_ed(s1,s2):
 def derepeat(s):
     #very rough
     while True:
-        m = re.search(r'(.......+)\1\1\1\1\1\1\1+',s)
+        #m = re.search(r'(.......+)\1\1\1\1\1\1\1+',s) #8 chars, 7 repeat
+        m = re.search(r'(.......+)\1\1\1\1\1+',s) #8 chars, 5 repeat
         if m is None:
             break
 
         start,end = m.span()
-        end-=len(m[1])
+        #end-=len(m[1]) #keep one
         s = s[:start]+s[end:]
     return s
 
@@ -143,27 +144,62 @@ def fixLoadJSON(pred):
                 elif pred[char]=='}' and pred[:char].rfind('{')<pred[:char].rfind('}'):
                     #random extra close curelybrace
                     pred = pred[:char]+pred[char+1:]
+                elif pred[char-1]=='"' and pred[char:].find('"')+1==pred[char:].find(':'):
+                    #forgot to seperate something
+                    pred = pred[:char]+',"'+pred[char:]
+                elif pred[char:].startswith('answers') or pred[char:].startswith('"answers') or pred[char:].startswith(' "answers'):
+                    #we need to add this to the previous entity
+                    if pred[char:].startswith('answers'):
+                        prepend=', "'
+                    elif pred[char:].startswith(' "answers'):
+                        prepend=','
+                    else:
+                        prepend=', '
+                    prev_quote = pred[:char].rfind('"')
+                    prev_curly = pred[:char].rfind('}')
+                    prev_comma = pred[:char].rfind(',')
+                    if prev_curly > prev_quote and prev_curly+1==prev_comma:
+                        pred = pred[:prev_curly]+prepend+pred[prev_comma+1:]
+                    else:
+                        assert False
                 else:
                     assert False
             elif "Expecting ';' delimiter" in typ:
                 if char==len(pred):
                     pred+=':'
                 else:
-                    bracket = pred[:char-1].rfind('{')
-                    colon = pred[:char-1].rfind(':')
-                    if bracket>colon:
-                        #this is missing the class prediction
-                        pred = pred[:char]+':"other"'+pred[char:]
-                    else:
-                        #extra data?
-                        open_quote= pred[colon:].find('"')
-                        assert open_quote!=-1
-                        open_quote += colon
-                        close_quote= pred[open_quote+1:].find('"')
-                        assert close_quote!=-1
-                        close_quote += open_quote+1
+                    fixed = False
+                    #first check if this is a bad ", maybe unescaped
+                    #import pdb;pdb.set_trace()
+                    if pred[char-1]=='"':
+                        quote = pred[char:].find('"')
+                        colon = pred[char:].find(':')
+                        quote += char
+                        colon += char
+                        if colon-1==quote and pred[colon+1]==' ':
+                            #skip colon and space
+                            if pred[colon+2:].startswith('"question"') or pred[colon+2:].startswith('"other"') or pred[colon+2:].startswith('"header"') or pred[colon+2:].startswith('"answer"'):
+                                #yes, escape the "
+                                pred = pred[:char-1]+'\\'+pred[char-1:]
+                                fixed=True
 
-                        pred =pred[:close_quote+1]+pred[char:] #REMOVE
+                    
+                    if not fixed:
+                        bracket = pred[:char-1].rfind('{')
+                        colon = pred[:char-1].rfind(':')
+                        if bracket>colon:
+                            #this is missing the class prediction
+                            pred = pred[:char]+': "other"'+pred[char:]
+                        else:
+                            #extra data?
+                            open_quote= pred[colon:].find('"')
+                            assert open_quote!=-1
+                            open_quote += colon
+                            close_quote= pred[open_quote+1:].find('"')
+                            assert close_quote!=-1
+                            close_quote += open_quote+1
+
+                            pred =pred[:close_quote+1]+pred[char:] #REMOVE
                         
             elif 'Expecting property name enclosed in double quotes' in typ:
                 if char==len(pred) or char==len(pred)-1:
@@ -207,6 +243,8 @@ class Entity():
     def __repr__(self):
         return '({} :: {})'.format(self.text,self.cls)
 def parseDict(header,entities,links):
+    if header=='':
+        return []
     to_link=[]
     is_table=False
     row_headers = None
@@ -218,7 +256,7 @@ def parseDict(header,entities,links):
     for text,value in header.items():
         if text=='content':
             if isinstance(value,list):
-                for thing in value:
+                for thing in reversed(value):
                     to_link+=parseDict(thing,entities,links)
             else:
                 assert isinstance(value,dict)
@@ -226,7 +264,7 @@ def parseDict(header,entities,links):
         elif text=='answers':
             if not isinstance(value,list):
                 value=[value]
-            for a in value:
+            for a in reversed(value):
                 assert isinstance(a,str)
                 a_id=len(entities)
                 entities.append(Entity(a,'answer',a_id))
@@ -263,18 +301,9 @@ def parseDict(header,entities,links):
         return_ids.append(my_id)
     else:
         #a table
-        if row_headers is not None:
-            row_ids = list(range(len(entities),len(entities)+len(row_headers)))
-            for rh in row_headers:
-                entities.append(Entity(rh,'question',len(entities)))
-        if col_headers is not None:
-            col_ids = list(range(len(entities),len(entities)+len(col_headers)))
-            for ch in col_headers:
-                entities.append(Entity(ch,'question',len(entities)))
-    
         if cells is not None:
-            for r,row in enumerate(cells):
-                for c,cell in enumerate(row):
+            for r,row in reversed(list(enumerate(cells))):
+                for c,cell in reversed(list(enumerate(row))):
                     if cell is not None:
                         c_id = len(entities)
                         entities.append(Entity(cell,'answer',c_id))
@@ -282,6 +311,19 @@ def parseDict(header,entities,links):
                             links.append((row_ids[r],c_id))
                         if col_headers is not None and len(col_ids)>c:
                             links.append((col_ids[c],c_id))
+        if row_headers is not None:
+            row_ids = list(range(len(entities),len(entities)+len(row_headers)))
+            for rh in reversed(row_headers):
+                entities.append(Entity(rh,'question',len(entities)))
+        else:
+            row_ids = []
+        if col_headers is not None:
+            col_ids = list(range(len(entities),len(entities)+len(col_headers)))
+            for ch in reversed(col_headers):
+                entities.append(Entity(ch,'question',len(entities)))
+        else:
+            col_ids = []
+    
 
         return_ids+=row_ids+col_ids
 
@@ -301,8 +343,9 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
     TRUER=True #False makes this do pair-first alignment, which is kind of cheating
     np.random.seed(1234)
     torch.manual_seed(1234)
-    DEBUG=True
-    print("DEBUG")
+    DEBUG=False
+    if DEBUG:
+        print("DEBUG")
     
     #too_long_gen_thresh=10
 
@@ -480,7 +523,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if not going_DEBUG and instance['imgName']!='92657391':
+            if DEBUG and (not going_DEBUG and instance['imgName']!='92091873'):
                 continue
             going_DEBUG=True
 
@@ -541,7 +584,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
 
             question='json>'
             answer,out_mask = model(img,None,[[question]],RUN=True)
-            print(answer)
+            print('PRED:: '+answer)
             answer = derepeat(answer)
             total_answer = answer
             for i in range(3): #shouldn't need to be more than 4 calls for test set
@@ -549,12 +592,12 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     break
                 
                 #how much of a lead? Need it to fit tokenwise in the 20 limit
-                tokens = tokenizer.encode(tokens)
+                tokens = tokenizer.encode(answer)
                 tokens = tokens[-20:]
                 prompt = tokenizer.decode(tokens,skip_special_tokens=True)
                 question = 'json~'+prompt
                 answer,out_mask = model(img,None,[[question]],RUN=True)
-                print(answer)
+                print('CONT:: '+answer)
                 answer = derepeat(answer)
 
                 total_answer+=answer
@@ -570,6 +613,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             for thing in pred_data[::-1]: #build pred_entities in reverse
                 if isinstance(thing,dict):
                     parseDict(thing,pred_entities,pred_links)
+                elif thing=='':
+                    pass
                 else:
                     print('non-dict at document level: {}'.format(thing))
                     import pdb;pdb.set_trace()
@@ -618,24 +663,50 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 pos_in_gt=0
                 last_x=0
                 last_y=0
+                last_text=None
                 gt_to_pred = defaultdict(list)
                 all_scores = defaultdict(dict)
-                for p_i,entity in enumerate(pred_entities)[::-1]:
+                for p_i,entity in reversed(list(enumerate(pred_entities))):
                     #if 'NAME' in entity.text:
                     #    import pdb; pdb.set_trace()
+                    if BROS:
+                        p_text = entity.text_lines[0]
+                    else: 
+                        p_text = entity.text
+                    has_link=False
+                    for a,b in pred_links:
+                        if p_i==a or p_i==b:
+                            has_link=True
+                            break
+                    #if 'cc' in p_text:
+                    #    import pdb; pdb.set_trace()
+                    if last_text == p_text:
+                        #the model maybe double predicted? In anycase, there will be a 0 distance if we use the last_x/y, so we'll rewind one step back
+                        last_x = last2_x
+                        last_y = last2_y
                     best_score=9999999
                     for g_i,x,y,g_text,cls in gt_entities:
-                        if BROS:
-                            p_text = entity.text_lines[0]
-                        else: 
-                            p_text = entity.text
 
                         text_dist = norm_ed(p_text,g_text)
                         if text_dist<match_thresh:# and cls==entity.cls: cheating a little if we use class
 
-                            dist = abs(last_y-y) + 0.1*abs(last_x-x)#math.sqrt((last_y-y)**2)+((last_x-x)**2))
-                            #TODO asymetric, penalize up alignment more than down
+                            #dist = abs(last_y-y) + 0.1*abs(last_x-x)#math.sqrt((last_y-y)**2)+((last_x-x)**2))
+                            #asymetric, penalize up alignment more than down
+                            dist = 0.15*abs(last_x-x)
+                            if last_y<y:
+                                dist+= y-last_y
+                            else:
+                                dist+= 1.2*(last_y-y)
                             score = text_dist + dist/DIST_SCORE
+
+                            #if '532' in p_text:
+                            #    import pdb;pdb.set_trace()
+
+                            #adjust score if there are any links
+                            #This obiviously doesn't effect these comprisons, but will help it ownership fights
+                            if has_link:
+                                score -= 0.03
+
 
                             all_scores[p_i][g_i]=score
 
@@ -646,41 +717,48 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                                 best_score = score
                     if best_score<9999999:
                         gt_to_pred[align_g_i].append((p_i,best_score))
+                        last2_x = last_x
+                        last2_y = last_y
                         last_x=align_x
                         last_y=align_y
+                        last_text = p_text
 
                 #Now, we potentially aligned multiple pred entities to gt entities
                 #We need to resolve these by finding the best alternate match for the worse match
                 new_gt_to_pred={}#[None]*len(groups)
+                pred_to_gt={}
                 new_gt_to_pred_scores={}
                 to_realign=[]
                 for g_i,p_is in gt_to_pred.items():
-                    if len(p_is)==1:
-                        new_gt_to_pred[g_i]=p_is[0][0]
-                        new_gt_to_pred_scores[g_i]=p_is[0][1]
-                    else:
+                    if len(p_is)>1:
+                        #import pdb;pdb.set_trace()
+                        #we need to check if any links to the p_is have already been aligned.
+                        #if so, we'll want to keep that consistant
+                        new_pis=[]
+                        for p_i,score in p_is:
+                            aligned_link = False
+                            for a,b in pred_links:
+                                other_i = None
+                                if a==p_i:
+                                    other_i = b
+                                elif b==p_i:
+                                    other_i = a
+                                if other_i in pred_to_gt:
+                                    #The link has been aligned to a gt
+                                    aligned_link=True
+                                    break
+                            if aligned_link:
+                                new_pis.append((p_i,score-0.05))
+                            else:
+                                new_pis.append((p_i,score))
+                        p_is = new_pis
                         p_is.sort(key=lambda a:a[1])
-                        new_gt_to_pred[g_i]=p_is[0][0] #best score gets it
-                        new_gt_to_pred_scores[g_i]=p_is[0][1]
-                        for p_i,_ in p_is[1:]:
-                            to_realign.append(p_i)
-                            #scores = [(g_i,score) for g_i,score in all_scores[p_i].items()]
-                            #best_score=9999999
-                            #for g_i,score in all_scores[p_i].items():
-                            #    if score<best_score:
-                            #        can_match = True
-                            #        if g_i in gt_to_pred:
-                            #            for p_i,score_other in gt_to_pred[g_i]:
-                            #                if score>score_other:
-                            #                    can_match=False
-                            #                    break
-                            #        if can_match:
-                            #            align_g_i=g_i
-                            #            best_score=score
-                            #if best_score<9999999:
-                            #    if  len(gt_to_pred[align_g_i])>0:
-                            #        to_realign+=gt_to_pred[align_g_i]
-                            #    new_gt_to_pred[align_g_i]=p_i
+
+                    new_gt_to_pred[g_i]=p_is[0][0] #best score gets it
+                    new_gt_to_pred_scores[g_i]=p_is[0][1]
+                    pred_to_gt[p_is[0][0]]=g_i
+                    for p_i,_ in p_is[1:]:
+                        to_realign.append(p_i)
                 debug_count=0
                 while len(to_realign)>0:
                     if debug_count>50:
@@ -704,6 +782,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                                 to_realign.append(new_gt_to_pred[align_g_i])
                             new_gt_to_pred[align_g_i]=p_i
                             new_gt_to_pred_scores[align_g_i]=best_score
+                            pred_to_gt[p_i]=align_g_i
                         #else:
                             #unmatched
 
@@ -717,6 +796,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 rel_truepos = 0
                 good_pred_pairs = set()
                 for g_i1,g_i2 in pairs:
+                    #if (g_i1==18 and g_i2==55) or (g_i2==18 and g_i1==55):
+                    #    import pdb;pdb.set_trace()
                     if g_i1 in new_gt_to_pred and g_i2 in new_gt_to_pred:
                         p_i1 = new_gt_to_pred[g_i1]
                         p_i2 = new_gt_to_pred[g_i2]
@@ -731,9 +812,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     
                         
                 if draw:
-                    pred_to_gt = {p_i:g_i for g_i,p_i in new_gt_to_pred.items()}
-                    #for p_i,g_i in pred_to_gt.items():
-                    #    print('algind G:{} <> P:{}'.format(transcription_groups[g_i],pred_entities[p_i].text))
+                    #pred_to_gt = {p_i:g_i for g_i,p_i in new_gt_to_pred.items()}
                     bad_pred_pairs=set(pred_links)-good_pred_pairs
                 ############
             else:
@@ -961,14 +1040,14 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                         x1,y1,x2,y2 = bb_lines[groups[best_g][0]]
                         mid_points.append((x1,(y1+y2)//2))
 
+                for p_a,p_b in bad_pred_pairs:
+                    x1,y1 = mid_points[p_a]
+                    x2,y2 = mid_points[p_b]
+                    img_f.line(draw_img,(x1,y1+1),(x2,y2+1),(255,0,0),2)
                 for p_a,p_b in good_pred_pairs:
                     x1,y1 = mid_points[p_a]
                     x2,y2 = mid_points[p_b]
                     img_f.line(draw_img,(x1,y1),(x2,y2),(0,255,0),2)
-                for p_a,p_b in bad_pred_pairs:
-                    x1,y1 = mid_points[p_a]
-                    x2,y2 = mid_points[p_b]
-                    img_f.line(draw_img,(x1,y1),(x2,y2),(255,0,0),2)
 
                 img_f.imshow('f',draw_img)
                 img_f.show()
