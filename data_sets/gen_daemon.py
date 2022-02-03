@@ -243,6 +243,11 @@ class GenDaemon:
         #    print('generated "{}" with [{}]'.format(word_new,_font_name))
         return img,word_new
 
+    def getBrackets(self,font,paren):
+        font,fontN=font
+        o,c = self.gen.getBrackets(font,paren)
+        return 255*o,255*c
+
     def getTextSample(self):
         if self.simple:
             words = []

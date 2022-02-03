@@ -41,6 +41,9 @@ class SpecialTokenEmbedder(nn.Module):
                 'linkdown-both~','linkdown-box~','linkdown-text~',
                 'linkup-both~','linkup-box~','linkup-text~',
                 'json~',
+                'list_row_headers~','list_column_headers~',
+                'full_row~','full_col~',
+                'full_row0~','full_col0~',
 
                 #census TODO
                 ]

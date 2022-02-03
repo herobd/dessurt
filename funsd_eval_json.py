@@ -226,6 +226,12 @@ def fixLoadJSON(pred):
                 elif pred[char-1]==']':
                     #closed bracket too early?
                     pred = pred[:char-1]+','+pred[char:]
+            elif 'Invalid' in typ and 'escape' in typ:
+                if  pred[char-1:char+1] == '\\u':
+                    #doesn't have number of char. Just remove
+                    pred = pred[:char-1]+pred[char+1:]
+                else:
+                    assert False
             else:
                 assert False
 

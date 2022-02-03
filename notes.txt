@@ -510,8 +510,12 @@ old Total rel recall, prec, Fm: 0.409   0.311   0.353
 New Total rel recall, prec, Fm: 0.424   0.341   0.378
 
 funsdJSON_mmswin_bart_PTfro94i222k_106 8000
+Maybe not full set?
 Total entity recall, prec, Fm:  0.557   0.662   0.605
 Total rel recall, prec, Fm:     0.384   0.667   0.488
+New eval:
+Total entity recall, prec, Fm:0.57 0.628   0.598
+Total rel recall, prec, Fm:0.318 0.536     0.399
 
 distilGN+form+syhw+paraCqa+cdipC_mmswin_bart_PTfrom79i1.2m_94 433920
 

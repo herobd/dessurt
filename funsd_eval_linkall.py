@@ -572,28 +572,29 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     pred_classes2.append(-1)
                 else:
                     assert answer[0]=='['
-                    assert answer[2]==']'
-                    pcls = answer[1] #remove '[ ' & ' ]'
+                    #assert answer[2]==']'
+                    end_bracket = answer.find(']')
+                    pcls = answer[1:end_bracket] #remove '[ ' & ' ]'
                     #expand from single letter, and get class index
                     for cls,icls in valid_data_loader.dataset.classMap.items():
-                        if cls[0]==pcls:
-                            pcls=cls
+                        if cls==pcls:
                             icls-=16
                             break
                     pred_classes2.append(icls)
                     
-                    answer = answer[3:]
+                    answer = answer[end_bracket+1:]
                 if answer==blank_token or answer==np_token:
                     links = []
                 else:
-                    linked_pred = answer[somwewher:]
-                    linked_pred = [ans[:-1] if (ans[-1]=='|' or ans[-1]==end_token) else ans for ans in linked_pred]
+                    if answer[-1]==end_token:
+                        answer = answer[:-1]
+                    linked_pred = answer.split('|')
                     links = []
                     for pred in linked_pred:
                         best_score=0.6
                         best_match=None
                         for other_gi,text in enumerate(pred_inst):
-                            text = text[:len(pred)] #shorten text
+                            #text = text[:len(pred)] #shorten text
                             score = norm_ed(text,pred)
                             if score<best_score:
                                 best_score=score

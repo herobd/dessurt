@@ -225,19 +225,14 @@ class FormQA(QADataset):
                         'class-linkdown-all': 1,
                         'class-linkup-all': 1,
                         'np':0.1,
-                        #'all':1.0,
-                        #'class-link':1.3,
-                        #'class':0.7,
-                        #'down-pair':1.0,
-                        #'up-pair':1.0,
                         'read':0.1,
                         'cell':1.1,
                         'row-header':1.1,
                         'col-header':1.1,
-                        'all-row':1.1,
-                        'all-col':1.1,
-                         'list-row-headers':1.1,
-                        'list-col-headers':1.1,
+                        'full-all-row':1.1,
+                        'full-all-col':1.1,
+                        'full-list-row-headers':1.1,
+                        'full-list-col-headers':1.1,
                         'count-tables':0.9,
                         'highlight-table':1.1
                         }
@@ -247,11 +242,6 @@ class FormQA(QADataset):
                         'class-linkdown-all': 1,
                         'class-linkup-all': 1,
                         'np':0.1,
-                        #'all':1.0,
-                        #'class-link':1.3,
-                        #'class':0.7,
-                        #'down-pair':1.0,
-                        #'up-pair':1.0,
                         'read':0.1,
                         'count-tables':0.01
                         }
@@ -259,17 +249,14 @@ class FormQA(QADataset):
                         'full_json': 10.7,
                         'class-link-all': 0.8,
                         'np':0.1,
-                        #'all':1.0,
-                        #'class-link':1.3,
-                        #'class':0.7,
                         'read':0.1,
                         'cell':1.1,
                         'row-header':1.1,
                         'col-header':1.1,
-                        'all-row':1.1,
-                        'all-col':1.1,
-                         'list-row-headers':1.1,
-                        'list-col-headers':1.1,
+                        'full-all-row':1.1,
+                        'full-all-col':1.1,
+                         'full-list-row-headers':1.1,
+                        'full-list-col-headers':1.1,
                         'count-tables':0.9,
                         'highlight-table':1.1
                         }
@@ -1072,6 +1059,45 @@ class FormQA(QADataset):
                 self.qaAdd(q_a_pairs,question+cell_text,header_text,ids,inmask,outmask)
 
 
+            elif q_type in ('full-all-row', 'full-all-col'):
+                table_i = random.randrange(len(tables))
+                table = tables[table_i]
+
+                if q_type=='full-all-row':
+                    row=True
+                    r,header = random.choice(list(enumerate(table.row_headers)))
+                    if header is None:
+                        continue
+                    all_cells = table.cells[r]
+                else:
+                    row=False
+                    c,header = random.choice(list(enumerate(table.col_headers)))
+                    if header is None:
+                        continue
+                    all_cells = [table.cells[r][c] for r in range(len(table.row_headers))]
+
+                ambiguous = all([line.ambiguous for line in header.lines])
+
+                outmask = []
+                ids=[line.bbid for line in header.lines]
+                header_text = header.text
+                for cell in all_cells:
+                    if cell is not None:
+                        ids += [line.bbid for line in cell.lines]
+                        outmask += [self.convertBB(s,line.box) for line in cell.lines]
+
+                response = '|'.join((cell.text if cell is not None else self.blank_token) for cell in all_cells) + self.end_token
+
+                if random.random()<0.5 or ambiguous:
+                    inmask = [self.convertBB(s,line.box) for line in header.lines]
+                    question = 'full_row0~' if row else 'full_col0~'
+                else:
+                    inmask = []
+                    question = 'full_row~' if row else 'full_col~'
+
+
+                self.qaAdd(q_a_pairs,question+header_text,response,ids,inmask,outmask)
+
             elif q_type in ('all-row', 'all-col'):
                 table_i = random.randrange(len(tables))
                 table = tables[table_i]
@@ -1159,6 +1185,33 @@ class FormQA(QADataset):
                         
 
 
+
+            elif q_type in ('full-list-row-headers','full-list-col-headers'):
+                table_i = random.randrange(len(tables))
+                table = tables[table_i]
+
+                if q_type=='full-list-row-headers':
+                    row=True
+                    headers = table.row_headers
+                else:
+                    row=False
+                    headers = table.col_headers
+                
+                ids=[]
+                outmask = []
+                for header in headers:
+                    if header is not None:
+                        ids+=[line.bbid for line in header.lines]
+                        outmask += [self.convertBB(s,line.box) for line in header.lines]
+
+                response = '|'.join((h.text if h is not None else self.blank_token) for h in headers) + self.end_token
+
+                inmask = []
+                question = 'list_row_headers~' if row else 'list_column_headers~'
+                question += str(table_i)
+            
+
+                self.qaAdd(q_a_pairs,question,response,ids,inmask,outmask)
 
             elif q_type in ('list-row-headers','list-col-headers'):
                 table_i = random.randrange(len(tables))
@@ -1823,16 +1876,10 @@ class FormQA(QADataset):
                             #    ret.append({'header':entities[child],'content':next_children})
                             #else:
                             #    ret.append({'header':entities[child]})
+                        elif entities[child].cls=='question':
+                            ret.append(formatQuestion(entities[child],next_children))
                         else:
-                            if next_children is not None:
-                                assert entities[child].cls=='question'
-                                ret.append(formatQuestion(entities[child],next_children))
-                                #if len(next_children)>0:
-                                #    ret.append({'question':entities[child],'answers':next_children})
-                                #else:
-                                #    ret.append({'question':entities[child]})
-                            else:
-                                ret.append(entities[child])
+                            ret.append(formatOther(entities[child]))
             elif entities[ei].cls=="question":
                 if not isinstance(children,(list,tuple)):
                     children = [children]
@@ -1865,7 +1912,7 @@ def formatQuestion(entity,children):
     #        'question answers': children if children is not None else []
     #        }
     ret = {entity.text:'question'}
-    if len(children)>0:
+    if children is not None and len(children)>0:
         ret['answers']=children
     return ret
 def formatOther(entity):
