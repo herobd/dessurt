@@ -184,6 +184,11 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
     valid_iter = iter(valid_data_loader)
 
     num_classes = len(valid_data_loader.dataset.classMap)
+    compatible_classes = set([('header','question'),('question','answer'),('header','other')])
+    acceptable_classes = set(compatible_classes)
+    acceptable_classes.update([('header','header'),('question','question'),('answer','answer')])
+
+    #incompatible_classes = set([('question','header'),('answer','header'),('other','answer'),('other','question'])
 
     total_entity_true_pos =0
     total_entity_pred =0
@@ -218,6 +223,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
 
 
             classes = [classes_lines[group[0]].argmax() for group in groups]
+            gt_classes = [data_loader.dataset.index_class_map[c] for c in classes]
+
             if draw:
                 draw_img = (255*(1-img.permute(1,2,0).expand(-1,-1,3).numpy())).astype(np.uint8)
             
@@ -281,6 +288,9 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             for table_i in range(int(answer)):
                 index_start = len(pred_cells)
                 #get column and row headers
+                print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+                print('WARNING TODO CHANGE TABLES TO NEW QUERIES')
+                print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
                 question='ch~'+str(table_i)
                 answer,out_mask = model(img,ocr,[[question]],RUN=True)
                 if not quiet:
@@ -403,7 +413,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 
                 i=len(col_headers)+len(row_headers)
                 for ci,ch in enumerate(col_headers):
-                    for ri,rh in enumerate(col_headers):
+                    for ri,rh in enumerate(row_headers):
                         assert i+index_start == len(pred_cells)
                         if i in c_to_g:
                             g = c_to_g[i]
@@ -553,66 +563,111 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             ######################
             #New prediction method
             ######################
-            pred_classes2 = []
-            pred_rel2 = []
-            pred_links=[]
+            pred_classes = []
+            pred_rel = []
+            pred_linksdown=[]
+            pred_linksup=[]
             for gi,(text,pred_group) in enumerate(zip(pred_inst,pred_groups)):
-                text = text[:max_qa_len_in] #if it's really long, that probably won't help
-                question='linkdown-text~'+text
-                mask = torch.zeros_like(img[:,1])
-                for ti in pred_group:
-                    if ti < len(bb_lines):
-                        tlX,tlY,brX,brY = bb_lines[ti]
-                        mask[:,tlY:brY+1,tlX:brX+1] = 1
-                answer, out_mask = model(torch.stack((img[:,0],mask),dim=1),ocr,[[question]],RUN=True)
-                if not quiet:
-                    print(question+' {:} '+answer)
-                if answer == '№':
-                    print('TODO, force "[" prediction...')
-                    pred_classes2.append(-1)
-                else:
-                    assert answer[0]=='['
-                    #assert answer[2]==']'
-                    end_bracket = answer.find(']')
-                    pcls = answer[1:end_bracket] #remove '[ ' & ' ]'
-                    #expand from single letter, and get class index
-                    for cls,icls in valid_data_loader.dataset.classMap.items():
-                        if cls==pcls:
-                            icls-=16
-                            break
-                    pred_classes2.append(icls)
-                    
-                    answer = answer[end_bracket+1:]
-                if answer==blank_token or answer==np_token:
-                    links = []
-                else:
-                    if answer[-1]==end_token:
-                        answer = answer[:-1]
-                    linked_pred = answer.split('|')
-                    links = []
-                    for pred in linked_pred:
-                        best_score=0.6
-                        best_match=None
-                        for other_gi,text in enumerate(pred_inst):
-                            #text = text[:len(pred)] #shorten text
-                            score = norm_ed(text,pred)
-                            if score<best_score:
-                                best_score=score
-                                best_match=other_gi
-                        if best_match is not None:
-                            links.append(best_match)
-                            pred_rel2.append((gi,best_match))
+                #text = text[:max_qa_len_in] #if it's really long, that probably won't help
+                updown = [('linkup-both~',pred_linksup),('linkdown-both~',pred_linksdown)]
+                pred_classes_this = []
+                for query,pred_links in updown:
+                    question=query+text
+                    mask = torch.zeros_like(img[:,1])
+                    for ti in pred_group:
+                        if ti < len(bb_lines):
+                            tlX,tlY,brX,brY = bb_lines[ti]
+                            mask[:,tlY:brY+1,tlX:brX+1] = 1
+                    answer, out_mask = model(torch.stack((img[:,0],mask),dim=1),ocr,[[question]],RUN=True)
+                    if not quiet:
+                        print(question+' {:} '+answer)
+                    if answer == np_token:
+                        print('TODO, force "[" prediction...?')
+                        #pred_classes2.append(-1)
+                    else:
+                        assert answer[0]=='['
+                        #assert answer[2]==']'
+                        end_bracket = answer.find(']')
+                        pcls = answer[1:end_bracket] #remove '[ ' & ' ]'
+                        #expand from single letter, and get class index
+                        #for cls,icls in valid_data_loader.dataset.classMap.items():
+                        #    if cls==pcls:
+                        #        icls-=16
+                        #        break
+                        #pred_classes2.append(icls)
+                        pred_classes_this.append(pcls)
+                        
+                        answer = answer[end_bracket+1:]
+                    if answer==blank_token or answer==np_token:
+                        links = []
+                    else:
+                        if answer[-1]==end_token:
+                            answer = answer[:-1]
+                        linked_pred = answer.split('|')
+                        links = []
+                        for pred in linked_pred:
+                            best_score=0.6
+                            best_match=None
+                            for other_gi,text in enumerate(pred_inst):
+                                #text = text[:len(pred)] #shorten text
+                                score = norm_ed(text,pred)
+                                if score<best_score:
+                                    best_score=score
+                                    best_match=other_gi
+                            if best_match is not None:
+                                links.append(best_match)
+                                #pred_rel2.append((gi,best_match))
 
-                pred_links.append(links)
+                    pred_links.append(links)
+                pred_classes.append(pred_classes_this)
             
             #Now settle the class predictions using the links
-            #for gi,pred_class,links in enumerate(zip(pred_classes2,pred_links)):
-            #    votes = defaultdict(int)
-            #    votes[pred_class]+=1
-            #    for link_i in links:
-            #        other_class = pred_classes2[link_i]
-            #        if other_class=='answer':
-            #            votes['question']
+            pred_class_votes=defaultdict(defaultdict(int))
+            for p_i,(my_votes,my_linksup,my_linksdown) in enumerate(zip(pred_classes,pred_linksup,pred_linksdown)):
+                for cls in my_votes:
+                    pred_class_votes[p_i][cls]+=1
+
+                for o_i in my_linksup:
+                    for cls in my_votes:
+                        for o_cls in pred_classes[o_i]:
+                            if (o_cls,cls) in compatible_classes:
+                                pred_class_votes[p_i][cls]+=1
+                                pred_class_votes[o_i][o_cls]+=1
+                for o_i in my_linksdown:
+                    for cls in my_votes:
+                        for o_cls in pred_classes[o_i]:
+                            if (cls,o_cls) in compatible_classes:
+                                pred_class_votes[p_i][cls]+=1
+                                pred_class_votes[o_i][o_cls]+=1
+
+            final_class_pred = [None]*len(pred_groups)
+            for p_i,votes in  pred_class_votes.items():
+                max_vs=0
+                for cls,vs in votes.items():
+                    if vs>max_vs:
+                        max_vs=vs
+                        top_classes=[cls]
+                    elif vs==max_vs:
+                        top_classes.append(cls)
+
+                if len(top_classes)>0:
+                    #how to resolve tie?
+                    TODO
+                final_class_pred[p_i]=top_classes[0]
+
+            pred_rel=set()
+            for p_i,links in enumerate(pred_linksup):
+                cls_down = final_class_pred[p_i]
+                for o_i in links:
+                    cls_up = final_class_pred[o_i]
+                    if (cls_up,cls_down) in acceptable_classes:
+                        pred_rel.add((o_i,p_i))
+            for p_i,links in enumerate(pred_linksdown):
+                cls_up = final_class_pred[p_i]
+                for o_i in links:
+                    cls_down = final_class_pred[o_i]
+                    if (cls_up,cls_down) in acceptable_classes:
+                        pred_rel.add((p_i,o_i))
 
             #We now can calculate the entity scores
             #We'll align the pred_groups to gt ones
@@ -621,8 +676,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             alignment = {}
             alignment_class = {}
             loc_pgroup=[]
-            for pgi,(pgroup,pclass) in enumerate(zip(pred_groups+pred_cells,pred_classes2+pred_cell_classes)):
-                for ggi,(ggroup,gclass) in enumerate(zip(groups,classes)):
+            for pgi,(pgroup,pclass) in enumerate(zip(pred_groups+pred_cells,final_class_pred+pred_cell_classes)):
+                for ggi,(ggroup,gclass) in enumerate(zip(groups,gt_classes)):
                     if pclass==gclass and len(pgroup)==len(ggroup) and all(x==y for x,y in zip(pgroup,ggroup)) and not group_claimed[ggi]:
                         group_claimed[ggi]=True
                         true_pos+=1
@@ -636,13 +691,13 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 loc_pgroup.append((x-pad_x,y-pad_y))
 
             #we added the table groups to the end, so we'll bump their alignemtn
-            rel_tables = [(a+len(pred_groups),b+len(groups)) for a,b in rel_tables]
+            rel_tables = [(a+len(pred_groups),b+len(pred_groups)) for a,b in rel_tables]
 
             entity_recall = true_pos/len(groups) if len(groups)>0 else 1
             entity_prec = true_pos/len(pred_inst) if len(pred_inst)>0 else 1
-            total_entity_true_pos2 += true_pos
-            total_entity_pred2 += len(pred_inst)
-            total_entity_gt2 += len(groups)
+            total_entity_true_pos += true_pos
+            total_entity_pred += len(pred_inst)
+            total_entity_gt += len(groups)
             if not quiet:
                 print('New Entity precision: {}'.format(entity_prec))
                 print('New Entity recall:    {}'.format(entity_recall))
@@ -653,7 +708,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             true_pos_noclass=0
             claimed=set()
             claimed_noclass=set()
-            for rel in pred_rel2+rel_tables:
+            for rel in list(pred_rel)+rel_tables:
                 try:
                     a0 = alignment[rel[0]]
                     a1 = alignment[rel[1]]
@@ -674,16 +729,17 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     pass
                 #if draw:
                 #    img_f.line(draw_img,loc_pgroup[rel[0]],loc_pgroup[rel[1]],(0,255,0),2)
-
-            rel_prec = true_pos/len(pred_rel2+rel_tables) if len(pred_rel2+rel_tables) > 0 else 1
+            pred_rel_count = len(pred_rel)+len(rel_tables)
+            rel_prec = true_pos/pred_rel_count if pred_rel_count > 0 else 1
             rel_recall = true_pos/len(pairs) if len(pairs)>0 else 1
-            rel_noclass_prec = true_pos_noclass/len(pred_rel2+rel_tables) if len(pred_rel2+rel_tables)>0 else 1
+            rel_noclass_prec = true_pos_noclass/pred_rel_count if pred_rel_count>0 else 1
             rel_noclass_recall = true_pos_noclass/len(pairs) if len(pairs)>0 else 1
 
             #import pdb;pdb.set_trace()
-            total_rel_true_pos2 += true_pos
-            total_rel_pred2 += len(pred_rel2+rel_tables)
-            total_rel_gt2 += len(pairs)
+            total_rel_true_pos += true_pos
+            total_rel_pred += pred_rel_count
+            total_rel_gt += len(pairs)
+
             if not quiet:
                 print('New Rel precision: {}'.format(rel_prec))
                 print('New Rel recall:    {}'.format(rel_recall))
@@ -737,23 +793,13 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
         total_entity_recall = total_entity_true_pos/total_entity_gt
         total_entity_F = 2*total_entity_prec*total_entity_recall/(total_entity_recall+total_entity_prec) if total_entity_recall+total_entity_prec>0 else 0
 
-        print('old Total entity recall, prec, Fm:\t{:.3}\t{:.3}\t{:.3}'.format(total_entity_recall,total_entity_prec,total_entity_F))
-
-        total_entity_prec = total_entity_true_pos2/total_entity_pred2
-        total_entity_recall = total_entity_true_pos2/total_entity_gt
-        total_entity_F = 2*total_entity_prec*total_entity_recall/(total_entity_recall+total_entity_prec) if total_entity_recall+total_entity_prec>0 else 0
-
-        print('New Total entity recall, prec, Fm:\t{:.3}\t{:.3}\t{:.3}'.format(total_entity_recall,total_entity_prec,total_entity_F))
+        print('Total entity recall, prec, Fm:\t{:.3}\t{:.3}\t{:.3}'.format(total_entity_recall,total_entity_prec,total_entity_F))
 
         total_rel_prec = total_rel_true_pos/total_rel_pred
         total_rel_recall = total_rel_true_pos/total_rel_gt
         total_rel_F = 2*total_rel_prec*total_rel_recall/(total_rel_recall+total_rel_prec) if total_rel_recall+total_rel_prec>0 else 0
-        print('old Total rel recall, prec, Fm:\t{:.3}\t{:.3}\t{:.3}'.format(total_rel_recall,total_rel_prec,total_rel_F))
+        print('Total rel recall, prec, Fm:\t{:.3}\t{:.3}\t{:.3}'.format(total_rel_recall,total_rel_prec,total_rel_F))
 
-        total_rel_prec = total_rel_true_pos2/total_rel_pred2
-        total_rel_recall = total_rel_true_pos2/total_rel_gt
-        total_rel_F = 2*total_rel_prec*total_rel_recall/(total_rel_recall+total_rel_prec) if total_rel_recall+total_rel_prec>0 else 0
-        print('New Total rel recall, prec, Fm:\t{:.3}\t{:.3}\t{:.3}'.format(total_rel_recall,total_rel_prec,total_rel_F))
 
 if __name__ == '__main__':
     logger = logging.getLogger()
