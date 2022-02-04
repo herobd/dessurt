@@ -218,7 +218,7 @@ class FormQA(QADataset):
         #self.do_words = config['do_words']
         #self.char_qs = config['char_qs'] if 'char_qs' in config else False
         if self.train:
-            if use_json='fine-tune':
+            if use_json=='fine-tune':
                 self.q_types = {
                         'full_json': 3,
                         'class-link-all': 1,
@@ -349,7 +349,7 @@ class FormQA(QADataset):
                         'count-tables':0.9,
                         'highlight-table':1.1
                         }
-            self.q_types_for_np = ['class-link','class','down-pair','up-pair','read','cell','row-header','col-header','all-row', 'list-row-headers','list-col-headers']
+                self.q_types_for_np = ['class-link','class','down-pair','up-pair','read','cell','row-header','col-header','all-row', 'list-row-headers','list-col-headers']
 
         else:
             #these are what we'll use to actually score
