@@ -1305,11 +1305,16 @@ class SynthFormDataset(FormQA):
             
             if not blank:
                 for x,y,img,img_h,img_w in img_pos_words:
+                    if x<0 or y<0 or x>=image.shape[1] or y>=image.shape[0]:
+                        return (max_x,max_y)
                     img = img_f.resize(img,(img_h,img_w))
                     if x+img_w>image.shape[1]:
                         img = img[:,:image.shape[1]-(x+img_w)]
+                        img_w = img.shape[1]
                     if y+img_h>image.shape[0]:
                         img = img[:image.shape[0]-(y+img_h),:]
+                        img_h = img.shape[0]
+
                     image[y:y+img_h,x:x+img_w] = img
 
             if text is not None:

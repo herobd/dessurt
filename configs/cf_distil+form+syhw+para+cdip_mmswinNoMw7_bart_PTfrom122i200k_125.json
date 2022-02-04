@@ -197,7 +197,7 @@
         "max_q_tokens": 20,
         "max_a_tokens": 800,
         "no_dropout": false,
-        "window_size": 12,
+        "window_size": 7,
         "decode_dim": 768,
         "dim_ff": 3072,
         "decode_num_heads": 8,
