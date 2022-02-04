@@ -218,7 +218,50 @@ class FormQA(QADataset):
         #self.do_words = config['do_words']
         #self.char_qs = config['char_qs'] if 'char_qs' in config else False
         if self.train:
-            if use_json:
+            if use_json='fine-tune':
+                self.q_types = {
+                        'full_json': 3,
+                        'class-link-all': 1,
+                        'class-linkdown-all': 1,
+                        'class-linkup-all': 1,
+                        'np':0.1,
+                        'read':0.1,
+                        'cell':1.1,
+                        'row-header':1.1,
+                        'col-header':1.1,
+                        'full-all-row':1.1,
+                        'full-all-col':1.1,
+                        'full-list-row-headers':1.1,
+                        'full-list-col-headers':1.1,
+                        'count-tables':0.9,
+                        'highlight-table':1.1
+                        }
+                self.q_types_no_table = {
+                        'full_json': 3,
+                        'class-link-all': 1,
+                        'class-linkdown-all': 1,
+                        'class-linkup-all': 1,
+                        'np':0.1,
+                        'read':0.1,
+                        'count-tables':0.01
+                        }
+                self.q_types_only_table = {
+                        'full_json': 2,
+                        'class-link-all': 0.8,
+                        'np':0.1,
+                        'read':0.1,
+                        'cell':1.1,
+                        'row-header':1.1,
+                        'col-header':1.1,
+                        'full-all-row':1.1,
+                        'full-all-col':1.1,
+                         'full-list-row-headers':1.1,
+                        'full-list-col-headers':1.1,
+                        'count-tables':0.9,
+                        'highlight-table':1.1
+                        }
+                self.q_types_for_np = ['class-link-all','class-linkdown-all','class-linkup-all','read','cell','row-header','col-header','full-all-col','full-all-row', 'full-list-row-headers','full-list-col-headers']
+            elif use_json:
                 self.q_types = {
                         'full_json': 12,
                         'class-link-all': 1,
@@ -260,7 +303,7 @@ class FormQA(QADataset):
                         'count-tables':0.9,
                         'highlight-table':1.1
                         }
-                self.q_types_for_np = ['class-link-all','class-linkdown-all','class-linkup-all','read','cell','row-header','col-header','all-row', 'list-row-headers','list-col-headers']
+                self.q_types_for_np = ['class-link-all','class-linkdown-all','class-linkup-all','read','cell','row-header','col-header','full-all-col','full-all-row', 'full-list-row-headers','full-list-col-headers']
             else:
                 self.q_types = {
                         'np':0.2,
@@ -828,6 +871,16 @@ class FormQA(QADataset):
                     question = '$r~{}' if random.random()<0.5 else ('ar~{}' if random.random()<0.5 else 'ar>{}')
                 elif sub_type == 'all-col':
                     question = '$c~{}' if random.random()<0.5 else ('ac~{}' if random.random()<0.5 else 'ac>{}')
+                elif sub_type == 'full-all-col':
+                    question = 'full_col~{}' if random.random()<0.5 else 'full_col0~{}' 
+                elif sub_type == 'full-all-row':
+                    question = 'full_row~{}' if random.random()<0.5 else 'full_row0~{}' 
+                elif sub_type == 'full-list-row-headers':
+                    question = 'list_row_headers~{}'
+                    prompt_text = len(tables)
+                elif sub_type == 'full-list-col-headers':
+                    question = 'list_column_headers~{}'
+                    prompt_text = len(tables)
                 elif sub_type in ('list-row-headers','list-col-headers'):
                     if sub_type == 'list-row-headers':
                         char = 'r'
