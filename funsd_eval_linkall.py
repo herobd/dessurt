@@ -24,6 +24,29 @@ try:
 except:
     pass
 
+#DELETE THIS
+def unrollList(model,img,ocr,prev_answer,query,count=10,quiet=False):
+    if prev_answer[-1]!=end_token and prev_answer[-1]!=np_token and prev_answer[-1]!=blank_token:
+        ret = [prev_answer]
+        i=0
+        while prev_answer[-1]!=end_token and prev_answer[-1]!=blank_token and prev_answer[-1]!=np_token and i<count*2:
+            if prev_answer[-1]=='|':
+                ready_answer = prev_answer[:-1]
+            else:
+                ready_answer = prev_answer
+
+            prev_answer, outmask = model(img,ocr,[[query+ready_answer]],RUN=True)
+            if not quiet:
+                print(query+ready_answer+' {:} '+prev_answer)
+            if prev_answer[0]=='[' and prev_answer[2]==']':
+                prev_answer = prev_answer[3:] #strip off class prediciton
+            if prev_answer != end_token and prev_answer != blank_token and prev_answer != np_token:
+                ret.append(prev_answer)
+            i+=1
+        return ret
+    else:
+        return []
+
 end_token = '‡'
 np_token = '№'
 blank_token = 'ø'
@@ -35,7 +58,8 @@ def norm_ed(s1,s2):
 def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False,max_qa_len=None,quiet=False):
     np.random.seed(1234)
     torch.manual_seed(1234)
-    PREVENT_MULTILINE=True
+    PREVENT_MULTILINE=False
+    DEBUG=True
     
     #too_long_gen_thresh=10
 
@@ -202,6 +226,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
     total_rel_true_pos2 =0
     total_rel_pred2 =0
     total_rel_gt2 =0
+    DEBUG_going=False
     with torch.no_grad():
         for instance in valid_iter:
             groups = instance['gt_groups']
@@ -214,6 +239,10 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             img = instance['img'][0]
             if not quiet:
                 print(instance['imgName'])
+
+            if DEBUG and not DEBUG_going and instance['imgName']!='91974562':
+                continue
+            DEBUG_going = True
 
             gt_line_to_group = instance['targetIndexToGroup']
 
@@ -458,11 +487,15 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     if not quiet:
                         print(question+' {:} '+answer)
                     if answer==np_token:
+                        #debug
                         disp_img = (torch.cat((1-2*img[:,0],1-2*img[:,0],mask),dim=0)*255).cpu().permute(1,2,0).numpy().astype(np.uint8)
                         img_f.imshow('s',disp_img)
                         img_f.show()
-                    answer = readLongText(model,img,ocr,answer,quiet=quiet)
-                    if answer==np_token or answer == '':
+                    if answer[-1]==end_token:
+                        answer = answer[:-1]
+                    else:
+                        print('^^ UNFINISHED LINE ?')
+                    if answer == '' or answer == np_token or answer[0]!='\\':
                         final_text = textline
                     else:
                         final_text = textline+(' ' if answer[0]!='\\' else '')+answer
@@ -567,12 +600,12 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             pred_rel = []
             pred_linksdown=[]
             pred_linksup=[]
-            for gi,(text,pred_group) in enumerate(zip(pred_inst,pred_groups)):
+            for gi,(entity_text,pred_group) in enumerate(zip(pred_inst,pred_groups)):
                 #text = text[:max_qa_len_in] #if it's really long, that probably won't help
                 updown = [('linkup-both~',pred_linksup),('linkdown-both~',pred_linksdown)]
                 pred_classes_this = []
                 for query,pred_links in updown:
-                    question=query+text
+                    question=query+entity_text
                     mask = torch.zeros_like(img[:,1])
                     for ti in pred_group:
                         if ti < len(bb_lines):
@@ -622,7 +655,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 pred_classes.append(pred_classes_this)
             
             #Now settle the class predictions using the links
-            pred_class_votes=defaultdict(defaultdict(int))
+            pred_class_votes=defaultdict(lambda:defaultdict(int))
             for p_i,(my_votes,my_linksup,my_linksdown) in enumerate(zip(pred_classes,pred_linksup,pred_linksdown)):
                 for cls in my_votes:
                     pred_class_votes[p_i][cls]+=1
@@ -650,9 +683,10 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     elif vs==max_vs:
                         top_classes.append(cls)
 
-                if len(top_classes)>0:
+                if len(top_classes)>1:
                     #how to resolve tie?
-                    TODO
+                    #TODO
+                    print('TODO: MULTIPLE CLASSES for "{}": {}'.format(pred_inst[p_i],top_classes))
                 final_class_pred[p_i]=top_classes[0]
 
             pred_rel=set()
@@ -708,6 +742,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             true_pos_noclass=0
             claimed=set()
             claimed_noclass=set()
+            good_rels=[]
+            bad_rels=[]
             for rel in list(pred_rel)+rel_tables:
                 try:
                     a0 = alignment[rel[0]]
@@ -725,6 +761,9 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     if rel_a not in claimed and rel_a in pairs:
                         true_pos+=1
                         claimed.add(rel_a)
+                        good_rels.append(rel)
+                    else:
+                        bad_rels.append(rel)
                 except KeyError:
                     pass
                 #if draw:
@@ -749,15 +788,15 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print('New Rel_noclass Fm:        {}'.format(2*rel_noclass_recall*rel_noclass_prec/(rel_noclass_recall+rel_noclass_prec) if rel_noclass_recall+rel_noclass_prec>0 else 0))
 
             if draw:
-                assert len(pred_classes+pred_cell_classes) == len(loc_pgroup)
-                for cls,loc,pgroup in zip(pred_classes+pred_cell_classes,loc_pgroup,pred_groups+pred_cells):
-                    if cls==0:
+                assert len(final_class_pred+pred_cell_classes) == len(loc_pgroup)
+                for cls,loc,pgroup in zip(final_class_pred+pred_cell_classes,loc_pgroup,pred_groups+pred_cells):
+                    if cls=='header':
                         color=(0,0,255) #header
-                    elif cls==1:
+                    elif cls=='question':
                         color=(0,255,255) #question
-                    elif cls==2:
+                    elif cls=='answer':
                         color=(255,255,0) #answer
-                    elif cls==3:
+                    elif cls=='other':
                         color=(255,0,255) #other 
                     #min_x = draw_img.shape[1]
                     #max_x = 0
@@ -785,6 +824,15 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     #img_f.line(draw_img,(max_x,max_y),(min_x,max_y),group_color,2)
                     #img_f.line(draw_img,(min_x,max_y),(min_x,min_y),group_color,2)
                     draw_img[round(loc[1]-4):round(loc[1]+4),round(loc[0]-4):round(loc[0]+4)]=color
+
+                for p1,p2 in bad_rels:
+                    loc1 = loc_pgroup[p1]
+                    loc2 = loc_pgroup[p2]
+                    img_f.line(draw_img,loc1,loc2,(255,0,0),2)
+                for p1,p2 in good_rels:
+                    loc1 = loc_pgroup[p1]
+                    loc2 = loc_pgroup[p2]
+                    img_f.line(draw_img,loc1,loc2,(0,255,0),2)
 
                 img_f.imshow('f',draw_img)
                 img_f.show()

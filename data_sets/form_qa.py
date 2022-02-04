@@ -219,6 +219,7 @@ class FormQA(QADataset):
         #self.char_qs = config['char_qs'] if 'char_qs' in config else False
         if self.train:
             if use_json=='fine-tune':
+                self.rel_vs_any_link_prob=0.001
                 self.q_types = {
                         'full_json': 3,
                         'class-link-all': 1,
@@ -262,6 +263,7 @@ class FormQA(QADataset):
                         }
                 self.q_types_for_np = ['class-link-all','class-linkdown-all','class-linkup-all','read','cell','row-header','col-header','full-all-col','full-all-row', 'full-list-row-headers','full-list-col-headers']
             elif use_json:
+                self.rel_vs_any_link_prob=0.1
                 self.q_types = {
                         'full_json': 12,
                         'class-link-all': 1,
@@ -373,13 +375,15 @@ class FormQA(QADataset):
     #entity_adj =[(upper,lower)] either can be None
     #tables = obj. col/row_headers = [entity_id], cells = [[entity_id]]
     #
-    def makeQuestions(self,s,entities,entity_link,tables,full_entities,full_entity_dict):
+    def makeQuestions(self,s,entities,entity_link,tables,raw_entities,raw_entity_dict):
         """
         Generates N questions from given docuemnt information:
          - entities: a list of Entity objects
          - entity_link: a list of (entity_id, entity_id) tuples where its (header,question)/(question,answer) and value may be a list
          - tables: a list of Table objects
          """
+        
+
         if len(entities)==0:
              return []
 
@@ -408,7 +412,7 @@ class FormQA(QADataset):
                 q_types = []
                 for cls in all_of_cls:
                     q_types.append(('all',cls,None))
-                for ei in range(len(full_entities)):
+                for ei in range(len(raw_entities)):
                     q_types.append(('class-link', ei,True))
                     q_types.append(('class-link', ei,False))
                 for entity in entities:
@@ -487,18 +491,18 @@ class FormQA(QADataset):
             elif q_type in ['class-link-all','class-linkdown-all','class-linkup-all']:
                 if q_type == 'class-link-all':
                     if self.train:
-                        if len(full_entities)==0:
+                        if len(raw_entities)==0:
                             continue
-                        ei = random.randrange(len(full_entities))
+                        ei = random.randrange(len(raw_entities))
                     else:
                         ei = instance
-                    entity = full_entities[ei]
+                    entity = raw_entities[ei]
                     question = 'link-'
-                    linked = [full_entities[lei] for lei in full_entity_dict[ei]] if ei in full_entity_dict else None
+                    linked = [raw_entities[lei] for lei in raw_entity_dict[ei]] if ei in raw_entity_dict else None
                 else:
                     down = 'down' in q_type
                     prompt_id = None
-                    if random.random()<0.5 and self.train:
+                    if random.random()<self.rel_vs_any_link_prob and self.train:
                         #select valid relationship
                         for i in range(min(10,len(entity_link))):
                             if down:
@@ -514,7 +518,7 @@ class FormQA(QADataset):
                     else:
                         #select random entitiy
                         if self.train:
-                            if len(full_entities)==0:
+                            if len(raw_entities)==0:
                                 continue
                             prompt_id = random.randrange(len(entities))
                         else:
@@ -587,12 +591,12 @@ class FormQA(QADataset):
 
             elif q_type == 'class-link':
                 if self.train:
-                    if len(full_entities)==0:
+                    if len(raw_entities)==0:
                         continue
-                    ei = random.randrange(len(full_entities))
+                    ei = random.randrange(len(raw_entities))
                 else:
                     ei = instance
-                entity = full_entities[ei]
+                entity = raw_entities[ei]
                 cls = entity.cls[0] #first character for compression
 
                 #g0 get with str+mask
@@ -626,7 +630,7 @@ class FormQA(QADataset):
                     inmask = [self.convertBB(s,line.box) for line in entity.lines]
                     mask=True
 
-                if ei not in full_entity_dict:
+                if ei not in raw_entity_dict:
                     question+='~'
                     response_text=self.blank_token
                     outmask=[]
@@ -635,22 +639,22 @@ class FormQA(QADataset):
                     
                     if highlight:
                         question+='~'
-                        response_text=str(len( full_entity_dict[ei]))
+                        response_text=str(len( raw_entity_dict[ei]))
                         outmask = []
                         ids = [line.bbid for line in entity.lines]
-                        for other_ei in full_entity_dict[ei]:
-                            outmask += [self.convertBB(s,line.box) for line in full_entities[other_ei].lines]
-                            ids += [line.bbid for line in full_entities[other_ei].lines]
+                        for other_ei in raw_entity_dict[ei]:
+                            outmask += [self.convertBB(s,line.box) for line in raw_entities[other_ei].lines]
+                            ids += [line.bbid for line in raw_entities[other_ei].lines]
                     else:
                         #step through
-                        num = len( full_entity_dict[ei])
+                        num = len( raw_entity_dict[ei])
                         if num>1:
                             i = random.randrange(num+1)
                         elif random.random()<0.01:
                             i = 1
                         else:
                             i = 0
-                        next_entity = full_entities[full_entity_dict[ei][i]] if i<num else None
+                        next_entity = raw_entities[raw_entity_dict[ei][i]] if i<num else None
 
                         if next_entity is not None:
                             response_text = self.getFrontText(next_entity.text,term='|' if i<num-1 else self.end_token)
@@ -668,7 +672,7 @@ class FormQA(QADataset):
                                 response_text = response_text[:self.max_qa_len_out]
                             ids = [line.bbid for line in entity.lines+next_entity.lines]
                         else:
-                            prev_entity = full_entities[full_entity_dict[ei][i-1]]
+                            prev_entity = raw_entities[raw_entity_dict[ei][i-1]]
                             if len(prompt_text)>-1+self.max_qa_len_in//2:
                                 prompt_text = self.selectPartTextForInput(prompt_text,length=-1+self.max_qa_len_in//2)
                             next_part_len = self.max_qa_len_in-(1+len(prompt_text))

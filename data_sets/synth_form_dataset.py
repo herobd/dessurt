@@ -1262,6 +1262,8 @@ class SynthFormDataset(FormQA):
                     elif 'box' in cue:
                         img_f.rectangle(image,(x-pad_w,y-pad_h),(rightmost_value_x[col_number]+pad_w,y+img_h+pad_h),color,line_thickness)
                     lowest_y = max(lowest_y,y+img_h+pad_h)
+                elif label_ei not in entity_link:
+                    entity_link[label_ei]=None
 
             if rightmost_x<init_x:
                 continue
