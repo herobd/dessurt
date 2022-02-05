@@ -34,6 +34,9 @@ def norm_ed(s1,s2):
     return editdistance.eval(s1.lower(),s2.lower())/max(len(s1),len(s2),1)
 
 def derepeat(s):
+    #hardcoded error the model makes a lot (for some reason)
+    s = s.replace('{"*": "question"},','')
+    s = s.replace(', {"*": "question"}','')
     #very rough
     while True:
         #m = re.search(r'(.......+)\1\1\1\1\1\1\1+',s) #8 chars, 7 repeat
@@ -104,29 +107,65 @@ def fixLoadJSON(pred):
                         pred+='}'
                 elif pred[char]==':':
                     #it didn't close a list
-                    assert pred[:char-1].rfind('[')>pred[:char-1].rfind('{')
-                    assert pred[char-1]=='"'
-                    open_quote = pred[:char-1].rfind('"')
-                    assert open_quote!=-1
-                    comma = pred[:open_quote].rfind(',')
-                    bracket = pred[:open_quote].rfind('[')
-                    #assert comma != -1
-                    if comma>bracket:
-                        pred = pred[:comma]+']},{'+pred[comma+1:]
-                    else:
-                        #unless this is a table, we want seperate objects
-                        curley = pred[:bracket].rfind('{')
-                        sub = pred[curley+1:bracket]
-                        if 'headers' in sub or 'cells' in sub:
-                            #table
-                            pred = pred[:bracket+1]+'],'+pred[bracket+1:]
+                    if pred[:char-1].rfind('[')>pred[:char-1].rfind('{'):
+                        assert pred[char-1]=='"'
+                        open_quote = pred[:char-1].rfind('"')
+                        assert open_quote!=-1
+                        comma = pred[:open_quote].rfind(',')
+                        bracket = pred[:open_quote].rfind('[')
+                        #assert comma != -1
+                        if comma>bracket:
+                            pred = pred[:comma]+']},{'+pred[comma+1:]
                         else:
-                            pred = pred[:bracket+1]+']},{'+pred[bracket+1:]
+                            #unless this is a table, we want seperate objects
+                            curley = pred[:bracket].rfind('{')
+                            sub = pred[curley+1:bracket]
+                            if 'headers' in sub or 'cells' in sub:
+                                #table
+                                pred = pred[:bracket+1]+'],'+pred[bracket+1:]
+                            else:
+                                pred = pred[:bracket+1]+']},{'+pred[bracket+1:]
+                    else:
+                        #double colon/value
+                        close_curly = pred[char:].find('{')
+                        if close_curly != -1:
+                            close_curly+=char
+                        #remove it 
+                        pred = pred[:char-1]+pred[close_curly:]
                 elif pred[char]==']' and pred[char-1]=='"':
                     assert pred[:char-1].rfind('[')<pred[:char-1].rfind('{')
                     pred = pred[:char]+'}'+pred[char:]
+                elif pred[char-1]=='"':
+                    prev_quote = pred[:char-1].rfind('"')
+                    prev_comma = pred[:char-1].rfind(',')
+                    prev_colon = pred[:char-1].rfind(':')
+                    if prev_quote>prev_comma and prev_quote>prev_colon and prev_colon>prev_comma:
+                        #we have an unterminated list?
+                        next_quote = pred[char:].find('"')
+                        assert next_quote!=-1
+                        next_quote += char
+                        next_curly = pred[char:].find('}')
+                        if next_curly!=-1:
+                            next_curly += char
+                        else:
+                            next_curly = 999999999999999
+                        next_bracket = pred[char:].find(']')
+                        if next_bracket!=-1:
+                            next_bracket += char
+                        else:
+                            next_bracket = 999999999999999
+                        next_end = min(next_curly,next_bracket)
+                        if next_quote>char and next_quote<next_end:
+                            #This is an incorrectly started value string
+                            #we'll just remove it
+                            pred = pred[:char]+pred[next_end:]
+                        else:
+                            assert False
+                    else:
+                        assert False
+
+                            
                 else:
-                    #pred+=','
                     assert False
             elif 'Unterminated string starting at' in typ:
                 pred+='"'
@@ -166,7 +205,12 @@ def fixLoadJSON(pred):
                     assert False
             elif "Expecting ';' delimiter" in typ:
                 if char==len(pred):
-                    pred+=':'
+                    #what things have colon? class, answers, content
+                    if pred.endswith('"content"') or pred.endswith('"answers"') or pred.endswith('"cells"') or pred.endswith('"row headers"') or pred.endswith('"column headers"'):
+                        comma= pred.rfind(',')
+                        pred = pred[:comma]+'}'
+                    else:
+                        pred+=': "other"}'
                 else:
                     fixed = False
                     #first check if this is a bad ", maybe unescaped
@@ -599,12 +643,17 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 
                 #how much of a lead? Need it to fit tokenwise in the 20 limit
                 tokens = tokenizer.encode(answer)
-                tokens = tokens[-20:]
+                tokens = tokens[-19:] #19 to account for start token (CLS) added at beginning
                 prompt = tokenizer.decode(tokens,skip_special_tokens=True)
                 question = 'json~'+prompt
                 answer,out_mask = model(img,None,[[question]],RUN=True)
                 print('CONT:: '+answer)
+                len_before = len(answer)
                 answer = derepeat(answer)
+                len_after = len(answer)
+
+                if len_after/len_before<0.45:
+                    break #bad repeating going on
 
                 total_answer+=answer
             
