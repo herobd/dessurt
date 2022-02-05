@@ -1202,6 +1202,8 @@ class SynthFormDataset(FormQA):
                     #print('swapped back to, {} : {}'.format(label_str_lines,value_str_lines))
                 
                 label_entity = self.makeAndDrawEntity(image,'question',label_str_lines,label_img_pos_lines)
+                if isinstance(label_entity,tuple):
+                    continue
                 label_ei=len(entities)
                 entities.append(label_entity)
                 if title is not None:
