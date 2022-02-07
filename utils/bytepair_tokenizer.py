@@ -1,5 +1,8 @@
 import torch
-from bpemb import BPEmb
+try:
+    from bpemb import BPEmb
+except:
+    pass
 
 class BytePairTokenizer():
     def __init__(self):

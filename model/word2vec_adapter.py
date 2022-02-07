@@ -1,9 +1,12 @@
-import gensim.downloader as api
-from bpemb import BPEmb
 import torch
 import torch.nn as nn
 import numpy as np
 import re
+try:
+    import gensim.downloader as api
+    from bpemb import BPEmb
+except:
+    pass
 
 debug=False
 if debug:

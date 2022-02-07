@@ -22,6 +22,8 @@ from .cdip_cloud_qa import CDIPCloudQA
 from .distil_bart import DistilBartDataset
 from .squad import SQuAD
 from .iam_qa import IAMQA
+from .iam_mixed import IAMMixed
+from .synth_hw_qa import SynthHWQA
 from .test_qa import TestQA
 
 
@@ -59,6 +61,8 @@ class MultipleDataset(Dataset):
                 dataset_len = len(dataset)
                 self.orders.append(random.sample(range(dataset_len),k=dataset_len))
 
+        self.debug = config.get('DEBUG',False)
+
     def max_len(self):
         return None
 
@@ -76,12 +80,17 @@ class MultipleDataset(Dataset):
             while choice>self.d_ranges[dataset_i]:
                 dataset_i+=1
 
+            
+
+
             if len(self.orders[dataset_i])==0:
                 dataset_len = len(self.data_sets[dataset_i])
                 self.orders[dataset_i]=random.sample(range(dataset_len),k=dataset_len)
             index = self.orders[dataset_i].pop()
             #index = random.randrange(0,self.lens[dataset_i])
             ret = self.data_sets[dataset_i][index]
+            if ret is None:
+                return self.__getitem__(idx)
         else:
             dataset_i=0
             while idx>=self.lens[dataset_i]:

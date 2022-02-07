@@ -39,6 +39,9 @@ class DocVQA(QADataset):
             qa = (instance['question'],instance['answers'])
             self.images.append({'id':instance['questionId'], 'imageName':instance['image'], 'imagePath':image_path, 'annotationPath':qa, 'rescaled':1 })
 
+        if config.get('half',False):
+            self.images = self.images[::2]
+
 
 
 

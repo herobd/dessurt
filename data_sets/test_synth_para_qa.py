@@ -58,7 +58,7 @@ def display(data):
 
         #widths.append(img.size(1))
         
-        draw='mk>' in q
+        draw=True#'mk>' in q
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -104,17 +104,22 @@ if __name__ == "__main__":
         'batch_size':1,
         #'gt_ocr': True,
         'rescale_range':[0.9,1.1],
-        'mode': 'hard_word',
+        '#mode': 'hard_word',
+        'mode': 'test',
+        'cased': True,
+        'augment_shade': 1,
         'crop_params': {
-            "crop_size":[96,384],
+            "#crop_size":[96,384],
+            "crop_size":[1152,768],
             "pad":0,
             "rot_degree_std_dev": 1
             },
         'questions':1,
         "max_qa_len_in": 640,
         "max_qa_len_out": 2560,
-        "image_size":[96,384],
-        "prefetch_factor": 10,
+        "#image_size":[96,384],
+        "image_size":[1148,764],
+        "prefetch_factor": 2,
         "persistent_workers": True
 
 })

@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import json
+import logging
 #from skimage import io
 #from skimage import draw
 #import skimage.transform as sktransform
@@ -9,6 +10,7 @@ import math, random, string, re
 from collections import defaultdict, OrderedDict
 import timeit
 from data_sets.gen_daemon import GenDaemon
+from data_sets.para_qa_dataset import makeMLMInstance
 from utils import augmentation
 
 from transformers import BartTokenizer, BartForConditionalGeneration
@@ -26,6 +28,7 @@ def collate(batch):
             'mask_labels_batch_mask': None,
             "bart_logits": torch.cat([b['bart_logits'] for b in batch],dim=0) if 'bart_logits' in batch[0] and batch[0]['bart_logits'] is not None else None,
             "bart_last_hidden": torch.cat([b['bart_last_hidden'] for b in batch],dim=0) if 'bart_last_hidden' in batch[0] and batch[0]['bart_last_hidden'] is not None else None,
+            "distill_loss_mask": torch.cat([b['distill_loss_mask'] for b in batch],dim=0) if 'distill_loss_mask' in batch[0] and batch[0]['distill_loss_mask'] is not None else None,
             }
 
 class DistilBartDataset(torch.utils.data.Dataset):
@@ -38,12 +41,16 @@ class DistilBartDataset(torch.utils.data.Dataset):
         super(DistilBartDataset, self).__init__()
 
         if split=='train':
-            if not config.get('no_distill',False):
+            no_distill = config.get('no_distill',False)
+            self.loss_mask = config.get('loss_mask',True)
+            if not no_distill or self.loss_mask:
                 self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/bart-large')
+                self.blank_token = 50264
+            if not no_distill:
                 self.model = BartForConditionalGeneration.from_pretrained('./cache_huggingface/bart-large')
                 self.model.eval()
             else:
-                self.tokenizer = None
+                self.model = None
         self.max_auto_tokens = config['max_auto_tokens']
 
         self.augment_shade = config.get('augment_shade',True)
@@ -65,11 +72,18 @@ class DistilBartDataset(torch.utils.data.Dataset):
         self.held_instance=None
         self.used_held = 0
         self.max_used_held = config['prefetch_factor']//2 if 'prefetch_factor' in config else 2
+        self.logger = logging.getLogger(self.__class__.__name__)
 
     def __len__(self):
         return 1000
 
     def __getitem__(self,index):
+        return self.getitem(index)
+    def getitem(self,index,recur=0):
+        #if recur>1:
+        #    self.logger.info('Repeating if distill dataset {}'.format(recur))
+        if recur>15:
+            return None
 
         image_h,image_w = self.image_size
 
@@ -91,55 +105,15 @@ class DistilBartDataset(torch.utils.data.Dataset):
             self.held_instance= (image,ocr)
             self.used_held=1
         
-        ##Make mlm instances
-        words = []
-        while len(words)<4 and len(ocr)>1:
-            #block = random.choice(ocr)
-            block_i = random.randrange(len(ocr))
-            block = ocr[block_i]
-            ocr = ocr[:block_i]+ocr[block_i+1:] #remove
-            target_string = []
-            for p,para in enumerate(block['paragraphs']):
-                for l,line in enumerate(para['lines']):
-                    for word in line['words']:
-                        words.append((word,p,l))
-                        target_string.append(word['text'])
-            target_string = ' '.join(target_string)
-        if len(words)<4:
-            return self.__getitem__(index)
 
-        num_spans=random.randrange(1,max(len(words)//8,2))
-        to_remove=[]
-        for i in range(num_spans):
-            num = np.random.poisson(3)
-            num = min(num,len(words)-1)
-            for i in range(50):
-                loc = random.randrange(0,len(words)-num)
-                before=max(0,loc-1)
-                after=min(len(words),loc+num+1)
-                good_spot = all((w is not None) for w in words[before:after])
-                if good_spot:
-                    break
+        words,to_remove,target_string,block = makeMLMInstance(ocr)
+        if words is None:
+            image=None
+            return self.getitem(index,recur+1)
 
-            if good_spot:
-                #get the bounding box to mask out of image
-                rm_words = words[loc:loc+num]
-                words = words[:loc]+[None]+words[loc+num:]
 
-                #group the words by line
-                lines=defaultdict(list)
-                for word,p,l in rm_words:
-                    lines[(p,l)].append(word)
-                for line in lines.values():
-                    #get bb. We can assume words are in read order
-                    #I'll assume left-right read order
-                    left_x = line[0]['box'][0] -1
-                    right_x = line[-1]['box'][2] +1
-                    top_y = min(w['box'][1] for w in line) -1
-                    bot_y = max(w['box'][3] for w in line) +1
-                    to_remove.append((left_x,top_y,right_x,bot_y))
 
-        if self.tokenizer is not None:
+        if self.model is not None or self.loss_mask:
             bart_input_string = []
             for word in words:
                 if word is not None:
@@ -147,10 +121,13 @@ class DistilBartDataset(torch.utils.data.Dataset):
                 else:
                     bart_input_string.append('<mask>')
             bart_input_string = ' '.join(bart_input_string)
+
             #print('Start BART '+bart_input_string[:20])
             input_ids = self.tokenizer([bart_input_string], return_tensors='pt')['input_ids']
             gt_input_ids = self.tokenizer([target_string], return_tensors='pt')['input_ids']
             gt_input_ids = gt_input_ids[:,:self.max_auto_tokens]
+
+        if self.model is not None:
             with torch.no_grad():
                 try:
                     bart_out = self.model(input_ids, labels=gt_input_ids,output_hidden_states=True)
@@ -159,13 +136,83 @@ class DistilBartDataset(torch.utils.data.Dataset):
                     print('bad index, probably: {} or {}'.format(input_ids.max(),gt_input_ids.max()))
                     print(bart_input_string)
                     print(target_string)
-                    return self.__getitem__(index)
+                    image=None
+                    return self.getitem(index,recur+1)
             logits = bart_out.logits
             last_hidden = bart_out.decoder_hidden_states[-1]
             #print('End BART '+bart_input_string)
         else:
             logits = None
             last_hidden = None
+
+        if self.loss_mask:
+            #Ideally, we only compute the loss on masked tokens
+            #however, we have to break the masks on words (for visual masking) which doesn't correspond to the tokenization
+            #So we'll compute the insertions and deletions in the Levenstein distance betweem the target and input
+            #From there we'll imply which tokens in the target are important and shouldn't be masked.
+            #This isn't perfect, but should be closer than no mask at all
+            #We also will ignore the insertion masks (at beginning and end only in our data) as it's unclear that the distribution of words would be the same between the models
+            dynamic_prog = [None]*(input_ids.shape[1])
+            for ii,input_id in enumerate(input_ids[0]):
+                dynamic_prog[ii] = [None]*(gt_input_ids.shape[1])
+
+
+                for ti,targ_id in enumerate(gt_input_ids[0]):
+                    same = input_id.item()==targ_id.item()
+                    blank = input_id.item()==self.blank_token and ii>1 and ii<input_ids.shape[1]-1
+                    possible_paths = []
+                    if ii>0 and ti>0:
+                        past_score,mask = dynamic_prog[ii-1][ti-1]
+                        possible_paths.append(
+                                (past_score+(0 if same else (1 if blank else 1.1)),
+                                    mask+[blank],
+                                    #past_path+[(ii,ti)]
+                                    ))
+                    elif ii==0 and ti==0:
+                        possible_paths.append(
+                                ((0 if same else 1),
+                                    [blank],
+                                    #[(0,0)]
+                                    ))
+    
+                    if ii>0:
+                        past_score,mask = dynamic_prog[ii-1][ti]
+                        possible_paths.append(
+                                (past_score+1.2,
+                                    mask,#+['skip'],
+                                    #past_path+[(ii,ti)]
+                                    ))
+                    if ti>0:
+                        past_score,mask = dynamic_prog[ii][ti-1]
+                        possible_paths.append(
+                                (past_score+(0.9 if blank else 1.1),
+                                    mask+[blank],
+                                    #past_path+[(ii,ti)]
+                                    ))
+
+                    possible_paths.sort(key=lambda a:a[0])
+                    
+                    dynamic_prog[ii][ti] = possible_paths[0]
+            score,loss_mask = dynamic_prog[-1][-1]
+            #for mask,(ii,ti) in zip(loss_mask,path):
+            #    print('{}:{}, {}:{}, {}'.format(ii,input_ids[0,ii].item(),ti,gt_input_ids[0,ti].item(),mask))
+            #assert all(m!='bad' for m in loss_mask)
+            assert len(loss_mask) == gt_input_ids.shape[1]
+            loss_mask = torch.BoolTensor(loss_mask)[None,:] #tensor and add batch dim
+
+            if not loss_mask.any():
+                loss_mask = None
+            #    #get a new batch
+            #    image=None
+            #    dynamic_prog=None
+            #    gt_input_ids=None
+            #    input_ids=None
+            #    loss_mask=None
+            #    words=None
+            #    ocr=None
+            #    return self.getitem(index,recur+1)
+
+
 
 
         image = 255-image
@@ -184,8 +231,12 @@ class DistilBartDataset(torch.utils.data.Dataset):
         for paragraph in block['paragraphs']:
             for line in paragraph['lines']:
                 x1,y1,x2,y2 = line['box']
-                image[y1:y2,x1:x2,1] = 255 #highlight block we're working on
+                image[round(y1):round(y2),round(x1):round(x2),1] = 255 #highlight block we're working on
         for x1,y1,x2,y2 in to_remove:
+            x1=round(x1)
+            y1=round(y1)
+            x2=round(x2)
+            y2=round(y2)
             image[y1:y2,x1:x2,0] = 128 #we mask to 0 [middle of range] in qa dataset
             image[y1:y2,x1:x2,1] = -255 #flip mask
 
@@ -231,9 +282,11 @@ class DistilBartDataset(torch.utils.data.Dataset):
                 "answers": [target_string],
                 "mask_label": None,
                 }
-        if logits is not None:
+        if logits is not None and (not self.loss_mask or loss_mask is not None):
             ret["bart_logits"] = logits
             ret["bart_last_hidden"] = last_hidden
+        if self.loss_mask and loss_mask is not None:
+            ret['distill_loss_mask'] = loss_mask
 
         return ret
 
@@ -416,4 +469,3 @@ class DistilBartDataset(torch.utils.data.Dataset):
                      'lines':ocr_lines
                      }]
                 }
-                

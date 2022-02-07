@@ -77,6 +77,7 @@ class QATrainer(BaseTrainer):
         self.data_loader_iter = iter(data_loader)
         self.valid_data_loader = valid_data_loader
 
+
         self.ocr_word_bbs = config['trainer']['word_bbs'] if 'word_bbs' in config['trainer'] else False
 
         self.debug = 'DEBUG' in  config['trainer']
@@ -323,7 +324,7 @@ class QATrainer(BaseTrainer):
             for name in names:
                 p = F_measure_prec[name] if name in F_measure_prec else 1
                 r = F_measure_recall[name] if name in F_measure_recall else 1
-                f = 2*(p*r)/(p+r)
+                f = 2*(p*r)/(p+r) if (p+r) > 0 else 0
                 total_Fms+=f
                 val_metrics['val_F_Measure_{}'.format(name)]=f
             val_metrics['val_F_Measure_MACRO']=total_Fms/len(names)
@@ -342,11 +343,17 @@ class QATrainer(BaseTrainer):
         ocrBoxes = instance['bb_gt']
         questions = instance['questions']
         answers = instance['answers']
-        #print('Q Lengths '+' '.join([str(len(a[0])) for a in questions])+' .....................')
-        #print('A Lengths '+' '.join([str(len(a[0])) for a in answers])+' .....................')
+        if self.debug:
+            print('=========')
+            print(questions)
+            print(' - - - -')
+            print(answers)
+            print('Q Lengths '+' '.join([str(len(a[0])) for a in questions])+' .....................')
+            print('A Lengths '+' '.join([str(len(a[0])) for a in answers])+' .....................')
         gt_mask = instance['mask_label']
         if gt_mask is not None:
             gt_mask = gt_mask.to(device)
+
 
         distill= 'bart_logits' in instance and instance['bart_logits'] is not None
 
@@ -439,6 +446,8 @@ class QATrainer(BaseTrainer):
         if not run:
             if 'answer' in self.loss:
                 losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
+                if self.debug:
+                    print('answer size: {}'.format(pred_a.size()))
             #losses['answerLoss'] = pred_a.sum()
             if 'mask' in self.loss and gt_mask is not None and pred_mask is not None: #we allow gt_mask to be none to not supervise
                 mask_labels_batch_mask = instance['mask_labels_batch_mask'].to(device)
@@ -446,20 +455,21 @@ class QATrainer(BaseTrainer):
 
             if distill:
                 #pred_len = batch_mask.size(1)
-                teacher_last_hidden = instance['bart_last_hidden'].to(device)
                 teacher_logits = instance['bart_logits'].to(device)
-                teacher_len = teacher_last_hidden.size(1)
-                batch_mask = batch_mask[:,:teacher_logits.size(1),None] #add channel dim for broadcast
+                teacher_len = teacher_logits.size(1)
+                batch_mask = batch_mask[:,:teacher_len,None] #add channel dim for broadcast
                 teacher_batch_mask = batch_mask[:,:teacher_len]
 
-                hidden_dim = teacher_last_hidden.size(-1)
                 logits_dim = teacher_logits.size(-1)
 
-                pred_logits = pred_logits[:,:teacher_logits.size(1),:logits_dim]
+                pred_logits = pred_logits[:,:teacher_len,:logits_dim]
                 
 
                 #cosine loss
                 if self.lossWeights['cosine']>0:
+                    teacher_last_hidden = instance['bart_last_hidden'].to(device)
+                    hidden_dim = teacher_last_hidden.size(-1)
+
                     pred_last_hidden = torch.masked_select(pred_last_hidden,batch_mask)
                     pred_last_hidden = pred_last_hidden.view(-1,hidden_dim)
                     teacher_last_hidden = torch.masked_select(teacher_last_hidden,teacher_batch_mask)
@@ -468,6 +478,14 @@ class QATrainer(BaseTrainer):
                     target = pred_last_hidden.new(pred_last_hidden.size(0)).fill_(1)
                     losses['cosineLoss'] = F.cosine_embedding_loss(pred_last_hidden, teacher_last_hidden, target,reduction="mean")
 
+                if 'distill_loss_mask' in instance and instance['distill_loss_mask'] is not None:
+                    distill_loss_mask = instance['distill_loss_mask'][...,None].to(batch_mask.device)
+                    batch_mask *= distill_loss_mask
+                    teacher_batch_mask *= distill_loss_mask
+                
+                if self.debug:
+                    print('batch_mask sum: {}'.format(batch_mask.sum()))
+                    print('teacher batch_mask sum: {}'.format(teacher_batch_mask.sum()))
                 pred_logits = torch.masked_select(pred_logits,batch_mask)
                 pred_logits = pred_logits.view(-1,logits_dim)
                 teacher_logits = torch.masked_select(teacher_logits,teacher_batch_mask)
@@ -630,6 +648,7 @@ class QATrainer(BaseTrainer):
                 elif question.startswith('ner_'):
                     pred_words = processNERLine(pred)#.split(' ')
                     gt_words = processNERLine(answer)
+                    #import pdb;pdb.set_trace()
                     #we now step through at be sure we mactch the words up
                     p=0 #pred index
                     g=0 #gt index
@@ -675,14 +694,26 @@ class QATrainer(BaseTrainer):
                             if pred_cls!='o':
                                 #precs[p][g]=defaultdict(list)
                                 precs[p][g][pred_cls]=precs[p][g][pred_cls]+[1 if pred_cls==gt_cls else 0]
-                    
-                    for cls,recall in recalls[-1][-1].items():
-                        log['F_recall_{}'.format(cls)]+=recall
-                        #print('recall {} added: {}'.format(cls,recall))
-                    for cls,prec in precs[-1][-1].items():
-                        log['F_prec_{}'.format(cls)]+=prec
-                        #print('prec {} added: {}'.format(cls,prec))
-                    log['E_approx_CER'].append(eds[-1][-1]/total_gt_len)
+                    if len(recalls)>0 and len(recalls[-1])>0:
+                        for cls,recall in recalls[-1][-1].items():
+                            log['F_recall_{}'.format(cls)]+=recall
+                            #print('recall {} added: {}'.format(cls,recall))
+                    else:
+                        for word,cls in gt_words:
+                            log['F_recall_{}'.format(cls)].append(0)
+
+                    if len(precs)>0 and len(precs[-1])>0:
+                        for cls,prec in precs[-1][-1].items():
+                            log['F_prec_{}'.format(cls)]+=prec
+                            #print('prec {} added: {}'.format(cls,prec))
+                    else:
+                        for word,cls in gt_words:
+                            log['F_prec_{}'.format(cls)].append(1)
+                    if len(pred_words)>0:
+                        log['E_approx_CER'].append(eds[-1][-1]/total_gt_len)
+                    elif len(gt_words)>0:
+                        log['E_approx_CER'].append(1)
+
 
                 elif question.startswith('mk>'):
                     pass #handled earlier
@@ -792,12 +823,24 @@ class QATrainer(BaseTrainer):
         #model.apply(lambda module: _set_momenta(module, momenta))
         #model.train(was_training)
 
-
+ner_classes=set(cls.lower() for cls in ['N', 'C', 'L', 'T', 'O', 'P', 'G','NORP', 'LAW', 'PER', 'QUANTITY', 'MONEY', 'CARDINAL', 'LOCATION', 'LANGUAGE', 'ORG', 'DATE', 'FAC', 'ORDINAL', 'TIME', 'WORK_OF_ART', 'PERCENT', 'GPE', 'EVENT', 'PRODUCT'])
 def processNERLine(line):
     ret = []
-    for w in line.split(' '):
+    words = line.split(' ')
+    words2 = line.split(']')
+    if len(words2)>len(words):
+        words = words2
+        spaced=False
+    else:
+        spaced=True
+    for w in words:
+        if len(w)==0:
+            continue
         start_b = w.rfind('[')
-        end_b = w.rfind(']')
+        if spaced:
+            end_b = w.rfind(']')
+        else:
+            end_b = len(w)
         if start_b!=-1 and end_b!=-1:
             if 'ne:'==w[start_b+1:start_b+4]:
                 cls = w[start_b+4:end_b]
@@ -816,6 +859,8 @@ def processNERLine(line):
             cls='o'
             word = line
         #print('see class: '+cls)
+        if cls not in ner_classes:
+            cls = 'o'
         ret.append((word,cls))
     return ret
 

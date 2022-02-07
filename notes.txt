@@ -96,6 +96,12 @@ mk_firsttoken_top50 mean:0.604,  std:0.48906441293555597
 mk_firsttoken_top100 mean:0.679,  std:0.4668607929565301
 score_ed mean:0.7556787306378923,  std:0.3652188581475455
 
+distil+paraCqa+cdipC_noDistill_mmswin_bart_deep_PTfrom69i328k_71 1374976
+mk_firsttoken_top10 mean:0.505,  std:0.4999749993749687
+mk_firsttoken_top50 mean:0.6565,  std:0.4748765629087205
+mk_firsttoken_top100 mean:0.7345,  std:0.4415990828794824
+score_ed mean:0.692295890492926,  std:0.3583896301726342
+
 distilGN+paraCqa+cdipC_mmswin_bart_deep_PTfrom80_85 148736
 mk_firsttoken_top10 mean:0.447,  std:0.4971830648765101
 mk_firsttoken_top50 mean:0.602,  std:0.4894854441145313
@@ -113,6 +119,24 @@ mk_firsttoken_top10 mean:0.4435,  std:0.49679749395503187
 mk_firsttoken_top50 mean:0.603,  std:0.48927599573246994
 mk_firsttoken_top100 mean:0.6685,  std:0.47075232341434065
 score_ed mean:0.7736319315827956,  std:0.3591052741535349
+
+distilGN+paraCqa+cdipC_mmswin_bart_deep_PTfrom80_85 1059840
+mk_firsttoken_top10 mean:0.499,  std:0.499998999999
+mk_firsttoken_top50 mean:0.6505,  std:0.47681206989756464
+mk_firsttoken_top100 mean:0.7195,  std:0.4492435308382303
+score_ed mean:0.6886722446943893,  std:0.3568412575493168
+
+distilGN+form+paraCqa+cdipC_mmswin_bart_deep_PTfrom85i777k_93 236545
+mk_firsttoken_top10 mean:0.486,  std:0.4998039615689336
+mk_firsttoken_top50 mean:0.6505,  std:0.47681206989756464
+mk_firsttoken_top100 mean:0.72,  std:0.44899888641287294
+score_ed mean:0.7117370093501273,  std:0.3512742208051487
+
+distilGN+syhw+form+paraCqa+cdipC_mmswin_bart_deep_PTfrom85i1.7m_97
+mk_firsttoken_top10 mean:0.4975,  std:0.4999937499609369
+mk_firsttoken_top50 mean:0.6585,  std:0.47421276870198253
+mk_firsttoken_top100 mean:0.727,  std:0.44550084175004656
+score_ed mean:0.6939529501072552,  std:0.3529913201523475
 
 
 distil+paraCqa+cdipC_mmswin_bart_deep_PTfrom67i280k_70 67328
@@ -174,6 +198,12 @@ mk_firsttoken_top50 mean:0.6295,  std:0.4829386607013359
 mk_firsttoken_top100 mean:0.6995,  std:0.458475462811261
 score_ed mean:0.7435990877300269,  std:0.3588007097959793
 
+distil+paraCqa+cdipC_noDistill_mmswin_bart_PTfrom50i260k_69 1462017
+mk_firsttoken_top10 mean:0.495,  std:0.4999749993749687
+mk_firsttoken_top50 mean:0.6505,  std:0.4768120698975646
+mk_firsttoken_top100 mean:0.717,  std:0.4504564351854683
+score_ed mean:0.7106254739794523,  std:0.3558405975790923
+
 distilGN+paraCqa+cdipC_mmswin_bart_PTfrom69i576k_78 283392
 mk_firsttoken_top10 mean:0.454,  std:0.49787950349457055
 mk_firsttoken_top50 mean:0.6055,  std:0.48874303064084706
@@ -216,6 +246,25 @@ mk_firsttoken_top50 mean:0.6255,  std:0.48399354334536326
 mk_firsttoken_top100 mean:0.697,  std:0.4595552197505757
 score_ed mean:0.7548094526132666,  std:0.3567550830695889
 
+distilGN+paraCqa+cdipC_mmswin_bart_PTfrom50i260k_79 1237504
+mk_firsttoken_top10 mean:0.5045,  std:0.499979749589921
+mk_firsttoken_top50 mean:0.667,  std:0.4712865370451398
+mk_firsttoken_top100 mean:0.734,  std:0.44186423254207846
+score_ed mean:0.6939050028073238,  std:0.34597430293027265
+
+distilGN+form+paraCqa+cdipC_mmswin_bart_PTfrom79i933k_92 227073
+mk_firsttoken_top10 mean:0.4945,  std:0.4999697490848822
+mk_firsttoken_top50 mean:0.6645,  std:0.47216496058051577
+mk_firsttoken_top100 mean:0.734,  std:0.44186423254207846
+score_ed mean:0.7066821986644833,  std:0.3617990940615286`
+
+distilGN+form+syhw+paraCqa+cdipC_mmswin_bart_PTfrom79i1.2m_94 133888
+mk_firsttoken_top10 mean:0.5065,  std:0.4999577482147866
+mk_firsttoken_top50 mean:0.6625,  std:0.4728570079844434
+mk_firsttoken_top100 mean:0.7405,  std:0.43836029701605045
+score_ed mean:0.703695667499973,  std:0.36165268547754403
+
+
 
 squad+iamqa+distil+paraCqa+cdipC_noDistill_mmswin_bart_PTfrom65i351k_73 63488
 mk_firsttoken_top10 mean:0.408,  std:0.49146312170904544
@@ -241,6 +290,19 @@ mk_firsttoken_top10 mean:0.3865,  std:0.4869473790873095
 mk_firsttoken_top50 mean:0.5505,  std:0.4974432128394155
 mk_firsttoken_top100 mean:0.6195,  std:0.48550978362953723
 score_ed mean:0.856155872948224,  std:0.34250612119704366
+
+
+distilGN+paraCqa+cdipC_mmswin_bart_singleCrsDp_PTfrom87i196k_91 498945
+mk_firsttoken_top10 mean:0.483,  std:0.49971091643068993
+mk_firsttoken_top50 mean:0.6375,  std:0.4807221130757352
+mk_firsttoken_top100 mean:0.71,  std:0.4537620521815371
+score_ed mean:0.7074021265492993,  std:0.3432389419282364
+
+distilGN+syhw+form+paraCqa+cdipC_mmswin_bart_singleCrsDp_PTfrom91i506k_96 131841
+mk_firsttoken_top10 mean:0.4735,  std:0.4992972561510828
+mk_firsttoken_top50 mean:0.635,  std:0.4814301610825811
+mk_firsttoken_top100 mean:0.7065,  std:0.45536551252812285
+score_ed mean:0.717233478885329,  std:0.3555030567282636
 
 
 ============================
@@ -280,6 +342,27 @@ docvqa_mmswin_bart_PTfrom73i219k_84 604160
 natural_q~_ED mean:0.45327360763605895,  std:0.48021861156787526
 E_ANLS mean:0.5148844286500002,  std:0.41728367604513317
 
+docvqa_mmswin_bart_PTfrom94i222k_102 215040
+natural_q~_ED mean:0.39342717574240293,  std:0.4622965231522144
+E_ANLS mean:0.5720655325905365,  std:0.40926403565075636
+
+
+half docvqa_mmswin_bart_PTfrom94i222k_102 217088
+natural_q~_ED mean:0.40725064576723274,  std:0.4722775947079554
+E_ANLS mean:0.5639314174818711,  std:0.41151000093166495
+
+docvqa_mmswin_bart_PTfrom98i87k_104 217344
+natural_q~_ED mean:0.4005758546234704,  std:0.4659416666568346
+E_ANLS mean:0.5647671016263905,  std:0.4116721164521224
+
+half docvqa_mmswin_bart_PTfrom98i87k_104 219136
+natural_q~_ED mean:0.38253102428989416,  std:0.44273165196235303
+E_ANLS mean:0.5728649025006802,  std:0.40622329615947494
+
+docvqa_mmswin_bart_PTfrom98i87k_104 100000
+natural_q~_ED mean:0.39090575856778365,  std:0.44783577527008434
+E_ANLS mean:0.5676065432537071,  std:0.40684078770667953
+
 ===========================================
 ==IAM NER===
 iamNERfull_mmswin_bart_PTfrom75i550k_89 100000
@@ -293,16 +376,65 @@ Using ner_full> Macro Fm = 0.6931861074637213
 iamNERfull_mmswin_bart_PTfrom75i550k_89 233k
 Macro Fm = 0.677763421320044
 
+iamNER_mmswin_bart_PTfrom99i69k_103 200k
+Macro Fm = 0.6734035270340595 (full)
+
+iamNER_mmswin_bart_PTfrom94i222k_101 200k
+Macro Fm = 0.6506582846365455 (full)
+
+iamNER_mmswin_bart_nertok_PTfrom99i69k_105 200k
+Macro Fm = 0.40800080905456754
+
+iamNER_mmswin_bart_nertok_PTfrom99i69k_105 220160
+Macro Fm = 0.46602064097986107
+
+
+
 iamNER_mmswin_bart_PTfrom75i400k_86 150000
 Macro Fm = 0.4347031506551097
 
 iamNER_mmswin_bart_PTfrom75i400k_86 308992
 Macro Fm = 0.5002126482391526
 
+iamNERfull_mmswin_bart_nertok_PTfrom75i550k_90 407040
+(full)Macro Fm = 0.477860204603461
+
+iamNERfull_mmswin_bart_nertok_PTfrom75i550k_90 283904
+full> Macro Fm = 0.46037010914893733
+lines> Macro Fm = 0.4785449955818479
+
+iamNERfull_mmswin_bart_nertok_PTfrom75i550k_90 200000
+Macro Fm = 0.5140060804780759
+
+iamNERfull_mmswin_bart_nertok_PTfrom75i550k_90 150000
+Macro Fm = 0.377364316250
+
+iamNERfull_mmswin_bart_nertok_PTfrom75i550k_90 407k
+(line)Macro Fm = 0.5474813829948751
+
+iamNERfull_mmswin_bart_nertok_PTfrom75i550k_90 100k
+(line) Macro Fm = 0.538130593321904
+
+iamNERfull_mmswin_bart_nertok_PTfrom89i100k_95 99841
+(line)Macro Fm = 0.6079255478987206
+
+iamNERfull_mmswin_bart_nertok_PTfrom89i100k_95 50k
+(line)Macro Fm=0.5292571407576296
+
+iamNERfull_mmswin_bart_nertok_PTfrom89i100k_95 189kk
+Macro Fm = 0.468709774974224
+
+
 ============================
 
 
 IAM pretrianing results
+
+
+distilGN+form+syhw+paraCqa+cdipC_mmswin_bart_PTfrom79i1.2m_94 147968 (Synth only)
+read_block0>_ED mean:0.21446708719569446,  std:0.11495937306311414
+E_line_based_CER mean:0.20895401140618947,  std:0.10665572174266998
+
 100k CER ~0.38
 At about 200k: CER (per line)=0.296
 300k: CER=0.32
@@ -373,10 +505,41 @@ New Total rel recall, prec, Fm: 0.44573643410852715     0.31767955801104975     
 
 funsd+table_mmswin_bart_PTfrom69i580k_81 391168
 old Total entity recall, prec, Fm:      0.734   0.673   0.702
-New Total entity recall, prec, Fm:      0.727   0.667   0.695
+New Total entity recall, prec, Fm:      0.727   0.667   0.695 <- Much higher entity Fm
 old Total rel recall, prec, Fm: 0.409   0.311   0.353
 New Total rel recall, prec, Fm: 0.424   0.341   0.378
 
+JSON Eval ==============
+
+funsdJSON_mmswin_bart_PTfro94i222k_106 8000
+Maybe not full set?
+Total entity recall, prec, Fm:  0.557   0.662   0.605
+Total rel recall, prec, Fm:     0.384   0.667   0.488
+New eval:
+Total entity recall, prec, Fm:0.57 0.628   0.598
+Total rel recall, prec, Fm:0.318 0.536     0.399
+
+funsdJSON_mmswin_bart_PTfro94i953k_T 8000 (after left header and checkboxes addition)
+Total entity recall, prec, Fm:  0.589   0.676   0.629  <- Has lower recall, often cuts short
+Total rel recall, prec, Fm:     0.372   0.636   0.469
+
+funsdJSONft_mmswin_bart_PTfro94i953k_T 8000
+Total entity recall, prec, Fm:  0.575   0.656   0.613
+Total rel recall, prec, Fm:     0.341   0.613   0.438
+
+funsdJSONft_mmswin_bart_PTfro94i953k_T 13824
+Total entity recall, prec, Fm:  0.581   0.698   0.634
+Total rel recall, prec, Fm:     0.357   0.613   0.451
+
+
+Link All Eval =====
+funsdJSONft_mmswin_bart_PTfro94i953k_T 8000
+Total entity recall, prec, Fm:  0.584   0.601   0.592
+Total rel recall, prec, Fm:     0.285   0.239   0.26
+
+funsdJSONft_mmswin_bart_PTfro94i953k_T 13824
+Total entity recall, prec, Fm:  0.651   0.657   0.654 <- Higher entity Fm
+Total rel recall, prec, Fm:     0.404   0.366   0.384
 
 
 =======

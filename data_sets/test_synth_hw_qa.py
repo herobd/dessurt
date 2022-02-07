@@ -1,4 +1,4 @@
-from data_sets import squad
+from data_sets import synth_hw_qa
 import math
 import sys
 from matplotlib import pyplot as plt
@@ -23,12 +23,28 @@ def display(data):
         img = torch.cat((img,img,img),dim=2)
         show = data['img'][b,1]>0
         mask = data['img'][b,1]<0
-        img[:,:,0] *= ~mask
-        img[:,:,1] *= ~show
-        if data['mask_label'] is not None:
-            img[:,:,2] *= 1-data['mask_label'][b,0]
+        #img[:,:,0] *= ~mask
+        #img[:,:,1] *= ~show
+        #img[:,:,2] *= 1-data['mask_label'][b,0]
         #img[2,img[2]<1]=0
 
+        #label = data['label']
+        #gt = data['gt'][b]
+        #print(label[:data['label_lengths'][b],b])
+        #if data['spaced_label'] is not None:
+        #    print('spaced label:')
+        #    print(data['spaced_label'][:,b])
+        #for bb,text in zip(data['bb_gt'][b],data['transcription'][b]):
+        #    print('ocr: {} {}'.format(text,bb))
+        #print('questions: {}'.format(data['questions'][b]))
+        #print('answers: {}'.format(data['answers'][b]))
+        if 'pre-recognition' in data and data['pre-recognition'] is not None:
+            res_im = data['pre-recognition'][b]
+            if res_im is not None:
+                print('OCR {}'.format(b))
+                for bb,(string,char_prob),score in res_im:
+                    print(string)
+                print('-------')
         print('questions and answers')
         for q,a in zip(data['questions'][b],data['answers'][b]):
             print(q+' [:] '+a)
@@ -42,7 +58,7 @@ def display(data):
 
         #widths.append(img.size(1))
         
-        draw=True#'0w' in q or 'w0' in q or 'l0' in q
+        draw=False#'mk>' in q
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -53,7 +69,7 @@ def display(data):
             #plt.imshow(img.numpy()[:,:,0], cmap='gray')
             #plt.show()
             img = (img*255).numpy().astype(np.uint8)
-            cv2.imwrite('test_paraSmaller.png',img)
+            #cv2.imwrite('test_hwSmaller.png',img)
             cv2.imshow('x',img)
             cv2.show()
 
@@ -75,7 +91,7 @@ if __name__ == "__main__":
     if len(sys.argv)>1:
         dirPath = sys.argv[1]
     else:
-        dirPath = '../data/SQuAD'
+        dirPath = '../data/synth_hw_wiki'
     if len(sys.argv)>2:
         start = int(sys.argv[2])
     else:
@@ -84,25 +100,26 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=squad.SQuAD(dirPath=dirPath,split='valid',config={
+    data=synth_hw_qa.SynthHWQA(dirPath=dirPath,split='train',config={
         'batch_size':1,
         #'gt_ocr': True,
+        'cased': True,
         'rescale_range':[0.9,1.1],
-        'crop_params': {
+        'crop_hwms': {
             "crop_size":[768,768],
             "pad":0,
             "rot_degree_std_dev": 1
             },
         'questions':1,
+        "max_qa_len_in": 64000,
+        "max_qa_len_out": 256000,
         "image_size":[768,768],
-        "prefetch_factor": 5,
-        "persistent_workers": True,
-        "cased": True
+        "prefetch_factor": 10,
+        "persistent_workers": True
 
 })
 
-    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=squad.collate)
-    print('dataset size: {}'.format(len(dataLoader)))
+    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=synth_hw_qa.collate)
     dataLoaderIter = iter(dataLoader)
 
         #if start==0:
@@ -118,8 +135,8 @@ if __name__ == "__main__":
             q_t=display(dataLoaderIter.next())
             for q in q_t:
                 question_types[q]+=1
-            print('question_types:')
-            print(question_types)
+            #print('question_types:')
+            #print(question_types)
     except StopIteration:
         print('done')
 
