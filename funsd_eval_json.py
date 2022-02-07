@@ -634,7 +634,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
 
             question='json>'
             answer,out_mask = model(img,None,[[question]],RUN=True)
-            if not quite:
+            if not quiet:
                 print('PRED:: '+answer)
             answer = derepeat(answer)
             total_answer = answer
@@ -648,7 +648,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 prompt = tokenizer.decode(tokens,skip_special_tokens=True)
                 question = 'json~'+prompt
                 answer,out_mask = model(img,None,[[question]],RUN=True)
-                if not quite:
+                if not quiet:
                     print('CONT:: '+answer)
                 len_before = len(answer)
                 answer = derepeat(answer)
