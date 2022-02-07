@@ -11,6 +11,7 @@ from utils.funsd_annotations import createLines
 import timeit
 from data_sets.qa import QADataset, collate
 
+#The creates a MLM run instance (based on BART)
 #used by distillation dataset too
 def getMinMaxWidth(words):
     max_w=0
@@ -32,6 +33,7 @@ def makeMLMInstance(ocr):
     ##Make mlm instances
     words = []
     while len(words)<4 and len(ocr)>1:
+        words = []
         #block = random.choice(ocr)
         block_i = random.randrange(len(ocr))
         block = ocr[block_i]
@@ -57,9 +59,9 @@ def makeMLMInstance(ocr):
         #    print('num is 0')
         good_spot = False
         for i in range(50 if num>0 else 20):
-            loc = random.randrange(0,len(words)-num)
+            loc = random.randrange(0,1+len(words)-num)
             if num==0:
-                if (loc==0 and words[0] is not None) or (loc==len(words)-1 and words[-1] is not None):
+                if (loc==0 and words[0] is not None) or (loc==len(words) and words[-1] is not None):
                     good_spot = True
                     break
                 elif words[0] is None and words[-1] is None:
@@ -93,29 +95,27 @@ def makeMLMInstance(ocr):
                     right_x = line[-1]['box'][2] +1
                     top_y = min(w['box'][1] for w in line) -1
                     bot_y = max(w['box'][3] for w in line) +1
-                    to_remove.append((left_x,top_y,right_x,bot_y))
-                    if to_remove[-1][3]-to_remove[-1][1]>100:
-                        import pdb;pdb.set_trace()
+                    to_remove.append((round(left_x),round(top_y),round(right_x),round(bot_y)))
             else:
                 #import pdb; pdb.set_trace()
-                if pre_add_none[loc] is not None:
+                word = pre_add_none[loc] if loc==0 else pre_add_none[loc-1]
+                if word is not None:
                     word_min_w,word_max_w,space = getMinMaxWidth(pre_add_none)
-                    word,p,l = pre_add_none[loc]
+                    word,p,l = word
                     line=block['paragraphs'][p]['lines'][l]
                     line_x1,line_y1,line_x2,line_y2 = line['box']
                     if loc == 0:
                         right_x,top_y,_,bot_y = word['box']
                         right_x -= space
-                        left_x = max(0,right_x - random.randrange(word_min_w,word_max_w))
-                        line['box'] = (left_x,line_y1,line_x2,line_y2)
+                        left_x = max(0,right_x - random.randrange(word_min_w,word_max_w+1))
+                        line['box'] = (round(left_x),round(line_y1),round(line_x2),round(line_y2))
                     else:
+                        assert loc == len(pre_add_none)
                         _,top_y,left_x,bot_y = word['box']
                         left_x += space
-                        right_x = left_x + random.randrange(word_min_w,word_max_w)
-                        line['box'] = (line_x1,line_y1,right_x,line_y2)
-                    to_remove.append((left_x,top_y,right_x,bot_y))
-                    if to_remove[-1][3]-to_remove[-1][1]>100:
-                        import pdb;pdb.set_trace()
+                        right_x = left_x + random.randrange(word_min_w,word_max_w+1)
+                        line['box'] = (round(line_x1),round(line_y1),round(right_x),round(line_y2))
+                    to_remove.append((round(left_x),round(top_y),round(right_x),round(bot_y)))
 
                 #if random.random()<0.5:
                 #    loc-=1
@@ -140,6 +140,7 @@ def makeMLMInstance(ocr):
                 #        word_min_w,word_max_w = getMinMaxWidth(pre_add_none)
                 #        right_x = left_x + random.randrange(5+word_min_w,5+word_max_w)
                 #        to_remove.append((left_x,top_y1,right_x,top_y1))
+
     
     return words,to_remove,target_string,block
 
@@ -166,7 +167,7 @@ class ParaQADataset(QADataset):
 
 
         self.punc_regex = re.compile('[%s]' % re.escape(string.punctuation))
-        sub_vocab_file = config['sub_vocab_file'] if 'sub_vocab_file' in config else '../data/wordsEn.txt'
+        sub_vocab_file = config['sub_vocab_file'] if 'sub_vocab_file' in config else 'data_sets/wordsEn.txt'
         with open(sub_vocab_file) as f:
             #self.vocab = [w.strip() for w in f.readlines()]
             self.vocab = defaultdict(list)
@@ -247,7 +248,8 @@ class ParaQADataset(QADataset):
             self.q_types = {
                     'read_blanked':1,
                     'proper_read_replaced':1,
-                    'read_with_masked':1,
+                    #'read_with_masked':1,
+                    'long_mlm':1.0,
                     'read_line':1,
                     'highlight_text':1.0,
                     'read_highlighted':1,
@@ -258,7 +260,8 @@ class ParaQADataset(QADataset):
             self.q_types_noblock = {
                     'read_blanked':1,
                     'proper_read_replaced':1,
-                    'read_with_masked':1.0,
+                    #'read_with_masked':1.0,
+                    'long_mlm':1.0,
                     'read_line':1,
                     'highlight_text':1.0,
                     'read_highlighted':1,

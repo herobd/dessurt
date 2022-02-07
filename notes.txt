@@ -505,10 +505,41 @@ New Total rel recall, prec, Fm: 0.44573643410852715     0.31767955801104975     
 
 funsd+table_mmswin_bart_PTfrom69i580k_81 391168
 old Total entity recall, prec, Fm:      0.734   0.673   0.702
-New Total entity recall, prec, Fm:      0.727   0.667   0.695
+New Total entity recall, prec, Fm:      0.727   0.667   0.695 <- Much higher entity Fm
 old Total rel recall, prec, Fm: 0.409   0.311   0.353
 New Total rel recall, prec, Fm: 0.424   0.341   0.378
 
+JSON Eval ==============
+
+funsdJSON_mmswin_bart_PTfro94i222k_106 8000
+Maybe not full set?
+Total entity recall, prec, Fm:  0.557   0.662   0.605
+Total rel recall, prec, Fm:     0.384   0.667   0.488
+New eval:
+Total entity recall, prec, Fm:0.57 0.628   0.598
+Total rel recall, prec, Fm:0.318 0.536     0.399
+
+funsdJSON_mmswin_bart_PTfro94i953k_T 8000 (after left header and checkboxes addition)
+Total entity recall, prec, Fm:  0.589   0.676   0.629  <- Has lower recall, often cuts short
+Total rel recall, prec, Fm:     0.372   0.636   0.469
+
+funsdJSONft_mmswin_bart_PTfro94i953k_T 8000
+Total entity recall, prec, Fm:  0.575   0.656   0.613
+Total rel recall, prec, Fm:     0.341   0.613   0.438
+
+funsdJSONft_mmswin_bart_PTfro94i953k_T 13824
+Total entity recall, prec, Fm:  0.581   0.698   0.634
+Total rel recall, prec, Fm:     0.357   0.613   0.451
+
+
+Link All Eval =====
+funsdJSONft_mmswin_bart_PTfro94i953k_T 8000
+Total entity recall, prec, Fm:  0.584   0.601   0.592
+Total rel recall, prec, Fm:     0.285   0.239   0.26
+
+funsdJSONft_mmswin_bart_PTfro94i953k_T 13824
+Total entity recall, prec, Fm:  0.651   0.657   0.654 <- Higher entity Fm
+Total rel recall, prec, Fm:     0.404   0.366   0.384
 
 
 =======

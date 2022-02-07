@@ -29,6 +29,9 @@ def display(data):
             img[:,:,2] *= 1-data['mask_label'][b,0]
         #img[2,img[2]<1]=0
 
+        print('mask')
+        print(data['distill_loss_mask'])
+
         #label = data['label']
         #gt = data['gt'][b]
         #print(label[:data['label_lengths'][b],b])

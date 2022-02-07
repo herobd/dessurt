@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import json
+import logging
 #from skimage import io
 #from skimage import draw
 #import skimage.transform as sktransform
@@ -27,6 +28,7 @@ def collate(batch):
             'mask_labels_batch_mask': None,
             "bart_logits": torch.cat([b['bart_logits'] for b in batch],dim=0) if 'bart_logits' in batch[0] and batch[0]['bart_logits'] is not None else None,
             "bart_last_hidden": torch.cat([b['bart_last_hidden'] for b in batch],dim=0) if 'bart_last_hidden' in batch[0] and batch[0]['bart_last_hidden'] is not None else None,
+            "distill_loss_mask": torch.cat([b['distill_loss_mask'] for b in batch],dim=0) if 'distill_loss_mask' in batch[0] and batch[0]['distill_loss_mask'] is not None else None,
             }
 
 class DistilBartDataset(torch.utils.data.Dataset):
@@ -40,9 +42,10 @@ class DistilBartDataset(torch.utils.data.Dataset):
 
         if split=='train':
             no_distill = config.get('no_distill',False)
-            self.loss_mask = config.get('loss_mask',False)
+            self.loss_mask = config.get('loss_mask',True)
             if not no_distill or self.loss_mask:
                 self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/bart-large')
+                self.blank_token = 50264
             if not no_distill:
                 self.model = BartForConditionalGeneration.from_pretrained('./cache_huggingface/bart-large')
                 self.model.eval()
@@ -69,11 +72,18 @@ class DistilBartDataset(torch.utils.data.Dataset):
         self.held_instance=None
         self.used_held = 0
         self.max_used_held = config['prefetch_factor']//2 if 'prefetch_factor' in config else 2
+        self.logger = logging.getLogger(self.__class__.__name__)
 
     def __len__(self):
         return 1000
 
     def __getitem__(self,index):
+        return self.getitem(index)
+    def getitem(self,index,recur=0):
+        #if recur>1:
+        #    self.logger.info('Repeating if distill dataset {}'.format(recur))
+        if recur>15:
+            return None
 
         image_h,image_w = self.image_size
 
@@ -98,7 +108,8 @@ class DistilBartDataset(torch.utils.data.Dataset):
 
         words,to_remove,target_string,block = makeMLMInstance(ocr)
         if words is None:
-            return self.__getitem__(index)
+            image=None
+            return self.getitem(index,recur+1)
 
 
 
@@ -125,7 +136,8 @@ class DistilBartDataset(torch.utils.data.Dataset):
                     print('bad index, probably: {} or {}'.format(input_ids.max(),gt_input_ids.max()))
                     print(bart_input_string)
                     print(target_string)
-                    return self.__getitem__(index)
+                    image=None
+                    return self.getitem(index,recur+1)
             logits = bart_out.logits
             last_hidden = bart_out.decoder_hidden_states[-1]
             #print('End BART '+bart_input_string)
@@ -139,38 +151,68 @@ class DistilBartDataset(torch.utils.data.Dataset):
             #So we'll compute the insertions and deletions in the Levenstein distance betweem the target and input
             #From there we'll imply which tokens in the target are important and shouldn't be masked.
             #This isn't perfect, but should be closer than no mask at all
-            dynamic_prog=[None]*input_ids.shape(1)
+            #We also will ignore the insertion masks (at beginning and end only in our data) as it's unclear that the distribution of words would be the same between the models
+            dynamic_prog = [None]*(input_ids.shape[1])
             for ii,input_id in enumerate(input_ids[0]):
-                dynamic_prog[target_id] = [None]*gt_input_ids.shape(1)
+                dynamic_prog[ii] = [None]*(gt_input_ids.shape[1])
+
 
                 for ti,targ_id in enumerate(gt_input_ids[0]):
-                    same = input_id==targ_id
-                    if same:
-                        past_score,past_path = dynamic_prog[ii-1][ti-1]
-                        possible_paths=[(past_score,past_path+[False])]
-                    else:
-                        possible_paths = []
-                        if ii>0 and not same:
-                            past_score,past_path = dynamic_prog[ii-1][ti]
-                            possible_paths.append((past_score+1,past_path+['next']))
-                        if ti>0 and not same:
-                            past_score,past_path = dynamic_prog[ii][ti-1]
-                            possible_paths.append((past_score+1,past_path+['here']))
-                        possible_paths.sort(key=lambda a:a[0])
+                    same = input_id.item()==targ_id.item()
+                    blank = input_id.item()==self.blank_token and ii>1 and ii<input_ids.shape[1]-1
+                    possible_paths = []
+                    if ii>0 and ti>0:
+                        past_score,mask = dynamic_prog[ii-1][ti-1]
+                        possible_paths.append(
+                                (past_score+(0 if same else (1 if blank else 1.1)),
+                                    mask+[blank],
+                                    #past_path+[(ii,ti)]
+                                    ))
+                    elif ii==0 and ti==0:
+                        possible_paths.append(
+                                ((0 if same else 1),
+                                    [blank],
+                                    #[(0,0)]
+                                    ))
+    
+                    if ii>0:
+                        past_score,mask = dynamic_prog[ii-1][ti]
+                        possible_paths.append(
+                                (past_score+1.2,
+                                    mask,#+['skip'],
+                                    #past_path+[(ii,ti)]
+                                    ))
+                    if ti>0:
+                        past_score,mask = dynamic_prog[ii][ti-1]
+                        possible_paths.append(
+                                (past_score+(0.9 if blank else 1.1),
+                                    mask+[blank],
+                                    #past_path+[(ii,ti)]
+                                    ))
+
+                    possible_paths.sort(key=lambda a:a[0])
                     
                     dynamic_prog[ii][ti] = possible_paths[0]
-            path = dynamic_prog[-1][-1][1]
-            loss_mask = []
-            next_step=False
-            for step in path:
-                if not step:
-                    loss_mask.append(next_step)
-                    next_step=False
-                elif step=='here':
-                    loss_mask.append(True)
-                else:
-                    next_step=True
-            assert len(loss_mask) == gt_input_ids.shape(1)
+            score,loss_mask = dynamic_prog[-1][-1]
+            #for mask,(ii,ti) in zip(loss_mask,path):
+            #    print('{}:{}, {}:{}, {}'.format(ii,input_ids[0,ii].item(),ti,gt_input_ids[0,ti].item(),mask))
+            #assert all(m!='bad' for m in loss_mask)
+            assert len(loss_mask) == gt_input_ids.shape[1]
+            loss_mask = torch.BoolTensor(loss_mask)[None,:] #tensor and add batch dim
+
+            if not loss_mask.any():
+                loss_mask = None
+            #    #get a new batch
+            #    image=None
+            #    dynamic_prog=None
+            #    gt_input_ids=None
+            #    input_ids=None
+            #    loss_mask=None
+            #    words=None
+            #    ocr=None
+            #    return self.getitem(index,recur+1)
+
+
 
 
         image = 255-image
@@ -189,8 +231,12 @@ class DistilBartDataset(torch.utils.data.Dataset):
         for paragraph in block['paragraphs']:
             for line in paragraph['lines']:
                 x1,y1,x2,y2 = line['box']
-                image[y1:y2,x1:x2,1] = 255 #highlight block we're working on
+                image[round(y1):round(y2),round(x1):round(x2),1] = 255 #highlight block we're working on
         for x1,y1,x2,y2 in to_remove:
+            x1=round(x1)
+            y1=round(y1)
+            x2=round(x2)
+            y2=round(y2)
             image[y1:y2,x1:x2,0] = 128 #we mask to 0 [middle of range] in qa dataset
             image[y1:y2,x1:x2,1] = -255 #flip mask
 
@@ -236,9 +282,11 @@ class DistilBartDataset(torch.utils.data.Dataset):
                 "answers": [target_string],
                 "mask_label": None,
                 }
-        if logits is not None:
+        if logits is not None and (not self.loss_mask or loss_mask is not None):
             ret["bart_logits"] = logits
             ret["bart_last_hidden"] = last_hidden
+        if self.loss_mask and loss_mask is not None:
+            ret['distill_loss_mask'] = loss_mask
 
         return ret
 

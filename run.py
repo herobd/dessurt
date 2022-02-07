@@ -139,7 +139,6 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do
 
 
     model.eval()
-    model.max_pred_len=40
     model.overwrite_char_prob=overwrite_char_prob
     if gpu:
         model = model.cuda()

@@ -1,5 +1,5 @@
 {
-    "name": "test",
+    "name": "distil+form+syhw+para+cdip_mmswinNoMw7_bart_PTfrom122i200k_125",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -14,6 +14,18 @@
         "num_workers": 6,
         "datasets": [
             {
+                "freq": 0.2,
+                "config": {
+                    "data_set_name": "DistilBartDataset",
+                    "data_dir": "../data/fonts",
+                    "image_size": [1008,784],
+                    "max_auto_tokens": 512,
+                    "clear_fonts": true,
+                    "min_text_height": 14,
+                    "min_para_width": 0.65
+                }
+            },
+            {
                 "freq": 0.05,
                 "config": {
                     "data_set_name": "SynthFormDataset",
@@ -24,16 +36,43 @@
                     "rescale_range": [0.9,1.1],
                     "crop_params": {
                         "crop_size": [
-                            1152,768
+                            1008,784
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
-                    "image_size": [1148,760],
+                    "image_size": [1004,780],
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "batch_size": 1
+                }
+            },
+            {
+                "freq": 0.01,
+                "config": {
+                    "data_set_name": "SynthHWQA",
+                    "data_dir": "../data/synth_hw_wiki",
+                    "cased": true,
+                    "batch_size": 1,
+                    "num_workers": 4,
+                    "rescale_range": [
+                        0.9,
+                        1.1
+                    ],
+                    "crop_params": {
+                        "crop_size": [
+                            1008,784
+                        ],
+                        "pad": 0,
+                        "rot_degree_std_dev": 1
+                    },
+                    "questions": 1,
+                    "max_qa_len_in": 640,
+                    "max_qa_len_out": 400000,
+                    "image_size": [1004,780],
+                    "prefetch_factor": 10,
+                    "persistent_workers": true
                 }
             },
             {
@@ -51,17 +90,44 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1152,768
+                            1008,784
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
-                    "image_size": [1148,760],
+                    "max_qa_len_out": 400000,
+                    "image_size": [1004,780],
                     "prefetch_factor": 10,
                     "persistent_workers": true
+                }
+            },
+            {
+                "freq": 0.45,
+                "config": {
+                    "data_set_name": "CDIPCloudQA",
+                    "data_dir": "../data/CDIPCloud",
+                    "mode": "hard_word",
+                    "cased": true,
+                    "batch_size": 1,
+                    "num_workers": 4,
+                    "rescale_range": [
+                        0.9,
+                        1.1
+                    ],
+		    "rescale_to_crop_size_first": true,
+                    "crop_params": {
+                        "crop_size": [
+                            1008,784
+                        ],
+                        "pad": 0,
+                        "rot_degree_std_dev": 1
+                    },
+                    "questions": 1,
+                    "max_qa_len_in": 640,
+                    "max_qa_len_out": 400000,
+                    "reuse_factor": 1.0
                 }
             }
         ]
@@ -77,13 +143,10 @@
     },
     "loss": {
         "#answer": "padded_seq_cross_entropy",
-        "answer": "label_smoothing",
-	"#mask": "sigmoid_BCE_mask_loss",
-	"mask": "focalLoss"
+        "answer": "label_smoothing"
     },
     "loss_weights": {
         "answer": 1,
-	"mask": 1,
         "cosine": 0,
         "distillation": 2.5
     },
@@ -102,11 +165,10 @@
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
-        "seperate_log_at": "logs",
         "val_step": 999999999999999,
         "save_step": 200000,
-        "save_step_minor": 10,
-        "log_step": 10,
+        "save_step_minor": 256,
+        "log_step": 1024,
         "print_pred_every": 1024,
         "verbosity": 1,
         "monitor": "loss",
@@ -121,24 +183,23 @@
             1000
         ],
         "#ramp_down_steps": 10000,
-        "#swa_lr_mul": 0.01,
-        "DEBUG":"DEBUG"
+        "#swa_lr_mul": 0.01
     },
     "arch": "MmSwin",
     "model": {
         "image_size": [
-            1152,768
+            1008,784
         ],
+        "do_mask_output": false,
         "use_set_length": true,
         "init_from_pretrained": "bart",
         "use_special_question_tokens": true,
         "max_q_tokens": 20,
-        "#max_a_tokens": 3400,
-        "max_a_tokens": 80,
+        "max_a_tokens": 800,
         "no_dropout": false,
-        "window_size": 12,
+        "window_size": 7,
         "decode_dim": 768,
-        "dim_ff": 30,
+        "dim_ff": 3072,
         "decode_num_heads": 8,
         "blocks_per_level": [
             4,

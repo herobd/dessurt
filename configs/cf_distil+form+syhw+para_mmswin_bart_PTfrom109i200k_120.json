@@ -1,5 +1,5 @@
 {
-    "name": "test",
+    "name": "distil+form+syhw+para_mmswin_bart_PTfrom109i200k_120",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -13,6 +13,18 @@
         "batch_size": 1,
         "num_workers": 6,
         "datasets": [
+            {
+                "freq": 0.2,
+                "config": {
+                    "data_set_name": "DistilBartDataset",
+                    "data_dir": "../data/fonts",
+                    "image_size": [1152,768],
+                    "max_auto_tokens": 512,
+                    "clear_fonts": true,
+                    "min_text_height": 14,
+                    "min_para_width": 0.65
+                }
+            },
             {
                 "freq": 0.05,
                 "config": {
@@ -32,8 +44,35 @@
                     "image_size": [1148,760],
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "batch_size": 1
+                }
+            },
+            {
+                "freq": 0.01,
+                "config": {
+                    "data_set_name": "SynthHWQA",
+                    "data_dir": "../data/synth_hw_wiki",
+                    "cased": true,
+                    "batch_size": 1,
+                    "num_workers": 4,
+                    "rescale_range": [
+                        0.9,
+                        1.1
+                    ],
+                    "crop_params": {
+                        "crop_size": [
+                            1152,768
+                        ],
+                        "pad": 0,
+                        "rot_degree_std_dev": 1
+                    },
+                    "questions": 1,
+                    "max_qa_len_in": 640,
+                    "max_qa_len_out": 400000,
+                    "image_size": [1148,760],
+                    "prefetch_factor": 10,
+                    "persistent_workers": true
                 }
             },
             {
@@ -58,7 +97,7 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "image_size": [1148,760],
                     "prefetch_factor": 10,
                     "persistent_workers": true
@@ -102,11 +141,10 @@
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
-        "seperate_log_at": "logs",
         "val_step": 999999999999999,
         "save_step": 200000,
-        "save_step_minor": 10,
-        "log_step": 10,
+        "save_step_minor": 256,
+        "log_step": 1024,
         "print_pred_every": 1024,
         "verbosity": 1,
         "monitor": "loss",
@@ -121,8 +159,7 @@
             1000
         ],
         "#ramp_down_steps": 10000,
-        "#swa_lr_mul": 0.01,
-        "DEBUG":"DEBUG"
+        "#swa_lr_mul": 0.01
     },
     "arch": "MmSwin",
     "model": {
@@ -134,11 +171,11 @@
         "use_special_question_tokens": true,
         "max_q_tokens": 20,
         "#max_a_tokens": 3400,
-        "max_a_tokens": 80,
+        "max_a_tokens": 800,
         "no_dropout": false,
         "window_size": 12,
         "decode_dim": 768,
-        "dim_ff": 30,
+        "dim_ff": 3072,
         "decode_num_heads": 8,
         "blocks_per_level": [
             4,

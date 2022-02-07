@@ -3,10 +3,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from model.pairing_g_graph_layoutlm import  runLayoutLM
 from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding, BartLearnedPositionalEmbedding
 from model.rel_pos_im_transformer import QTransformerLayer
-from model.swin_transformer import ConvPatchEmbed, SwinTransformerBlock, PatchMerging
+from model.swin_transformer import ConvPatchEmbed, SwinTransformerBlock, PatchMerging, PatchEmbed
 from model.trans_pooling import QPooler
 try:
     from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
@@ -31,12 +30,15 @@ class MmSwin(BaseModel):
         super(MmSwin, self).__init__(config)
         self.image_size = config['image_size'] #start at 512?
         dropout = 0 if 'no_dropout' in config and  config['no_dropout'] else 0.1
+        self.conv_patch_emb = config.get('conv_patch_emb',True)
         lighter_conv_patch_emb = config['lighter_conv_patch_emb'] if 'lighter_conv_patch_emb' in config else False
         init_from_pretrained = config.get('init_from_pretrained',True)
         use_special_question_tokens = config.get('use_special_question_tokens',True)
         self.use_set_length = config.get('use_set_length',True)
         self.max_q_tokens = config.get('max_q_tokens',32)
         self.max_a_tokens = config.get('max_a_tokens',512)
+
+        mask_output = config.get('do_mask_output',True)
 
         blocks_per_level = config['blocks_per_level'] #[2,2,6,2] -> in:512,emb:64 then 64,32,16,8
         use_swin = config.get('use_swin',[True]*sum(blocks_per_level  ))
@@ -98,6 +100,26 @@ class MmSwin(BaseModel):
         if config.get('NER_tokens',False):
             tokens = ["[NE:{}]".format(cls) for cls in ['N', 'C', 'L', 'T', 'O', 'P', 'G','NORP', 'LAW', 'PER', 'QUANTITY', 'MONEY', 'CARDINAL', 'LOCATION', 'LANGUAGE', 'ORG', 'DATE', 'FAC', 'ORDINAL', 'TIME', 'WORK_OF_ART', 'PERCENT', 'GPE', 'EVENT', 'PRODUCT']]
             self.tokenizer.add_tokens(tokens, special_tokens=True)
+        if config.get('rvl_cdip_tokens',False):
+            tokens = [
+                'letter',
+                'form',
+                'email',
+                'handwritten',
+                'advertisement',
+                'scientific_report',
+                'scientific_publication',
+                'specification',
+                'file_folder',
+                'news_article',
+                'budget',
+                'invoice',
+                'presentation',
+                'questionnaire',
+                'resume',
+                'memo',]
+            tokens = ['C:'+cls for cls in tokens]
+            self.tokenizer.add_tokens(tokens, special_tokens=True)
         
 
 
@@ -132,13 +154,19 @@ class MmSwin(BaseModel):
             self.a_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000,offset_start=1000)
 
 
-
-        self.patch_embed =  ConvPatchEmbed(
-                img_size=self.image_size, 
-                embed_dim=im_embed_dim,
-                norm_layer=nn.LayerNorm,
-                lighter=lighter_conv_patch_emb,
-                in_chans=2) #now includes the mask channel
+        if self.conv_patch_emb:
+            self.patch_embed =  ConvPatchEmbed(
+                    img_size=self.image_size, 
+                    embed_dim=im_embed_dim,
+                    norm_layer=nn.LayerNorm,
+                    lighter=lighter_conv_patch_emb,
+                    in_chans=2) #now includes the mask channel
+        else:
+            self.patch_embed =  PatchEmbed(
+                    img_size=self.image_size, 
+                    embed_dim=im_embed_dim,
+                    norm_layer=nn.LayerNorm,
+                    in_chans=2) #now includes the mask channel
         if pre_trained_patch_emb is not None:
             checkpoint = torch.load(pre_trained_patch_emb, map_location=lambda storage, location: storage)
             pe_state_dict=self.patch_embed.state_dict()
@@ -207,36 +235,39 @@ class MmSwin(BaseModel):
 
 
         self.final_resolution = cur_resolution
-        upsample_net = [nn.ConvTranspose2d(d_im,d_im//2,4,2,1),
-                        nn.InstanceNorm2d(d_im//2),
-                        nn.Dropout2d(p=0.125,inplace=True),
-                        nn.ReLU(inplace=True),
-                        nn.Conv2d(d_im//2,d_im//4,3,1,1),
-                        nn.InstanceNorm2d(d_im//4),
-                        nn.Dropout2d(p=0.125,inplace=True),
-                        nn.ReLU(inplace=True)]
-        d_im = d_im//4
-        #upsample for rest of Swin blocks
-        for i in range(len(blocks_per_level)-1):
-            upsample_net+=[ nn.ConvTranspose2d(d_im,d_im//2,4,2,1),
+        if mask_output:
+            upsample_net = [nn.ConvTranspose2d(d_im,d_im//2,4,2,1),
                             nn.InstanceNorm2d(d_im//2),
                             nn.Dropout2d(p=0.125,inplace=True),
-                            nn.ReLU(inplace=True)]
-            d_im = d_im//2
-        #upsample for original CNN encoding
-        for i in range(2):
-            if d_im>16:
-                d_im_out = d_im//2
-            else:
-                d_im_out = d_im
-            upsample_net+=[ nn.ConvTranspose2d(d_im,d_im_out,4,2,1),
-                            nn.InstanceNorm2d(d_im_out),
+                            nn.ReLU(inplace=True),
+                            nn.Conv2d(d_im//2,d_im//4,3,1,1),
+                            nn.InstanceNorm2d(d_im//4),
                             nn.Dropout2d(p=0.125,inplace=True),
                             nn.ReLU(inplace=True)]
-            d_im = d_im_out
-        upsample_net.append(nn.Conv2d(d_im,1,1,1,0))
-        upsample_net.append(nn.Sigmoid())
-        self.upsample_net= nn.Sequential(*upsample_net)
+            d_im = d_im//4
+            #upsample for rest of Swin blocks
+            for i in range(len(blocks_per_level)-1):
+                upsample_net+=[ nn.ConvTranspose2d(d_im,d_im//2,4,2,1),
+                                nn.InstanceNorm2d(d_im//2),
+                                nn.Dropout2d(p=0.125,inplace=True),
+                                nn.ReLU(inplace=True)]
+                d_im = d_im//2
+            #upsample for original CNN encoding
+            for i in range(2):
+                if d_im>16:
+                    d_im_out = d_im//2
+                else:
+                    d_im_out = d_im
+                upsample_net+=[ nn.ConvTranspose2d(d_im,d_im_out,4,2,1),
+                                nn.InstanceNorm2d(d_im_out),
+                                nn.Dropout2d(p=0.125,inplace=True),
+                                nn.ReLU(inplace=True)]
+                d_im = d_im_out
+            upsample_net.append(nn.Conv2d(d_im,1,1,1,0))
+            upsample_net.append(nn.Sigmoid())
+            self.upsample_net= nn.Sequential(*upsample_net)
+        else:
+            self.upsample_net=None
         
         
 
@@ -451,10 +482,13 @@ class MmSwin(BaseModel):
 
         ##############
         #Visual output
-        H,W = self.final_resolution
-        #reshape and permute to convert to image
-        im_feats = im_tokens.view(new_batch_size,H,W,im_tokens.size(2)).permute(0,3,1,2)
-        out_mask = self.upsample_net(im_feats)
+        if self.upsample_net is not None:
+            H,W = self.final_resolution
+            #reshape and permute to convert to image
+            im_feats = im_tokens.view(new_batch_size,H,W,im_tokens.size(2)).permute(0,3,1,2)
+            out_mask = self.upsample_net(im_feats)
+        else:
+            out_mask = None
 
                     
 

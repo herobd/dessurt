@@ -280,6 +280,9 @@ class BaseTrainer:
         self.start_iteration = 1
         self.iteration=self.start_iteration
         self.checkpoint_dir = os.path.join(config['trainer']['save_dir'], self.name)
+        self.seperate_log = None
+        if 'seperate_log_at' in config['trainer']:
+            self.seperate_log = os.path.join(config['trainer']['seperate_log_at'],self.name+'.log')
         ensure_dir(self.checkpoint_dir)
         json.dump(config, open(os.path.join(self.checkpoint_dir, 'config.json'), 'w'),
                   indent=4, sort_keys=False)
@@ -513,6 +516,15 @@ class BaseTrainer:
             self.logger.info("Saved current best: {} ...".format('model_best.pth'))
         else:
             self.logger.info("Saved checkpoint: {} ...".format(filename))
+
+        if self.seperate_log is not None:
+            state = {
+                'iteration': iteration,
+                'logger': self.train_logger,
+                'config': self.config
+            }
+            torch.save(state, self.seperate_log) #something is wrong with thel inkgin
+
 
 
         ######DEBUG
