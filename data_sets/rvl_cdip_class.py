@@ -23,6 +23,7 @@ class RVLCDIPClass(QADataset):
         super(RVLCDIPClass, self).__init__(dirPath,split,config,images)
 
         self.do_masks=True
+        self.cased = True
 
         if split=='valid':
             split = 'val'
@@ -48,9 +49,10 @@ class RVLCDIPClass(QADataset):
 
         split_file = os.path.join(dirPath,'labels',f'{split}.txt')
         self.images=[]
-        for open(split_file) as f:
-            for line in f.readlines()
+        with open(split_file) as f:
+            for line in f.readlines():
                 path, cls = line.strip().split(' ')
+                path = os.path.join(dirPath,'images',path)
                 cls = int(cls)
                 qa=[{
             'question':'classify>',
