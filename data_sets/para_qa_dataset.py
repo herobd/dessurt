@@ -94,6 +94,8 @@ def makeMLMInstance(ocr):
                     top_y = min(w['box'][1] for w in line) -1
                     bot_y = max(w['box'][3] for w in line) +1
                     to_remove.append((left_x,top_y,right_x,bot_y))
+                    if to_remove[-1][3]-to_remove[-1][1]>100:
+                        import pdb;pdb.set_trace()
             else:
                 #import pdb; pdb.set_trace()
                 if pre_add_none[loc] is not None:
@@ -107,12 +109,13 @@ def makeMLMInstance(ocr):
                         left_x = max(0,right_x - random.randrange(word_min_w,word_max_w))
                         line['box'] = (left_x,line_y1,line_x2,line_y2)
                     else:
-                        assert loc == len(pre_add_none)-1
                         _,top_y,left_x,bot_y = word['box']
                         left_x += space
                         right_x = left_x + random.randrange(word_min_w,word_max_w)
                         line['box'] = (line_x1,line_y1,right_x,line_y2)
                     to_remove.append((left_x,top_y,right_x,bot_y))
+                    if to_remove[-1][3]-to_remove[-1][1]>100:
+                        import pdb;pdb.set_trace()
 
                 #if random.random()<0.5:
                 #    loc-=1
