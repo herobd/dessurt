@@ -15,6 +15,7 @@ from data_sets import synth_para_qa
 from data_sets import synth_form_dataset
 from data_sets import squad
 from data_sets import docvqa
+from data_sets import rvl_cdip_class
 from data_sets import test_qa
 from data_sets import funsd_qa
 from data_sets import cdip_qa
@@ -145,6 +146,8 @@ def getDataLoader(config,split,rank=None,world_size=None):
             return withCollate(squad.SQuAD,squad.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='DocVQA':
             return withCollate(docvqa.DocVQA,docvqa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='RVLCDIPClass':
+            return withCollate(rvl_cdip_class.RVLCDIPClass,rvl_cdip_class.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='TestQA':
             return withCollate(test_qa.TestQA,test_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='NobrainQA':

@@ -526,10 +526,18 @@ Total rel recall, prec, Fm:     0.372   0.636   0.469
 funsdJSONft_mmswin_bart_PTfro94i953k_T 8000
 Total entity recall, prec, Fm:  0.575   0.656   0.613
 Total rel recall, prec, Fm:     0.341   0.613   0.438
+=
+Total entity recall, prec, Fm:  0.594   0.638   0.615
+Total rel recall, prec, Fm:     0.347   0.583   0.435
 
 funsdJSONft_mmswin_bart_PTfro94i953k_T 13824
 Total entity recall, prec, Fm:  0.581   0.698   0.634
 Total rel recall, prec, Fm:     0.357   0.613   0.451
+
+
+funsdJSONft_mmswin_bart_PTfro94i964k_T 10k
+Total entity recall, prec, Fm:  0.596   0.687   0.638
+Total rel recall, prec, Fm:     0.359   0.589   0.446
 
 
 Link All Eval =====
