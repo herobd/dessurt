@@ -81,7 +81,7 @@ def fixLoadJSON(pred):
             pred_data = json.loads(pred)
         except json.decoder.JSONDecodeError as e:
             sections = '{}'.format(e)
-            print(sections)
+            #print(sections)
             sections=sections.replace("':'","';'")
             sections = sections.split(':')
             #if len(sections)==3:
@@ -278,13 +278,13 @@ def fixLoadJSON(pred):
                     assert False
             else:
                 assert False
-
-            print('corrected pred: '+pred)
+            
+            #print('corrected pred: '+pred)
     return pred_data
 
 class Entity():
     def __init__(self,text,cls,identity):
-        print('Created entitiy: {}'.format(text))
+        #print('Created entitiy: {}'.format(text))
         self.text=text
         self.text_lines = text.split('\\')
         self.cls=cls
@@ -627,14 +627,15 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             #TODO multi-step pred for long forms
 
             #print GT
-            print('==GT form==')
-            for ga,gb in pairs:
-                print('{} [{}] <=> {} [{}]'.format(transcription_groups[ga],gt_classes[ga],transcription_groups[gb],gt_classes[gb]))
-            print()
+            #print('==GT form==')
+            #for ga,gb in pairs:
+            #    print('{} [{}] <=> {} [{}]'.format(transcription_groups[ga],gt_classes[ga],transcription_groups[gb],gt_classes[gb]))
+            #print()
 
             question='json>'
             answer,out_mask = model(img,None,[[question]],RUN=True)
-            print('PRED:: '+answer)
+            if not quite:
+                print('PRED:: '+answer)
             answer = derepeat(answer)
             total_answer = answer
             for i in range(3): #shouldn't need to be more than 4 calls for test set
@@ -647,7 +648,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 prompt = tokenizer.decode(tokens,skip_special_tokens=True)
                 question = 'json~'+prompt
                 answer,out_mask = model(img,None,[[question]],RUN=True)
-                print('CONT:: '+answer)
+                if not quite:
+                    print('CONT:: '+answer)
                 len_before = len(answer)
                 answer = derepeat(answer)
                 len_after = len(answer)
@@ -658,9 +660,10 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 total_answer+=answer
             
             pred_data = fixLoadJSON(total_answer)
-
-            print('==Corrected==')
-            print(json.dumps(pred_data,indent=2))
+            
+            if not quiet:
+                print('==Corrected==')
+                print(json.dumps(pred_data,indent=2))
             
             #get entities and links
             pred_entities=[]
@@ -672,7 +675,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     pass
                 else:
                     print('non-dict at document level: {}'.format(thing))
-                    import pdb;pdb.set_trace()
+                    assert False
+                    #import pdb;pdb.set_trace()
 
 
             #we're going to do a check for repeats of the last entity. This frequently happens
@@ -694,8 +698,9 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 else:
                     break
             if remove is not None:
-                print('removing duplicate end entities: {}'.format(pred_entities[remove:]))
-                pred_entities = pred_entities[:remove]
+                if not quiet:
+                    print('removing duplicate end entities: {}'.format(pred_entities[remove:]))
+                    pred_entities = pred_entities[:remove]
                 
             #align entities to GT ones
             #pred_to_gt={}
@@ -818,7 +823,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 while len(to_realign)>0:
                     if debug_count>50:
                         print('infinite loop')
-                        import pdb;pdb.set_trace()
+                        assert False
+                        #import pdb;pdb.set_trace()
                     debug_count+=1
 
                     doing = to_realign
@@ -1006,7 +1012,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
 
                     if match is None:
                         #false positive? Split entity?
-                        print('No match found for pred entitiy: {}'.format(e_i.text))
+                        if not quiet:
+                            print('No match found for pred entitiy: {}'.format(e_i.text))
                         #import pdb;pdb.set_trace()
                         pass
                     else:
@@ -1023,7 +1030,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
 
                         if len(p_lines)==len(g_lines):
                             entities_truepos+=1
-                        else:
+                        elif not quiet:
                             print('Incomplete entity')
                             print('    GT:{}'.format(g_lines))
                             print('  pred:{}'.format(p_lines))
@@ -1047,6 +1054,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print('Rel precision: {}'.format(rel_prec))
                 print('Rel recall:    {}'.format(rel_recall))
                 print('Rel Fm:        {}'.format(2*rel_recall*rel_prec/(rel_recall+rel_prec) if rel_recall+rel_prec>0 else 0))
+            else:
+                print('{} Entity Fm: {},  Rel Fm:{}'.format(instance['imgName'],2*entity_recall*entity_prec/(entity_recall+entity_prec) if entity_recall+entity_prec>0 else 0,2*rel_recall*rel_prec/(rel_recall+rel_prec) if rel_recall+rel_prec>0 else 0))
 
             total_rel_true_pos += rel_truepos
             total_rel_pred += len(pred_links)
@@ -1084,7 +1093,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                             draw_img[y-3:y+3,x-3:x+3]=color
 
                     else:
-                        print('unmatched entity: {}'.format(entity.text))
+                        if not quiet:
+                            print('unmatched entity: {}'.format(entity.text))
                         best=9999999999
                         for g_i,g_text in enumerate(transcription_groups):
                             s = norm_ed(g_text,entity.text)
