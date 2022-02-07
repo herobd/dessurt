@@ -45,6 +45,9 @@ class SpecialTokenEmbedder(nn.Module):
                 'full_row~','full_col~',
                 'full_row0~','full_col0~',
 
+                #RVL CDIP
+                'classify>',
+
                 #census TODO
                 ]
         self.get_index = {s:i for i,s in enumerate(tokens)}
