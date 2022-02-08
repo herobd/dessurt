@@ -49,7 +49,19 @@ class CensusQA(RecordQA):
                     } 
 
         self.pretrain = config.get('pretrain',False)
-        if self.pretrain:
+        if self.pretrain=='all':
+            self.cased=True
+            self.all_fields.remove('previous')
+            if self.train:
+                self.q_types =         ['all-name','all-age','whole-doc','get-field']
+                self.q_type_weights =  [1,          1,          2, 0.5]
+                self.q_types_single =         ['all-name','all-age','whole-doc','get-field']
+                self.q_type_single_weights =  [1,1,2, 0.5]
+            else:
+                #these are what we'll use to actually score
+                #(not actually looked at as it isn't sampling)
+                self.q_types =         ['whole-doc']
+        elif self.pretrain:
             self.cased=True
             self.all_fields.remove('previous')
             if self.train:

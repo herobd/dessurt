@@ -44,6 +44,8 @@ class SpecialTokenEmbedder(nn.Module):
                 'list_row_headers~','list_column_headers~',
                 'full_row~','full_col~',
                 'full_row0~','full_col0~',
+                #RVL CDIP
+                'classify>',
                 #census (parital)
                 'all-name~','all-given name~','all-age~','record~',
                 ]

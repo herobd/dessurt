@@ -100,6 +100,26 @@ class MmSwin(BaseModel):
         if config.get('NER_tokens',False):
             tokens = ["[NE:{}]".format(cls) for cls in ['N', 'C', 'L', 'T', 'O', 'P', 'G','NORP', 'LAW', 'PER', 'QUANTITY', 'MONEY', 'CARDINAL', 'LOCATION', 'LANGUAGE', 'ORG', 'DATE', 'FAC', 'ORDINAL', 'TIME', 'WORK_OF_ART', 'PERCENT', 'GPE', 'EVENT', 'PRODUCT']]
             self.tokenizer.add_tokens(tokens, special_tokens=True)
+        if config.get('rvl_cdip_tokens',False):
+            tokens = [
+                'letter',
+                'form',
+                'email',
+                'handwritten',
+                'advertisement',
+                'scientific_report',
+                'scientific_publication',
+                'specification',
+                'file_folder',
+                'news_article',
+                'budget',
+                'invoice',
+                'presentation',
+                'questionnaire',
+                'resume',
+                'memo',]
+            tokens = ['C:'+cls for cls in tokens]
+            self.tokenizer.add_tokens(tokens, special_tokens=True)
         
 
 
