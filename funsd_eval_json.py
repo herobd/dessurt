@@ -140,6 +140,7 @@ def fixLoadJSON(pred):
                     prev_comma = pred[:char-1].rfind(',')
                     prev_colon = pred[:char-1].rfind(':')
                     if prev_quote>prev_comma and prev_quote>prev_colon and prev_colon>prev_comma:
+
                         #we have an unterminated list?
                         next_quote = pred[char:].find('"')
                         assert next_quote!=-1
@@ -159,7 +160,9 @@ def fixLoadJSON(pred):
                             #This is an incorrectly started value string
                             #we'll just remove it
                             pred = pred[:char]+pred[next_end:]
-                        else:
+                        elif pred[char]=='}':
+                                pred = pred[:char]+']'+pred[char:]
+                        else: 
                             assert False
                     else:
                         assert False
@@ -364,12 +367,18 @@ def parseDict(header,entities,links):
         if row_headers is not None:
             row_ids = list(range(len(entities),len(entities)+len(row_headers)))
             for rh in reversed(row_headers):
+                if '<<' in rh and '>>' in rh:
+                    #subheader
+                    raise NotImplementedError("subheader is not implemented")
                 entities.append(Entity(rh,'question',len(entities)))
         else:
             row_ids = []
         if col_headers is not None:
             col_ids = list(range(len(entities),len(entities)+len(col_headers)))
             for ch in reversed(col_headers):
+                if '<<' in ch and '>>' in ch:
+                    #subheader
+                    raise NotImplementedError("subheader is not implemented")
                 entities.append(Entity(ch,'question',len(entities)))
         else:
             col_ids = []
@@ -636,11 +645,14 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             answer,out_mask = model(img,None,[[question]],RUN=True)
             if not quiet:
                 print('PRED:: '+answer)
+            num_calls=1
+            total_char_pred=len(answer)
             answer = derepeat(answer)
             total_answer = answer
             for i in range(3): #shouldn't need to be more than 4 calls for test set
                 if end_token in total_answer:
                     break
+                num_calls+=1
                 
                 #how much of a lead? Need it to fit tokenwise in the 20 limit
                 tokens = tokenizer.encode(answer)
@@ -648,6 +660,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 prompt = tokenizer.decode(tokens,skip_special_tokens=True)
                 question = 'json~'+prompt
                 answer,out_mask = model(img,None,[[question]],RUN=True)
+                total_char_pred += len(answer)
                 if not quiet:
                     print('CONT:: '+answer)
                 len_before = len(answer)
@@ -659,6 +672,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
 
                 total_answer+=answer
             
+            final_char_pred = len(total_answer)
             pred_data = fixLoadJSON(total_answer)
             
             if not quiet:
@@ -875,8 +889,10 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 if draw:
                     #pred_to_gt = {p_i:g_i for g_i,p_i in new_gt_to_pred.items()}
                     bad_pred_pairs=set(pred_links)-good_pred_pairs
+
                 ############
             else:
+                #Cheating
                 gt_pair_hit=[False]*len(pairs)
                 rel_truepos=0
                 pred_to_gt=defaultdict(list)
@@ -1055,7 +1071,10 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print('Rel recall:    {}'.format(rel_recall))
                 print('Rel Fm:        {}'.format(2*rel_recall*rel_prec/(rel_recall+rel_prec) if rel_recall+rel_prec>0 else 0))
             else:
-                print('{} Entity Fm: {},  Rel Fm:{}'.format(instance['imgName'],2*entity_recall*entity_prec/(entity_recall+entity_prec) if entity_recall+entity_prec>0 else 0,2*rel_recall*rel_prec/(rel_recall+rel_prec) if rel_recall+rel_prec>0 else 0))
+                print('{} ({}, {}) EntityFm: {},  RelFm: {}'.format(instance['imgName'],
+                    num_calls,
+                    final_char_pred/total_char_pred,
+                    2*entity_recall*entity_prec/(entity_recall+entity_prec) if entity_recall+entity_prec>0 else 0,2*rel_recall*rel_prec/(rel_recall+rel_prec) if rel_recall+rel_prec>0 else 0))
 
             total_rel_true_pos += rel_truepos
             total_rel_pred += len(pred_links)

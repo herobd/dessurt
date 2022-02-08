@@ -19,7 +19,7 @@ def perform_crop(img, gt, crop):
     return scaled_gt_img, scaled_gt
 
 
-def generate_random_crop(img, pixel_gt, line_gts, point_gts, params, bb_gt=None, bb_auxs=None, query_bb=None,cropPoint=None,center=False):
+def generate_random_crop(img, pixel_gt, line_gts, point_gts, params, bb_gt=None, bb_auxs=None, query_bb=None,cropPoint=None,center=False,left=False):
     #img : np array image
     #pixel_gt : np array to be cropped in same wya
     #line_gt/point_gts : not used
@@ -45,11 +45,18 @@ def generate_random_crop(img, pixel_gt, line_gts, point_gts, params, bb_gt=None,
         if cropPoint is None:
             if cnt==0 and center:
                 dim0 = (img.shape[0]-csY)//2
-                dim1 = (img.shape[1]-csX)//2
+                if left:
+                    dim1=0
+                else:
+                    dim1 = (img.shape[1]-csX)//2
             elif query_bb is None:
                 dim0 = np.random.randint(0,img.shape[0]-csY)
-                dim1 = np.random.randint(0,img.shape[1]-csX)
+                if left:
+                    dim1 = np.random.randint(0,math.ceil((img.shape[1]-csX)/20))
+                else:
+                    dim1 = np.random.randint(0,img.shape[1]-csX)
             else:
+                assert not left
                 #force the random crop to fully contain the query, if it can
                 # otherwise contain part of it
                 minY=int(max(0,query_bb[9]-csY,query_bb[11]-csY,query_bb[13]-csY,query_bb[15]-csY))
@@ -384,6 +391,7 @@ class CropBoxTransform(object):
         self.flip_vert = crop_params['flip_vert'] if 'flip_vert' in crop_params else False
 
         self.random = crop_params['random'] if 'random' in crop_params else True
+        self.left = crop_params.get('left',False)
 
 
     def __call__(self, sample,cropPoint=None):
@@ -573,7 +581,7 @@ class CropBoxTransform(object):
                     gt[:,:,3] = gt[:,:,3] + pad_params[0][0]
 
 
-        crop_params, org_img, pixel_gt, line_gt_match, point_gt_match, new_bb_gt, new_bb_auxs, cropPoint = generate_random_crop(org_img, pixel_gt, line_gts, point_gts, self.random_crop_params, bb_gt=bb_gt, bb_auxs=bb_auxs, query_bb=query_bb, cropPoint=cropPoint, center=not self.random)
+        crop_params, org_img, pixel_gt, line_gt_match, point_gt_match, new_bb_gt, new_bb_auxs, cropPoint = generate_random_crop(org_img, pixel_gt, line_gts, point_gts, self.random_crop_params, bb_gt=bb_gt, bb_auxs=bb_auxs, query_bb=query_bb, cropPoint=cropPoint, center=not self.random, left=self.left)
         #print(crop_params)
         #print(gt_match)
         

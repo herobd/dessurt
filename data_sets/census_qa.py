@@ -33,6 +33,7 @@ class CensusQA(RecordQA):
         self.all_fields=set(['line no.','household','name','previous','race','relationship','sex', 'given name', 'age', 'birthplace'])
         self.id_fields=set(['line no.','name'])
         self.next_name_ids = ['given name','name']
+        self.ordered_ids = ['line no.','household','name','relationship','sex','race','age','birthplace']
         self.main_id_field = 'line no.'
         self.name_to_id = {
                     'line no.': 'LINE_NBR',
@@ -46,6 +47,20 @@ class CensusQA(RecordQA):
                     'age': 'PR_AGE',
                     'birthplace': 'PR_BIRTH_PLACE'
                     } 
+
+        self.pretrain = config.get('pretrain',False)
+        if self.pretrain:
+            self.cased=True
+            self.all_fields.remove('previous')
+            if self.train:
+                self.q_types =         ['all-name','all-age','whole-doc']
+                self.q_type_weights =  [1,          1,          2]
+                self.q_types_single =         ['all-name','all-age','whole-doc']
+                self.q_type_single_weights =  [1,1,2]
+            else:
+                #these are what we'll use to actually score
+                #(not actually looked at as it isn't sampling)
+                self.q_types =         ['whole-doc']
 
 
 

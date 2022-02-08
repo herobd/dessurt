@@ -44,8 +44,8 @@ class SpecialTokenEmbedder(nn.Module):
                 'list_row_headers~','list_column_headers~',
                 'full_row~','full_col~',
                 'full_row0~','full_col0~',
-
-                #census TODO
+                #census (parital)
+                'all-name~','all-given name~','all-age~','record~',
                 ]
         self.get_index = {s:i for i,s in enumerate(tokens)}
         self.emb = nn.Embedding(len(tokens),emb_dim)
