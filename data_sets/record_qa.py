@@ -61,12 +61,14 @@ class RecordQA(QADataset):
 
         q_a_pairs = []
         if self.train:
-            if len(entries)>1:
+            if len(entries)>1 or self.pretrain:
                 q_types = random.choices(self.q_types,self.q_type_weights,k=self.questions*50)
             elif len(entries)>0:
                 q_types = random.choices(self.q_types_single,self.q_type_single_weights,k=self.questions*50)
             else:
                 q_types = ['np']*(self.questions*20)
+        elif self.pretrain:
+           q_types = ['whole-doc'] 
         else:
             q_types = []
             for entry in entries:
@@ -80,7 +82,32 @@ class RecordQA(QADataset):
                 q_type,instance,switch = q_type
             else:
                 switch=False
-            if q_type == 'next-name':
+            if q_type == 'all-name':
+                name_id = random.choice(self.next_name_ids)
+                names=[]
+                for entry in entries:
+                    names.append(entry[name_id] if entry[name_id] is not None else self.blank_token)
+                response = '\\'.join(names) + self.end_token if len(names)>0 else self.blank_token
+                question='all-{}~'.format(name_id)
+                self.qaAdd(q_a_pairs,question,response)
+            elif q_type == 'all-age':
+                ages=[]
+                for entry in entries:
+                    ages.append(entry['age'] if entry['age'] is not None else self.blank_token)
+                response = '\\'.join(ages) + self.end_token if len(ages)>0 else self.blank_token
+                question='all-age~'
+                self.qaAdd(q_a_pairs,question,response)
+            elif q_type == 'whole-doc':
+                lines=[]
+                for entry in entries:
+                    line=[]
+                    for field_id in self.ordered_ids:
+                        line.append(entry[field_id] if entry[field_id]  is not None else self.blank_token)
+                    lines.append('|'.join(line))
+                response = '\\'.join(lines) + self.end_token if len(lines)>0 else self.blank_token
+                question='record~'
+                self.qaAdd(q_a_pairs,question,response)
+            elif q_type == 'next-name':
                 down = random.random()<0.5
                 name_id = random.choice(self.next_name_ids)
                 for i in range(20):
