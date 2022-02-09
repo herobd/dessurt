@@ -2,67 +2,64 @@ from utils import img_f
 import numpy as np
 import random
 
-def perp( a ) :
-    b = np.empty_like(a)
-    b[0] = -a[1]
-    b[1] = a[0]
-    return b
+from utils.naf_to_json import putInReadOrder
 
-def lineIntersection(lineA, lineB, threshA_low=10, threshA_high=10, threshB_low=10, threshB_high=10, both=False):
-    a1=lineA[0]
-    a2=lineA[1]
-    b1=lineB[0]
-    b2=lineB[1]
-    da = a2-a1
-    db = b2-b1
-    dp = a1-b1
-    dap = perp(da)
-    denom = np.dot( dap, db)
-    num = np.dot( dap, dp )
-    point = (num / denom.astype(float))*db + b1
-    #check if it is on atleast one line segment
-    vecA = da/np.linalg.norm(da)
-    p_A = np.dot(point,vecA)
-    a1_A = np.dot(a1,vecA)
-    a2_A = np.dot(a2,vecA)
+size=100
+offset=20
+for i in range(1):
+    a= np.zeros((size,size,3),dtype=np.uint8)
+    x1=10#random.random()*size
+    x2=30#random.random()*size
+    x3=30#random.random()*size
+    x4=10#random.random()*size
+    y1=10#random.random()*size
+    y2=10#random.random()*size
+    y3=30#random.random()*size
+    y4=30#random.random()*size
+    img_f.line(a,(x1,y1),(x4,y4),[255,0,0])
+    img_f.line(a,(x2,y2),(x3,y3),[255,0,0])
+    poly1 = np.array([[x1,y1],[x2,y2],[x3,y3],[x4,y4]])
+    p1_1 = (poly1[0]+poly1[3])/2
+    p1_2 = (poly1[1]+poly1[2])/2
+    h1_1 = (poly1[3]+poly1[2])/2
+    h1_2 = (poly1[0]+poly1[1])/2
+    offset_x = 50#random.random()*offset - offset//2
+    offset_y = 0#random.random()*offset - offset//2
+    x1+=offset_x
+    x2+=offset_x
+    x3+=offset_x
+    x4+=offset_x
+    y1+=offset_y
+    y2+=offset_y
+    y3+=offset_y
+    y4+=offset_y
+    img_f.line(a,(x1,y1),(x4,y4),[0,255,0])
+    img_f.line(a,(x2,y2),(x3,y3),[0,255,0])
+    poly2 = np.array([[x1,y1],[x2,y2],[x3,y3],[x4,y4]])
+    p2_1 = (poly2[0]+poly2[3])/2
+    p2_2 = (poly2[1]+poly2[2])/2
+    h2_1 = (poly2[3]+poly2[2])/2
+    h2_2 = (poly2[0]+poly2[1])/2
 
-    vecB = db/np.linalg.norm(db)
-    p_B = np.dot(point,vecB)
-    b1_B = np.dot(b1,vecB)
-    b2_B = np.dot(b2,vecB)
+    order = putInReadOrder(1,poly1,2,poly2)
     
-    ###rint('A:{},  B:{}, int p:{}'.format(lineA,lineB,point))
-    ###rint('{:.0f}>{:.0f} and {:.0f}<{:.0f}  and/or  {:.0f}>{:.0f} and {:.0f}<{:.0f} = {} {} {}'.format((p_A+threshA_low),(min(a1_A,a2_A)),(p_A-threshA_high),(max(a1_A,a2_A)),(p_B+threshB_low),(min(b1_B,b2_B)),(p_B-threshB_high),(max(b1_B,b2_B)),(p_A+threshA_low>min(a1_A,a2_A) and p_A-threshA_high<max(a1_A,a2_A)),'and' if both else 'or',(p_B+threshB_low>min(b1_B,b2_B) and p_B-threshB_high<max(b1_B,b2_B))))
-    if both:
-        if ( (p_A+threshA_low>min(a1_A,a2_A) and p_A-threshA_high<max(a1_A,a2_A)) and
-             (p_B+threshB_low>min(b1_B,b2_B) and p_B-threshB_high<max(b1_B,b2_B)) ):
-            return point
+    img_f.line(a,p1_1,p1_2,[255,0,0])
+    a[round(p1_1[1]),round(p1_1[0])]=[255,255,0]
+    img_f.line(a,p2_1,p2_2,[0,255,0])
+    a[round(p2_1[1]),round(p2_1[0])]=[0,255,255]
+
+    img_f.line(a,h1_1,h1_2,[255,0,0])
+    a[round(h1_1[1]),round(h1_1[0])]=[255,0,255]
+    img_f.line(a,h2_1,h2_2,[0,255,0])
+    a[round(h2_1[1]),round(h2_1[0])]=[255,255,255]
+
+    if order[0]==1:
+        print('red on top')
     else:
-        if ( (p_A+threshA_low>min(a1_A,a2_A) and p_A-threshA_high<max(a1_A,a2_A)) or
-             (p_B+threshB_low>min(b1_B,b2_B) and p_B-threshB_high<max(b1_B,b2_B)) ):
-            return point
-    return None
+        print('green on top')
 
-a= np.zeros((500,500),dtype=np.uint8)
-lines=[]
-for i in range(1000):
-    x1=random.random()*500
-    x2=random.random()*500
-    y1=random.random()*500
-    y2=random.random()*500
-    new_line = np.array([[x1,y1],[x2,y2]])
-    
-    hit= False
-    for line in lines:
-        if lineIntersection(line,new_line) is not None:
-            hit = True
-            break
-    if not hit:
-        lines.append(new_line)
-        img_f.line(a,[x1,y1],[x2,y2],255)
-
-img_f.imshow('x',a)
-img_f.show()
+    img_f.imshow('x',a)
+    img_f.show()
 
 #from data_sets.gen_daemon import GenDaemon
 #import numpy as np

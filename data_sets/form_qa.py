@@ -113,7 +113,17 @@ class Table:
                 ty = min(ty,y1)
                 by = max(by,y2)
         return lx,ty,rx,by
-
+class FillInProse:
+    #This is a paragraph/run of text where there are blanks to be filled in
+    def __init__(self,entities):
+        self.entities = entities
+    def getBox(self):
+    def __repr__(self):
+        s = ''
+        for e in self.entities:
+            s+= 'Q' if e.cls=='question' else 'A'
+            s+= ':'+e.text+', '
+        return 'FillInProse({})'.format(s)
 class Entity:
     #This represents a multi-line entity
     def __init__(self,cls,lines=None):
@@ -375,7 +385,7 @@ class FormQA(QADataset):
     #entity_adj =[(upper,lower)] either can be None
     #tables = obj. col/row_headers = [entity_id], cells = [[entity_id]]
     #
-    def makeQuestions(self,s,entities,entity_link,tables,raw_entities,raw_entity_dict):
+    def makeQuestions(self,s,entities,entity_link,tables,raw_entities,raw_entity_dict,proses=None):
         """
         Generates N questions from given docuemnt information:
          - entities: a list of Entity objects
@@ -402,12 +412,12 @@ class FormQA(QADataset):
             else:
                 probs = self.q_types_no_table
             if 'full_json' in probs.keys():
-                json_text = self.makeJsonText(entities,entity_link,tables)
+                json_text = self.makeJsonText(entities,entity_link,tables,proses)
             q_types = random.choices(list(probs.keys()),probs.values(),k=self.questions*50)
         else:
             if 'full_json' in self.q_types:
                 q_types = [('full_json',None,None)]
-                json_text = self.makeJsonText(entities,entity_link,tables)
+                json_text = self.makeJsonText(entities,entity_link,tables,proses)
             else:
                 q_types = []
                 for cls in all_of_cls:
@@ -1582,7 +1592,7 @@ class FormQA(QADataset):
             new_link_dict[e1]=sorted_e2s
         return new_link_dict
 
-    def makeJsonText(self,entities,entity_link,tables):
+    def makeJsonText(self,entities,entity_link,tables,proses=None):
         #spits out json with all structure
 
 
@@ -1608,6 +1618,9 @@ class FormQA(QADataset):
                     if e==e2:
                         table_map[i]=table_id+len(entities)
                         break
+        if proses is not None:
+            for prose in proses:
+                TODO()
         
         entities = entities+tables
         old_entities = entities
