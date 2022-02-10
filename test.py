@@ -2,20 +2,38 @@ from utils import img_f
 import numpy as np
 import random
 
-from utils.naf_to_json import putInReadOrder
+from data_sets.naf_qa import putInReadOrder
 
 size=100
 offset=20
-for i in range(1):
+ax1=[10,10,10,10,10]
+ax2=[10,10,40,30,30]
+ax3=[20,20,40,30,30]
+ax4=[20,20,10,10,10]
+ay1=[40,40,10,10,10]
+ay2=[10,10,10,10,14]
+ay3=[10,10,30,30,34]
+ay4=[40,40,30,30,30]
+xoff = [0,40,0,0,0]
+yoff = [-30,0,20,20,20]
+for i in range(3):
     a= np.zeros((size,size,3),dtype=np.uint8)
-    x1=10#random.random()*size
-    x2=30#random.random()*size
-    x3=30#random.random()*size
-    x4=10#random.random()*size
-    y1=10#random.random()*size
-    y2=10#random.random()*size
-    y3=30#random.random()*size
-    y4=30#random.random()*size
+    x1=ax1[i]
+    x2=ax2[i]
+    x3=ax3[i]
+    x4=ax4[i]
+    y1=ay1[i]
+    y2=ay2[i]
+    y3=ay3[i]
+    y4=ay4[i]
+    #x1=random.random()*size
+    #x2=random.random()*size
+    #x3=random.random()*size
+    #x4=random.random()*size
+    #y1=random.random()*size
+    #y2=random.random()*size
+    #y3=random.random()*size
+    #y4=random.random()*size
     img_f.line(a,(x1,y1),(x4,y4),[255,0,0])
     img_f.line(a,(x2,y2),(x3,y3),[255,0,0])
     poly1 = np.array([[x1,y1],[x2,y2],[x3,y3],[x4,y4]])
@@ -23,8 +41,10 @@ for i in range(1):
     p1_2 = (poly1[1]+poly1[2])/2
     h1_1 = (poly1[3]+poly1[2])/2
     h1_2 = (poly1[0]+poly1[1])/2
-    offset_x = 50#random.random()*offset - offset//2
-    offset_y = 0#random.random()*offset - offset//2
+    offset_x = xoff[i]#random.random()*offset - offset//2
+    offset_y = yoff[i]#random.random()*offset - offset//2
+    #offset_x = random.random()*offset - offset//2
+    #offset_y = random.random()*offset - offset//2
     x1+=offset_x
     x2+=offset_x
     x3+=offset_x
