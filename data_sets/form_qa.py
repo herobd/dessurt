@@ -12,6 +12,8 @@ import timeit
 from data_sets.qa import QADataset,collate
 from data_sets.wiki_text import getWikiArticle,getWikiDataset
 
+from utils.read_order import sortReadOrder
+
 import utils.img_f as img_f
 from transformers import BartTokenizer
 
@@ -113,10 +115,53 @@ class Table:
                 ty = min(ty,y1)
                 by = max(by,y2)
         return lx,ty,rx,by
-
+class FillInProse:
+    #This is a paragraph/run of text where there are blanks to be filled in
+    def __init__(self,entities):
+        self.entities = entities
+    def getBox(self):
+        lx=ty=999999
+        rx=by=-1
+        for entity in self.entities:
+            x1,y1,x2,y2 = entity.getBox()
+            lx = min(lx,x1)
+            rx = max(rx,x2)
+            ty = min(ty,y1)
+            by = max(by,y2)
+        return lx,ty,rx,by
+    def __repr__(self):
+        s = ''
+        for e in self.entities:
+            s+= 'Q' if e.cls=='question' else 'A'
+            s+= ':'+e.text+', '
+        return 'FillInProse({})'.format(s)
+class MinoredField:
+    #This is a paragraph/run of text where there are blanks to be filled in
+    def __init__(self,question,answers,minors):
+        self.question = question
+        self.answers = answers
+        self.minors = minors
+    def getBox(self):
+        lx,ty,rx,by = self.question.getBox() if self.question is not None else (99999,99999,-1,-1)
+        for entity in self.answers:
+            x1,y1,x2,y2 = entity.getBox()
+            lx = min(lx,x1)
+            rx = max(rx,x2)
+            ty = min(ty,y1)
+            by = max(by,y2)
+        for entity in self.minors:
+            x1,y1,x2,y2 = entity.getBox()
+            lx = min(lx,x1)
+            rx = max(rx,x2)
+            ty = min(ty,y1)
+            by = max(by,y2)
+        return lx,ty,rx,by
+    def __repr__(self):
+        return 'FillInProse({}, {}, {})'.format(self.question,self.answers,self.minors)
 class Entity:
     #This represents a multi-line entity
     def __init__(self,cls,lines=None):
+        self.used = False #used for debuggin in JSON creation
         if isinstance(cls,Entity) and lines is None:
             #copy contstructor
             other = cls
@@ -180,7 +225,14 @@ class Entity:
 
 class Line:
     def __init__(self,text,box):
-        self.box=box
+        if isinstance(box,np.ndarray) and len(box.shape)==2:
+            self.box = box.flatten()
+        else:
+            self.box=box
+        if len(self.box)==8:
+            lX,tY,rX,tY,rX,bY,lX,bY = self.box
+            self.box=[lX,tY,rX,tY,rX,bY,lX,bY,
+                    lX,(tY+bY)/2,rX,(tY+bY)/2,(lX+rX)/2,tY,(lX+rX)/2,bY]
         self.bbid=None
         self.text=text
         self.ambiguous=False
@@ -375,7 +427,7 @@ class FormQA(QADataset):
     #entity_adj =[(upper,lower)] either can be None
     #tables = obj. col/row_headers = [entity_id], cells = [[entity_id]]
     #
-    def makeQuestions(self,s,entities,entity_link,tables,raw_entities,raw_entity_dict):
+    def makeQuestions(self,s,entities,entity_link,tables,raw_entities,raw_entity_dict,proses=None,minored_fields=None):
         """
         Generates N questions from given docuemnt information:
          - entities: a list of Entity objects
@@ -386,6 +438,20 @@ class FormQA(QADataset):
 
         if len(entities)==0:
              return []
+
+
+        #sort all entity_links and raw_entity_dict in read order
+        new_entity_link=[]
+        for head,tails in entity_link:
+            if isinstance(tails,(list,tuple)):
+                tails = sortReadOrder([(t,entities[t].lines[0].box) for t in tails])
+            new_entity_link.append((head,tails))
+        entity_link = new_entity_link
+
+        for e_i in raw_entity_dict:
+            items = sortReadOrder([(t,raw_entities[t].lines[0].box) for t in raw_entity_dict[e_i]])
+            raw_entity_dict[e_i]=items
+                
 
         all_of_cls=defaultdict(list)
         for entity in entities:
@@ -402,12 +468,12 @@ class FormQA(QADataset):
             else:
                 probs = self.q_types_no_table
             if 'full_json' in probs.keys():
-                json_text = self.makeJsonText(entities,entity_link,tables)
+                json_text = self.makeJsonText(entities,entity_link,tables,proses,minored_fields)
             q_types = random.choices(list(probs.keys()),probs.values(),k=self.questions*50)
         else:
             if 'full_json' in self.q_types:
                 q_types = [('full_json',None,None)]
-                json_text = self.makeJsonText(entities,entity_link,tables)
+                json_text = self.makeJsonText(entities,entity_link,tables,proses,minored_fields)
             else:
                 q_types = []
                 for cls in all_of_cls:
@@ -438,7 +504,10 @@ class FormQA(QADataset):
             if tok_len>self.max_a_tokens:
                 if tok_len-(self.max_q_tokens+self.max_a_tokens)>0:
                     if self.train:
-                        r = random.randrange(tok_len-(self.max_q_tokens+self.max_a_tokens))
+                        if random.random()<0.1:
+                            r = random.randrange(tok_len-(self.max_q_tokens+self.max_a_tokens))
+                        else:
+                            r = random.randrange(tok_len-self.max_q_tokens-2)
                     else:
                         r = tok_len-(self.max_q_tokens+self.max_a_tokens)
                 else:
@@ -1352,15 +1421,15 @@ class FormQA(QADataset):
                             for line in header.lines:
                                 outmask.append(self.convertBB(s,line.box))
                                 table_ids.append(line.bbid)
-
-                    for r in range(len(table.row_headers)):
-                        for c in range(len(table.col_headers)):
-                            cell = table.cells[r][c]
-                            #print('{},{}: {}'.format(r,c,cell.text if cell is not None else '-'))
-                            if cell is not None:
-                                for line in cell.lines:
-                                    outmask.append(self.convertBB(s,line.box))
-                                    table_ids.append(line.bbid)
+                    if len(table.cells)>0:
+                        for r in range(len(table.row_headers)):
+                            for c in range(len(table.col_headers)):
+                                cell = table.cells[r][c]
+                                #print('{},{}: {}'.format(r,c,cell.text if cell is not None else '-'))
+                                if cell is not None:
+                                    for line in cell.lines:
+                                        outmask.append(self.convertBB(s,line.box))
+                                        table_ids.append(line.bbid)
                 self.qaAdd(q_a_pairs,'t#>',str(len(tables)),table_ids,[],outmask)
 
             elif q_type=='highlight-table':
@@ -1373,15 +1442,16 @@ class FormQA(QADataset):
                         for line in header.lines:
                             outmask.append(self.convertBB(s,line.box))
                             table_ids.append(line.bbid)
-
-                for r in range(len(table.row_headers)):
-                    for c in range(len(table.col_headers)):
-                        cell = table.cells[r][c]
-                        #print('{},{}: {}'.format(r,c,cell.text if cell is not None else '-'))
-                        if cell is not None:
-                            for line in cell.lines:
-                                outmask.append(self.convertBB(s,line.box))
-                                table_ids.append(line.bbid)
+                
+                if len(table.cells)>0:
+                    for r in range(len(table.row_headers)):
+                        for c in range(len(table.col_headers)):
+                            cell = table.cells[r][c]
+                            #print('{},{}: {}'.format(r,c,cell.text if cell is not None else '-'))
+                            if cell is not None:
+                                for line in cell.lines:
+                                    outmask.append(self.convertBB(s,line.box))
+                                    table_ids.append(line.bbid)
 
 
                 self.qaAdd(q_a_pairs,'0t~{}'.format(table_i),'',table_ids,[],outmask)
@@ -1582,7 +1652,7 @@ class FormQA(QADataset):
             new_link_dict[e1]=sorted_e2s
         return new_link_dict
 
-    def makeJsonText(self,entities,entity_link,tables):
+    def makeJsonText(self,entities,entity_link,tables,proses=None,minored_fields=None):
         #spits out json with all structure
 
 
@@ -1608,8 +1678,20 @@ class FormQA(QADataset):
                     if e==e2:
                         table_map[i]=table_id+len(entities)
                         break
-        
         entities = entities+tables
+
+        if proses is not None:
+            for prose in proses:
+                table_entities+=prose.entities
+            entities+=proses
+        if minored_fields is not None:
+            for minored_field in minored_fields:
+                if minored_field.question is not None:
+                    table_entities.append(minored_field.question)
+                table_entities+=minored_field.answers+minored_field.minors
+            entities+=minored_fields
+
+        
         old_entities = entities
         #table_ids = list(range(len(entities)-len(tables),len(entities)))
         
@@ -1641,6 +1723,26 @@ class FormQA(QADataset):
                 for line in entity.lines:
                     h_sum += line.getBox()[3]-line.getBox()[1]
                 avg_line_h = h_sum/len(entity.lines)
+            elif isinstance(entity,MinoredField):
+                if entity.question is not None:
+                    h_sum=entity.question.getBox()[3]-entity.question.getBox()[1]
+                    h_count=1
+                else:
+                    h_sum=0
+                    h_count=0
+                for e in entity.answers+entity.minors:
+                    for lin in e.lines:
+                        h_sum += line.getBox()[3]-line.getBox()[1]
+                        h_count += 1
+                avg_line_h = h_sum/h_count
+            elif isinstance(entity,FillInProse):
+                h_sum=0
+                h_count=0
+                for e in entity.entities:
+                    for lin in e.lines:
+                        h_sum += line.getBox()[3]-line.getBox()[1]
+                        h_count += 1
+                avg_line_h = h_sum/h_count
             else:
                 h_sum = 0
                 h_count = 0
@@ -1687,11 +1789,21 @@ class FormQA(QADataset):
 
             if do_this:
                 old_to_new[gi]=len(new_entities)
+                ####DEBUG
+                #try:
+                #    if entity.text == '6, PLACE OF BIRTH':
+                #        import pdb; pdb.set_trace()
+                #except:
+                #    pass
                 new_entities.append(entity)
                 i+=1
+     
+        
         
         new_entity_link = []
         for head,tail in entity_link:
+            if head not in old_to_new:
+                continue
             head = old_to_new[head]
             if tail is None:
                 pass
@@ -1711,7 +1823,9 @@ class FormQA(QADataset):
                         not_in_table.append(t)
 
                 if not part_of_table:
-                    tail = [old_to_new[t] for t in tail]
+                    tail = [old_to_new[t] for t in tail if t in old_to_new]
+                    if len(tail)==0:
+                        tail=None
                 else:
                     table = old_entities[table_id]
 
@@ -1736,7 +1850,7 @@ class FormQA(QADataset):
 
                     #Is this a whole row/col/table super-header?
                     table_header = False
-                    if len(tail)>=len(table.row_headers):
+                    if len(tail)>=len(table.row_headers) and len(table.row_headers)>0:
                         table_header = True
                         tail_entities = [old_entities[t] for t in tail]
                         for r_h in table.row_headers:
@@ -1770,7 +1884,7 @@ class FormQA(QADataset):
                     continue
 
             elif tail in old_to_new:
-                tail = old_to_new[tail]
+                tail = old_to_new[tail] if tail in old_to_new else None
             elif new_entities[head].cls=='header':
                 #this actually is part of a table?
                 possible_header = old_entities[tail]
@@ -1789,8 +1903,9 @@ class FormQA(QADataset):
                 print('unhandeled case, probably {} {} is in a table'.format(tail,old_entities[tail]))
                 import pdb;pdb.set_trace()
                 print('ERROR')
-            new_entity_link.append((head,tail))
-        assert len(new_entity_link) == len(entity_link) or len(tables)>0
+            if tail is not None:
+                new_entity_link.append((head,tail))
+        #assert len(new_entity_link) == len(entity_link) or len(tables)>0 or len(proses)>0 or len(minored_fields)>0
         entity_link = new_entity_link
         entities = new_entities
         
@@ -1837,7 +1952,7 @@ class FormQA(QADataset):
             if ei not in claimed_by and entity not in table_entities:
                 children = self.getChildren(ei,entities,link_dict)
                 #full[entities[ei]]=children
-                if isinstance(entities[ei],Table):
+                if isinstance(entities[ei],Table) or isinstance(entities[ei],FillInProse) or isinstance(entities[ei],MinoredField):
                     doc.append(children)
 
                 elif entities[ei].cls == 'header':
@@ -1909,8 +2024,23 @@ class FormQA(QADataset):
             ret = {
                     'row headers': entities[ei].row_headers,
                     'column headers': entities[ei].col_headers,
-                    'cells': entities[ei].cells
-                    }
+                 }
+            if len(entities[ei].cells)>0: #because we forgot to transcribe table cells for NAF dataset
+                ret['cells']= entities[ei].cells
+
+        elif isinstance(entities[ei],FillInProse):
+            ret = {}
+            for e in entities[ei].entities:
+                ret[e.text]=e.cls #dict preserves order
+        elif isinstance(entities[ei],MinoredField):
+            ret = {}
+            if entities[ei].question is not None:
+                ret[entities[ei].question.text]='question'
+            if len(entities[ei].answers)>0:
+                ret['answers']=entities[ei].answers
+            if len(entities[ei].minors)>0:
+                ret['subprompt']=entities[ei].minors
+
         elif ei in link_dict:
             children = link_dict[ei]
             if children is None:
@@ -1957,6 +2087,8 @@ class FormQA(QADataset):
  
 #This formatting is specifically choosen so the autoregressive predicts the text and than the class
 def formatHeader(entity,children):
+    assert not entity.used
+    entity.used = True
     #return {'text':entity,
     #        'header content': children if children is not None else []
     #        }
@@ -1965,6 +2097,8 @@ def formatHeader(entity,children):
         ret['content']=children
     return ret
 def formatQuestion(entity,children):
+    assert not entity.used
+    entity.used = True
     #return {'text':entity,
     #        'question answers': children if children is not None else []
     #        }
@@ -1973,6 +2107,8 @@ def formatQuestion(entity,children):
         ret['answers']=children
     return ret
 def formatOther(entity):
+    assert not entity.used
+    entity.used = True
     #return {'text':entity}
     return {entity.text:entity.cls}
             

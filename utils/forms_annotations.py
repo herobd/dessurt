@@ -144,15 +144,23 @@ def convertBBs(bbs,rotate,numClasses):
 
 
 #This annotation corrects assumptions made during GTing, modifies the annotations for the current parameterization, and slightly changes the format
+#if this is None, it gets processed for QA-JSON stuff
 def fixAnnotations(this,annotations):
-    def isSkipField(this,bb):
-        return (    (this.no_blanks and (bb['isBlank']=='blank' or bb['isBlank']==3)) or
-                    (this.no_print_fields and (bb['isBlank']=='print' or bb['isBlank']==2)) or
-                    (this.no_graphics and bb['type']=='graphic') or
-                    bb['type'] == 'fieldRow' or
-                    bb['type'] == 'fieldCol' or
-                    bb['type'] == 'fieldRegion'
-                )
+    if this is None:
+        def isSkipField(this,bb):
+            return (   #((bb['isBlank']=='blank' or bb['isBlank']==3) and 'P' not in bb['type']) or
+                        bb['type']=='graphic' or
+                        bb['type'] == 'fieldRegion'
+                    )
+    else:
+        def isSkipField(this,bb):
+            return (    (this.no_blanks and (bb['isBlank']=='blank' or bb['isBlank']==3)) or
+                        (this.no_print_fields and (bb['isBlank']=='print' or bb['isBlank']==2)) or
+                        (this.no_graphics and bb['type']=='graphic') or
+                        bb['type'] == 'fieldRow' or
+                        bb['type'] == 'fieldCol' or
+                        bb['type'] == 'fieldRegion'
+                    )
     def fixIsBlank(bb):
         if 'isBlank' in bb:
             if bb['type'] == 'fieldCircle':
@@ -179,9 +187,21 @@ def fixAnnotations(this,annotations):
         fixIsBlank(bb)
         annotations['byId'][bb['id']]=bb
     if 'samePairs' in annotations:
-        if not this.only_opposite_pairs:
+        if this is None or not this.only_opposite_pairs:
             annotations['pairs']+=annotations['samePairs']
         del annotations['samePairs']
+
+    #if this is None:
+    #    #find bbs linked to blanks, as the blanks will be removed, but we want to know these are "questions" rather than "other" text
+    #    isQuestion = []
+    #    for id1,id2 in annotations['pairs']:
+    #        b1 = annotations['byId'][id1]['isBlank']
+    #        b2 = annotations['byId'][id2]['isBlank']
+    #        if b1=='blank' or b1==3:
+    #            isQuestion.append(id2)
+    #        elif b2=='blank' or b2==3:
+    #            isQuestion.append(id1)
+    #    annotations['isBlankQuestion'] = isQuestion
 
 
     numPairsWithoutBB=0
@@ -227,7 +247,7 @@ def fixAnnotations(this,annotations):
                 idsToFix.append(id)
         elif bb['type']=='fieldCircle':
             circleIds.append(id)
-            if this.swapCircle:
+            if this is None or this.swapCircle:
                 annotations['byId'][id]['type']='textCircle'
 
     del annotations['fieldBBs']
@@ -248,7 +268,7 @@ def fixAnnotations(this,annotations):
             pairsToRemove.append(i)
         elif pair[0] in idsToRemove or pair[1] in idsToRemove:
             pairsToRemove.append(i)
-        elif (this.only_opposite_pairs and 
+        elif (this is not None and this.only_opposite_pairs and 
                 ( (annotations['byId'][pair[0]]['type'][:4]=='text' and 
                    annotations['byId'][pair[1]]['type'][:4]=='text') or
                   (annotations['byId'][pair[0]]['type'][:4]=='field' and 
@@ -407,7 +427,7 @@ def fixAnnotations(this,annotations):
         assert(len(pair)==2)
     #add pairs
     toAdd=[]
-    if not this.only_opposite_pairs:
+    if this is None or not this.only_opposite_pairs:
         for gid,group in  circleGroups.items():
             for id in group:
                 for id2 in group:
