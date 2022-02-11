@@ -148,7 +148,7 @@ def convertBBs(bbs,rotate,numClasses):
 def fixAnnotations(this,annotations):
     if this is None:
         def isSkipField(this,bb):
-            return (   ((bb['isBlank']=='blank' or bb['isBlank']==3) and 'P' not in bb['type']) or
+            return (   #((bb['isBlank']=='blank' or bb['isBlank']==3) and 'P' not in bb['type']) or
                         bb['type']=='graphic' or
                         bb['type'] == 'fieldRegion'
                     )
@@ -191,17 +191,17 @@ def fixAnnotations(this,annotations):
             annotations['pairs']+=annotations['samePairs']
         del annotations['samePairs']
 
-    if this is None:
-        #find bbs linked to blanks, as the blanks will be removed, but we want to know these are "questions" rather than "other" text
-        isQuestion = []
-        for id1,id2 in annotations['pairs']:
-            b1 = annotations['byId'][id1]['isBlank']
-            b2 = annotations['byId'][id2]['isBlank']
-            if b1=='blank' or b1==3:
-                isQuestion.append(id2)
-            elif b2=='blank' or b2==3:
-                isQuestion.append(id1)
-        annotations['isBlankQuestion'] = isQuestion
+    #if this is None:
+    #    #find bbs linked to blanks, as the blanks will be removed, but we want to know these are "questions" rather than "other" text
+    #    isQuestion = []
+    #    for id1,id2 in annotations['pairs']:
+    #        b1 = annotations['byId'][id1]['isBlank']
+    #        b2 = annotations['byId'][id2]['isBlank']
+    #        if b1=='blank' or b1==3:
+    #            isQuestion.append(id2)
+    #        elif b2=='blank' or b2==3:
+    #            isQuestion.append(id1)
+    #    annotations['isBlankQuestion'] = isQuestion
 
 
     numPairsWithoutBB=0

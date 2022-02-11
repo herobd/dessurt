@@ -71,7 +71,7 @@ class NAFQA(FormQA):
                     continue
                 for imageName in imageNames:
                     ###DEBUG(')
-                    #imageName = '100660788_00355.jpg'
+                    imageName = '005025348_00007.jpg'
 
                     org_path = os.path.join(dirPath,'groups',groupName,imageName)
                     if self.cache_resized:
@@ -130,6 +130,20 @@ class NAFQA(FormQA):
             return [v*s for v in box]
         return (s*box).tolist()
 
+    def typeToClass(self,typ):
+        if 'Circle' in typ:
+            cls = 'circle'
+        elif 'text' in typ:
+            cls = 'question'
+        elif 'field' in typ:
+            assert 'Row' not in typ
+            assert 'Col' not in typ
+            cls = 'answer'
+        elif 'comment' in typ:
+            cls = 'other'
+        else:
+            assert False
+        return cls
 
 
     def getEntitiesAndSuch(self,annotations,image_scale):
@@ -199,26 +213,19 @@ class NAFQA(FormQA):
                 #assert 'Row' not in all_bbs[id1]['type'] and 'Row' not in all_bbs[id2]['type']
                 #assert 'Col' not in all_bbs[id1]['type'] and 'Col' not in all_bbs[id2]['type']
                 #same class
-                if 'Circle' in all_bbs[group[0]]['type']:
-                    cls = 'circle'
-                elif 'text' in all_bbs[group[0]]['type']:
-                    cls = 'question'
-                elif 'field' in all_bbs[group[0]]['type']:
-                    assert 'Row' not in all_bbs[group[0]]['type']
-                    assert 'Col' not in all_bbs[group[0]]['type']
-                    cls = 'answer'
-                elif 'comment' in all_bbs[group[0]]['type']:
-                    cls = 'other'
-                else:
-                    assert False
+                cls = self.typeToClass(all_bbs[group[0]]['type'])
                 lines=[]
                 for bb_id in group:
                     if bb_id not in transcriptions and 'Circle' in all_bbs[group[0]]['type']:
                         transcriptions[bb_id]='UNTRANSCRIBED CIRCLE'
+                    elif all_bbs[bb_id]['isBlank']=='blank':
+                        continue
                     lines.append(Line(transcriptions[bb_id],all_bbs[bb_id]['poly_points']))
                     bb_to_e[bb_id]=len(entities)
-                entities.append(Entity(cls,lines))
-                e_groups.append(group)
+
+                if len(lines)>0:
+                    entities.append(Entity(cls,lines))
+                    e_groups.append(group)
             else:
                 #should be para
                 assert all('P' in all_bbs[bb_id]['type'] for bb_id in group)
@@ -229,7 +236,7 @@ class NAFQA(FormQA):
                 prev_id = None
                 cls = 'question' if 'text' in prev_type else 'answer'
                 for bb_id in group:
-                    if bb_id not in transcriptions and all_bbs[bb_id]['isBlank']=='blank':
+                    if all_bbs[bb_id]['isBlank']=='blank':
                         transcriptions[bb_id]=self.blank_token
                     l = Line(transcriptions[bb_id],all_bbs[bb_id]['poly_points'  ])
                     if all_bbs[bb_id]['type']==prev_type:
@@ -271,21 +278,14 @@ class NAFQA(FormQA):
             bb= all_bbs[bb_id]
             if 'Row' not in bb['type'] and 'Col' not in bb['type']:
                 if transcriptions[bb_id]=='':
-                    #not sure why, but some blanks?
-                    for id1,id2 in all_pairs:
-                        if id1==bb_id:
-                            annotations['isBlankQuestion'].append(id2)
-                        elif id2==bb_id:
-                            annotations['isBlankQuestion'].append(id1)
+                    assert bb['isBlank']=='blank'
+                    #for id1,id2 in all_pairs:
+                    #    if id1==bb_id:
+                    #        annotations['isBlankQuestion'].append(id2)
+                    #    elif id2==bb_id:
+                    #        annotations['isBlankQuestion'].append(id1)
                 else:
-                    if 'text' in bb['type']:
-                        cls = 'question'
-                    elif 'field' in bb['type']:
-                        cls = 'answer'
-                    elif 'comment' in bb['type']:
-                        cls = 'other'
-                    else:
-                        assert False
+                    cls = self.typeToClass(bb['type'])
 
                     bb_to_e[bb_id]=len(e_groups)
                     entities.append(Entity(cls,[Line(transcriptions[bb_id],bb['poly_points'])]))
@@ -423,12 +423,29 @@ class NAFQA(FormQA):
         
         
         for id1,id2 in all_pairs:
-            if id1 not in bb_to_e or id2 not in bb_to_e:
+            #if id1 not in bb_to_e or id2 not in bb_to_e:
+            #    continue
+            #if id2=='f16':
+            #    import pdb;pdb.set_trace()
+
+            #We'll initially keep links with blanks so minor groups get processed correctly.
+            # We'll remove then later
+            try:
+                if id1 not in bb_to_e and all_bbs[id1]['isBlank']=='blank':
+                    bb1=None
+                    type1 = all_bbs[id1]['type']
+                else:
+                    bb1 = all_bbs[id1]
+                    type1 = bb1['type']
+                if id2 not in bb_to_e and all_bbs[id2]['isBlank']=='blank':
+                    bb2=None
+                    type2 = all_bbs[id2]['type']
+                else:
+                    bb2 = all_bbs[id2]
+                    type2 = bb2['type']
+            except KeyError:
                 continue
-            bb1 = all_bbs[id1]
-            type1 = bb1['type']
-            bb2 = all_bbs[id2]
-            type2 = bb2['type']
+
             if 'Row' not in type1 and 'Col' not in type2 and 'Row' not in type2 and 'Col' not in type2 and ('P' not in type1 or 'P' not in type2) and type1!=type2:
                 #if 'P' in type1 and id1 in bb_to_prose:
                 #    if type2 == 'comment' or type2==:
@@ -440,14 +457,22 @@ class NAFQA(FormQA):
                 #        continue
                 #    print('Para linked to something else...')
                 #    import pdb; pdb.set_trace()
-                e_id1 = bb_to_e[id1]
-                e1 = entities[e_id1]
-                e_id2 = bb_to_e[id2]
-                e2 = entities[e_id2]
-                if 'question'==e1.cls and ('answer'==e2.cls or 'circle'==e2.cls):
+                if bb1 is not None:
+                    e_id1 = bb_to_e[id1]
+                    e1_cls = entities[e_id1].cls
+                else:
+                    e_id1 = id1
+                    e1_cls=self.typeToClass(type1)
+                if bb2 is not None:
+                    e_id2 = bb_to_e[id2]
+                    e2_cls = entities[e_id2].cls
+                else:
+                    e_id2 = id2
+                    e2_cls=self.typeToClass(type2)
+                if 'question'==e1_cls and ('answer'==e2_cls or 'circle'==e2_cls):
                     entity_link[e_id1].append( e_id2)
                     has_link.add(e_id1)
-                elif 'question'==e2.cls and ('answer'==e1.cls or 'circle'==e1.cls):
+                elif 'question'==e2_cls and ('answer'==e1_cls or 'circle'==e1_cls):
                     entity_link[e_id2].append( e_id1)
                     has_link.add(e_id2)
                 elif 'Minor' in type1 and e_id1 in table_headers:
@@ -487,19 +512,43 @@ class NAFQA(FormQA):
         for up,downs in entity_link.items():
             for d in downs:
                 link_ups[d].append(up)
-        minored_fields=[]
+
+        new_minor_groups=[]
         for group in minor_groups:
             #find all other attached things
             new_group = set(group)
             for e_id in group:
                 new_group.update(entity_link[e_id])
                 new_group.update(link_ups[e_id])
+            new_minor_groups.append(new_group)
+
+        #merge minor groups
+        new_gi=0
+        while new_gi<len(new_minor_groups):
+            to_combine=[]
+            for i in range(new_gi+1,len(new_minor_groups)):
+                for mine in new_minor_groups[new_gi]:
+                    if mine in new_minor_groups[i]:
+                        to_combine.append(i)
+                        break
+            for i in reversed(to_combine):
+                new_minor_groups[new_gi].update(new_minor_groups[i])
+                del new_minor_groups[i]
+            new_gi+=1
+
+
+
+        #now create objects
+        minored_fields=[]
+        for new_group in new_minor_groups:
 
             #we expect one question(text) multiple answers and multiple minor
             question = None
             answers = []
             minors = []
             for e_id in new_group:
+                if isinstance(e_id,str):
+                    continue #a blank
                 typ = all_bbs[e_groups[e_id][0]]['type']
                 if 'Minor' in typ:
                     minors.append(entities[e_id])
@@ -510,19 +559,19 @@ class NAFQA(FormQA):
                     assert question is None
                     question = entities[e_id]
 
-            if question is not None and (len(answers)>0 or len(minors)>0):
+            if question is not None or (len(answers)>0 or len(minors)>0):
                 answers = sortReadOrder([(ans,ans.lines[0].box) for ans in answers])
                 minors = sortReadOrder([(minor,minor.lines[0].box) for minor in minors])
                 minored_fields.append(MinoredField(question,answers,minors))
 
 
         #update has_link with questions with blank answers
-        for bb_id in annotations['isBlankQuestion']:
-            try:
-                e_id = bb_to_e[bb_id]
-                has_link.add(e_id)
-            except KeyError:
-                pass
+        #for bb_id in annotations['isBlankQuestion']:
+        #    try:
+        #        e_id = bb_to_e[bb_id]
+        #        has_link.add(e_id)
+        #    except KeyError:
+        #        pass
 
 
         #now, relying on has_link we assign "questions" with no answer to the proper class of other
@@ -531,7 +580,18 @@ class NAFQA(FormQA):
             entity = entities[e_id]
             if entity.cls=='question':
                 entity.cls = 'other'
-
+        
+        #Remove blank links
+        new_entity_link=defaultdict(list)
+        link_ups = defaultdict(list)
+        for up,downs in entity_link.items():
+            if isinstance(up,int):
+                downs = [d for d in downs if isinstance(d,int)]
+                if len(downs)>0:
+                    new_entity_link[up]=downs
+                    for d in downs:
+                        link_ups[d].append(up)
+        entity_link = new_entity_link
 
         #return entities,entity_link,tables,proses
         #run through all entites to build bbs, assign bbid, and find ambiguity

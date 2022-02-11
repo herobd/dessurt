@@ -449,7 +449,7 @@ class FormQA(QADataset):
         entity_link = new_entity_link
 
         for e_i in raw_entity_dict:
-            items = sortReadOrder([(t,entities[t].lines[0].box) for t in raw_entity_dict[e_i]])
+            items = sortReadOrder([(t,raw_entities[t].lines[0].box) for t in raw_entity_dict[e_i]])
             raw_entity_dict[e_i]=items
                 
 
@@ -504,7 +504,7 @@ class FormQA(QADataset):
             if tok_len>self.max_a_tokens:
                 if tok_len-(self.max_q_tokens+self.max_a_tokens)>0:
                     if self.train:
-                        if random.random()<0.5:
+                        if random.random()<0.1:
                             r = random.randrange(tok_len-(self.max_q_tokens+self.max_a_tokens))
                         else:
                             r = random.randrange(tok_len-self.max_q_tokens-2)
@@ -1789,8 +1789,16 @@ class FormQA(QADataset):
 
             if do_this:
                 old_to_new[gi]=len(new_entities)
+                ####DEBUG
+                #try:
+                #    if entity.text == '6, PLACE OF BIRTH':
+                #        import pdb; pdb.set_trace()
+                #except:
+                #    pass
                 new_entities.append(entity)
                 i+=1
+     
+        
         
         new_entity_link = []
         for head,tail in entity_link:
@@ -1897,7 +1905,7 @@ class FormQA(QADataset):
                 print('ERROR')
             if tail is not None:
                 new_entity_link.append((head,tail))
-        assert len(new_entity_link) == len(entity_link) or len(tables)>0 or len(proses)>0 or len(minored_fields)>0
+        #assert len(new_entity_link) == len(entity_link) or len(tables)>0 or len(proses)>0 or len(minored_fields)>0
         entity_link = new_entity_link
         entities = new_entities
         
