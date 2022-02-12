@@ -41,7 +41,7 @@ def display(data):
                 assert a[-1]=='‡'
                 a=a[:-1]
                 a = json.loads(a)
-                a = json.dumps(a,indent=3)+'‡'
+                a = json.dumps(a,ensure_ascii=False,indent=3)+'‡'
             print(q+' : '+a)
 
         #widths.append(img.size(1))
