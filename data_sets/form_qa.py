@@ -1986,7 +1986,7 @@ class FormQA(QADataset):
         #    import pdb;pdb.set_trace()
         if self.shorten_text_in_json:
             doc = self.shortenElement(doc)
-        return json.dumps(doc,default=lambda a:a.text)+self.end_token
+        return json.dumps(doc,ensure_ascii=False,default=lambda a:a.text)+self.end_token
 
     def shortenElement(self, ele):
         if isinstance(ele,str):

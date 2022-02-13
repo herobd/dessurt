@@ -54,18 +54,14 @@ class RVLCDIPClass(QADataset):
                 path, cls = line.strip().split(' ')
                 path = os.path.join(dirPath,'images',path)
                 cls = int(cls)
-                qa=[{
-            'question':'classify>',
-            'answer':self.str_lookup[cls],
-            'bb_ids':None,
-            'in_bbs':None,
-            'out_bbs':None,
-            'mask_bbs':None
-            }]
+                qa=[]
+                self.qaAdd(qa,'classify>',self.str_lookup[cls])
                 self.images.append({'imageName':path,'imagePath':path,'annotationPath':cls,'qa':qa})
 
 
-
+        if split=='val':
+            #too long for training, shorten. 1/5?
+            self.images = self.images[::5]
 
 
 

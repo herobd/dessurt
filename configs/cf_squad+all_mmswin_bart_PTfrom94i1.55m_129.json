@@ -1,5 +1,5 @@
 {
-    "name": "distilGN+form+syhw+paraCqa+cdipC_mmswin_bart_PTfrom79i1.2m_94",
+    "name": "squad+all_mmswin_bart_PTfrom94i1.55m_129",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -13,6 +13,27 @@
         "batch_size": 1,
         "num_workers": 6,
         "datasets": [
+            {
+                "freq": 1.5,
+                "config": {
+                    "data_set_name": "SQuAD",
+                    "data_dir": "../data/SQuAD",
+                    "rescale_range": [
+                        0.9,
+                        1.1
+                    ],
+                    "crop_params": {
+                        "crop_size": [
+                            1152,768
+                        ],
+                        "pad": 0,
+                        "rot_degree_std_dev": 1
+                    },
+                    "questions": 1,
+                    "image_size": [1150,760],
+                    "cased": true
+                }
+            },
             {
                 "freq": 0.05,
                 "config": {
@@ -133,7 +154,33 @@
         ]
     },
     "validation": {
-        "shuffle": false
+        "shuffle": false,
+        "batch_size": 3,
+        "data_set_name": "MultipleDataset",
+        "datasets": [
+            {
+                "freq": 1,
+                "config": {
+                    "data_set_name": "SQuAD",
+                    "data_dir": "../data/SQuAD",
+                    "rescale_range": [
+                        1.0,
+                        1.0
+                    ],
+                    "crop_params": {
+                        "crop_size": [
+                            1152,768
+                        ],
+                        "pad": 0,
+                        "random": false
+                    },
+                    "questions": 1,
+                    "image_size": [1150,760],
+                    "cased": true
+                }
+            }
+
+        ]
     },
     "lr_scheduler_type": "none",
     "optimizer_type": "AdamW",
@@ -163,12 +210,12 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 4000000,
+        "iterations": 250000,
         "accum_grad_steps": 128,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
-        "val_step": 999999999999999,
+        "val_step": 250000,
         "save_step": 200000,
         "save_step_minor": 256,
         "log_step": 1024,

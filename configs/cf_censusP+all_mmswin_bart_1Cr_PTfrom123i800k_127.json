@@ -1,5 +1,5 @@
 {
-    "name": "distilGN+form+syhw+paraCqa+cdipC_mmswin_bart_PTfrom79i1.2m_94",
+    "name": "censusP+all_mmswin_bart_1Cr_PTfrom123i800k_127",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -14,7 +14,27 @@
         "num_workers": 6,
         "datasets": [
             {
-                "freq": 0.05,
+                "freq": 0.2,
+                "config": {
+                    "data_set_name": "CensusQA",
+                    "data_dir": "../data/familysearch",
+                    "rescale_range": [1,1.15],
+                    "max_qa_len": 999999,
+                    "questions":1,
+                    "pretrain": true,
+                    "rescale_to_crop_height_first": true,
+                    "crop_params": {
+                        "crop_size": [
+                            1152,768
+                        ],
+                        "pad": 0,
+                        "rot_degree_std_dev": 1,
+                        "left": true
+                    }
+                }
+            },
+            {
+                "freq": 0.2,
                 "config": {
                     "data_set_name": "DistilBartDataset",
                     "data_dir": "../data/fonts",
@@ -44,7 +64,7 @@
                     "image_size": [1148,760],
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "batch_size": 1
                 }
             },
@@ -69,7 +89,7 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "image_size": [1148,760],
                     "prefetch_factor": 10,
                     "persistent_workers": true
@@ -97,7 +117,7 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "image_size": [1148,760],
                     "prefetch_factor": 10,
                     "persistent_workers": true
@@ -126,14 +146,38 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "reuse_factor": 1.0
                 }
             }
         ]
     },
     "validation": {
-        "shuffle": false
+        "shuffle": false,
+        "batch_size": 3,
+        "datasets": [
+            {
+                "freq": 1,
+                "config": {
+                    "data_set_name": "CensusQA",
+                    "data_dir": "../data/familysearch",
+                    "rescale_range": [1.1,1.1],
+                    "max_qa_len": 999999,
+                    "questions":1,
+                    "pretrain": true,
+                    "rescale_to_crop_height_first": true,
+                    "crop_params": {
+                        "crop_size": [
+                            1152,768
+                        ],
+                        "pad": 0,
+                        "rot_degree_std_dev": 1,
+                        "left": true,
+                        "random": false
+                    }
+                }
+            }
+        ]
     },
     "lr_scheduler_type": "none",
     "optimizer_type": "AdamW",
@@ -163,13 +207,13 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 4000000,
+        "iterations": 200000,
         "accum_grad_steps": 128,
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
-        "val_step": 999999999999999,
-        "save_step": 200000,
+        "val_step": 25000,
+        "save_step": 100000,
         "save_step_minor": 256,
         "log_step": 1024,
         "print_pred_every": 1024,
@@ -186,20 +230,18 @@
             1000
         ],
         "#ramp_down_steps": 10000,
-        "#swa_lr_mul": 0.01,
-        "DEBUG":"DEBUG"
+        "#swa_lr_mul": 0.01
     },
     "arch": "MmSwin",
     "model": {
         "image_size": [
             1152,768
         ],
+        "max_q_tokens": 20,
+        "max_a_tokens": 800,
         "use_set_length": true,
         "init_from_pretrained": "bart",
         "use_special_question_tokens": true,
-        "max_q_tokens": 20,
-        "#max_a_tokens": 3400,
-        "max_a_tokens": 800,
         "no_dropout": false,
         "window_size": 12,
         "decode_dim": 768,
@@ -222,14 +264,14 @@
             false
         ],
         "swin_cross_attention":[
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
             false,
             false
         ],

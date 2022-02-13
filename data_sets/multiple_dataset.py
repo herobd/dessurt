@@ -21,6 +21,7 @@ from .cdip_qa import CDIPQA
 from .cdip_cloud_qa import CDIPCloudQA
 from .distil_bart import DistilBartDataset
 from .squad import SQuAD
+from .census_qa import CensusQA
 from .iam_qa import IAMQA
 from .iam_mixed import IAMMixed
 from .synth_hw_qa import SynthHWQA

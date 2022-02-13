@@ -37,7 +37,7 @@ pids=()
 
 for rank in ~<0..{1}~>
 do
-    srun -N 1 -n 1 --gpus 1 --exclusive  python  train.py --supercomputer -c configs/cf_{2}.json -s saved/{2}/checkpoint-latest.pth --rank $rank --worldsize {0} &
+    srun -N 1 -n 1 --gpus 1 --exclusive  python  train.py --supercomputer -c configs/cf_{2}.json -r saved/{2}/checkpoint-latest.pth --rank $rank --worldsize {0} &
     pids+=($!)
     if [ $rank==0 ]; then
         sleep 2.5

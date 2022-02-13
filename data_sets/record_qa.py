@@ -68,7 +68,10 @@ class RecordQA(QADataset):
             else:
                 q_types = ['np']*(self.questions*20)
         elif self.pretrain:
-           q_types = [('whole-doc',None,None)] 
+           q_types = [('whole-doc',None,None),
+                      #('all-name',None,None),
+                      #('all-age',None,None),
+                      ] 
         else:
             q_types = []
             for entry in entries:

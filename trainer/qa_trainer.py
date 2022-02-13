@@ -260,6 +260,8 @@ class QATrainer(BaseTrainer):
         Note:
             The validation metrics in log must have the key 'val_metrics'.
         """
+        self.logger.info('start valid loop')
+        start_time = timeit.default_timer()
         self.model.eval()
 
         val_metrics = {}#not a default dict since it can have different kinds of data in it
@@ -329,6 +331,8 @@ class QATrainer(BaseTrainer):
                 val_metrics['val_F_Measure_{}'.format(name)]=f
             val_metrics['val_F_Measure_MACRO']=total_Fms/len(names)
 
+        end_time = timeit.default_timer()
+        self.logger.info('Time to complete validation loop: {}'.format(end_time-start_time))
         return val_metrics
 
 
@@ -731,7 +735,14 @@ class QATrainer(BaseTrainer):
                 #    pred_data = fixLoadJSON(pred)
                 # 
                 #    #get predicted and gt entities
-               
+                elif question.startswith('classify>'):
+                    if answer==pred:
+                        log['E_class_acc'].append(1)
+                    else:
+                        log['E_class_acc'].append(0)
+                elif question.startswith('record~'):
+                    ed = editdistance.eval(answer,pred)
+                    log['E_doc_CE'].append(ed/len(answer))
                 else:
                     print('ERROR: missed question -- {}'.format(question))
                 
