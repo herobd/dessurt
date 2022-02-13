@@ -119,22 +119,31 @@ def getHeight(poly):
     p2 = (poly[3]+poly[2])/2
     return math.sqrt(np.power(p2-p1,2).sum())
 
-def putInReadOrder(a,a_poly,b,b_poly,final=False):
+def putInReadOrder(a,a_poly,b,b_poly,final=False,height=None):
     angle = (getAngle(a_poly) + getAngle(b_poly))/2
 
-    height_a = getHeight(a_poly)
     pos_a = getVertReadPosition(a_poly, angle)
-    height_b = getHeight(b_poly)
     pos_b = getVertReadPosition(b_poly, angle)
 
-
+    if height is None:
+        height_a = getHeight(a_poly)
+        height_b = getHeight(b_poly)
+        height = max(height_a,height_b)
     diff = pos_b-pos_a
-    thresh = 0.4*(height_a+height_b)/2
+    thresh = 0.4*height
+
+    #for horz comparison, they need to be relatively close horizontally
+    #a_x1 = (a_poly[0,0]+a_poly[3,0])/2
+    #a_x2 = (a_poly[1,0]+a_poly[2,0])/2
+    #b_x1 = (b_poly[0,0]+b_poly[3,0])/2
+    #b_x2 = (b_poly[1,0]+b_poly[2,0])/2
+    #h_diff = min(abs(a_x1-b_x2),abs(a_x2-b_x1))
+
     #print('angle: {}'.format(angle))
     #print('red {}: {}'.format('horz' if final else 'vert',pos_a))
     #print('grn {}: {}'.format('horz' if final else 'vert',pos_b))
     #print('  thresh: {},  diff: {}'.format(thresh,diff))
-    if final or abs(diff)>thresh:
+    if final or abs(diff)>thresh: # or h_diff>3*height:
         if diff>0:
             return [a,b]
         else:
@@ -147,6 +156,17 @@ def putInReadOrder(a,a_poly,b,b_poly,final=False):
 def sortReadOrder(to_sort):
     #insertion sort, will only have short lists
     new_list=[]
+    height=0
+    for item,box in to_sort:
+        if len(box)==4 and not isinstance(box,np.ndarray):
+            x1,y1,x2,y2 = box
+            box = np.array([[x1,y1],[x2,y1],[x2,y2],[x1,y2]])
+        else:
+            if not isinstance(box,np.ndarray):
+                box=np.array(box)
+            if box.shape!=(4,2):
+                box = np.reshape(box[:8],(4,2))
+        height = max(height,getHeight(box))
     for item,box in to_sort:
         if len(box)==4 and not isinstance(box,np.ndarray):
             x1,y1,x2,y2 = box
@@ -158,12 +178,20 @@ def sortReadOrder(to_sort):
                 box = np.reshape(box[:8],(4,2))
             
         added = False
-        for i,(other_item,other_box) in enumerate(new_list):
-            if putInReadOrder(True,box,False,other_box)[0]:
-                new_list = new_list[:i]+[(item,box)]+new_list[i:]
+        for i,(other_item,other_box) in reversed(list(enumerate(new_list))):
+            if putInReadOrder(False,box,True,other_box,height=height)[0]:
+                new_list = new_list[:i+1]+[(item,box)]+new_list[i+1:]
                 added=True
                 break
         if not added:
-            new_list.append((item,box))
+            new_list=[(item,box)]+new_list
     return [i[0] for i in new_list]
 
+def sameLine(box1,box2):
+
+    h1=getHeight(box1)
+    h2=getHeight(box2)
+    v1=getVertReadPosition(box1)
+    v2=getVertReadPosition(box2)
+
+    return abs(v1-v2)<0.4*max(h1,h2)

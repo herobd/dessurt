@@ -115,6 +115,8 @@ class Table:
                 ty = min(ty,y1)
                 by = max(by,y2)
         return lx,ty,rx,by
+    def getSortTopBot(self):
+        return self.getBox()[1::2] #1,3=y1,y2
 class FillInProse:
     #This is a paragraph/run of text where there are blanks to be filled in
     def __init__(self,entities):
@@ -135,6 +137,8 @@ class FillInProse:
             s+= 'Q' if e.cls=='question' else 'A'
             s+= ':'+e.text+', '
         return 'FillInProse({})'.format(s)
+    def getSortTopBot(self):
+        return self.getBox()[1::2] #1,3=y1,y2
 class MinoredField:
     #This is a paragraph/run of text where there are blanks to be filled in
     def __init__(self,question,answers,minors):
@@ -157,7 +161,12 @@ class MinoredField:
             by = max(by,y2)
         return lx,ty,rx,by
     def __repr__(self):
-        return 'FillInProse({}, {}, {})'.format(self.question,self.answers,self.minors)
+        return 'Minored({}, {}, {})'.format(self.question,self.answers,self.minors)
+    def getSortTopBot(self):
+        if self.question is not None:
+            return self.question.getSortTopBot()
+        else:
+            return self.answers[0].getSortTopBot()
 class Entity:
     #This represents a multi-line entity
     def __init__(self,cls,lines=None):
@@ -222,6 +231,8 @@ class Entity:
             return self.box
         else:
             return min(self.box[::2]),min(self.box[1::2]),max(self.box[::2]),max(self.box[1::2])
+    def getSortTopBot(self):
+        return self.getBox()[1::2] #1,3=y1,y2
 
 class Line:
     def __init__(self,text,box):
@@ -1739,7 +1750,7 @@ class FormQA(QADataset):
                 h_sum=0
                 h_count=0
                 for e in entity.entities:
-                    for lin in e.lines:
+                    for line in e.lines:
                         h_sum += line.getBox()[3]-line.getBox()[1]
                         h_count += 1
                 avg_line_h = h_sum/h_count
@@ -1761,13 +1772,14 @@ class FormQA(QADataset):
                 avg_line_h = h_sum/h_count
 
             #and use that to set the "rougly parallel line"
-            y_min = entities[i][1].getBox()[1]-(avg_line_h*0.4)
-            y_max = entities[i][1].getBox()[3]+(avg_line_h*0.4)
+            sort_top,sort_bot = entities[i][1].getSortTopBot()
+            y_min = sort_top-(avg_line_h*0.4)
+            y_max = sort_bot+(avg_line_h*0.4)
             #print('y_min={}, y_max={},  entity={}'.format(y_min,y_max,entity.getBox()))
 
             #get all entities (following this one) that fall into that line
             j=i+1
-            while j<len(entities) and entities[j][1].getBox()[1]>y_min and entities[j][1].getBox()[3]<y_max:
+            while j<len(entities) and entities[j][1].getSortTopBot()[0]>y_min and entities[j][1].getSortTopBot()[1]<y_max:
                 j+=1
             do_this = True #no reorder, can add this entity
             if j>i+1:
@@ -1789,9 +1801,9 @@ class FormQA(QADataset):
 
             if do_this:
                 old_to_new[gi]=len(new_entities)
-                ####DEBUG
+                ###DEBUG
                 #try:
-                #    if entity.text == '6, PLACE OF BIRTH':
+                #    if entity.text == '6. COUNTRY OF\\CITIZENSHIP':
                 #        import pdb; pdb.set_trace()
                 #except:
                 #    pass
@@ -2043,12 +2055,19 @@ class FormQA(QADataset):
 
         elif ei in link_dict:
             children = link_dict[ei]
+
             if children is None:
                 children = []
+            if not isinstance(children,(list,tuple)):
+                children = [children]
+            new_children =[]
+            for chd in children:
+                if not entities[chd].used:
+                    entities[chd].used=True
+                    new_children.append(chd)
+            children = new_children
             #assert isinstance(children,list)
             if entities[ei].cls=="header":
-                if not isinstance(children,(list,tuple)):
-                    children = [children]
                 #ret = {}
                 ret = []
                 for child in children:
@@ -2068,15 +2087,11 @@ class FormQA(QADataset):
                         else:
                             ret.append(formatOther(entities[child]))
             elif entities[ei].cls=="question":
-                if not isinstance(children,(list,tuple)):
-                    children = [children]
-                #else:
-                #    print('JSON SEES MULTI ANSWER {}'.format(entities[ei].text))
 
                 ret = []
                 for child in children:
                     if child is not None:
-                        assert entities[child].cls=='answer'
+                        #assert entities[child].cls=='answer'
                         ret.append(entities[child])
             else:
                 assert children is None
