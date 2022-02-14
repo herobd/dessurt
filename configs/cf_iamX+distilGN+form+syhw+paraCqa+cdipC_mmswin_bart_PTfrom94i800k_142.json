@@ -1,5 +1,5 @@
 {
-    "name": "distil+form+syhw+para+cdip_mmswinNoM_bart_PTfrom121i200k_124",
+    "name": "iamX+distilGN+form+syhw+paraCqa+cdipC_mmswin_bart_PTfrom94i800k_142",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -41,7 +41,7 @@
                 }
             },
             {
-                "freq": 0.2,
+                "freq": 0.05,
                 "config": {
                     "data_set_name": "DistilBartDataset",
                     "data_dir": "../data/fonts",
@@ -81,7 +81,7 @@
                     ],
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 400000,
+                    "max_qa_len_out": 4000,
                     "batch_size": 1
                 }
             },
@@ -107,7 +107,7 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 400000,
+                    "max_qa_len_out": 4000,
                     "image_size": [
                         1148,
                         760
@@ -139,7 +139,7 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 400000,
+                    "max_qa_len_out": 4000,
                     "image_size": [
                         1148,
                         760
@@ -172,7 +172,7 @@
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 400000,
+                    "max_qa_len_out": 4000,
                     "reuse_factor": 1.0
                 }
             }
@@ -219,10 +219,13 @@
     },
     "loss": {
         "#answer": "padded_seq_cross_entropy",
-        "answer": "label_smoothing"
+        "answer": "label_smoothing",
+        "#mask": "sigmoid_BCE_mask_loss",
+        "mask": "focalLoss"
     },
     "loss_weights": {
         "answer": 1,
+        "mask": 1,
         "cosine": 0,
         "distillation": 2.5
     },
@@ -257,7 +260,8 @@
             1000
         ],
         "#ramp_down_steps": 10000,
-        "#swa_lr_mul": 0.01
+        "#swa_lr_mul": 0.01,
+        "DEBUG": "DEBUG"
     },
     "arch": "MmSwin",
     "model": {
@@ -265,11 +269,11 @@
             1152,
             768
         ],
-        "do_mask_output": false,
         "use_set_length": true,
         "init_from_pretrained": "bart",
         "use_special_question_tokens": true,
         "max_q_tokens": 20,
+        "#max_a_tokens": 3400,
         "max_a_tokens": 800,
         "no_dropout": false,
         "window_size": 12,

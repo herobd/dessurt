@@ -1,5 +1,5 @@
 {
-    "name": "distilGN+syhw+form+paraCqa+cdipC_mmswin_bart_singleCrsDp_PTfrom91i506k_96",
+    "name": "censusP+distilGN+syhw+form+paraCqa+cdipC_mmswin_bart_singleCrsDp_PTfrom91i506k_96",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",

@@ -1,5 +1,5 @@
 {
-    "name": "censusP+distil+form+syhw+para+cdip_mmswin_bart_PTfrom119i800k_139",
+    "name": "iamX+distil+form+syhw+para+cdip_mmswinNoM_bart_PTfrom124i800k_146",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -14,27 +14,30 @@
         "num_workers": 6,
         "datasets": [
             {
-                "freq": 0.2,
+                "freq": 0.75,
                 "config": {
-                    "data_set_name": "CensusQA",
-                    "data_dir": "../data/familysearch",
+                    "data_set_name": "IAMMixed",
+                    "data_dir": "../data/IAM",
                     "rescale_range": [
-                        1,
-                        1.15
+                        0.9,
+                        1
                     ],
-                    "max_qa_len": 999999,
-                    "questions": 1,
-                    "pretrain": true,
-                    "rescale_to_crop_height_first": true,
+                    "image_size": [
+                        1150,
+                        760
+                    ],
                     "crop_params": {
                         "crop_size": [
                             1152,
                             768
                         ],
                         "pad": 0,
-                        "rot_degree_std_dev": 1,
-                        "left": true
-                    }
+                        "rot_degree_std_dev": 1
+                    },
+                    "questions": 1,
+                    "max_qa_len_in": 640,
+                    "max_qa_len_out": 99999999999999,
+                    "cased": true
                 }
             },
             {
@@ -178,30 +181,32 @@
     "validation": {
         "shuffle": false,
         "batch_size": 3,
+        "num_workers": 4,
         "datasets": [
             {
                 "freq": 1,
                 "config": {
-                    "data_set_name": "CensusQA",
-                    "data_dir": "../data/familysearch",
+                    "data_set_name": "IAMQA",
+                    "data_dir": "../data/IAM",
+                    "rescale_to_crop_size_first": true,
+                    "mode": "IAM_valid",
                     "rescale_range": [
-                        1.1,
-                        1.1
+                        0.9,
+                        0.9
                     ],
-                    "max_qa_len": 999999,
-                    "questions": 1,
-                    "pretrain": true,
-                    "rescale_to_crop_height_first": true,
                     "crop_params": {
                         "crop_size": [
                             1152,
                             768
                         ],
                         "pad": 0,
-                        "rot_degree_std_dev": 1,
-                        "left": true,
+                        "rot_degree_std_dev": 0,
                         "random": false
-                    }
+                    },
+                    "questions": 1,
+                    "max_qa_len_in": 640,
+                    "max_qa_len_out": 9999999999,
+                    "cased": true
                 }
             }
         ]
@@ -214,13 +219,10 @@
     },
     "loss": {
         "#answer": "padded_seq_cross_entropy",
-        "answer": "label_smoothing",
-        "#mask": "sigmoid_BCE_mask_loss",
-        "mask": "focalLoss"
+        "answer": "label_smoothing"
     },
     "loss_weights": {
         "answer": 1,
-        "mask": 1,
         "cosine": 0,
         "distillation": 2.5
     },
@@ -238,10 +240,9 @@
         "accum_grad_steps": 128,
         "#swa": true,
         "#swa_start": 200000,
-        "save_dir": "/fslhome/dmh1993/saved/",
-        "seperate_log_at": "logs",
+        "save_dir": "saved/",
         "val_step": 25000,
-        "save_step": 100000,
+        "save_step": 50000,
         "save_step_minor": 256,
         "log_step": 1024,
         "print_pred_every": 1024,
@@ -264,11 +265,11 @@
             1152,
             768
         ],
+        "do_mask_output": false,
         "use_set_length": true,
         "init_from_pretrained": "bart",
         "use_special_question_tokens": true,
         "max_q_tokens": 20,
-        "#max_a_tokens": 3400,
         "max_a_tokens": 800,
         "no_dropout": false,
         "window_size": 12,
