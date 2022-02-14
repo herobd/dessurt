@@ -1,5 +1,5 @@
 {
-    "name": "squad+all_mmswin_bart_PTfrom94i1.55m_129",
+    "name": "form+syhw+para+cdip_mmswin_bart_PTfrom109i200k_118",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -24,26 +24,18 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1152,768
+                            1152,
+                            768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
-                    "image_size": [1150,760],
+                    "image_size": [
+                        1150,
+                        760
+                    ],
                     "cased": true
-                }
-            },
-            {
-                "freq": 0.05,
-                "config": {
-                    "data_set_name": "DistilBartDataset",
-                    "data_dir": "../data/fonts",
-                    "image_size": [1152,768],
-                    "max_auto_tokens": 512,
-                    "clear_fonts": true,
-                    "min_text_height": 14,
-                    "min_para_width": 0.65
                 }
             },
             {
@@ -54,18 +46,25 @@
                     "font_dir": "../data/fonts",
                     "cased": true,
                     "use_json": true,
-                    "rescale_range": [0.9,1.1],
+                    "rescale_range": [
+                        0.9,
+                        1.1
+                    ],
                     "crop_params": {
                         "crop_size": [
-                            1152,768
+                            1152,
+                            768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
-                    "image_size": [1148,760],
+                    "image_size": [
+                        1148,
+                        760
+                    ],
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "batch_size": 1
                 }
             },
@@ -83,15 +82,19 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1152,768
+                            1152,
+                            768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
-                    "image_size": [1148,760],
+                    "max_qa_len_out": 400000,
+                    "image_size": [
+                        1148,
+                        760
+                    ],
                     "prefetch_factor": 10,
                     "persistent_workers": true
                 }
@@ -111,15 +114,19 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1152,768
+                            1152,
+                            768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
-                    "image_size": [1148,760],
+                    "max_qa_len_out": 400000,
+                    "image_size": [
+                        1148,
+                        760
+                    ],
                     "prefetch_factor": 10,
                     "persistent_workers": true
                 }
@@ -137,17 +144,18 @@
                         0.9,
                         1.1
                     ],
-		    "rescale_to_crop_size_first": true,
+                    "rescale_to_crop_size_first": true,
                     "crop_params": {
                         "crop_size": [
-                            1152,768
+                            1152,
+                            768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "reuse_factor": 1.0
                 }
             }
@@ -169,17 +177,20 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1152,768
+                            1152,
+                            768
                         ],
                         "pad": 0,
                         "random": false
                     },
                     "questions": 1,
-                    "image_size": [1150,760],
+                    "image_size": [
+                        1150,
+                        760
+                    ],
                     "cased": true
                 }
             }
-
         ]
     },
     "lr_scheduler_type": "none",
@@ -191,12 +202,12 @@
     "loss": {
         "#answer": "padded_seq_cross_entropy",
         "answer": "label_smoothing",
-	"#mask": "sigmoid_BCE_mask_loss",
-	"mask": "focalLoss"
+        "#mask": "sigmoid_BCE_mask_loss",
+        "mask": "focalLoss"
     },
     "loss_weights": {
         "answer": 1,
-	"mask": 1,
+        "mask": 1,
         "cosine": 0,
         "distillation": 2.5
     },
@@ -210,13 +221,14 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 250000,
+        "iterations": 200000,
         "accum_grad_steps": 128,
         "#swa": true,
         "#swa_start": 200000,
-        "save_dir": "saved/",
+        "save_dir": "/fslhome/dmh1993/saved/",
+        "seperate_log_at": "logs",
         "val_step": 25000,
-        "save_step": 200000,
+        "save_step": 100000,
         "save_step_minor": 256,
         "log_step": 1024,
         "print_pred_every": 1024,
@@ -224,22 +236,20 @@
         "monitor": "loss",
         "monitor_mode": "none",
         "retry_count": 0,
-
         "do_ocr": "no",
-
         "#use_learning_schedule": "multi_rise then ramp_to_swa",
         "use_learning_schedule": "multi_rise",
         "warmup_steps": [
             1000
         ],
         "#ramp_down_steps": 10000,
-        "#swa_lr_mul": 0.01,
-        "DEBUG":"DEBUG"
+        "#swa_lr_mul": 0.01
     },
     "arch": "MmSwin",
     "model": {
         "image_size": [
-            1152,768
+            1152,
+            768
         ],
         "use_set_length": true,
         "init_from_pretrained": "bart",
@@ -256,7 +266,7 @@
             4,
             6
         ],
-        "use_swin":[
+        "use_swin": [
             true,
             true,
             true,
@@ -268,7 +278,7 @@
             false,
             false
         ],
-        "swin_cross_attention":[
+        "swin_cross_attention": [
             true,
             true,
             true,
