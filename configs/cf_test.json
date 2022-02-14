@@ -5,69 +5,32 @@
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
-        "data_set_name": "MultipleDataset",
-        "data_dir": "",
+        "data_set_name": "NAFQA",
+        "data_dir": "../data/forms",
         "shuffle": true,
         "prefetch_factor": 2,
         "persistent_workers": false,
         "batch_size": 1,
         "num_workers": 6,
-        "datasets": [
-            {
-                "freq": 0.05,
-                "config": {
-                    "data_set_name": "SynthFormDataset",
-                    "data_dir": "../data",
-                    "font_dir": "../data/fonts",
-                    "cased": true,
-                    "use_json": true,
-                    "rescale_range": [0.9,1.1],
-                    "crop_params": {
-                        "crop_size": [
-                            1152,768
-                        ],
-                        "pad": 0,
-                        "rot_degree_std_dev": 1
-                    },
-                    "image_size": [1148,760],
-                    "questions": 1,
-                    "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
-                    "batch_size": 1
-                }
-            },
-            {
-                "freq": 0.29,
-                "config": {
-                    "data_set_name": "SynthParaQA",
-                    "data_dir": "../data/fonts",
-                    "mode": "hard_word",
-                    "cased": true,
-                    "batch_size": 1,
-                    "num_workers": 4,
-                    "rescale_range": [
-                        0.9,
-                        1.1
-                    ],
-                    "crop_params": {
-                        "crop_size": [
-                            1152,768
-                        ],
-                        "pad": 0,
-                        "rot_degree_std_dev": 1
-                    },
-                    "questions": 1,
-                    "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
-                    "image_size": [1148,760],
-                    "prefetch_factor": 10,
-                    "persistent_workers": true
-                }
-            }
-        ]
+        "rescale_range":[0.9,1.1],
+        "rescale_to_crop_size_first": true,
+        "crop_params": {
+              "crop_size":[1152,768],
+              "pad":0,
+              "rot_degree_std_dev": 1
+              },
+          "questions":1,
+          "max_qa_len": 9999000,
+          "use_json": true
     },
     "validation": {
-        "shuffle": false
+        "shuffle": false,
+        "rescale_range":[1,1],
+        "crop_params": {
+              "crop_size":[1152,768],
+              "pad":0,
+              "random":false
+              }
     },
     "lr_scheduler_type": "none",
     "optimizer_type": "AdamW",
@@ -103,7 +66,7 @@
         "#swa_start": 200000,
         "save_dir": "saved/",
         "seperate_log_at": "logs",
-        "val_step": 999999999999999,
+        "val_step": 10,
         "save_step": 200000,
         "save_step_minor": 10,
         "log_step": 10,

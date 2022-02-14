@@ -743,6 +743,9 @@ class QATrainer(BaseTrainer):
                 elif question.startswith('record~'):
                     ed = editdistance.eval(answer,pred)
                     log['E_doc_CE'].append(ed/len(answer))
+                elif question.startswith('json'):
+                    ed = editdistance.eval(answer,pred)
+                    log['E_json_CE'].append(ed/len(answer))
                 else:
                     print('ERROR: missed question -- {}'.format(question))
                 

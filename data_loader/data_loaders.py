@@ -18,6 +18,7 @@ from data_sets import docvqa
 from data_sets import rvl_cdip_class
 from data_sets import test_qa
 from data_sets import funsd_qa
+from data_sets import naf_qa
 from data_sets import cdip_qa
 from data_sets import cdip_cloud_qa
 from data_sets import iam_qa
@@ -162,6 +163,8 @@ def getDataLoader(config,split,rank=None,world_size=None):
             return withCollate(funsd_graph_pair.FUNSDGraphPair,funsd_graph_pair.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='FUNSDQA':
             return withCollate(funsd_qa.FUNSDQA,funsd_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='NAFQA':
+            return withCollate(naf_qa.NAFQA,naf_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='CDIPQA':
             return withCollate(cdip_qa.CDIPQA,cdip_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='CDIPCloudQA':
