@@ -51,8 +51,8 @@ def display(data):
         #        draw = True
         #        break
         #draw = draw and '\\' in a
-        if 'json' in q:
-            draw = True
+        #if 'json' in q:
+        #    draw = True
 
         #draw=True
         if draw :

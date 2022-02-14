@@ -2066,8 +2066,9 @@ class FormQA(QADataset):
             new_children =[]
             for chd in children:
                 if not entities[chd].used:
-                    entities[chd].used=True
                     new_children.append(chd)
+                else:
+                    print("WARNING : prevented child which had already been used")
             children = new_children
             #assert isinstance(children,list)
             if entities[ei].cls=="header":
@@ -2098,6 +2099,7 @@ class FormQA(QADataset):
                 for child in children:
                     if child is not None:
                         #assert entities[child].cls=='answer'
+                        entities[child].used=True
                         ret.append(entities[child])
             else:
                 assert children is None
