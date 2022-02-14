@@ -933,7 +933,9 @@ class FormQA(QADataset):
                     #we'll make this hard by selecting a real other header
                     if len(tables)>0:
                         table = random.choice(tables)
-                        if random.random()>0.5:
+                        if (random.random()>0.5 and len(table.row_headers)>0) or len(table.col_headers)==0:
+                            if len(table.row_headers)==0:
+                                continue
                             headers = table.row_headers
                         else:
                             headers = table.col_headers
@@ -1745,7 +1747,7 @@ class FormQA(QADataset):
                     h_sum=0
                     h_count=0
                 for e in entity.answers+entity.minors:
-                    for lin in e.lines:
+                    for line in e.lines:
                         h_sum += line.getBox()[3]-line.getBox()[1]
                         h_count += 1
                 avg_line_h = h_sum/h_count
@@ -1757,7 +1759,7 @@ class FormQA(QADataset):
                         h_sum += line.getBox()[3]-line.getBox()[1]
                         h_count += 1
                 avg_line_h = h_sum/h_count
-            else:
+            else: #Table
                 h_sum = 0
                 h_count = 0
                 if entity.row_headers is not None:
@@ -1772,7 +1774,7 @@ class FormQA(QADataset):
                             for line in header.lines:
                                 h_sum += line.getBox()[3]-line.getBox()[1]
                                 h_count +=1
-                avg_line_h = h_sum/h_count
+                avg_line_h = h_sum/h_count if h_count>0 else 200
 
             #and use that to set the "rougly parallel line"
             sort_top,sort_bot = entities[i][1].getSortTopBot()
@@ -1890,7 +1892,7 @@ class FormQA(QADataset):
                         #we'll just add extra text to each
                         head_text = new_entities[head].text
                         for t in tail:
-                            assert old_entities[t].cls == 'question'
+                            #assert old_entities[t].cls == 'question'
                             old_entities[t].text = '<<'+head_text+'>> '+old_entities[t].text
                         claimed_by[head]=new_table_id #the table, which I don't have the index for
                         
@@ -2036,13 +2038,7 @@ class FormQA(QADataset):
 
     def getChildren(self,ei,entities,link_dict):
         if isinstance(entities[ei],Table):
-            ret = {
-                    'row headers': entities[ei].row_headers,
-                    'column headers': entities[ei].col_headers,
-                 }
-            if len(entities[ei].cells)>0: #because we forgot to transcribe table cells for NAF dataset
-                ret['cells']= entities[ei].cells
-
+            ret = formatTable(entities[ei])
         elif isinstance(entities[ei],FillInProse):
             ret = {}
             for e in entities[ei].entities:
@@ -2067,8 +2063,8 @@ class FormQA(QADataset):
             for chd in children:
                 if not entities[chd].used:
                     new_children.append(chd)
-                else:
-                    print("WARNING : prevented child which had already been used")
+                #else:
+                #    print("WARNING : prevented child which had already been used")
             children = new_children
             #assert isinstance(children,list)
             if entities[ei].cls=="header":
@@ -2089,8 +2085,8 @@ class FormQA(QADataset):
                         elif entities[child].cls=='question':
                             if not entities[child].used:
                                 ret.append(formatQuestion(entities[child],next_children))
-                            else:
-                                print("WARNING : prevented question entity from being added twice to JSON")
+                            #else:
+                            #    print("WARNING : prevented question entity from being added twice to JSON")
                         else:
                             ret.append(formatOther(entities[child]))
             elif entities[ei].cls=="question":
@@ -2120,6 +2116,11 @@ def formatHeader(entity,children):
         ret['content']=children
     return ret
 def formatQuestion(entity,children):
+    if len(children) == 1 and isinstance(children[0],Table):
+        #unsusual circumstance with NAF dataset
+        #make the question a header
+        entity.cls='header'
+        return formatHeader(entity,[formatTable(children[0])])
     assert not entity.used
     entity.used = True
     #return {'text':entity,
@@ -2134,4 +2135,11 @@ def formatOther(entity):
     entity.used = True
     #return {'text':entity}
     return {entity.text:entity.cls}
-            
+def formatTable(entity):
+    ret = {
+            'row headers': entity.row_headers,
+            'column headers': entity.col_headers,
+         }
+    if len(entity.cells)>0: #because we forgot to transcribe table cells for NAF dataset
+        ret['cells']= entity.cells
+    return ret

@@ -71,7 +71,7 @@ class NAFQA(FormQA):
                     continue
                 for imageName in imageNames:
                     ###DEBUG(')
-                    #imageName = '004173988_00122.jpg'
+                    #imageName = '004713434_00277.jpg'
 
                     org_path = os.path.join(dirPath,'groups',groupName,imageName)
                     if self.cache_resized:
@@ -101,12 +101,12 @@ class NAFQA(FormQA):
                             #create questions for each image
                             with open(jsonPath) as f:
                                 annotations = json.load(f)
-                            all_entities,entity_link,table,proses,minored_fields,bbs,link_dict = self.getEntitiesAndSuch(annotations,rescale)
-                            qa = self.makeQuestions(self.rescale_range[1],all_entities,entity_link,tables,full_entities,link_dict,proses=proses,minored_fields=minored_fields)
+                            all_entities,entity_link,tables,proses,minored_fields,bbs,link_dict = self.getEntitiesAndSuch(annotations,rescale)
+                            qa = self.makeQuestions(self.rescale_range[1],all_entities,entity_link,tables,all_entities,link_dict,proses=proses,minored_fields=minored_fields)
                             #import pdb;pdb.set_trace()
                             for _qa in qa:
                                 _qa['bb_ids']=None
-                                self.images.append({'id':image_name, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':image_name[:image_name.rfind('.')], 'qa':[_qa]})
+                                self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
 
 
     def parseAnn(self,annotations,s):
@@ -163,11 +163,14 @@ class NAFQA(FormQA):
         group_num=0
         id_to_group = defaultdict(lambda: None)
         same_row = []
+        same_col = []
         all_pairs = sortReadOrder([(pair,all_bbs[pair[0]]['poly_points']) for pair in all_pairs])
         for id1,id2 in all_pairs:
             if all_bbs[id1]['type']==all_bbs[id2]['type'] or ('P' in all_bbs[id1]['type'] and 'P' in all_bbs[id2]['type']):
                 if 'Row' in all_bbs[id1]['type'] and 'Row' in all_bbs[id2]['type']:
                     same_row.append((id1,id2))
+                elif 'Col' in all_bbs[id1]['type'] and 'Col' in all_bbs[id2]['type']:
+                    same_col.append((id1,id2))
                 else:
                     assert 'Row' not in all_bbs[id1]['type'] and 'Row' not in all_bbs[id2]['type']
                     assert 'Col' not in all_bbs[id1]['type'] and 'Col' not in all_bbs[id2]['type']
@@ -236,8 +239,13 @@ class NAFQA(FormQA):
                 lines=[]
                 for bb_id in group:
                     if bb_id not in transcriptions and 'Circle' in all_bbs[group[0]]['type']:
-                        transcriptions[bb_id]='UNTRANSCRIBED CIRCLE'
+                        transcriptions[bb_id]='§'#'UNTRANSCRIBED CIRCLE'
                     elif all_bbs[bb_id]['isBlank']=='blank':
+                        continue
+                    elif bb_id not in transcriptions:
+                        #print('No transcription for {}'.format(all_bbs[bb_id]))
+                        continue
+                    elif transcriptions[bb_id]=='':
                         continue
                     lines.append(Line(transcriptions[bb_id],all_bbs[bb_id]['poly_points']))
                     bb_to_e[bb_id]=len(entities)
@@ -257,7 +265,9 @@ class NAFQA(FormQA):
                 for bb_id in group:
                     if all_bbs[bb_id]['isBlank']=='blank':
                         transcriptions[bb_id]=self.blank_token
-                    elif transcriptions[bb_id]=='':
+                    elif (bb_id not in transcriptions or transcriptions[bb_id]=='') and 'answer'==cls:
+                        transcriptions[bb_id]=self.blank_token
+                    elif bb_id not in transcriptions or transcriptions[bb_id]=='':
                         continue
                     
                     l = Line(transcriptions[bb_id],all_bbs[bb_id]['poly_points'  ])
@@ -265,27 +275,29 @@ class NAFQA(FormQA):
                         lines.append(l)
                         p_group.append(bb_id)
                     else:
-                        p_entities.append(Entity(cls,lines))
-                        if prev_id is not None:
-                            entity_link[prev_id].append(len(entities))
-                        for a_id in p_group:
-                            bb_to_e[a_id]=len(entities)
-                        prev_id = len(entities) #update
-                        has_link.add(len(entities))
-                        entities.append(p_entities[-1])
-                        e_groups.append(p_group)
+                        if len(lines)>0:
+                            p_entities.append(Entity(cls,lines))
+                            if prev_id is not None:
+                                entity_link[prev_id].append(len(entities))
+                            for a_id in p_group:
+                                bb_to_e[a_id]=len(entities)
+                            prev_id = len(entities) #update
+                            has_link.add(len(entities))
+                            entities.append(p_entities[-1])
+                            e_groups.append(p_group)
                         lines=[l]
                         p_group = [bb_id]
                         prev_type = all_bbs[bb_id]['type']
                         cls = 'question' if 'text' in prev_type else 'answer'
-                p_entities.append(Entity(cls,lines))
-                if prev_id is not None:
-                    entity_link[prev_id].append(len(entities))
-                    has_link.add(len(entities))
-                for a_id in p_group:
-                    bb_to_e[a_id]=len(entities)
-                entities.append(p_entities[-1])
-                e_groups.append(p_group)
+                if len(lines)>0:
+                    p_entities.append(Entity(cls,lines))
+                    if prev_id is not None:
+                        entity_link[prev_id].append(len(entities))
+                        has_link.add(len(entities))
+                    entities.append(p_entities[-1])
+                    e_groups.append(p_group)
+                    for a_id in p_group:
+                        bb_to_e[a_id]=len(entities)
                 
                 if len(p_entities)>1:
                     for bb_id in group:
@@ -358,6 +370,23 @@ class NAFQA(FormQA):
                         if not got_it:
                             dont.append(rid2)
                         break
+            #same col
+            for rid1,rid2 in same_col:
+                for bb in lines:
+                    if bb['id']==rid2:
+                        got_it=False
+                        for id1,id2 in all_pairs:
+                            if id1==bb['id'] and 'field' not in all_bbs[id2]['type']:
+                                dont.append(rid1)
+                                got_it=True
+                                break
+                            elif id2==bb['id'] and 'field' not in all_bbs[id1]['type']:
+                                dont.append(rid1)
+                                got_it=True
+                                break
+                        if not got_it:
+                            dont.append(rid2)
+                        break
             
             for bb in lines:
                 links=[]
@@ -373,21 +402,33 @@ class NAFQA(FormQA):
                 if 'Row' in bb['type']:
                     pos = getVertReadPosition(bb['poly_points'])
                     if len(links)>1:
-                        assert len(links)==2
-                        posR = getHorzReadPosition(bb['poly_points'])
-                        pos0 = getHorzReadPosition(all_bbs[links[0]]['poly_points'])
-                        pos1 = getHorzReadPosition(all_bbs[links[1]]['poly_points'])
+                        if  len(links)==2:
+                            posR = getHorzReadPosition(bb['poly_points'])
+                            pos0 = getHorzReadPosition(all_bbs[links[0]]['poly_points'])
+                            pos1 = getHorzReadPosition(all_bbs[links[1]]['poly_points'])
 
-                        if pos0<posR and pos<pos1:
-                            linked=links[0]
-                        elif pos1<posR and pos<pos0:
-                            linked = links[1]
-                        elif 'Number' in all_bbs[links[0]]['type']:
-                            linked = links[1]
-                        elif 'Number' in all_bbs[links[1]]['type']:
-                            linked = links[0]
+                            if pos0<posR and pos<pos1:
+                                linked=links[0]
+                            elif pos1<posR and pos<pos0:
+                                linked = links[1]
+                            elif 'Number' in all_bbs[links[0]]['type']:
+                                linked = links[1]
+                            elif 'Number' in all_bbs[links[1]]['type']:
+                                linked = links[0]
+                            else:
+                                assert False
                         else:
-                            assert False
+                            links = [l for l in links if 'Number' not in all_bbs[l]['type']]
+                            if len(links)>0:
+                                min_dist=999999
+                                best_l=None
+                                for bb_id in links:
+                                    pos_l = getVertReadPosition(all_bbs[bb_id]['poly_points'])
+                                    dist = abs(pos-pos_l)
+                                    if dist<min_dist:
+                                        min_dist=dist
+                                        best_l = bb_id
+                                links=[best_l]
                     else:
                         linked=links[0] if len(links)>0 else None
 
@@ -450,7 +491,7 @@ class NAFQA(FormQA):
         for id1,id2 in all_pairs:
             #if id1 not in bb_to_e or id2 not in bb_to_e:
             #    continue
-            #if id2=='f16':
+            #if 't40' in (id1, id2):
             #    import pdb;pdb.set_trace()
 
             #We'll initially keep links with blanks so minor groups get processed correctly.
@@ -497,6 +538,8 @@ class NAFQA(FormQA):
                         e2_cls=self.typeToClass(type2)
                 except KeyError:
                     continue
+                #if isinstance(e_id1,int) and isinstance(e_id2,int) and ('Deputy Collector of Customs.'== entities[e_id1].text or 'Deputy Collector of Customs.'==entities[e_id2].text):
+                #    import pdb; pdb.set_trace()
                 if 'question'==e1_cls and ('answer'==e2_cls or 'circle'==e2_cls):
                     entity_link[e_id1].append( e_id2)
                     has_link.add(e_id1)
@@ -509,8 +552,8 @@ class NAFQA(FormQA):
                 elif 'Minor' in type2 and e_id2 in table_headers:
                     entity_link[e_id1].append( e_id2)
                     has_link.add(e_id1)
-                else:
-                    print(f'WARNING unhandled class pairing (skipping): {e1_cls}:{type1}<->{e2_cls}:{type2}')
+                #else:
+                #    print(f'WARNING unhandled class pairing (skipping): {e1_cls}:{type1}<->{e2_cls}:{type2}')
 
                 if ('Minor' in type1 or 'Minor' in type2) and e_id1 not in table_headers and e_id2 not in table_headers:
                     mg1=mg2=None
@@ -538,17 +581,19 @@ class NAFQA(FormQA):
 
         additional_links = defaultdict(list) #for minor fields
         for id1,id2 in all_pairs:
+            #if 't40' in (id1, id2):
+            #    import pdb;pdb.set_trace()
             id1 = bb_to_e[id1] if id1 in bb_to_e else id1
             id2 = bb_to_e[id2] if id2 in bb_to_e else id2
-            if id1 in all_minor and id2 in all_minor:
+            if id1!=id2 and id1 in all_minor and id2 in all_minor:
                 additional_links[id1].append(id2)
                 additional_links[id2].append(id1)
-                        
+                    
         link_ups = defaultdict(list)
         for up,downs in entity_link.items():
             for d in downs:
                 link_ups[d].append(up)
-
+        #import pdb;pdb.set_trace()
         new_minor_groups=[]
         for group in minor_groups:
             #find all other attached things
@@ -608,7 +653,7 @@ class NAFQA(FormQA):
                     blank_answers.append(e_id)
                 else:
                     typ = all_bbs[e_groups[e_id][0]]['type']
-                    if 'Number' in typ:
+                    if 'Number' in typ or 'comment' in typ:
                         continue
                     if 'Minor' in typ:
                         minors.append(entities[e_id])
