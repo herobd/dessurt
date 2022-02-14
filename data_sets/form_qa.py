@@ -20,6 +20,7 @@ from transformers import BartTokenizer
 
 class Table:
     def __init__(self,row_headers,col_headers):
+        self.used=False
         self.row_headers=row_headers
         self.col_headers=col_headers
         self.cells=[[None]*len(col_headers) for i in range(len(row_headers))]
@@ -120,6 +121,7 @@ class Table:
 class FillInProse:
     #This is a paragraph/run of text where there are blanks to be filled in
     def __init__(self,entities):
+        self.used = False
         self.entities = entities
     def getBox(self):
         lx=ty=999999
@@ -142,6 +144,7 @@ class FillInProse:
 class MinoredField:
     #This is a paragraph/run of text where there are blanks to be filled in
     def __init__(self,question,answers,minors):
+        self.used=False
         self.question = question
         self.answers = answers
         self.minors = minors
@@ -2083,7 +2086,10 @@ class FormQA(QADataset):
                             #else:
                             #    ret.append({'header':entities[child]})
                         elif entities[child].cls=='question':
-                            ret.append(formatQuestion(entities[child],next_children))
+                            if not entities[child].used:
+                                ret.append(formatQuestion(entities[child],next_children))
+                            else:
+                                print("WARNING : prevented question entity from being added twice to JSON")
                         else:
                             ret.append(formatOther(entities[child]))
             elif entities[ei].cls=="question":

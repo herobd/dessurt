@@ -17,18 +17,38 @@ Don't use conda for the following libraries:
 
 Actually it's kind of important to do it in this order:
 
+###set up python env
+python -m venv NAME
+source NAME/bin/activate  #(Note, you'll need to be sure the environment is activated before running a job)
+
+###install with pip, because conda doesn't work well on supercomputer
+pip install torch==1.10.2+cu113 torchvision==0.11.3+cu113 torchaudio==0.10.2+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html
+pip install scikit-image shapely editdistance timm datasets transformers
+cd /zgrouphome/fslg_documents/synthetic_text_gen
+python setup.py install
+
+####Then start all the jobs with a handy script
+cd /zgrouphome/fslg_documents/pairing
+./run_X.sh
+
 ###Environment setup
 
-`conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch`
-`conda install scikit-image`
-`conda install shapely`
-`pip install editdistance timm datasets transformers`
+####set up python env
+`python -m venv NAME`
+`source NAME/bin/activate`  (Note, you'll need to be sure the environment is activated before running a job)
 
-synthetic_text_gen
+####install with pip, because conda doesn't work well on supercomputer
+`pip install torch==1.10.2+cu113 torchvision==0.11.3+cu113 torchaudio==0.10.2+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html`
+`pip install scikit-image shapely editdistance timm datasets transformers`
+`cd /zgrouphome/fslg_documents/synthetic_text_gen`
 `python setup.py install`
 
-Not this:
-`conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-lts -c nvidia`
+####Then start all the jobs with a handy script
+`cd /zgrouphome/fslg_documents/pairing`
+`./run_X.sh`
+
+
+##other things you don't need to see
 
 
 
