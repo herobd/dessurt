@@ -1,5 +1,5 @@
 {
-    "name": "censusP+distilGN+syhw+form+paraCqa+cdipC_mmswin_bart_singleCrsDp_PTfrom91i506k_96",
+    "name": "squad+form+syhw+para+cdip_mmswin_bart_PTfrom118i800k_140",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -8,48 +8,34 @@
         "data_set_name": "MultipleDataset",
         "data_dir": "",
         "shuffle": true,
-        "prefetch_factor": 5,
-        "persistent_workers": true,
+        "prefetch_factor": 2,
+        "persistent_workers": false,
         "batch_size": 1,
         "num_workers": 6,
         "datasets": [
             {
-                "freq": 0.2,
+                "freq": 1.5,
                 "config": {
-                    "data_set_name": "CensusQA",
-                    "data_dir": "../data/familysearch",
+                    "data_set_name": "SQuAD",
+                    "data_dir": "../data/SQuAD",
                     "rescale_range": [
-                        1,
-                        1.15
+                        0.9,
+                        1.1
                     ],
-                    "max_qa_len": 999999,
-                    "questions": 1,
-                    "pretrain": true,
-                    "rescale_to_crop_height_first": true,
                     "crop_params": {
                         "crop_size": [
                             1152,
                             768
                         ],
                         "pad": 0,
-                        "rot_degree_std_dev": 1,
-                        "left": true
-                    }
-                }
-            },
-            {
-                "freq": 0.05,
-                "config": {
-                    "data_set_name": "DistilBartDataset",
-                    "data_dir": "../data/fonts",
+                        "rot_degree_std_dev": 1
+                    },
+                    "questions": 1,
                     "image_size": [
-                        1008,
-                        784
+                        1150,
+                        760
                     ],
-                    "max_auto_tokens": 512,
-                    "clear_fonts": true,
-                    "min_text_height": 14,
-                    "min_para_width": 0.65
+                    "cased": true
                 }
             },
             {
@@ -66,24 +52,24 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1008,
-                            784
+                            1152,
+                            768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "image_size": [
-                        1004,
-                        780
+                        1148,
+                        760
                     ],
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "batch_size": 1
                 }
             },
             {
-                "freq": 0.005,
+                "freq": 0.01,
                 "config": {
                     "data_set_name": "SynthHWQA",
                     "data_dir": "../data/synth_hw_wiki",
@@ -96,25 +82,25 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1008,
-                            784
+                            1152,
+                            768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "image_size": [
-                        1004,
-                        780
+                        1148,
+                        760
                     ],
                     "prefetch_factor": 10,
                     "persistent_workers": true
                 }
             },
             {
-                "freq": 0.295,
+                "freq": 0.29,
                 "config": {
                     "data_set_name": "SynthParaQA",
                     "data_dir": "../data/fonts",
@@ -128,18 +114,18 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1008,
-                            784
+                            1152,
+                            768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "image_size": [
-                        1004,
-                        780
+                        1148,
+                        760
                     ],
                     "prefetch_factor": 10,
                     "persistent_workers": true
@@ -161,15 +147,15 @@
                     "rescale_to_crop_size_first": true,
                     "crop_params": {
                         "crop_size": [
-                            1008,
-                            784
+                            1152,
+                            768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "reuse_factor": 1.0
                 }
             }
@@ -178,30 +164,31 @@
     "validation": {
         "shuffle": false,
         "batch_size": 3,
+        "data_set_name": "MultipleDataset",
         "datasets": [
             {
                 "freq": 1,
                 "config": {
-                    "data_set_name": "CensusQA",
-                    "data_dir": "../data/familysearch",
+                    "data_set_name": "SQuAD",
+                    "data_dir": "../data/SQuAD",
                     "rescale_range": [
-                        1.1,
-                        1.1
+                        1.0,
+                        1.0
                     ],
-                    "max_qa_len": 999999,
-                    "questions": 1,
-                    "pretrain": true,
-                    "rescale_to_crop_height_first": true,
                     "crop_params": {
                         "crop_size": [
                             1152,
                             768
                         ],
                         "pad": 0,
-                        "rot_degree_std_dev": 1,
-                        "left": true,
                         "random": false
-                    }
+                    },
+                    "questions": 1,
+                    "image_size": [
+                        1150,
+                        760
+                    ],
+                    "cased": true
                 }
             }
         ]
@@ -213,10 +200,14 @@
         "weight_decay": 0.01
     },
     "loss": {
-        "answer": "label_smoothing"
+        "#answer": "padded_seq_cross_entropy",
+        "answer": "label_smoothing",
+        "#mask": "sigmoid_BCE_mask_loss",
+        "mask": "focalLoss"
     },
     "loss_weights": {
         "answer": 1,
+        "mask": 1,
         "cosine": 0,
         "distillation": 2.5
     },
@@ -234,7 +225,8 @@
         "accum_grad_steps": 128,
         "#swa": true,
         "#swa_start": 200000,
-        "save_dir": "saved/",
+        "save_dir": "/fslhome/dmh1993/saved/",
+        "seperate_log_at": "logs",
         "val_step": 25000,
         "save_step": 100000,
         "save_step_minor": 256,
@@ -256,22 +248,23 @@
     "arch": "MmSwin",
     "model": {
         "image_size": [
-            1008,
-            784
+            1152,
+            768
         ],
         "use_set_length": true,
         "init_from_pretrained": "bart",
         "use_special_question_tokens": true,
-        "no_dropout": false,
         "max_q_tokens": 20,
+        "#max_a_tokens": 3400,
         "max_a_tokens": 800,
-        "window_size": 7,
+        "no_dropout": false,
+        "window_size": 12,
         "decode_dim": 768,
         "dim_ff": 3072,
         "decode_num_heads": 8,
         "blocks_per_level": [
             4,
-            7
+            6
         ],
         "use_swin": [
             true,
@@ -283,19 +276,17 @@
             true,
             true,
             false,
-            false,
             false
         ],
         "swin_cross_attention": [
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
-            false,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
             false,
             false
         ],

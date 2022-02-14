@@ -1,5 +1,5 @@
 {
-    "name": "distil+form+syhw+para+cdip_mmswin_bart_PTfrom109i200k_119",
+    "name": "iamX+distilGN+form+syhw+paraCqa+cdipC_mmswinW7_bart_PTfrom114i800k_144",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -14,27 +14,30 @@
         "num_workers": 6,
         "datasets": [
             {
-                "freq": 0.2,
+                "freq": 0.75,
                 "config": {
-                    "data_set_name": "CensusQA",
-                    "data_dir": "../data/familysearch",
+                    "data_set_name": "IAMMixed",
+                    "data_dir": "../data/IAM",
                     "rescale_range": [
-                        1,
-                        1.15
+                        0.9,
+                        1
                     ],
-                    "max_qa_len": 999999,
-                    "questions": 1,
-                    "pretrain": true,
-                    "rescale_to_crop_height_first": true,
+                    "image_size": [
+                        1150,
+                        760
+                    ],
                     "crop_params": {
                         "crop_size": [
                             1152,
                             768
                         ],
                         "pad": 0,
-                        "rot_degree_std_dev": 1,
-                        "left": true
-                    }
+                        "rot_degree_std_dev": 1
+                    },
+                    "questions": 1,
+                    "max_qa_len_in": 640,
+                    "max_qa_len_out": 99999999999999,
+                    "cased": true
                 }
             },
             {
@@ -43,8 +46,8 @@
                     "data_set_name": "DistilBartDataset",
                     "data_dir": "../data/fonts",
                     "image_size": [
-                        1152,
-                        768
+                        1008,
+                        784
                     ],
                     "max_auto_tokens": 512,
                     "clear_fonts": true,
@@ -66,19 +69,19 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1152,
-                            768
+                            1008,
+                            784
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "image_size": [
-                        1148,
-                        760
+                        1004,
+                        780
                     ],
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 400000,
+                    "max_qa_len_out": 4000,
                     "batch_size": 1
                 }
             },
@@ -96,18 +99,18 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1152,
-                            768
+                            1008,
+                            784
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 400000,
+                    "max_qa_len_out": 4000,
                     "image_size": [
-                        1148,
-                        760
+                        1004,
+                        780
                     ],
                     "prefetch_factor": 10,
                     "persistent_workers": true
@@ -128,18 +131,18 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1152,
-                            768
+                            1008,
+                            784
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 400000,
+                    "max_qa_len_out": 4000,
                     "image_size": [
-                        1148,
-                        760
+                        1004,
+                        780
                     ],
                     "prefetch_factor": 10,
                     "persistent_workers": true
@@ -161,15 +164,15 @@
                     "rescale_to_crop_size_first": true,
                     "crop_params": {
                         "crop_size": [
-                            1152,
-                            768
+                            1008,
+                            784
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 400000,
+                    "max_qa_len_out": 4000,
                     "reuse_factor": 1.0
                 }
             }
@@ -178,30 +181,32 @@
     "validation": {
         "shuffle": false,
         "batch_size": 3,
+        "num_workers": 4,
         "datasets": [
             {
                 "freq": 1,
                 "config": {
-                    "data_set_name": "CensusQA",
-                    "data_dir": "../data/familysearch",
+                    "data_set_name": "IAMQA",
+                    "data_dir": "../data/IAM",
+                    "rescale_to_crop_size_first": true,
+                    "mode": "IAM_valid",
                     "rescale_range": [
-                        1.1,
-                        1.1
+                        0.9,
+                        0.9
                     ],
-                    "max_qa_len": 999999,
-                    "questions": 1,
-                    "pretrain": true,
-                    "rescale_to_crop_height_first": true,
                     "crop_params": {
                         "crop_size": [
                             1152,
                             768
                         ],
                         "pad": 0,
-                        "rot_degree_std_dev": 1,
-                        "left": true,
+                        "rot_degree_std_dev": 0,
                         "random": false
-                    }
+                    },
+                    "questions": 1,
+                    "max_qa_len_in": 640,
+                    "max_qa_len_out": 9999999999,
+                    "cased": true
                 }
             }
         ]
@@ -238,10 +243,9 @@
         "accum_grad_steps": 128,
         "#swa": true,
         "#swa_start": 200000,
-        "save_dir": "/fslhome/dmh1993/saved/",
-        "seperate_log_at": "logs",
+        "save_dir": "saved/",
         "val_step": 25000,
-        "save_step": 100000,
+        "save_step": 50000,
         "save_step_minor": 256,
         "log_step": 1024,
         "print_pred_every": 1024,
@@ -261,8 +265,8 @@
     "arch": "MmSwin",
     "model": {
         "image_size": [
-            1152,
-            768
+            1008,
+            784
         ],
         "use_set_length": true,
         "init_from_pretrained": "bart",
@@ -271,7 +275,7 @@
         "#max_a_tokens": 3400,
         "max_a_tokens": 800,
         "no_dropout": false,
-        "window_size": 12,
+        "window_size": 7,
         "decode_dim": 768,
         "dim_ff": 3072,
         "decode_num_heads": 8,

@@ -215,7 +215,7 @@
         "#swa": true,
         "#swa_start": 200000,
         "save_dir": "saved/",
-        "val_step": 250000,
+        "val_step": 25000,
         "save_step": 200000,
         "save_step_minor": 256,
         "log_step": 1024,

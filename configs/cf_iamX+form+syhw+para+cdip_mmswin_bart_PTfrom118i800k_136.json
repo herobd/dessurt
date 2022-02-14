@@ -1,5 +1,5 @@
 {
-    "name": "distilGN+form+syhw+paraCqa+cdipC_mmswinW7_bart_PTfrom94i482k_114",
+    "name": "iamX+form+syhw+para+cdip_mmswin_bart_PTfrom118i800k_136",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -41,21 +41,6 @@
                 }
             },
             {
-                "freq": 0.2,
-                "config": {
-                    "data_set_name": "DistilBartDataset",
-                    "data_dir": "../data/fonts",
-                    "image_size": [
-                        1008,
-                        784
-                    ],
-                    "max_auto_tokens": 512,
-                    "clear_fonts": true,
-                    "min_text_height": 14,
-                    "min_para_width": 0.65
-                }
-            },
-            {
                 "freq": 0.05,
                 "config": {
                     "data_set_name": "SynthFormDataset",
@@ -69,19 +54,19 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1008,
-                            784
+                            1152,
+                            768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "image_size": [
-                        1004,
-                        780
+                        1148,
+                        760
                     ],
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "batch_size": 1
                 }
             },
@@ -99,18 +84,18 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1008,
-                            784
+                            1152,
+                            768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "image_size": [
-                        1004,
-                        780
+                        1148,
+                        760
                     ],
                     "prefetch_factor": 10,
                     "persistent_workers": true
@@ -131,18 +116,18 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1008,
-                            784
+                            1152,
+                            768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "image_size": [
-                        1004,
-                        780
+                        1148,
+                        760
                     ],
                     "prefetch_factor": 10,
                     "persistent_workers": true
@@ -164,15 +149,15 @@
                     "rescale_to_crop_size_first": true,
                     "crop_params": {
                         "crop_size": [
-                            1008,
-                            784
+                            1152,
+                            768
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 1
                     },
                     "questions": 1,
                     "max_qa_len_in": 640,
-                    "max_qa_len_out": 4000,
+                    "max_qa_len_out": 400000,
                     "reuse_factor": 1.0
                 }
             }
@@ -243,7 +228,8 @@
         "accum_grad_steps": 128,
         "#swa": true,
         "#swa_start": 200000,
-        "save_dir": "saved/",
+        "save_dir": "/fslhome/dmh1993/saved/",
+        "seperate_log_at": "logs",
         "val_step": 25000,
         "save_step": 50000,
         "save_step_minor": 256,
@@ -265,8 +251,8 @@
     "arch": "MmSwin",
     "model": {
         "image_size": [
-            1008,
-            784
+            1152,
+            768
         ],
         "use_set_length": true,
         "init_from_pretrained": "bart",
@@ -275,7 +261,7 @@
         "#max_a_tokens": 3400,
         "max_a_tokens": 800,
         "no_dropout": false,
-        "window_size": 7,
+        "window_size": 12,
         "decode_dim": 768,
         "dim_ff": 3072,
         "decode_num_heads": 8,
