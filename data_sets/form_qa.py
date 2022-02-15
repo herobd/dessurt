@@ -2116,7 +2116,7 @@ def formatHeader(entity,children):
         ret['content']=children
     return ret
 def formatQuestion(entity,children):
-    if len(children) == 1 and isinstance(children[0],Table):
+    if children is not None and len(children) == 1 and isinstance(children[0],Table):
         #unsusual circumstance with NAF dataset
         #make the question a header
         entity.cls='header'
