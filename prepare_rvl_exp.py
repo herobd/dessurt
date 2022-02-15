@@ -58,7 +58,7 @@ new_dataset= {
         "shuffle": True,
         "prefetch_factor": 2,
         "persistent_workers": True,
-        "batch_size": 1,
+        "batch_size": 2,
         "num_workers": 6,
         "rescale_range": [
             0.9,
@@ -75,7 +75,7 @@ new_dataset= {
             }
 new_val =  {
         "shuffle": False,
-        "batch_size": 3,
+        "batch_size": 5,
 	"rescale_range": [1,1],
 	"rescale_to_crop_size_first": True,
 	"crop_params": {
