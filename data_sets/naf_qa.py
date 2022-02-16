@@ -40,6 +40,9 @@ class NAFQA(FormQA):
 
         self.extra_np = 0.05
 
+        with open('data_sets/long_naf_images.txt') as f:
+            do_twice = f.read().split('\n')
+
         if images is not None:
             self.images=images
         else:
@@ -94,7 +97,11 @@ class NAFQA(FormQA):
                                         )
                                 img_f.imwrite(path,resized)
                         if self.train:
-                            self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')]})
+                            name = imageName[:imageName.rfind('.')]
+                            self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':name})
+                            if name in do_twice:
+                                self.images.append({'id':imageName+'2', 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':name})
+
                         else:
                             assert self.rescale_range[1]==self.rescale_range[0]
                             assert self.questions==1

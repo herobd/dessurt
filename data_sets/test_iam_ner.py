@@ -8,10 +8,11 @@ import numpy as np
 import torch
 import utils.img_f as cv2
 from collections import defaultdict
+from transformers import BartTokenizer
 
 widths=[]
 
-def display(data):
+def display(data,tokenizer=None):
     batchSize = data['img'].size(0)
     #mask = makeMask(data['image'])
     question_types=[]
@@ -50,10 +51,13 @@ def display(data):
                 if loc ==-1:
                     loc = len(q)
             question_types.append(q[:loc])
+        
+        if tokenizer is not None:
+            toks = len(tokenizer.tokenize(a))+2
 
         #widths.append(img.size(1))
         
-        draw=True#q.startswith('mm')
+        draw=False#q.startswith('mm')
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -79,7 +83,7 @@ def display(data):
 
         #plt.show()
     print('batch complete')
-    return question_types
+    return toks#question_types
 
 if __name__ == "__main__":
     if len(sys.argv)>1:
@@ -94,7 +98,7 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=iam_ner.IAMNER(dirPath=dirPath,split='valid',config={
+    data=iam_ner.IAMNER(dirPath=dirPath,split='test',config={
         'rescale_range': [0.75,1],
         '#rescale_range': [0.9,0.9],
         'rescale_to_crop_size_first': True,
@@ -115,23 +119,27 @@ if __name__ == "__main__":
     print('dataset size: {}'.format(len(dataLoader)))
     dataLoaderIter = iter(dataLoader)
 
+    tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
+
         #if start==0:
         #display(data[0])
     for i in range(0,start):
         print(i)
         dataLoaderIter.next()
         #display(data[i])
+    max_tok_len=0
     try:
         question_types = defaultdict(int)
         while True:
             #print('?')
-            q_t=display(dataLoaderIter.next())
-            for q in q_t:
-                question_types[q]+=1
-            print('question_types:')
-            print(question_types)
+            tok_len=display(dataLoaderIter.next(),tokenizer)
+            #for q in q_t:
+            #    question_types[q]+=1
+            #print('question_types:')
+            #print(question_types)
+            max_tok_len = max(tok_len,max_tok_len)
     except StopIteration:
-        print('done')
+        print('max token length {}'.format(max_tok_len))
 
     #print('width mean: {}'.format(np.mean(widths)))
     #print('width std: {}'.format(np.std(widths)))

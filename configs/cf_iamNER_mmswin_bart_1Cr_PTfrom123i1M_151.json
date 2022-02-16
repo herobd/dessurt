@@ -105,7 +105,7 @@
             768
         ],
         "max_q_tokens": 20,
-        "max_a_tokens": 800,
+        "max_a_tokens": 720,
         "use_set_length": true,
         "init_from_pretrained": "bart",
         "use_special_question_tokens": true,

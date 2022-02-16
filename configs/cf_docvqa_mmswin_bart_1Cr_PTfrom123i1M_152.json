@@ -10,7 +10,7 @@
         "shuffle": true,
         "prefetch_factor": 5,
         "persistent_workers": true,
-        "batch_size": 1,
+        "batch_size": 2,
         "num_workers": 4,
         "rescale_range": [
             0.9,
@@ -106,7 +106,7 @@
             768
         ],
         "max_q_tokens": 20,
-        "max_a_tokens": 200,
+        "max_a_tokens": 50,
         "use_set_length": true,
         "init_from_pretrained": "bart",
         "use_special_question_tokens": true,

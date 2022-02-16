@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import utils.img_f as cv2
 import json
+from collections import defaultdict
 
 widths=[]
 
@@ -27,7 +28,7 @@ def display(data):
         #label = data['label']
         #gt = data['gt'][b]
         #print(label[:data['label_lengths'][b],b])
-        print(data['imgName'][b])
+        #print(data['imgName'][b])
         #if data['spaced_label'] is not None:
         #    print('spaced label:')
         #    print(data['spaced_label'][:,b])
@@ -35,14 +36,14 @@ def display(data):
         #    print('ocr: {} {}'.format(text,bb))
         #print('questions: {}'.format(data['questions'][b]))
         #print('answers: {}'.format(data['answers'][b]))
-        print('questions and answers')
+        #print('questions and answers')
         for q,a in zip(data['questions'][b],data['answers'][b]):
             if q=='json>':
                 assert a[-1]=='‡'
                 a=a[:-1]
                 a = json.loads(a)
                 a = json.dumps(a,ensure_ascii=False,indent=3)+'‡'
-            print(q+' : '+a)
+            #print(q+' : '+a)
 
         #widths.append(img.size(1))
         draw = False
@@ -79,7 +80,10 @@ def display(data):
         #    ax_im.imshow(img)
 
         #plt.show()
-    print('batch complete')
+    #print('batch complete')
+    #if 'json~' in q:
+    #    print(data['imgName'][b])
+    return q[4]
 
 
 if __name__ == "__main__":
@@ -107,7 +111,7 @@ if __name__ == "__main__":
             },
         'questions':1,
         'max_qa_len': 9999000,
-        "use_json": True
+        "use_json": 'only'
 
 })
 
@@ -120,12 +124,16 @@ if __name__ == "__main__":
         print('test {}'.format(i))
         dataLoaderIter.next()
         #display(data[i])
+    typs=defaultdict(int)
     try:
         while True:
             #print('?')
-            display(dataLoaderIter.next())
+            typ=display(dataLoaderIter.next())
+            typs[typ]+=1
     except StopIteration:
-        print('done')
+        #print('done')
+        pass
+    print(typs)
 
     #print('width mean: {}'.format(np.mean(widths)))
     #print('width std: {}'.format(np.std(widths)))
