@@ -36,7 +36,7 @@ print('from '+itera)
 
 broken = name.split('_')
 old_id = broken[-1]
-new_name='rvl_'+('_'.join(broken[1:-2]))+'_PTfrom{}i{}_{}'.format(old_id,itera,new_id)
+new_name='docvqa_'+('_'.join(broken[1:-2]))+'_PTfrom{}i{}_{}'.format(old_id,itera,new_id)
 
 old_cf = 'configs/cf_{}.json'.format(name)
 new_cf = 'configs/cf_{}.json'.format(new_name)
@@ -53,13 +53,13 @@ with open(old_cf) as f:
 image_size = cf['model']['image_size']
 
 new_dataset= {
-	"data_set_name": "RVLCDIPClass",
-	"data_dir": "../data/rvl-cdip",
+	"data_set_name": "DocVQA",
+	"data_dir": "../data/DocVQA",
         "shuffle": True,
-        "prefetch_factor": 2,
+        "prefetch_factor": 5,
         "persistent_workers": True,
-        "batch_size": 2,
-        "num_workers": 6,
+        "batch_size": 1,
+        "num_workers": 4,
         "rescale_range": [
             0.9,
             1.1
@@ -75,7 +75,7 @@ new_dataset= {
             }
 new_val =  {
         "shuffle": False,
-        "batch_size": 5,
+        "batch_size": 3,
 	"rescale_range": [1,1],
 	"rescale_to_crop_size_first": True,
 	"crop_params": {
@@ -90,16 +90,16 @@ cf['data_loader']=new_dataset
 
 cf['validation']=new_val
 
-cf['model']['max_a_tokens'] = 8 #doesn't need to predict more than 1
+cf['model']['max_a_tokens'] = 200 
 
 #set validation
-cf['trainer']['iterations']=200000
-cf['trainer']['val_step']=25000
+cf['trainer']['iterations']=250000
+cf['trainer']['val_step']=10000
 cf['trainer']['save_step']=50000
 
 #set drop in LR
 cf['trainer']["use_learning_schedule"]= "multi_rise then ramp_to_lower"
-cf['trainer']["lr_down_start"]= 150000
+cf['trainer']["lr_down_start"]= 175000
 cf['trainer']["ramp_down_steps"]= 10000
 cf['trainer']["lr_mul"]= 0.1
 

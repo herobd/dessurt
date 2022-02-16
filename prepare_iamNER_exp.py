@@ -86,6 +86,8 @@ cf['data_loader']=new_dataset
 
 cf['validation']=new_val
 
+cf['model']['max_a_tokens'] = 730  #full 800 not required
+
 #set validation
 cf['trainer']['iterations']=120000
 cf['trainer']['val_step']=10000
