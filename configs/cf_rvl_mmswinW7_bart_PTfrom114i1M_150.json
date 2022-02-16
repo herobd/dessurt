@@ -10,7 +10,7 @@
         "shuffle": true,
         "prefetch_factor": 2,
         "persistent_workers": true,
-        "batch_size": 1,
+        "batch_size": 2,
         "num_workers": 6,
         "rescale_range": [
             0.9,

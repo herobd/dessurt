@@ -61,13 +61,17 @@ def main(rank,config, resume,world_size=None):
     if rank is not None: #multiprocessing
         #print('Process {} can see these GPUs:'.format(rank,os.environ['CUDA_VISIBLE_DEVICES']))
         if 'distributed' in config:
+            if config['super_computer']:
+                init_file_path='file:///fslhome/brianld/job_comm/{}'.format(config['name'])
+            else:
+                init_file_path='file:///home/davis/job_comm/{}'.format(config['name'])
             print('env NCCL_SOCKET_IFNAME: {}'.format(os.environ['NCCL_SOCKET_IFNAME']))
             logger.info('{} calling dist.init_process_group() <<<<'.format(rank))
             os.environ['CUDA_VISIBLE_DEVICES']='0'
             os.environ['NCCL_ASYNC_ERROR_HANDLING']='1'
             dist.init_process_group(
                             "nccl",
-                            init_method='file:///fslhome/brianld/job_comm/{}'.format(config['name']),
+                            init_method=init_file_path,
                             rank=rank,
                             world_size=world_size,
                             timeout=datetime.timedelta(0, 5600))
