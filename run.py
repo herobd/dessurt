@@ -27,7 +27,7 @@ except:
 def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do_saliency=False,overwrite_char_prob=False):
     np.random.seed(1234)
     torch.manual_seed(1234)
-    no_mask_qs = ['fli:','fna:','re~','l~','v~', 'mm~','mk>','natrual_q~']
+    no_mask_qs = ['fli:','fna:','re~','l~','v~', 'mm~','mk>','natrual_q~','json>','json~']
     remove_qs = ['rm>','mlm>','mm~','mk>']
     if resume is not None:
         checkpoint = torch.load(resume, map_location=lambda storage, location: storage)
@@ -173,14 +173,17 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do
                 scale_width = do_pad[1]/img.shape[1]
                 choosen_scale = min(scale_height, scale_width)
                 if scale:
-                    scale*=choosen_scale
+                    new_scale=scale*choosen_scale
                 else:
-                    scale=choosen_scale
+                    new_scale=choosen_scale
+            else:
+                new_scale=scale
 
 
 
-            if scale:
-                img = img_f.resize(img,fx=scale,fy=scale)
+
+            if new_scale:
+                img = img_f.resize(img,fx=new_scale,fy=new_scale)
             
             if do_pad and (img.shape[0]!=do_pad[0] or img.shape[1]!=do_pad[1]):
                 diff_x = do_pad[1]-img.shape[1]

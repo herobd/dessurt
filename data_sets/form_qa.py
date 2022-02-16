@@ -284,7 +284,19 @@ class FormQA(QADataset):
         #self.do_words = config['do_words']
         #self.char_qs = config['char_qs'] if 'char_qs' in config else False
         if self.train:
-            if use_json=='fine-tune':
+            if use_json=='only':
+                self.rel_vs_any_link_prob=0.001
+                self.q_types = {
+                        'full_json': 3,
+                        }
+                self.q_types_no_table = {
+                        'full_json': 3,
+                        }
+                self.q_types_only_table = {
+                        'full_json': 2,
+                        }
+                self.q_types_for_np = ['class-link-all','class-linkdown-all','class-linkup-all','read','cell','row-header','col-header','full-all-col','full-all-row', 'full-list-row-headers','full-list-col-headers']
+            elif use_json=='fine-tune':
                 self.rel_vs_any_link_prob=0.001
                 self.q_types = {
                         'full_json': 3,
