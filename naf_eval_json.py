@@ -290,7 +290,14 @@ class Entity():
         #print('Created entitiy: {}'.format(text))
         self.text=text
         self.text_lines = text.split('\\')
-        self.cls=cls
+        if cls=='header' or cls=='question' or cls=='other' or cls=='circle':
+            self.cls='textGeneric'
+        elif cls=='answer':
+            self.cls='fieldGeneric'
+        else:
+            print('UNKNOWN PRED CLASS: '+cls)
+            assert False 
+        self.original_cls=cls
         self.id=identity
 
     def __repr__(self):
@@ -526,23 +533,32 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
     config['validation']['eval']=True
 
     # change to graph pair dataset
-    config['data_loader']['data_set_name']='FUNSDGraphPair'
-    config['data_loader']['data_dir']='../data/FUNSD'
+    config['data_loader']['data_set_name']='FormsGraphPair'
+    config['data_loader']['data_dir']='../data/forms'
     config['data_loader']['crop_params']=None
     config['data_loader']['batch_size']=1
-    config['data_loader']['split_to_lines']=True
     config['data_loader']['color']=False
     config['data_loader']['rescale_range']=[1,1]
+    config['data_loader']['no_blanks']=True
+    config['data_loader']['swap_circle']=True
+    config['data_loader']['no_graphics']=True
+    config['data_loader']['only_opposite_pairs']=False
+    config['data_loader']['no_groups']=True
+
     if DEBUG:
         config['data_loader']['num_workers']=0
 
-    config['validation']['data_set_name']='FUNSDGraphPair'
-    config['validation']['data_dir']='../data/FUNSD'
-    config['validation']['crop_params']=None
-    config['validation']['batch_size']=1
-    config['validation']['split_to_lines']=True
-    config['validation']['color']=False
-    config['validation']['rescale_range']=[1,1]
+    config['data_loader']['data_set_name']='FormsGraphPair'
+    config['data_loader']['data_dir']='../data/forms'
+    config['data_loader']['crop_params']=None
+    config['data_loader']['batch_size']=1
+    config['data_loader']['color']=False
+    config['data_loader']['rescale_range']=[1,1]
+    config['data_loader']['no_blanks']=True
+    config['data_loader']['swap_circle']=True
+    config['data_loader']['no_graphics']=True
+    config['data_loader']['only_opposite_pairs']=False
+    config['data_loader']['no_groups']=True
 
     if not test:
         data_loader, valid_data_loader = getDataLoader(config,'train')
@@ -586,6 +602,13 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             if DEBUG and (not going_DEBUG and instance['imgName']!='92091873'):
                 continue
             going_DEBUG=True
+
+
+            scale_height = do_pad[0]/img.shape[1]
+            scale_width = do_pad[1]/img.shape[2]
+            choosen_scale = min(scale_height, scale_width)
+            img = img_f.resize(img[0].numpy(),fx=choosen_scale,fy=choosen_scale)
+            img = torch.FloatTensor(img)[None,...]
 
             gt_line_to_group = instance['targetIndexToGroup']
 
@@ -1088,7 +1111,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 for p_i,entity in enumerate(pred_entities):
                     if p_i in pred_to_gt:
                         g_i = pred_to_gt[p_i]
-                        cls = entity.cls
+                        cls = entity.original_cls
                         if cls=='header':
                             color=(0,0,255) #header
                         elif cls=='question':
@@ -1097,6 +1120,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                             color=(255,255,0) #answer
                         elif cls=='other':
                             color=(255,0,255) #other 
+                        elif cls=='circle':
+                            color=(155,255,155) #answer
 
                         x1,y1,x2,y2 = bb_lines[groups[g_i][0]]
                         for l_i in groups[g_i][1:]:

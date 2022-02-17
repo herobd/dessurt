@@ -31,7 +31,7 @@ class GraphPairDataset(torch.utils.data.Dataset):
         #    self.augmentation_params=config['augmentation_params']
         #else:
         #    self.augmentation_params=None
-        self.questions = config['questions'] if 'questions' in config else False
+        ##self.questions = config['questions'] if 'questions' in config else False
         self.color = config['color'] if 'color' in config else True
         self.rotate = config['rotation'] if 'rotation' in config else False
         #patchSize=config['patch_size']
@@ -143,36 +143,36 @@ class GraphPairDataset(torch.utils.data.Dataset):
         #pixel_gt = table_pixels
 
         ##ticTr=timeit.default_timer()
-        if self.questions: #we need to do questions before crop to have full context
-            #we have to relationships to get questions
-            pairs=set()
-            for index1,id in enumerate(ids): #updated
-                responseBBIdList = self.getResponseBBIdList(id,annotations)
-                for bbId in responseBBIdList:
-                    try:
-                        index2 = ids.index(bbId)
-                        pairs.add((min(index1,index2),max(index1,index2)))
-                    except ValueError:
-                        pass
-            groups_adj = set()
-            if groups is not None:
-                for n0,n1 in pairs:
-                    g0=-1
-                    g1=-1
-                    for i,ns in enumerate(groups):
-                        if n0 in ns:
-                            g0=i
-                            if g1!=-1:
-                                break
-                        if n1 in ns:
-                            g1=i
-                            if g0!=-1:
-                                break
-                    if g0!=g1:
-                        groups_adj.add((min(g0,g1),max(g0,g1)))
-            questions_and_answers = self.makeQuestions(bbs,trans,groups,groups_adj)
-        else:
-            questions_and_answers=None
+        #if self.questions: #we need to do questions before crop to have full context
+        #    #we have to relationships to get questions
+        #    pairs=set()
+        #    for index1,id in enumerate(ids): #updated
+        #        responseBBIdList = self.getResponseBBIdList(id,annotations)
+        #        for bbId in responseBBIdList:
+        #            try:
+        #                index2 = ids.index(bbId)
+        #                pairs.add((min(index1,index2),max(index1,index2)))
+        #            except ValueError:
+        #                pass
+        #    groups_adj = set()
+        #    if groups is not None:
+        #        for n0,n1 in pairs:
+        #            g0=-1
+        #            g1=-1
+        #            for i,ns in enumerate(groups):
+        #                if n0 in ns:
+        #                    g0=i
+        #                    if g1!=-1:
+        #                        break
+        #                if n1 in ns:
+        #                    g1=i
+        #                    if g0!=-1:
+        #                        break
+        #            if g0!=g1:
+        #                groups_adj.add((min(g0,g1),max(g0,g1)))
+        #    questions_and_answers = self.makeQuestions(bbs,trans,groups,groups_adj)
+        #else:
+        questions_and_answers=None
 
         if self.transform is not None:
             if 'word_boxes' in form_metadata:

@@ -159,6 +159,10 @@ class FormsGraphPair(GraphPairDataset):
                 'textGeneric':13,
                 'fieldGeneric':14,
                 }
+        self.index_class_map=[
+                'textGeneric',
+                'fieldGeneric',
+                ]
         for i,clas in enumerate(self.useClasses):
             self.classMap[clas]=i+15
         if not self.no_blanks:
