@@ -240,7 +240,7 @@
         "accum_grad_steps": 128,
         "#swa": true,
         "#swa_start": 200000,
-        "save_dir": "saved/",
+        "save_dir": "/fslhome/mwh1998/saved/",
         "val_step": 25000,
         "save_step": 50000,
         "save_step_minor": 256,
@@ -257,7 +257,8 @@
             1000
         ],
         "#ramp_down_steps": 10000,
-        "#swa_lr_mul": 0.01
+        "#swa_lr_mul": 0.01,
+        "seperate_log_at": "logs"
     },
     "arch": "MmSwin",
     "model": {

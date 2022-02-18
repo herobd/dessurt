@@ -102,6 +102,8 @@ class CensusQA(RecordQA):
                     print("Error, unknown split {}".format(split))
                     exit(1)
             self.images=[]
+            if not self.train:
+                imagesAndAnn = imagesAndAnn[::2]
             for imageName,imagePath,jsonPath in imagesAndAnn:
                 #if os.path.exists(jsonPath):
                 #    org_path = imagePath

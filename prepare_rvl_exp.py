@@ -37,6 +37,7 @@ print('from '+itera)
 broken = name.split('_')
 old_id = broken[-1]
 new_name='rvl_'+('_'.join(broken[1:-2]))+'_PTfrom{}i{}_{}'.format(old_id,itera,new_id)
+print(new_name)
 
 old_cf = 'configs/cf_{}.json'.format(name)
 new_cf = 'configs/cf_{}.json'.format(new_name)

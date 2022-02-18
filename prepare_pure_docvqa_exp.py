@@ -37,6 +37,7 @@ print('from '+itera)
 broken = name.split('_')
 old_id = broken[-1]
 new_name='docvqa_'+('_'.join(broken[1:-2]))+'_PTfrom{}i{}_{}'.format(old_id,itera,new_id)
+print(new_name)
 
 old_cf = 'configs/cf_{}.json'.format(name)
 new_cf = 'configs/cf_{}.json'.format(new_name)
@@ -90,7 +91,7 @@ cf['data_loader']=new_dataset
 
 cf['validation']=new_val
 
-cf['model']['max_a_tokens'] = 200 
+cf['model']['max_a_tokens'] = 50
 
 #set validation
 cf['trainer']['iterations']=250000
@@ -99,7 +100,7 @@ cf['trainer']['save_step']=50000
 
 #set drop in LR
 cf['trainer']["use_learning_schedule"]= "multi_rise then ramp_to_lower"
-cf['trainer']["lr_down_start"]= 175000
+cf['trainer']["lr_down_start"]= 200000
 cf['trainer']["ramp_down_steps"]= 10000
 cf['trainer']["lr_mul"]= 0.1
 

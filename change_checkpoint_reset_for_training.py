@@ -64,7 +64,7 @@ def readRemoveWrite(in_path,out_path,arrange_layers=None,remove_layers=None,rena
     else:
         new_file = os.path.join(new_file,'checkpoint-latest.pth')
     torch.save(saved,new_file)
-    print('saved '+new_file)
+    print('SAVED '+new_file)
 
 if __name__ == '__main__':
 
