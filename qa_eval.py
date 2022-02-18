@@ -155,6 +155,31 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                         },
                 "validation":{}
                 }
+    elif data_set_name=='RVL':
+        data_config={
+                "data_loader": {
+                    "data_set_name": "RVLCDIPClass",
+                    "data_dir": "../data/rvl-cdip",
+                    "batch_size": config['validation']['batch_size'] if not run else 1,
+                    "rescale_to_crop_size_first": True,
+                    "rescale_range": [
+                        1.0,
+                        1.0
+                    ],
+                    "crop_params": {
+                        "crop_size": [
+                            image_h,image_w
+                        ],
+                        "random": False
+                    },
+                    "questions": 1,
+                    "max_qa_len_in": 640,
+                    "max_qa_len_out": 99999999999,
+                    "cased": True,
+                    "shuffle": False
+                        },
+                "validation":{}
+                }
     elif data_set_name=='IAMNER':
         data_config={
                 "data_loader": {
@@ -163,6 +188,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     "batch_size": config['data_loader']['batch_size']*(3 if 'full' in config['data_loader'] else 2) if not run else 1,
                     "full": config['data_loader'].get('full',False),
                     "cased": config['data_loader'].get('cased',False),
+                    "task": config['data_loader'].get('task',6),
                     "eval_full": True,
                     "rescale_to_crop_size_first": True,
                     "rescale_range": [

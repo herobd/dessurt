@@ -2,6 +2,7 @@ import json
 import os
 import sys
 from change_checkpoint_reset_for_training import readRemoveWrite
+from make_run import create
 
 
 if len(sys.argv)==1:
@@ -94,9 +95,10 @@ cf['validation']=new_val
 cf['model']['max_a_tokens'] = 50
 
 #set validation
-cf['trainer']['iterations']=250000
+cf['trainer']['iterations']=280000
 cf['trainer']['val_step']=10000
-cf['trainer']['save_step']=50000
+cf['trainer']['save_step']=20000
+cf['trainer']["save_step_minor"]= 1024 
 
 #set drop in LR
 cf['trainer']["use_learning_schedule"]= "multi_rise then ramp_to_lower"
@@ -116,3 +118,4 @@ else:
 with open(new_cf,'w') as f:
     json.dump(cf,f,indent=4)
 print(new_cf)
+create(new_name)

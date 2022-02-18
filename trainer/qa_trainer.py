@@ -427,7 +427,7 @@ class QATrainer(BaseTrainer):
 
         if run:
             string_a,pred_mask = self.model(image,ocr_res,questions,RUN=True)
-        if distill:
+        elif distill:
             pred_a, target_a, string_a, pred_logits, pred_last_hidden, batch_mask = self.model(image,ocr_res,questions,answers,distill=True)
             pred_mask = None
         else:

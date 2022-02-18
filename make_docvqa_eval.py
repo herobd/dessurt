@@ -36,7 +36,7 @@ source activate /fslhome/brianld/miniconda3/envs/new
 """
 do_template="""
 echo "{0}" 
-python qa_eval.py -d DocVQA -c saved/{0}/checkpoint-latest.pth -g 0 -v 0 --autoregressive
+python qa_eval.py -d DocVQA -c saved/{0}/checkpoint-latest.pth -g 0 -v 0 --autoregressive -T
 """
 
 import sys

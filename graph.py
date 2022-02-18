@@ -56,9 +56,13 @@ def graph(log,plot=True,substring=None,regex=None):
     else:
         i=1
         for metric, data in graphs.items():
-            if metric[:3]=='avg' or metric[:3]=='val':
+            if metric in skip:
+                continue
+            if (substring is None and regex is None and (metric[:3]=='avg' or metric[:3]=='val')) or (substring is not None and substring in metric) or (regex is not None and re.match(regex,metric)):
                 print(metric)
-                print(data['values'])
+                #print(data['values'])
+                for i,v in zip(data['iters'], data['values']):
+                    print('{}: {}'.format(i,v))
 
 
 
