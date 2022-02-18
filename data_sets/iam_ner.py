@@ -38,7 +38,7 @@ class IAMNER(QADataset):
 
         self.current_crop=None
         self.word_id_to_cls={}
-
+        
         if images is not None:
             self.images=images
         else:

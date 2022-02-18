@@ -625,7 +625,9 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             gt_classes = [data_loader.dataset.index_class_map[c] for c in classes]
 
             if draw:
-                draw_img = (255*(1-img.permute(1,2,0).expand(-1,-1,3).numpy())).astype(np.uint8)
+                draw_img = (128*(1-img.permute(1,2,0).expand(-1,-1,3).numpy())).astype(np.uint8)
+
+            #import pdb;pdb.set_trace()
             
             if do_pad and (img.shape[1]<do_pad[0] or img.shape[2]<do_pad[1]):
                 diff_x = do_pad[1]-img.shape[2]

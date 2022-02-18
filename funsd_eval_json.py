@@ -163,9 +163,20 @@ def fixLoadJSON(pred):
                         elif pred[char]=='}':
                                 pred = pred[:char]+']'+pred[char:]
                         else: 
-                            assert False
+                            assert False        
                     else:
-                        assert False
+                        prev_curley = pred[:char-1].rfind('{')
+                        next_quote = pred[char:].find('"')
+                        next_quote += char
+                        if pred[next_quote-1]]=='\\':
+                            next_quote = pred[next_quote+1:].find('"')
+                            next_quote += next_quote+1
+                        #next_colon = pred[char:].find(':')
+                        if pred[next_quote+1]==':' and prev_colon<prev_quote:
+                            #maybe it shouldn't have closed
+                            pred = pred[:char-1]+pred[char:]
+                        else:
+                            assert False
 
                             
                 else:
@@ -603,6 +614,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
 
             if draw:
                 draw_img = (255*(1-img.permute(1,2,0).expand(-1,-1,3).numpy())).astype(np.uint8)
+                #import pdb;pdb.set_trace()
             
             if do_pad and (img.shape[1]<do_pad[0] or img.shape[2]<do_pad[1]):
                 diff_x = do_pad[1]-img.shape[2]
