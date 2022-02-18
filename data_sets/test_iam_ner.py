@@ -57,7 +57,7 @@ def display(data,tokenizer=None):
 
         #widths.append(img.size(1))
         
-        draw=False#q.startswith('mm')
+        draw='WORK_OF_ART' in a
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -111,7 +111,8 @@ if __name__ == "__main__":
             },
         'questions':1,
         'full': True,
-        'cased': True
+        'cased': True,
+        "task": 18,
 
 })
 
