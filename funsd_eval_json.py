@@ -30,6 +30,8 @@ end_token = '‡'
 np_token = '№'
 blank_token = 'ø'
 
+CUT_BACK=False
+
 def findNonEscaped(s,target):
     chopped=0
     while True:
@@ -710,7 +712,13 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 num_calls+=1
                 
                 #how much of a lead? Need it to fit tokenwise in the 20 limit
-                tokens = tokenizer.encode(answer)
+                if CUT_BACK:
+                    tokens = tokenizer.encode(total_answer)
+                    if len(tokens)>600:
+                        tokens = tokens[:-100]
+                        total_answer = tokenizer.decode(tokens,skip_special_tokens=True)
+                else:
+                    tokens = tokenizer.encode(answer)
                 tokens = tokens[-19:] #19 to account for start token (CLS) added at beginning
                 prompt = tokenizer.decode(tokens,skip_special_tokens=True)
                 question = 'json~'+prompt
