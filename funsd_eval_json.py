@@ -30,6 +30,25 @@ end_token = '‡'
 np_token = '№'
 blank_token = 'ø'
 
+def findNonEscaped(s,target):
+    chopped=0
+    while True:
+        loc = s.find(target)
+        if loc<=0 or s[loc-1]!='\\':
+            return loc+chopped
+        else:
+            s=s[loc+1:]
+            chopped+=loc+1
+def rfindNonEscaped(s,target):
+    while True:
+        loc = s.rfind(target)
+        if loc<=0 or s[loc-1]!='\\':
+            return loc
+        else:
+            s=s[:loc]
+
+
+
 def norm_ed(s1,s2):
     return editdistance.eval(s1.lower(),s2.lower())/max(len(s1),len(s2),1)
 
@@ -81,7 +100,7 @@ def fixLoadJSON(pred):
             pred_data = json.loads(pred)
         except json.decoder.JSONDecodeError as e:
             sections = '{}'.format(e)
-            #print(sections)
+            print(sections)
             sections=sections.replace("':'","';'")
             sections = sections.split(':')
             #if len(sections)==3:
@@ -93,6 +112,7 @@ def fixLoadJSON(pred):
             loc_char = loc.find('char ')
             loc_char_end = loc.rfind(')')
             char = int(loc[loc_char+5:loc_char_end])
+
             
             if "Expecting ',' delimiter" in typ:
                 if char==len(pred):
@@ -134,15 +154,21 @@ def fixLoadJSON(pred):
                         pred = pred[:char-1]+pred[close_curly:]
                 elif pred[char]==']' and pred[char-1]=='"':
                     assert pred[:char-1].rfind('[')<pred[:char-1].rfind('{')
-                    pred = pred[:char]+'}'+pred[char:]
+                    if pred[char+1]!='}':
+                        pred = pred[:char]+'}'+pred[char:]
+                    else:
+                        #this may be just a unopened list closing, in which case we'll remove it
+                        pred = pred[:char]+pred[char+1:]
                 elif pred[char-1]=='"':
-                    prev_quote = pred[:char-1].rfind('"')
+                    #prev_quote = pred[:char-1].rfind('"')
+                    prev_quote = rfindNonEscaped(pred[:char-1],'"')
                     prev_comma = pred[:char-1].rfind(',')
                     prev_colon = pred[:char-1].rfind(':')
                     if prev_quote>prev_comma and prev_quote>prev_colon and prev_colon>prev_comma:
 
                         #we have an unterminated list?
-                        next_quote = pred[char:].find('"')
+                        #next_quote = pred[char:].find('"')
+                        next_quote = findNonEscaped(pred[char:],'"')
                         assert next_quote!=-1
                         next_quote += char
                         next_curly = pred[char:].find('}')
@@ -165,16 +191,21 @@ def fixLoadJSON(pred):
                         else: 
                             assert False        
                     else:
-                        prev_curley = pred[:char-1].rfind('{')
-                        next_quote = pred[char:].find('"')
+                        prev_quote = rfindNonEscaped(pred[:char-1],'"')
+                        prev_curley = pred[:prev_quote].rfind('{')
+                        prev_bracket = pred[:prev_quote].rfind('[')
+                        #next_quote = pred[char:].find('"')
+                        next_quote = findNonEscaped(pred[char:],'"')
                         next_quote += char
-                        if pred[next_quote-1]]=='\\':
-                            next_quote = pred[next_quote+1:].find('"')
-                            next_quote += next_quote+1
                         #next_colon = pred[char:].find(':')
-                        if pred[next_quote+1]==':' and prev_colon<prev_quote:
+                        if pred[next_quote+1]==':' and prev_bracket>prev_curley:# and prev_colon<prev_quote:
+                            #We're in a list, so close it
+                            #and start the quote we sould be in
+                            pred = pred[:char]+']}, {"'+pred[char:]
+                            #else
                             #maybe it shouldn't have closed
-                            pred = pred[:char-1]+pred[char:]
+                            #import pdb;pdb.set_trace()
+                            #pred = pred[:char-1]+pred[char:]
                         else:
                             assert False
 
@@ -208,7 +239,8 @@ def fixLoadJSON(pred):
                         prepend=','
                     else:
                         prepend=', '
-                    prev_quote = pred[:char].rfind('"')
+                    #prev_quote = pred[:char].rfind('"')
+                    prev_quote = rfindNonEscaped(pred[:char],'"')
                     prev_curly = pred[:char].rfind('}')
                     prev_comma = pred[:char].rfind(',')
                     if prev_curly > prev_quote and prev_curly+1==prev_comma:
@@ -230,7 +262,8 @@ def fixLoadJSON(pred):
                     #first check if this is a bad ", maybe unescaped
                     #import pdb;pdb.set_trace()
                     if pred[char-1]=='"':
-                        quote = pred[char:].find('"')
+                        #quote = pred[char:].find('"')
+                        quote = findNonEscaped(pred[char:],'"')
                         colon = pred[char:].find(':')
                         quote += char
                         colon += char
@@ -243,17 +276,26 @@ def fixLoadJSON(pred):
 
                     
                     if not fixed:
-                        bracket = pred[:char-1].rfind('{')
-                        colon = pred[:char-1].rfind(':')
+                        if pred[char-1]=='"':
+                            #find opening quote
+                            open_quote = rfindNonEscaped(pred[:char-1],'"')
+                            bracket = pred[:open_quote].rfind('{')
+                            colon = pred[:open_quote].rfind(':')
+                        else:
+                            bracket = pred[:char-1].rfind('{')
+                            colon = pred[:char-1].rfind(':')
                         if bracket>colon:
                             #this is missing the class prediction
                             pred = pred[:char]+': "other"'+pred[char:]
                         else:
                             #extra data?
-                            open_quote= pred[colon:].find('"')
+                            #open_quote= pred[colon:].find('"')
+                            open_quote = findNonEscaped(pred[colon:],'"')
                             assert open_quote!=-1
                             open_quote += colon
-                            close_quote= pred[open_quote+1:].find('"')
+                            #close_quote= pred[open_quote+1:].find('"')
+                            close_quote = findNonEscaped(pred[:open_quote+1],'"')
+
                             assert close_quote!=-1
                             close_quote += open_quote+1
 
@@ -293,7 +335,7 @@ def fixLoadJSON(pred):
             else:
                 assert False
             
-            #print('corrected pred: '+pred)
+            print('corrected pred: '+pred)
     return pred_data
 
 class Entity():
@@ -413,7 +455,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
     TRUER=True #False makes this do pair-first alignment, which is kind of cheating
     np.random.seed(1234)
     torch.manual_seed(1234)
-    DEBUG=False
+    DEBUG=True
     if DEBUG:
         print("DEBUG")
     
@@ -594,7 +636,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='92091873'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='92314414'):
                 continue
             going_DEBUG=True
 
@@ -877,7 +919,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 entities_truepos = 0
                 for g_i,p_i in new_gt_to_pred.items():
                     if gt_classes[g_i]==pred_entities[p_i].cls:
-                        if not BROS or norm_ed(pred_entities[p_i].text,transcription_groups[g_i])<ENTITY_MATCH_THRESH:
+                        if norm_ed(pred_entities[p_i].text,transcription_groups[g_i])<ENTITY_MATCH_THRESH:
                             entities_truepos+=1
                         #print('A hit G:{} <> P:{}'.format(transcription_groups[g_i],pred_entities[p_i].text))
 
