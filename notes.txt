@@ -587,48 +587,64 @@ old Total rel recall, prec, Fm: 0.436046511627907       0.33783783783783783     
 New Total rel recall, prec, Fm: 0.4418604651162791      0.3343108504398827      0.38063439065108506
 
 =======
-read_blanked','read_replaced','read_with_masked','read_line','highlight_text','read_highlighted','masked_lm','put_in_place','read_on','read_backwards','highlight_block','
-
-Data in FS jsons
-
-probably filter this char out of recog results: ' ̟'
-
-#For training on just Census
-HOUSEHOLD_ID = household id
-LINE_NBR = line no.
-PR_AGE = age
-PR_BIRTH_PLACE = birth place
-PR_MARITAL_STATUS = marital status
-PR_NAME = name
-PR_NAME_GNx
-PR_NAME_SURNx
-PR_PREV_RESIDENCE_CITY 
-PR_PREV_RESIDENCE_COUNTY 
-PR_PREV_RESIDENCE_STATE 
-PR_PREV_RESIDENCE_PLACE = previous residence place#'Same House' should be careful
-PR_RACE_OR_COLOR / PR_RACE_OR_COLOR_CSS
-PR_RELATIONSHIP_TO_HEAD / PR_RELATIONSHIP_TO_HEAD_CSS / RELATIONSHIP_CODE
-PR_SEX_CODE
-
-~global to document~
-EVENT_PLACE_LEVEL_1
-EVENT_PLACE_LEVEL_2
-EVENT_PLACE_LEVEL_3
-EVENT_DISTRICT
-SHEET_NUMBER_LETTER
-
-
-Questions:
-Basic 0:
-next name down/up
-[field] for [line/name]?
-More heavily weight towards name-line/line-name tasks as most HWR is reading name
-
-Intermediate 1:
-[value,value,value] is what line/name?
-
-Advanced 2:
-Who is older?
-Are these in the same household?
-Who is the head of this person?
-People in my household?
+JOBS
+                                  funsd_mmswin_bart_singleCrsDp_PTfrom96ilatest_174  47043211        0:00
+                                              funsd_mmswin_bart_PTfrom94ilatest_162  47043212        0:00
+                                          iamNER18_mmswin_bart_PTfrom136ilatest_225  47043207        0:23
+                                            iamNER_mmswin_bart_PTfrom135ilatest_226  47043208        0:23
+                                          iamNER18_mmswin_bart_PTfrom135ilatest_227  47043209        0:23
+                                          iamNER18_mmswin_bart_PTfrom134ilatest_229  47043210        0:23
+                                              iamNER18_mmswin_bart_PTfrom119i1M_223  47043205        0:45
+                                            iamNER_mmswin_bart_PTfrom136ilatest_224  47043206        0:45
+                                                iamNER_mmswin_bart_PTfrom119i1M_222  47043204        0:57
+                                                docvqa_mmswin_bart_PTfrom119i1M_219  47043201        1:24
+                                                   naf_mmswin_bart_PTfrom119i1M_220  47043202        1:24
+                                              iamNER18_mmswin_bart_PTfrom118i1M_217  47043199        1:58
+                                                   rvl_mmswin_bart_PTfrom119i1M_218  47043200        1:58
+                                                docvqa_mmswin_bart_PTfrom115i1M_177  47043195        2:08
+                                 docvqa_mmswin_bart_singleCrsDp_PTfrom96ilatest_172  47043196        2:08
+                                               naf_mmswin_bart_PTfrom138ilatest_157  47043197        2:08
+                                               naf_mmswin_bart_PTfrom139ilatest_199  47043198        2:08
+                                                 rvl_mmswinW7_bart_PTfrom114i1M_166  47043191        2:17
+                                              rvl_mmswinNoMw7_bart_PTfrom125i1M_193  47043192        2:17
+                                                rvl_mmswinNoM_bart_PTfrom124i1M_191  47043193        2:17
+                                                rvl_mmswin_bart_PTfrom94ilatest_160  47043194        2:17
+                                              iamNER18_mmswin_bart_PTfrom116i1M_210  47043187        2:28
+                                              iamNER18_mmswin_bart_PTfrom117i1M_211  47043188        2:28
+                                           naf_mmswin_bart_PTfrom126ilatest_153ALT2  47043189        2:28
+                                            rvl_mmswin_bart_1Cr_PTfrom123i1M_149ALT  47043190        2:28
+                                           iamNER18_mmswinNoM_bart_PTfrom124i1M_207  47043185        2:39
+                                         iamNER18_mmswinNoMw7_bart_PTfrom125i1M_208  47043186        2:39
+                                           iamNER_mmswinNoMw7_bart_PTfrom125i1M_197  47043179        2:59
+                                              iamNER_mmswin_bart_PTfrom142i100k_198  47043180        2:59
+                                     naf_mmswin_bart_singleCrsDp_PTfrom143i250k_200  47043181        2:59
+                                           iamNER18_mmswin_bart_PTfrom94ilatest_201  47043182        2:59
+                                            iamNER18_mmswin_bart_PTfrom142i100k_202  47043183        2:59
+                                            iamNER18_mmswinW7_bart_PTfrom114i1M_205  47043184        2:59
+                                    naf_mmswin_bart_singleCrsDp_PTfrom96ilatest_173  47043173        3:09
+                                                iamNER_mmswin_bart_PTfrom116i1M_185  47043174        3:09
+                                                   naf_mmswin_bart_PTfrom117i1M_188  47043175        3:09
+                                                iamNER_mmswin_bart_PTfrom117i1M_190  47043176        3:09
+                                               naf_mmswin_bart_1Cr_PTfrom123i1M_192  47043177        3:09
+                                              naf_mmswinNoMw7_bart_PTfrom125i1M_195  47043178        3:09
+                                            iamNER_mmswin_bart_1Cr_PTfrom123i1M_151  47043168        3:29
+                                  iamNER_mmswin_bart_singleCrsDp_PTfrom132i100k_157  47043169        3:29
+                                                naf_mmswin_bart_PTfrom94ilatest_161  47043170        3:29
+                                             iamNER_mmswinNoM_bart_PTfrom124i1M_169  47043172        3:29
+                                                   rvl_mmswin_bart_PTfrom117i1M_186  47031227     7:16:52
+                                    rvl_mmswin_bart_singleCrsDp_PTfrom96ilatest_171  47031231     7:16:52
+                                                   rvl_mmswin_bart_PTfrom116i1M_181  47031228     7:16:56
+                                                   rvl_mmswin_bart_PTfrom115i1M_176  47031229     7:16:56
+                                              rvl_mmswinW7_bart_PTfrom114i1M_150ALT  47031075     7:30:07
+                                                iamNER_mmswin_bart_PTfrom118i1M_216  47037406     2:11:14
+                                                   naf_mmswin_bart_PTfrom118i1M_214  47037384     2:16:01
+                                                docvqa_mmswin_bart_PTfrom118i1M_213  47037381     2:19:56
+                                           docvqa_mmswinNoMw7_bart_PTfrom125i1M_194  47033614     5:40:14
+                                                docvqa_mmswin_bart_PTfrom116i1M_182  47033616     5:40:14
+                                             docvqa_mmswinNoM_bart_PTfrom124i1M_156  47033619     5:40:14
+                                              docvqa_mmswinW7_bart_PTfrom114i1M_155  47033621     5:40:14
+                                                docvqa_mmswin_bart_PTfrom117i1M_187  47033615     5:40:17
+             iamX+distilGN+form+syhw+paraCqa+cdipC_mmswinW7_bart_PTfrom114i800k_144  47047211        0:00
+                  iamX+distil+form+syhw+para+cdip_mmswinNoM_bart_PTfrom124i800k_146  47047214        0:00
+                iamX+distil+form+syhw+para+cdip_mmswinNoMw7_bart_PTfrom125i800k_145  47047218        0:00
+                                        iamX+all_mmswin_bart_1Cr_PTfrom123i800k_131  47047225
