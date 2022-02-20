@@ -98,7 +98,7 @@ def fixLoadJSON(pred):
     try: 
         while pred_data is None:
             counter -=1
-            if len(pred)>start_len+20 or counter==0:
+            if len(pred)>start_len+40 or counter==0:
                 assert False
             pred = pred.replace(',,',',')
             pred = pred.replace('{{','{')
