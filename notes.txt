@@ -648,3 +648,7 @@ JOBS
                   iamX+distil+form+syhw+para+cdip_mmswinNoM_bart_PTfrom124i800k_146  47047214        0:00
                 iamX+distil+form+syhw+para+cdip_mmswinNoMw7_bart_PTfrom125i800k_145  47047218        0:00
                                         iamX+all_mmswin_bart_1Cr_PTfrom123i800k_131  47047225
+docvqa_mmswin_bart_PTfrom94ilatest_154
+iamNER_mmswinW7_bart_PTfrom114i1M_148
+iamX+distil+form+syhw+para+cdip_mmswin_bart_PTfrom119i800k_137
+iamX+cdip_mmswin_bart_PTfrom115i800k_133
