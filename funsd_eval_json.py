@@ -346,7 +346,7 @@ def fixLoadJSON(pred):
                                 assert open_quote!=-1
                                 open_quote += colon
                                 #close_quote= pred[open_quote+1:].find('"')
-                                close_quote = findNonEscaped(pred[:open_quote+1],'"')
+                                close_quote = findNonEscaped(pred[open_quote+1:],'"')
 
                                 assert close_quote!=-1
                                 close_quote += open_quote+1
