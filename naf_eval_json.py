@@ -21,6 +21,7 @@ import editdistance
 import random
 import re
 from transformers import BartTokenizer
+from funsd_eval_json import fixLoadJSON
 try:
     import easyocr
 except:
@@ -32,6 +33,43 @@ blank_token = 'ø'
 
 def norm_ed(s1,s2):
     return editdistance.eval(s1.lower(),s2.lower())/max(len(s1),len(s2),1)
+
+def breakIntoLines(entities,links):
+    old_to_head={}
+    old_to_tail={}
+    new_entities=[]
+    new_links=[]
+    for old_id,entity in enumerate(entities):
+        if len(entity.text_lines)==1:
+            e_id = len(new_entities)
+            new_entities.append(entity)
+            old_to_head[old_id] = e_id
+            old_to_tail[old_id] = e_id
+        else:
+            lines = entity.split()
+            head_id = len(new_entities)
+            new_entities.append(lines[0])
+            prev_id = head_id
+            for line in lines[1:]:
+                next_id = len(new_entities)
+                new_entities.append(line)
+                new_links.append((prev_id,next_id))
+                prev_id = next_id
+
+            old_to_head[old_id] = head_id
+            old_to_tail[old_id] = prev_id
+
+    for a,b in links:
+        #a_head = old_to_head[a]
+        a_tail = old_to_tail[a]
+        b_head = old_to_head[b]
+        #b_tail = old_to_tail[b]
+        new_links.append((a_tail,b_head))
+
+    return new_entities,new_links
+
+
+
 
 def derepeat(s):
     #hardcoded error the model makes a lot (for some reason)
@@ -64,235 +102,15 @@ def findUnmatched(s):
 
     return b_stack[-1] if len(b_stack) > 0 else -1, c_stack[-1] if len(c_stack) > 0 else -1
 
-def fixLoadJSON(pred):
-    pred_data = None
-    start_len = len(pred)
-    end_token_loc = pred.find(end_token)
-    if end_token_loc != -1:
-        pred = pred[:end_token_loc]
-    counter=2000
-    while pred_data is None:
-        counter -=1
-        if len(pred)>start_len+20 or counter==0:
-            assert False
-        pred = pred.replace(',,',',')
-        pred = pred.replace('{{','{')
-        try:
-            pred_data = json.loads(pred)
-        except json.decoder.JSONDecodeError as e:
-            sections = '{}'.format(e)
-            #print(sections)
-            sections=sections.replace("':'","';'")
-            sections = sections.split(':')
-            #if len(sections)==3:
-            #    err,typ,loc =sections
-            #else:
-            typ,loc = sections
-
-            assert 'line 1' in loc
-            loc_char = loc.find('char ')
-            loc_char_end = loc.rfind(')')
-            char = int(loc[loc_char+5:loc_char_end])
-            
-            if "Expecting ',' delimiter" in typ:
-                if char==len(pred):
-                    #closing ] or }?
-                    #bracket = pred.rfind('[')
-                    #curley = pred.rfind('{')
-                    bracket,curley = findUnmatched(pred)
-                    assert bracket!=-1 or curley!=-1
-                    if bracket>curley:
-                        pred+=']'
-                    else:
-                        pred+='}'
-                elif pred[char]==':':
-                    #it didn't close a list
-                    if pred[:char-1].rfind('[')>pred[:char-1].rfind('{'):
-                        assert pred[char-1]=='"'
-                        open_quote = pred[:char-1].rfind('"')
-                        assert open_quote!=-1
-                        comma = pred[:open_quote].rfind(',')
-                        bracket = pred[:open_quote].rfind('[')
-                        #assert comma != -1
-                        if comma>bracket:
-                            pred = pred[:comma]+']},{'+pred[comma+1:]
-                        else:
-                            #unless this is a table, we want seperate objects
-                            curley = pred[:bracket].rfind('{')
-                            sub = pred[curley+1:bracket]
-                            if 'headers' in sub or 'cells' in sub:
-                                #table
-                                pred = pred[:bracket+1]+'],'+pred[bracket+1:]
-                            else:
-                                pred = pred[:bracket+1]+']},{'+pred[bracket+1:]
-                    else:
-                        #double colon/value
-                        close_curly = pred[char:].find('{')
-                        if close_curly != -1:
-                            close_curly+=char
-                        #remove it 
-                        pred = pred[:char-1]+pred[close_curly:]
-                elif pred[char]==']' and pred[char-1]=='"':
-                    assert pred[:char-1].rfind('[')<pred[:char-1].rfind('{')
-                    pred = pred[:char]+'}'+pred[char:]
-                elif pred[char-1]=='"':
-                    prev_quote = pred[:char-1].rfind('"')
-                    prev_comma = pred[:char-1].rfind(',')
-                    prev_colon = pred[:char-1].rfind(':')
-                    if prev_quote>prev_comma and prev_quote>prev_colon and prev_colon>prev_comma:
-
-                        #we have an unterminated list?
-                        next_quote = pred[char:].find('"')
-                        assert next_quote!=-1
-                        next_quote += char
-                        next_curly = pred[char:].find('}')
-                        if next_curly!=-1:
-                            next_curly += char
-                        else:
-                            next_curly = 999999999999999
-                        next_bracket = pred[char:].find(']')
-                        if next_bracket!=-1:
-                            next_bracket += char
-                        else:
-                            next_bracket = 999999999999999
-                        next_end = min(next_curly,next_bracket)
-                        if next_quote>char and next_quote<next_end:
-                            #This is an incorrectly started value string
-                            #we'll just remove it
-                            pred = pred[:char]+pred[next_end:]
-                        elif pred[char]=='}':
-                                pred = pred[:char]+']'+pred[char:]
-                        else: 
-                            assert False
-                    else:
-                        assert False
-
-                            
-                else:
-                    assert False
-            elif 'Unterminated string starting at' in typ:
-                pred+='"'
-            elif 'Expecting value' in typ:
-                if char==len(pred) and pred[char-1]==':':
-                    #We'll just remove this incomplete prediction
-                    bracket = pred.rfind('{')
-                    assert bracket > pred.rfind('}')
-                    comma = pred[:bracket].rfind(',')
-                    pred = pred[:comma]
-                elif char==len(pred) and pred[char-1]!='"':
-                    pred+='""'
-                elif char==len(pred)-1 and pred[char]!='"':
-                    pred+='""'
-                elif pred[char]=='}' and pred[:char].rfind('{')<pred[:char].rfind('}'):
-                    #random extra close curelybrace
-                    pred = pred[:char]+pred[char+1:]
-                elif pred[char-1]=='"' and pred[char:].find('"')+1==pred[char:].find(':'):
-                    #forgot to seperate something
-                    pred = pred[:char]+',"'+pred[char:]
-                elif pred[char:].startswith('answers') or pred[char:].startswith('"answers') or pred[char:].startswith(' "answers'):
-                    #we need to add this to the previous entity
-                    if pred[char:].startswith('answers'):
-                        prepend=', "'
-                    elif pred[char:].startswith(' "answers'):
-                        prepend=','
-                    else:
-                        prepend=', '
-                    prev_quote = pred[:char].rfind('"')
-                    prev_curly = pred[:char].rfind('}')
-                    prev_comma = pred[:char].rfind(',')
-                    if prev_curly > prev_quote and prev_curly+1==prev_comma:
-                        pred = pred[:prev_curly]+prepend+pred[prev_comma+1:]
-                    else:
-                        assert False
-                else:
-                    assert False
-            elif "Expecting ';' delimiter" in typ:
-                if char==len(pred):
-                    #what things have colon? class, answers, content
-                    if pred.endswith('"content"') or pred.endswith('"answers"') or pred.endswith('"cells"') or pred.endswith('"row headers"') or pred.endswith('"column headers"'):
-                        comma= pred.rfind(',')
-                        pred = pred[:comma]+'}'
-                    else:
-                        pred+=': "other"}'
-                else:
-                    fixed = False
-                    #first check if this is a bad ", maybe unescaped
-                    #import pdb;pdb.set_trace()
-                    if pred[char-1]=='"':
-                        quote = pred[char:].find('"')
-                        colon = pred[char:].find(':')
-                        quote += char
-                        colon += char
-                        if colon-1==quote and pred[colon+1]==' ':
-                            #skip colon and space
-                            if pred[colon+2:].startswith('"question"') or pred[colon+2:].startswith('"other"') or pred[colon+2:].startswith('"header"') or pred[colon+2:].startswith('"answer"'):
-                                #yes, escape the "
-                                pred = pred[:char-1]+'\\'+pred[char-1:]
-                                fixed=True
-
-                    
-                    if not fixed:
-                        bracket = pred[:char-1].rfind('{')
-                        colon = pred[:char-1].rfind(':')
-                        if bracket>colon:
-                            #this is missing the class prediction
-                            pred = pred[:char]+': "other"'+pred[char:]
-                        else:
-                            #extra data?
-                            open_quote= pred[colon:].find('"')
-                            assert open_quote!=-1
-                            open_quote += colon
-                            close_quote= pred[open_quote+1:].find('"')
-                            assert close_quote!=-1
-                            close_quote += open_quote+1
-
-                            pred =pred[:close_quote+1]+pred[char:] #REMOVE
-                        
-            elif 'Expecting property name enclosed in double quotes' in typ:
-                if char==len(pred) or char==len(pred)-1:
-                    if pred[-1]=='"':
-                        pred = pred[:-1]
-                        bracket = pred.rfind('{')
-                        if bracket>pred.rfind('"'):
-                            pred = pred[:bracket]
-                    else:
-                        if pred[-1]==',':
-                            pred=pred[:-1]
-                        pred+='}'
-                else:
-                    assert False
-            elif 'Expecting value' in typ:
-                if pred[-1]==',':
-                    pred=pred[:-1]
-                else:
-                    assert False
-            elif 'Extra data' in typ :
-                if len(pred)==char:
-                    assert pred[-1]==','
-                    pred = pred[:-1]
-                elif pred[char-1]==']':
-                    #closed bracket too early?
-                    pred = pred[:char-1]+','+pred[char:]
-            elif 'Invalid' in typ and 'escape' in typ:
-                if  pred[char-1:char+1] == '\\u':
-                    #doesn't have number of char. Just remove
-                    pred = pred[:char-1]+pred[char+1:]
-                else:
-                    assert False
-            else:
-                assert False
-            
-            #print('corrected pred: '+pred)
-    return pred_data
 
 class Entity():
-    def __init__(self,text,cls,identity):
+    def __init__(self,text,cls,identity=None):
         #print('Created entitiy: {}'.format(text))
         self.text=text
         self.text_lines = text.split('\\')
-        if cls=='header' or cls=='question' or cls=='other' or cls=='circle':
+        if cls=='header' or cls=='question' or cls=='other' or cls=='circle' or cls=='textGeneric':
             self.cls='textGeneric'
-        elif cls=='answer':
+        elif cls=='answer' or cls=='fieldGe':
             self.cls='fieldGeneric'
         else:
             print('UNKNOWN PRED CLASS: '+cls)
@@ -302,18 +120,25 @@ class Entity():
 
     def __repr__(self):
         return '({} :: {})'.format(self.text,self.cls)
-def parseDict(header,entities,links):
-    if header=='':
+    def split(self):
+        ret=[]
+        for line in self.text_lines:
+            ret.append(Entity(line,self.cls))
+        return ret
+
+
+def parseDict(ent_dict,entities,links):
+    if ent_dict=='':
         return []
     to_link=[]
     is_table=False
-    row_headers = None
-    col_headers = None
+    row_ent_dicts = None
+    col_ent_dicts = None
     cells = None
     my_text = None
     return_ids=[]
-    double_entity=[]
-    for text,value in header.items():
+    prose=[]
+    for text,value in ent_dict.items():
         if text=='content':
             if isinstance(value,list):
                 for thing in reversed(value):
@@ -341,7 +166,7 @@ def parseDict(header,entities,links):
             if isinstance(value,str):
                 if my_text is not None:
                     #merged entity?
-                    double_entity.append((my_text,my_class,to_link))
+                    prose.append((my_text,my_class,to_link))
                     #my_id=len(entities)
                     #entities.append(Entity(my_text,my_class,my_id))
                     #for other_id in to_link:
@@ -375,7 +200,7 @@ def parseDict(header,entities,links):
             row_ids = list(range(len(entities),len(entities)+len(row_headers)))
             for rh in reversed(row_headers):
                 if '<<' in rh and '>>' in rh:
-                    #subheader
+                    #subent_dict
                     raise NotImplementedError("subheader is not implemented")
                 entities.append(Entity(rh,'question',len(entities)))
         else:
@@ -384,7 +209,7 @@ def parseDict(header,entities,links):
             col_ids = list(range(len(entities),len(entities)+len(col_headers)))
             for ch in reversed(col_headers):
                 if '<<' in ch and '>>' in ch:
-                    #subheader
+                    #subent_dict
                     raise NotImplementedError("subheader is not implemented")
                 entities.append(Entity(ch,'question',len(entities)))
         else:
@@ -392,13 +217,16 @@ def parseDict(header,entities,links):
     
 
         return_ids+=row_ids+col_ids
-
-    for my_text,my_class,to_link in double_entity:
+    
+    prev_id=my_id
+    for my_text,my_class,to_link in reversed(prose):
         my_id=len(entities)
         entities.append(Entity(my_text,my_class,my_id))
         for other_id in to_link:
             links.append((my_id,other_id))
+        links.append((my_id,prev_id))
         return_ids.append(my_id)
+        prev_id = my_id
 
     return return_ids
 
@@ -409,7 +237,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
     TRUER=True #False makes this do pair-first alignment, which is kind of cheating
     np.random.seed(1234)
     torch.manual_seed(1234)
-    DEBUG=False
+    DEBUG=True
     if DEBUG:
         print("DEBUG")
     
@@ -548,17 +376,17 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
     if DEBUG:
         config['data_loader']['num_workers']=0
 
-    config['data_loader']['data_set_name']='FormsGraphPair'
-    config['data_loader']['data_dir']='../data/forms'
-    config['data_loader']['crop_params']=None
-    config['data_loader']['batch_size']=1
-    config['data_loader']['color']=False
-    config['data_loader']['rescale_range']=[1,1]
-    config['data_loader']['no_blanks']=True
-    config['data_loader']['swap_circle']=True
-    config['data_loader']['no_graphics']=True
-    config['data_loader']['only_opposite_pairs']=False
-    config['data_loader']['no_groups']=True
+    config['validation']['data_set_name']='FormsGraphPair'
+    config['validation']['data_dir']='../data/forms'
+    config['validation']['crop_params']=None
+    config['validation']['batch_size']=1
+    config['validation']['color']=False
+    config['validation']['rescale_range']=[1,1]
+    config['validation']['no_blanks']=True
+    config['validation']['swap_circle']=True
+    config['validation']['no_graphics']=True
+    config['validation']['only_opposite_pairs']=False
+    config['validation']['no_groups']=True
 
     if not test:
         data_loader, valid_data_loader = getDataLoader(config,'train')
@@ -599,7 +427,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='92091873'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='007372211_00002'):
                 continue
             going_DEBUG=True
 
@@ -610,6 +438,9 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             img = img_f.resize(img[0].numpy(),fx=choosen_scale,fy=choosen_scale)
             img = torch.FloatTensor(img)[None,...]
 
+            bb_lines = bb_lines*choosen_scale
+            loc_lines = loc_lines*choosen_scale
+
             gt_line_to_group = instance['targetIndexToGroup']
 
             transcription_groups = []
@@ -619,7 +450,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 transcription_groups.append('\\'.join([transcription_lines[t] for t in group]))
                 transcription_firstline.append(transcription_lines[group[0]])
                 pos_groups.append(loc_lines[group[0]])
-
+            
 
             classes = [classes_lines[group[0]].argmax() for group in groups]
             gt_classes = [data_loader.dataset.index_class_map[c] for c in classes]
@@ -627,7 +458,6 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             if draw:
                 draw_img = (128*(1-img.permute(1,2,0).expand(-1,-1,3).numpy())).astype(np.uint8)
 
-            #import pdb;pdb.set_trace()
             
             if do_pad and (img.shape[1]<do_pad[0] or img.shape[2]<do_pad[1]):
                 diff_x = do_pad[1]-img.shape[2]
@@ -636,11 +466,11 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 pad_y = diff_y//2
                 pad_x = diff_x//2
                 if diff_x>=0 and diff_y>=0:
-                    p_img[:,diff_y//2:-(diff_y//2 + diff_y%2),diff_x//2:-(diff_x//2 + diff_x%2)] = img
+                    p_img[:,diff_y//2:p_img.shape[1]-(diff_y//2 + diff_y%2),diff_x//2:p_img.shape[2]-(diff_x//2 + diff_x%2)] = img
                 elif diff_x<0 and diff_y>=0:
-                    p_img[:,diff_y//2:-(diff_y//2 + diff_y%2),:] = img[:,:,(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
+                    p_img[:,diff_y//2:p_img.shape[1]-(diff_y//2 + diff_y%2),:] = img[:,:,(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
                 elif diff_x>=0 and diff_y<0:
-                    p_img[:,diff_x//2:-(diff_x//2 + diff_x%2)] = img[:,(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),:]
+                    p_img[:,diff_x//2:p_img.shape[2]-(diff_x//2 + diff_x%2)] = img[:,(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),:]
                 else:
                     p_img = img[:,(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
                 img=p_img
@@ -717,6 +547,10 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     print('non-dict at document level: {}'.format(thing))
                     assert False
                     #import pdb;pdb.set_trace()
+
+            #New addition for NAF
+            #Break all entities into individual ones, and redo linking
+            pred_entities,pred_links = breakIntoLines(pred_entities,pred_links)
 
 
             #we're going to do a check for repeats of the last entity. This frequently happens
@@ -918,164 +752,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
 
                 ############
             else:
-                #Cheating
-                gt_pair_hit=[False]*len(pairs)
-                rel_truepos=0
-                pred_to_gt=defaultdict(list)
-                good_pred_pairs = []
-                bad_pred_pairs = []
-                for p_a,p_b in pred_links:
-                    e_a = pred_entities[p_a]
-                    e_b = pred_entities[p_b]
+                assert False
 
-                    a_aligned = pred_to_gt.get(p_a,-1)
-                    b_aligned = pred_to_gt.get(p_b,-1)
-
-                    best_score = 99999
-                    best_gt_pair = -1
-                    for pairs_i,(g_a,g_b) in enumerate(pairs):
-                        #can't match to a gt pair twice
-                        if gt_pair_hit[pairs_i]:
-                            continue
-
-                        if a_aligned==-1 and b_aligned==-1:
-
-                            if BROS:
-                                dist_aa = norm_ed(transcription_firstline[g_a],e_a.text_lines[0]) if e_a.cls==gt_classes[g_a] else 99
-                                dist_bb = norm_ed(transcription_firstline[g_b],e_b.text_lines[0]) if e_b.cls==gt_classes[g_b] else 99
-                                dist_ab = norm_ed(transcription_firstline[g_a],e_b.text_lines[0]) if e_b.cls==gt_classes[g_a] else 99
-                                dist_ba = norm_ed(transcription_firstline[g_b],e_a.text_lines[0]) if e_a.cls==gt_classes[g_b] else 99
-                            else:
-                                dist_aa = norm_ed(transcription_groups[g_a],e_a.text) if e_a.cls==gt_classes[g_a] else 99
-                                dist_bb = norm_ed(transcription_groups[g_b],e_b.text) if e_b.cls==gt_classes[g_b] else 99
-                                dist_ab = norm_ed(transcription_groups[g_a],e_b.text) if e_b.cls==gt_classes[g_a] else 99
-                                dist_ba = norm_ed(transcription_groups[g_b],e_a.text) if e_a.cls==gt_classes[g_b] else 99
-                            
-                            if dist_aa+dist_bb < dist_ab+dist_ba and dist_aa<LINK_MATCH_THRESH and dist_bb<LINK_MATCH_THRESH:
-                                score = dist_aa+dist_bb
-                                if score<best_score:
-                                    best_score = score
-                                    best_gt_pair = pairs_i
-                                    matching = (g_a,g_b)
-                            elif dist_ab<LINK_MATCH_THRESH and dist_ba<LINK_MATCH_THRESH:
-                                score = dist_ab+dist_ba
-                                if score<best_score:
-                                    best_score = score
-                                    best_gt_pair = pairs_i
-                                    matching = (g_b,g_a)
-                        elif a_aligned!=-1 and b_aligned!=-1:
-                            if g_a == a_aligned and g_b == b_aligned:
-                                matching = (g_a,g_b)
-                                best_gt_pair = pairs_i
-                                break #can't get better than this if restricting alignment
-                            elif g_a == b_aligned and g_b == a_aligned:
-                                matching = (g_b,g_a)
-                                best_gt_pair = pairs_i
-                                break #can't get better than this if restricting alignment
-                        else:
-                            #only one is aligned
-                            if a_aligned!=-1:
-                                p_loose = p_b
-                                e_loose = e_b
-                                if g_a == a_aligned:
-                                    g_have = g_a
-                                    g_other = g_b
-                                elif g_b == a_aligned:
-                                    g_have = g_b
-                                    g_other = g_a
-                                else:
-                                    continue #not match for aligned
-                            else:
-                                p_loose = p_a
-                                e_loose = e_a
-                                if g_a == b_aligned:
-                                    g_have = g_a
-                                    g_other = g_b
-                                elif g_b == b_aligned:
-                                    g_have = g_b
-                                    g_other = g_a
-                                else:
-                                    continue
-
-                            if BROS:
-                                score = norm_ed(transcription_firstline[g_other],e_loose.text_lines[0]) if e_loose.cls==gt_classes[g_other] else 99
-                            else:
-                                score = norm_ed(transcription_groups[g_other],e_loose.text) if e_loose.cls==gt_classes[g_other] else 99
-                            if score<best_score and score<LINK_MATCH_THRESH:
-                                matching = (g_have,g_other) if a_aligned!=-1 else (g_other,g_have)
-                                best_gt_pair = pairs_i
-
-
-                    if best_gt_pair!=-1:
-                        gt_pair_hit[best_gt_pair]=True
-                        pred_to_gt[p_a] = matching[0]
-                        pred_to_gt[p_b] = matching[1]
-                        rel_truepos+=1
-                        good_pred_pairs.append((p_a,p_b))
-                    else:
-                        bad_pred_pairs.append((p_a,p_b))
-
-                    #    rel_FP+=1
-                assert rel_truepos==sum(gt_pair_hit)
-                rel_recall = sum(gt_pair_hit)/len(pairs) if len(pairs)>0 else 1
-                rel_prec = rel_truepos/len(pred_links) if len(pred_links)>0 else 1
-
-                #Now look at the entities. We have some aligned already, do the rest
-                gt_entities_hit = [[] for i in range(len(transcription_groups))]
-                to_align = []
-                for p_i in range(len(pred_entities)):
-                    if p_i in pred_to_gt:
-                        gt_entities_hit[pred_to_gt[p_i]].append(p_i)
-                    else:
-
-                        to_align.append(p_i)
-
-                #resolve ambiguiotity
-                for p_is in gt_entities_hit:
-                    if len(p_is)>1:
-                        #can only align one
-                        cls= pred_entities[p_is[0]].cls
-                        for e_i in p_is[1:]:
-                            assert pred_entities[e_i].cls == cls
-
-                for p_i in to_align:
-                    e_i = pred_entities[p_i]
-                    best_score = 999999999
-                    match = None
-                    for g_i,p_is in enumerate(gt_entities_hit):
-                        if len(p_is)==0:
-                            if BROS:
-                                score = norm_ed(transcription_firstline[g_i],e_i.text_lines[0]) if e_i.cls==gt_classes[g_i] else 99
-                            else:
-                                score = norm_ed(transcription_groups[g_i],e_i.text) if e_i.cls==gt_classes[g_i] else 99
-                            if score<LINK_MATCH_THRESH and score<best_score:
-                                best_score = score
-                                match = g_i
-
-                    if match is None:
-                        #false positive? Split entity?
-                        if not quiet:
-                            print('No match found for pred entitiy: {}'.format(e_i.text))
-                        #import pdb;pdb.set_trace()
-                        pass
-                    else:
-                        gt_entities_hit[match].append(p_i)
-                        pred_to_gt[p_i]=match
-
-                #check completion of entities (pred have all the lines)
-                entities_truepos=0
-                for g_i,p_i in enumerate(gt_entities_hit):
-                    if len(p_i)>0:
-                        p_i=p_i[0]
-                        p_lines = pred_entities[p_i].text_lines
-                        g_lines = transcription_groups[g_i].split('\\')
-
-                        if len(p_lines)==len(g_lines):
-                            entities_truepos+=1
-                        elif not quiet:
-                            print('Incomplete entity')
-                            print('    GT:{}'.format(g_lines))
-                            print('  pred:{}'.format(p_lines))
             #######End cheating       
 
                     
@@ -1113,6 +791,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 for p_i,entity in enumerate(pred_entities):
                     if p_i in pred_to_gt:
                         g_i = pred_to_gt[p_i]
+                        print('{} [[matched to ]] {}'.format(pred_entities[p_i].text,transcription_groups[g_i]))
                         cls = entity.original_cls
                         if cls=='header':
                             color=(0,0,255) #header
@@ -1137,6 +816,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                             img_f.rectangle(draw_img,(x1,y1),(x2,y2),color,2)
                         else:
                             x,y = mid_points[-1]
+                            x=int(x)
+                            y=int(y)
                             draw_img[y-3:y+3,x-3:x+3]=color
 
                     else:
