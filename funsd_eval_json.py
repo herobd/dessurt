@@ -165,11 +165,18 @@ def fixLoadJSON(pred):
                                         close_quote_b = rfindNonEscaped(pred[:bracket],'"')
                                         open_quote_b = rfindNonEscaped(pred[:close_quote_b],'"')
                                         assert pred[open_quote_b+1:close_quote_b]=='answers'
-                                        pred_edits.append('{}<{}>{} '.format(pred[char-5:char],pred[char],pred[char+1:char+5])+' shortening to fill-in-prose, removed {}'.format(pred[open_quote_b:,bracket+1]))
-                                        pred = pred[:open_quote_b]+pred[bracket+1:]
+                                        close_bracket = pred[char:].find(']')
+                                        close_curley = pred[char:].find('}')
+                                        if close_bracket<close_curley:
+                                            close_bracket += char
+                                            pred_edits.append('{}<{}>{} '.format(pred[char-5:char],pred[char],pred[char+1:char+5])+' shortening to fill-in-prose, removed {} AND ]'.format(pred[open_quote_b:bracket+1]))
+                                            pred = pred[:open_quote_b]+pred[bracket+1:close_bracket]+pred[close_bracket+1:]
+                                        else:
+                                            pred_edits.append('{}<{}>{} '.format(pred[char-5:char],pred[char],pred[char+1:char+5])+' shortening to fill-in-prose, removed {}'.format(pred[open_quote_b:bracket+1]))
+                                            pred = pred[:open_quote_b]+pred[bracket+1:]
                                     else:
                                         pred_edits.append('{}<{}>{} '.format(pred[char-5:char],pred[char:char+1],pred[char+1:char+5])+'(2nd) insert list close and new object start')
-                                    pred = pred[:bracket+1]+']},{'+pred[bracket+1:]
+                                        pred = pred[:bracket+1]+']},{'+pred[bracket+1:]
                         else:
                             #double colon/value
                             close_curly = pred[char:].find('{')
