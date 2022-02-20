@@ -511,7 +511,24 @@ New Total rel recall, prec, Fm: 0.424   0.341   0.378
 
 JSON Eval ==============
 NEW==
-funsd_mmswin_bart_PTfrom94ilatest_162 -L 0.5 -E 0.75
+funsd_mmswin_bart_PTfrom94ilatest_162 -L 0.5 -E 0.25
+Total entity recall, prec, Fm:  0.575   0.668   0.618
+Total rel recall, prec, Fm:     0.335   0.631   0.437
+
+funsd_mmswin_bart_PTfrom94ilatest_162 -L 0.6 -E 0.5
+Total entity recall, prec, Fm:  0.593   0.688   0.637
+Total rel recall, prec, Fm:     0.338   0.638   0.442
+
+funsd_mmswin_bart_PTfrom94ilatest_162 -L 0.5 -E 0.5
+Total entity recall, prec, Fm:  0.593   0.688   0.637
+Total rel recall, prec, Fm:     0.335   0.631   0.437
+
+CUT BACK
+Total entity recall, prec, Fm:  0.593   0.688   0.637
+Total rel recall, prec, Fm:     0.335   0.631   0.437
+100
+Total entity recall, prec, Fm:  0.593   0.688   0.637
+Total rel recall, prec, Fm:     0.335   0.631   0.437
 
 OLD=====
 funsdJSON_mmswin_bart_PTfro94i222k_106 8000
