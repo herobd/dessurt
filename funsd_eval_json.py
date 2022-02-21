@@ -98,7 +98,7 @@ def fixLoadJSON(pred):
     try: 
         while pred_data is None:
             counter -=1
-            if len(pred)>start_len+40 or counter==0:
+            if len(pred)>start_len+120 or counter==0:
                 assert False
             pred = pred.replace(',,',',')
             pred = pred.replace('{{','{')
@@ -194,6 +194,10 @@ def fixLoadJSON(pred):
                             #this may be just a unopened list closing, in which case we'll remove it
                             pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'remove list closing (not opened)')
                             pred = pred[:char]+pred[char+1:]
+                    elif pred[char]==']' and pred[char-1]==']':
+                        #double list closure
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'remove list closure (double)')
+                        pred = pred[:char]+pred[char+1:]
                     elif pred[char-1]=='"':
                         #prev_quote = pred[:char-1].rfind('"')
                         prev_quote = rfindNonEscaped(pred[:char-1],'"')
@@ -467,6 +471,15 @@ def parseDict(header,entities,links):
             elif isinstance(value,list) and text=='cells':
                 is_table=True
                 cells = value
+            elif isinstance(value,list) and my_text is None:
+                #potentially bad qa?
+                my_text = text
+                my_class = 'question'
+                for a in reversed(value):
+                    assert isinstance(a,str)
+                    a_id=len(entities)
+                    entities.append(Entity(a,'answer',a_id))
+                    to_link.append(a_id)
     if not is_table:
         my_id=len(entities)
         entities.append(Entity(my_text,my_class,my_id))
@@ -476,15 +489,17 @@ def parseDict(header,entities,links):
     else:
         #a table
         if cells is not None:
+            cell_ids = defaultdict(dict)
             for r,row in reversed(list(enumerate(cells))):
                 for c,cell in reversed(list(enumerate(row))):
                     if cell is not None:
                         c_id = len(entities)
                         entities.append(Entity(cell,'answer',c_id))
-                        if row_headers is not None and len(row_ids)>r:
-                            links.append((row_ids[r],c_id))
-                        if col_headers is not None and len(col_ids)>c:
-                            links.append((col_ids[c],c_id))
+                        cell_ids[r][c]=c_id
+                        #if row_headers is not None and len(row_ids)>r:
+                        #    links.append((row_ids[r],c_id))
+                        #if col_headers is not None and len(col_ids)>c:
+                        #    links.append((col_ids[c],c_id))
         if row_headers is not None:
             row_ids = list(range(len(entities),len(entities)+len(row_headers)))
             for rh in reversed(row_headers):
@@ -503,6 +518,15 @@ def parseDict(header,entities,links):
                 entities.append(Entity(ch,'question',len(entities)))
         else:
             col_ids = []
+        if cells is not None:
+            for r,row in reversed(list(enumerate(cells))):
+                for c,cell in reversed(list(enumerate(row))):
+                    if cell is not None:
+                        c_id = cell_ids[r][c]
+                        if row_headers is not None and len(row_ids)>r:
+                            links.append((row_ids[r],c_id))
+                        if col_headers is not None and len(col_ids)>c:
+                            links.append((col_ids[c],c_id))
     
 
         return_ids+=row_ids+col_ids
@@ -519,11 +543,11 @@ def parseDict(header,entities,links):
 
 
 
-def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False,max_qa_len=None,quiet=False,BROS=False,ENTITY_MATCH_THRESH=0.6,LINK_MATCH_THRESH=0.6):
+def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False,max_qa_len=None,quiet=False,BROS=False,ENTITY_MATCH_THRESH=0.6,LINK_MATCH_THRESH=0.6,DEBUG=False):
     TRUER=True #False makes this do pair-first alignment, which is kind of cheating
     np.random.seed(1234)
     torch.manual_seed(1234)
-    DEBUG=True
+    #DEBUG=True
     if DEBUG:
         print("DEBUG")
         print("EBUG")
@@ -706,7 +730,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='92657311_7313'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='92081358_1359'):
                 continue
             going_DEBUG=True
 
@@ -1312,6 +1336,8 @@ if __name__ == '__main__':
                         help='max len for questions')
     parser.add_argument('-d', '--draw', default=False, action='store_const', const=True,
                         help='display image with pred annotated (default: False)')
+    parser.add_argument('-D', '--DEBUG', default=False, action='store_const', const=True,
+                        help='d')
     parser.add_argument('-E', '--ENTITY_MATCH_THRESH', default=0.6, type=float,
                         help='Edit distance required to have pred entity match a GT one for entity detection')
     parser.add_argument('-L', '--LINK_MATCH_THRESH', default=0.6, type=float,
