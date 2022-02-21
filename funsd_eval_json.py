@@ -523,7 +523,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
     TRUER=True #False makes this do pair-first alignment, which is kind of cheating
     np.random.seed(1234)
     torch.manual_seed(1234)
-    DEBUG=True
+    DEBUG=False
     if DEBUG:
         print("DEBUG")
         print("EBUG")
