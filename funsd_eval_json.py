@@ -117,7 +117,7 @@ def fixLoadJSON(pred):
                 assert 'line 1' in loc
                 loc_char = loc.find('char ')
                 loc_char_end = loc.rfind(')')
-                char = int(loc[loc_char+10:loc_char_end])
+                char = int(loc[loc_char+5:loc_char_end])
 
                 
                 if "Expecting ',' delimiter" in typ:
@@ -523,9 +523,11 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
     TRUER=True #False makes this do pair-first alignment, which is kind of cheating
     np.random.seed(1234)
     torch.manual_seed(1234)
-    DEBUG=False
+    DEBUG=True
     if DEBUG:
         print("DEBUG")
+        print("EBUG")
+        print("EBUG")
     
     
     #too_long_gen_thresh=10
@@ -704,7 +706,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='92081358_1359'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='92657311_7313'):
                 continue
             going_DEBUG=True
 
