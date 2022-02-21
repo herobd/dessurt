@@ -93,7 +93,7 @@ cf['model']['max_a_tokens'] = 730  #full 800 not required
 #set validation
 cf['trainer']['iterations']=200099
 cf['trainer']['val_step']=10000
-cf['trainer']['save_step']=140000
+cf['trainer']['save_step']=1400000000
 cf['trainer']["save_step_minor"]= 1024 
 cf['trainer']['monitor_mode']='max'
 cf['trainer']['monitor']='val_F_Measure_MACRO'
