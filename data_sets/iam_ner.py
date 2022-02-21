@@ -29,6 +29,7 @@ class IAMNER(QADataset):
         self.cache_resized = False
         self.warp_lines = None
         self.full = config.get('full',False)
+        self.class_first = config.get('class_first',False)
         if self.full:
             assert self.cased
         self.eval_full = config.get('eval_full',True)
@@ -118,8 +119,9 @@ class IAMNER(QADataset):
 
 
         if self.full:
+            class_after = (not self.train) or random.random()<0.5 or (not self.class_first)
             if (self.eval_full and not self.train) or (self.train and random.random()<0.5):
-                q='ner_full>'
+                q='ner_full>' if class_after else 'ner_full_c1>'
                 a=[]
                 for words in W_lines:
                     minX=minY = 9999999999
@@ -136,8 +138,11 @@ class IAMNER(QADataset):
                         maxX = max(maxX,rX)
                         minY = min(minY,tY)
                         maxY = max(maxY,bY)
-
-                        a.append(word[1]+'[NE:'+cls+']')
+                        
+                        if class_after:
+                            a.append(word[1]+'[NE:'+cls+']')
+                        else:
+                            a.append('{NE:'+cls+'}'+word[1])
 
 
                     lX=minX
@@ -153,7 +158,7 @@ class IAMNER(QADataset):
                 #line
 
                 for words in W_lines:
-                    q='ner_line>'
+                    q='ner_line>' if class_after else 'ner_line_c1>'
                     a=[]
                     minX=minY = 9999999999
                     maxX=maxY = -1
@@ -172,8 +177,11 @@ class IAMNER(QADataset):
                         maxX = max(maxX,rX)
                         minY = min(minY,tY)
                         maxY = max(maxY,bY)
-
-                        a.append(word[1]+'[NE:'+cls+']')
+                        
+                        if class_after:
+                            a.append(word[1]+'[NE:'+cls+']')
+                        else:
+                            a.append('{NE:'+cls+'}'+word[1])
 
                     if self.train and all_O and random.random()<0.5:
                         continue #skip this so we see more instances of Named Entities
