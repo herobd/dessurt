@@ -189,7 +189,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     "full": config['data_loader'].get('full',False),
                     "cased": config['data_loader'].get('cased',False),
                     "task": config['data_loader'].get('task',6),
-                    "eval_full": False,
+                    "eval_full": not test,
                     "rescale_to_crop_size_first": True,
                     "rescale_range": [
                         1.0,
