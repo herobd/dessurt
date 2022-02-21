@@ -339,8 +339,8 @@ def fixLoadJSON(pred):
                             next_quote = findNonEscaped(pred[char+1:],'"')
                             assert next_quote!=-1
                             next_quote += char+1
-                            pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'remove extra quote: {}'.format(pred[char:next_quote]))
-                            pred = pred[:char]+pred[next_quote:]
+                            pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'replace extra quote with ,: {}'.format(pred[char:next_quote]))
+                            pred = pred[:char]+','+pred[next_quote:]
 
                             fixed=True
 
