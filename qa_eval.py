@@ -189,7 +189,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     "full": config['data_loader'].get('full',False),
                     "cased": config['data_loader'].get('cased',False),
                     "task": config['data_loader'].get('task',6),
-                    "eval_full": True,
+                    "eval_full": not test,
                     "rescale_to_crop_size_first": True,
                     "rescale_range": [
                         1.0,
@@ -245,7 +245,10 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
         print('ERROR, unknown dataset: {}'.format(data_set_name))
         exit(1)
     
-    data_loader, valid_data_loader = getDataLoader(data_config,'train')
+    data_loader, valid_data_loader = getDataLoader(data_config,'train' if not test else 'test')
+
+    if test:
+        valid_data_loader = data_loader
 
 
     #if checkpoint is not None:
