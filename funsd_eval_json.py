@@ -1359,6 +1359,6 @@ if __name__ == '__main__':
         exit()
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw, quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH)
+            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw, quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH,DEBUG=args.DEBUG)
     else:
-        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw,quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH)
+        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw,quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH,DEBUG=args.DEBUG)
