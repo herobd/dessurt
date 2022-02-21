@@ -38,7 +38,8 @@ def display(data):
         print('questions and answers')
         for q,a in zip(data['questions'][b],data['answers'][b]):
             if q=='json>':
-                a = json.loads(a)
+                
+                a = json.loads(a[:-1])
                 a = json.dumps(a,indent=3)
             print(q+' : '+a)
 
@@ -49,10 +50,10 @@ def display(data):
         #        draw = True
         #        break
         #draw = draw and '\\' in a
-        if 'json' not in q and ('>>' in a or '>>' in q):
-            draw = True
+        #if 'json' not in q and ('>>' in a or '>>' in q):
+        #    draw = True
 
-        draw=True
+        draw='json~' in q
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())

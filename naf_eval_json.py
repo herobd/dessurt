@@ -80,7 +80,9 @@ def derepeat(s):
         #m = re.search(r'(.......+)\1\1\1\1\1\1\1+',s) #8 chars, 7 repeat
         m = re.search(r'(.......+)\1\1\1\1\1+',s) #8 chars, 5 repeat
         if m is None:
-            break
+            m = re.search(r'(..............+)\1\1\1\1+',s) #15 chars, 4 repeat
+            if m is None:
+                break
 
         start,end = m.span()
         #end-=len(m[1]) #keep one
@@ -110,7 +112,7 @@ class Entity():
         self.text_lines = text.split('\\')
         if cls=='header' or cls=='question' or cls=='other' or cls=='circle' or cls=='textGeneric':
             self.cls='textGeneric'
-        elif cls=='answer' or cls=='fieldGe':
+        elif cls=='answer' or cls=='fieldGeneric':
             self.cls='fieldGeneric'
         else:
             print('UNKNOWN PRED CLASS: '+cls)
@@ -123,7 +125,7 @@ class Entity():
     def split(self):
         ret=[]
         for line in self.text_lines:
-            ret.append(Entity(line,self.cls))
+            ret.append(Entity(line,self.original_cls))
         return ret
 
 
@@ -184,62 +186,99 @@ def parseDict(ent_dict,entities,links):
         for other_id in to_link:
             links.append((my_id,other_id))
         return_ids.append(my_id)
+
+        prev_id=my_id
+        for my_text,my_class,to_link in reversed(prose):
+            my_id=len(entities)
+            entities.append(Entity(my_text,my_class,my_id))
+            for other_id in to_link:
+                links.append((my_id,other_id))
+            links.append((my_id,prev_id))
+            return_ids.append(my_id)
+            prev_id = my_id
     else:
         #a table
         if cells is not None:
+            cell_ids = defaultdict(dict)
             for r,row in reversed(list(enumerate(cells))):
                 for c,cell in reversed(list(enumerate(row))):
                     if cell is not None:
                         c_id = len(entities)
+                        cell_ids[r][c]=c_id
                         entities.append(Entity(cell,'answer',c_id))
-                        if row_headers is not None and len(row_ids)>r:
-                            links.append((row_ids[r],c_id))
-                        if col_headers is not None and len(col_ids)>c:
-                            links.append((col_ids[c],c_id))
+                        #if row_headers is not None and len(row_ids)>r:
+                        #    links.append((row_ids[r],c_id))
+                        #if col_headers is not None and len(col_ids)>c:
+                        #    links.append((col_ids[c],c_id))
         if row_headers is not None:
+            subheaders=defaultdict(list)
             row_ids = list(range(len(entities),len(entities)+len(row_headers)))
             for rh in reversed(row_headers):
                 if '<<' in rh and '>>' in rh:
                     #subent_dict
-                    raise NotImplementedError("subheader is not implemented")
+                    assert rh[:2]=='<<'
+                    sub_end = rh.find('>>')
+                    sub =  rh[2:sub_end]
+                    rh=rh[sub_end+2:]
+                    subheaders[sub].append(len(entities))
+
                 entities.append(Entity(rh,'question',len(entities)))
+
+            for subh,sub_links in subheaders.items():
+                subi = len(entities)
+                entities.append(Entity(subh,'header',len(entities)))
+                for rhi in sub_links:
+                    links.append((subi,rhi))
         else:
             row_ids = []
         if col_headers is not None:
+            subheaders=defaultdict(list)
             col_ids = list(range(len(entities),len(entities)+len(col_headers)))
             for ch in reversed(col_headers):
                 if '<<' in ch and '>>' in ch:
                     #subent_dict
-                    raise NotImplementedError("subheader is not implemented")
+                    assert ch[:2]=='<<'
+                    sub_end = ch.find('>>')
+                    sub =  ch[2:sub_end]
+                    ch=ch[sub_end+2:]
+                    subheaders[sub].append(len(entities))
                 entities.append(Entity(ch,'question',len(entities)))
+
+            for subh,sub_links in subheaders.items():
+                subi = len(entities)
+                entities.append(Entity(subh,'header',len(entities)))
+                for chi in sub_links:
+                    links.append((subi,chi))
         else:
             col_ids = []
     
+        if cells is not None:
+            for r,row in reversed(list(enumerate(cells))):
+                for c,cell in reversed(list(enumerate(row))):
+                    if cell is not None:
+                        c_id = cell_ids[r][c]
+                        if row_headers is not None and len(row_ids)>r:
+                            links.append((row_ids[r],c_id))
+                        if col_headers is not None and len(col_ids)>c:
+                            links.append((col_ids[c],c_id))
 
         return_ids+=row_ids+col_ids
     
-    prev_id=my_id
-    for my_text,my_class,to_link in reversed(prose):
-        my_id=len(entities)
-        entities.append(Entity(my_text,my_class,my_id))
-        for other_id in to_link:
-            links.append((my_id,other_id))
-        links.append((my_id,prev_id))
-        return_ids.append(my_id)
-        prev_id = my_id
+
 
     return return_ids
 
 
 
 
-def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False,max_qa_len=None,quiet=False,BROS=False,ENTITY_MATCH_THRESH=0.6,LINK_MATCH_THRESH=0.6):
+def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False,max_qa_len=None,quiet=False,BROS=False,ENTITY_MATCH_THRESH=0.6,LINK_MATCH_THRESH=0.6,DEBUG=False):
     TRUER=True #False makes this do pair-first alignment, which is kind of cheating
     np.random.seed(1234)
     torch.manual_seed(1234)
-    DEBUG=True
     if DEBUG:
         print("DEBUG")
+        print("EBUG")
+        print("EBUG")
     
     
     #too_long_gen_thresh=10
@@ -427,7 +466,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='007372211_00002'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='100283146_00008'):
                 continue
             going_DEBUG=True
 
@@ -447,7 +486,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             transcription_firstline = []
             pos_groups = []
             for group in groups:
-                transcription_groups.append('\\'.join([transcription_lines[t] for t in group]))
+                transcription_groups.append('\\'.join([transcription_lines[t] for t in group if transcription_lines[t] is not None]))
                 transcription_firstline.append(transcription_lines[group[0]])
                 pos_groups.append(loc_lines[group[0]])
             
@@ -512,8 +551,12 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 
                 #how much of a lead? Need it to fit tokenwise in the 20 limit
                 tokens = tokenizer.encode(answer)
-                tokens = tokens[-19:] #19 to account for start token (CLS) added at beginning
+                #tokens = tokens[-19:] #19 to account for start token (CLS) added at beginning
+                tokens_potentialoverlap = tokens[-5:]
+                tokens = tokens[-25:-4] #allow for overlap
                 prompt = tokenizer.decode(tokens,skip_special_tokens=True)
+
+                potentialoverlap = tokenizer.decode(tokens_potentialoverlap,skip_special_tokens=True)
                 question = 'json~'+prompt
                 answer,out_mask = model(img,None,[[question]],RUN=True)
                 total_char_pred += len(answer)
@@ -526,6 +569,23 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 if len_after/len_before<0.45:
                     break #bad repeating going on
 
+                #find overlapping region
+                OVERLAP_THRESH=0.2
+                best_ed=OVERLAP_THRESH
+                for ci in range(len(potentialoverlap)):
+                    po_old = potentialoverlap[ci:]
+                    po_new = answer[:len(po_old)]
+                    if po_old==po_new:
+                        answer = answer[len(po_old):]
+                        perfect_match=True
+                        break
+                    else:
+                        ed = norm_ed(po_old,po_new)
+                        if ed<best_ed:
+                            best_ed = ed
+                            best_answer=answer[len(po_old):]
+                if not perfect_match and best_ed<OVERLAP_THRESH:
+                    answer=best_answer
                 total_answer+=answer
             
             final_char_pred = len(total_answer)
@@ -886,6 +946,8 @@ if __name__ == '__main__':
                         help='max len for questions')
     parser.add_argument('-d', '--draw', default=False, action='store_const', const=True,
                         help='display image with pred annotated (default: False)')
+    parser.add_argument('-D', '--DEBUG', default=False, action='store_const', const=True,
+                        help='d')
     parser.add_argument('-E', '--ENTITY_MATCH_THRESH', default=0.6, type=float,
                         help='Edit distance required to have pred entity match a GT one for entity detection')
     parser.add_argument('-L', '--LINK_MATCH_THRESH', default=0.6, type=float,
@@ -906,6 +968,6 @@ if __name__ == '__main__':
         exit()
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw, quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH)
+            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw, quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH,DEBUG=args.DEBUG)
     else:
-        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw,quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH)
+        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw,quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH,DEBUG=args.DEBUG)
