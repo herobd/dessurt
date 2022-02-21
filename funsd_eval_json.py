@@ -790,6 +790,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                     tokens = tokenizer.encode(answer)
                 tokens = tokens[-19:] #19 to account for start token (CLS) added at beginning
                 prompt = tokenizer.decode(tokens,skip_special_tokens=True)
+
                 question = 'json~'+prompt
                 answer,out_mask = model(img,None,[[question]],RUN=True)
                 total_char_pred += len(answer)
@@ -801,7 +802,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
 
                 if len_after/len_before<0.45:
                     break #bad repeating going on
-
+                
                 total_answer+=answer
             
             final_char_pred = len(total_answer)

@@ -184,6 +184,16 @@ def parseDict(ent_dict,entities,links):
         for other_id in to_link:
             links.append((my_id,other_id))
         return_ids.append(my_id)
+
+        prev_id=my_id
+        for my_text,my_class,to_link in reversed(prose):
+            my_id=len(entities)
+            entities.append(Entity(my_text,my_class,my_id))
+            for other_id in to_link:
+                links.append((my_id,other_id))
+            links.append((my_id,prev_id))
+            return_ids.append(my_id)
+            prev_id = my_id
     else:
         #a table
         if cells is not None:
@@ -218,15 +228,7 @@ def parseDict(ent_dict,entities,links):
 
         return_ids+=row_ids+col_ids
     
-    prev_id=my_id
-    for my_text,my_class,to_link in reversed(prose):
-        my_id=len(entities)
-        entities.append(Entity(my_text,my_class,my_id))
-        for other_id in to_link:
-            links.append((my_id,other_id))
-        links.append((my_id,prev_id))
-        return_ids.append(my_id)
-        prev_id = my_id
+
 
     return return_ids
 
@@ -447,7 +449,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             transcription_firstline = []
             pos_groups = []
             for group in groups:
-                transcription_groups.append('\\'.join([transcription_lines[t] for t in group]))
+                transcription_groups.append('\\'.join([transcription_lines[t] for t in group if transcription_lines[t] is not None]))
                 transcription_firstline.append(transcription_lines[group[0]])
                 pos_groups.append(loc_lines[group[0]])
             
@@ -512,8 +514,12 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 
                 #how much of a lead? Need it to fit tokenwise in the 20 limit
                 tokens = tokenizer.encode(answer)
-                tokens = tokens[-19:] #19 to account for start token (CLS) added at beginning
+                #tokens = tokens[-19:] #19 to account for start token (CLS) added at beginning
+                tokens_potentialoverlap = tokens[-4:]
+                tokens = tokens[-25:-4] #allow for overlap
                 prompt = tokenizer.decode(tokens,skip_special_tokens=True)
+
+                potentialoverlap = tokenizer.decode(tokens_potentialoverlap,skip_special_tokens=True)
                 question = 'json~'+prompt
                 answer,out_mask = model(img,None,[[question]],RUN=True)
                 total_char_pred += len(answer)
@@ -526,6 +532,22 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 if len_after/len_before<0.45:
                     break #bad repeating going on
 
+                import pdb;pdb.set_trace()
+                #find overlapping region
+                for ci in range(len(potentialoverlap)):
+                    po_old = potentialoverlap[ci:]
+                    po_new = answer[:ci]
+                    if po_old==po_new:
+                        answer = answer[ci:]
+                        perfect_match=True
+                        break
+                    else:
+                        ed = norm_ed(po_old,po_new)
+                        if ed<best_ed:
+                            best_ed = ed
+                            best_answer=answer[ci:]
+                if not perfect_match and best_ed<0.2:
+                    answer=best_answer
                 total_answer+=answer
             
             final_char_pred = len(total_answer)
