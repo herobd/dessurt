@@ -315,7 +315,20 @@ def fixLoadJSON(pred):
                         fixed = False
                         #first check if this is a bad ", maybe unescaped
                         #import pdb;pdb.set_trace()
-                        if pred[char-1]=='"':
+
+                        if pred[char]=='"' and (pred[char-1]=='"' or pred[char-2]=='"'):
+                            #extra quotes in there
+                            #find the ned quote and remove until then
+                            next_quote = findNonEscaped(pred[char+1:],'"')
+                            assert next_quote!=-1
+                            next_quote += char+1
+                            pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'remove extra quote: {}'.format(pred[char:next_quote]))
+                            pred = pred[:char]+pred[next_quote:]
+
+                            fixed=True
+
+                            
+                        elif pred[char-1]=='"':
                             #quote = pred[char:].find('"')
                             quote = findNonEscaped(pred[char:],'"')
                             colon = pred[char:].find(':')
@@ -730,7 +743,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='92081358_1359'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='92327794'):
                 continue
             going_DEBUG=True
 
