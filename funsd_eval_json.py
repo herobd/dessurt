@@ -402,6 +402,7 @@ def fixLoadJSON(pred):
             print('========')
             print(did)
             print(p)
+        print('currect context: {}<{}>{} '.format(pred[char-5:char],pred[char],pred[char+1:char+5]))
         raise e
     return pred_data
 
