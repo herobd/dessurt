@@ -427,6 +427,7 @@ class QATrainer(BaseTrainer):
 
         if run:
             string_a,pred_mask = self.model(image,ocr_res,questions,RUN=True)
+            string_a = [[string_a]]
         elif distill:
             pred_a, target_a, string_a, pred_logits, pred_last_hidden, batch_mask = self.model(image,ocr_res,questions,answers,distill=True)
             pred_mask = None
@@ -652,7 +653,7 @@ class QATrainer(BaseTrainer):
                 elif question.startswith('ner_'):
                     pred_words = processNERLine(pred)#.split(' ')
                     gt_words = processNERLine(answer)
-                    #import pdb;pdb.set_trace()
+
                     #we now step through at be sure we mactch the words up
                     p=0 #pred index
                     g=0 #gt index
