@@ -98,7 +98,7 @@ class MmSwin(BaseModel):
             add = ['"answer"',"question","other","header","},{",'"answers":','"content":']
             self.tokenizer.add_tokens(add, special_tokens=True)
         if config.get('NER_tokens',False):
-            tokens = ["[NE:{}]".format(cls) for cls in ['N', 'C', 'L', 'T', 'O', 'P', 'G','NORP', 'LAW', 'PER', 'QUANTITY', 'MONEY', 'CARDINAL', 'LOCATION', 'LANGUAGE', 'ORG', 'DATE', 'FAC', 'ORDINAL', 'TIME', 'WORK_OF_ART', 'PERCENT', 'GPE', 'EVENT', 'PRODUCT']]
+            tokens = ["[NE:{}]".format(cls) for cls in ['N', 'C', 'L', 'T', 'O', 'P', 'G','NORP', 'LAW', 'PER', 'QUANTITY', 'MONEY', 'CARDINAL', 'LOCATION', 'LANGUAGE', 'ORG', 'DATE', 'FAC', 'ORDINAL', 'TIME', 'WORK_OF_ART', 'PERCENT', 'GPE', 'EVENT', 'PRODUCT','ART']]
             self.tokenizer.add_tokens(tokens, special_tokens=True)
         if config.get('rvl_cdip_tokens',False):
             tokens = [

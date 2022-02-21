@@ -113,7 +113,7 @@ if __name__ == "__main__":
         'questions':1,
         'full': True,
         'cased': True,
-        #"task": 18,
+        "task": 18,
 
 })
 
