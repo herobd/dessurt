@@ -73,15 +73,22 @@ def derepeat(s):
 def findUnmatched(s):
     b_stack=[]
     c_stack=[]
+    in_quote=False
     for i,c in enumerate(s):
-        if c=='[':
-            b_stack.append(i)
-        elif c==']':
-            b_stack.pop()
-        elif c=='{':
-            c_stack.append(i)
-        elif c=='}':
-            c_stack.pop()
+        if not in_quote:
+            if c=='[':
+                b_stack.append(i)
+            elif c==']':
+                b_stack.pop()
+            elif c=='{':
+                c_stack.append(i)
+            elif c=='}':
+                c_stack.pop()
+            elif c=='"':
+                in_quote=True
+        elif c=='"' and s[i-1]!='\\':
+            in_quote=False
+
 
     return b_stack[-1] if len(b_stack) > 0 else -1, c_stack[-1] if len(c_stack) > 0 else -1
 
@@ -295,8 +302,18 @@ def fixLoadJSON(pred):
                         prev_curly = pred[:char].rfind('}')
                         prev_comma = pred[:char].rfind(',')
                         if prev_curly > prev_quote and prev_curly+1==prev_comma:
-                            pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'cut something? {}'.format(pred[prev_curly:prev:comma+1]))
+                            pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'cut something? {}'.format(pred[prev_curly:prev_comma+1]))
                             pred = pred[:prev_curly]+prepend+pred[prev_comma+1:]
+                        else:
+                            assert False
+                    elif ',' == pred[char-1]:
+                        next_quote = findNonEscaped(pred[char:],'"')
+                        assert next_quote!=-1
+                        next_quote+=char
+                        if ','==pred[next_quote+1] or ']'==pred[next_quote+1] or '}'==pred[next_quote+1]:
+                            #forgot open quote. Add it
+                            pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open quote')
+                            pred=pred[:char]+'"'+pred[char:]
                         else:
                             assert False
                     else:
@@ -315,7 +332,20 @@ def fixLoadJSON(pred):
                         fixed = False
                         #first check if this is a bad ", maybe unescaped
                         #import pdb;pdb.set_trace()
-                        if pred[char-1]=='"':
+
+                        if pred[char]=='"' and (pred[char-1]=='"' or pred[char-2]=='"'):
+                            #extra quotes in there
+                            #find the ned quote and remove until then
+                            next_quote = findNonEscaped(pred[char+1:],'"')
+                            assert next_quote!=-1
+                            next_quote += char+1
+                            pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'remove extra quote: {}'.format(pred[char:next_quote]))
+                            pred = pred[:char]+pred[next_quote:]
+
+                            fixed=True
+
+                            
+                        elif pred[char-1]=='"':
                             #quote = pred[char:].find('"')
                             quote = findNonEscaped(pred[char:],'"')
                             colon = pred[char:].find(':')
@@ -729,7 +759,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='92081358_1359'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='92327794'):
                 continue
             going_DEBUG=True
 

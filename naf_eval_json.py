@@ -116,7 +116,8 @@ class Entity():
             self.cls='fieldGeneric'
         else:
             print('UNKNOWN PRED CLASS: '+cls)
-            assert False 
+            cls = 'other' # parsing error, likely
+            self.cls = 'textGeneric'
         self.original_cls=cls
         self.id=identity
 
@@ -466,7 +467,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='100283146_00008'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='004098525_00025'):
                 continue
             going_DEBUG=True
 
@@ -572,6 +573,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 #find overlapping region
                 OVERLAP_THRESH=0.2
                 best_ed=OVERLAP_THRESH
+                perfect_match=False
                 for ci in range(len(potentialoverlap)):
                     po_old = potentialoverlap[ci:]
                     po_new = answer[:len(po_old)]
