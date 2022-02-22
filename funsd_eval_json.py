@@ -256,9 +256,16 @@ def fixLoadJSON(pred):
                                 #import pdb;pdb.set_trace()
                                 #pred = pred[:char-1]+pred[char:]
                             else:
-                                assert False
+                                close_curly = pred[char:].find('}')
+                                if close_curly>next_quote:
+                                    pred=pred[:char]+':"'+pred[char:]
+                                else:
+                                    assert False
 
-                                
+                    elif pred[char]=='{' and (pred[char-1]=='}' or pred[char-2]=='}'):
+                        #forgot a comma
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'add a comma between objs')
+                        pred = pred[:char]+','+pred[char:]
                     else:
                         assert False
                 elif 'Unterminated string starting at' in typ:
