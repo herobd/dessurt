@@ -320,6 +320,7 @@ def fixLoadJSON(pred):
                         assert False
                 elif "Expecting ';' delimiter" in typ:
                     if char==len(pred):
+                                pred = pred[:char]+','+pred[next_quote:]
                         #what things have colon? class, answers, content
                         if pred.endswith('"content"') or pred.endswith('"answers"') or pred.endswith('"cells"') or pred.endswith('"row headers"') or pred.endswith('"column headers"'):
                             comma= pred.rfind(',')
@@ -339,8 +340,18 @@ def fixLoadJSON(pred):
                             next_quote = findNonEscaped(pred[char+1:],'"')
                             assert next_quote!=-1
                             next_quote += char+1
-                            pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'replace extra quote with ,: {}'.format(pred[char:next_quote]))
-                            pred = pred[:char]+','+pred[next_quote:]
+
+                            next_close_quote = findNonEscaped(pred[next_quote+1:],'"')
+                            assert next_close_quote!=-1
+                            next_close_quote+=next_quote+1
+                            p = pred[next_quote+1:next_close_quote]
+                            if p in ('answer','question','header','other'):
+
+                                pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'replace extra quote with ":": {}'.format(pred[char:next_quote]))
+                                pred = pred[:char]+':'+pred[next_quote:]
+                            else:
+                                pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'replace extra quote with ",": {}'.format(pred[char:next_quote]))
+                                pred = pred[:char]+','+pred[next_quote:]
 
                             fixed=True
 
@@ -760,7 +771,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='92327794'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='92433599_92433601'):
                 continue
             going_DEBUG=True
 
