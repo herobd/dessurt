@@ -467,7 +467,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='004098525_00025'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='007641649_00124'):
                 continue
             going_DEBUG=True
 
@@ -566,6 +566,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 len_before = len(answer)
                 answer = derepeat(answer)
                 len_after = len(answer)
+
+                #import pdb;pdb.set_trace()
 
                 if len_after/len_before<0.45:
                     break #bad repeating going on
