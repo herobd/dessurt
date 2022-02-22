@@ -186,6 +186,7 @@ def fixLoadJSON(pred):
         pred = pred[:end_token_loc]
     counter=50
     last_char=-1
+    last_len=len(pred)
 
     pred_steps=[pred]
     pred_edits=['init']
@@ -214,9 +215,10 @@ def fixLoadJSON(pred):
                 loc_char_end = loc.rfind(')')
                 char = int(loc[loc_char+5:loc_char_end])
                 
-                if last_char>=char:
+                if last_char>=char and len(pred)>=last_len:
                     counter -=1
                 last_char = char
+                last_len = len(pred)
                 
                 if "Expecting ',' delimiter" in typ:
                     if char==len(pred):
@@ -890,7 +892,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='92657391'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='93455715'):
                 continue
             going_DEBUG=True
 
