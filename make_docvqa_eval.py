@@ -4,7 +4,7 @@ template= """#!/bin/bash
 #SBATCH --ntasks=5
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
-#SBATCH -J "eval docvqa"
+#SBATCH -J "eval {0} docvqa"
 #SBATCH --mem-per-cpu=4048M
 #SBATCH --mail-user=herobd@gmail.com   # email address
 #SBATCH --mail-type=END

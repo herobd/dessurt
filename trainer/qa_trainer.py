@@ -80,7 +80,7 @@ class QATrainer(BaseTrainer):
 
         self.ocr_word_bbs = config['trainer']['word_bbs'] if 'word_bbs' in config['trainer'] else False
 
-        self.debug = 'DEBUG' in  config['trainer']
+        self.debug = False#'DEBUG' in  config['trainer']
 
 
         self.amp = config['trainer']['AMP'] if 'AMP' in config['trainer'] else False
@@ -427,6 +427,7 @@ class QATrainer(BaseTrainer):
 
         if run:
             string_a,pred_mask = self.model(image,ocr_res,questions,RUN=True)
+            string_a = [[string_a]]
         elif distill:
             pred_a, target_a, string_a, pred_logits, pred_last_hidden, batch_mask = self.model(image,ocr_res,questions,answers,distill=True)
             pred_mask = None
@@ -652,24 +653,27 @@ class QATrainer(BaseTrainer):
                 elif question.startswith('ner_'):
                     pred_words = processNERLine(pred)#.split(' ')
                     gt_words = processNERLine(answer)
-                    #import pdb;pdb.set_trace()
+
                     #we now step through at be sure we mactch the words up
                     p=0 #pred index
                     g=0 #gt index
                     eds = [None]*len(pred_words)
                     recalls = [None]*len(pred_words)
                     precs = [None]*len(pred_words)
+                    aligned = [None]*len(pred_words)
                     total_gt_len=0
                     for p in range(len(pred_words)):
                         eds[p] = [None]*len(gt_words)
                         recalls[p] = [defaultdict(list) for i in range(len(gt_words))]#[None]*len(gt_words)
                         precs[p] = [defaultdict(list) for i in range(len(gt_words))]#[None]*len(gt_words)
+                        aligned[p] = [None for i in range(len(gt_words))]
                         for g in range(len(gt_words)):
                             ed = editdistance.eval(pred_words[p][0],gt_words[g][0])
                             if p==0 and g==0:
                                 prev_ed=0
                                 prev_recall={}
                                 prev_prec={}
+                                prev_aligned=[]
                             else:
                                 step = []
                                 if p>0 and g>0:
@@ -683,9 +687,12 @@ class QATrainer(BaseTrainer):
                                 prev_ed = eds[p+sp][g+sg]
                                 prev_recall = recalls[p+sp][g+sg]
                                 prev_prec = precs[p+sp][g+sg]
+                                prev_aligned = aligned[p+sp][g+sg]
 
                             eds[p][g]=ed+prev_ed
                             total_gt_len+=len(gt_words[g][0])
+
+                            aligned[p][g]=prev_aligned+[(gt_words[g],pred_words[p])]
 
                             #hit = gt_words[g][1] == pred_words[p][1]
                             gt_cls = gt_words[g][1]
@@ -717,6 +724,12 @@ class QATrainer(BaseTrainer):
                         log['E_approx_CER'].append(eds[-1][-1]/total_gt_len)
                     elif len(gt_words)>0:
                         log['E_approx_CER'].append(1)
+
+                    for gt,pred in aligned[-1][-1]:
+                        if gt[1]==pred[1]:
+                            print('{}\t{}\t\t{}\t{}'.format(gt[1],gt[0],pred[1],pred[0]))
+                        else:
+                            print('{}\t{}\t\t{}\t{} <<< error'.format(gt[1],gt[0],pred[1],pred[0]))
 
 
                 elif question.startswith('mk>'):

@@ -57,7 +57,8 @@ def display(data,tokenizer=None):
 
         #widths.append(img.size(1))
         
-        draw='WORK_OF_ART' in a
+        #draw='WORK_OF_ART' in a
+        draw=True
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -98,7 +99,7 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=iam_ner.IAMNER(dirPath=dirPath,split='test',config={
+    data=iam_ner.IAMNER(dirPath=dirPath,split='train',config={
         'rescale_range': [0.75,1],
         '#rescale_range': [0.9,0.9],
         'rescale_to_crop_size_first': True,
@@ -111,6 +112,7 @@ if __name__ == "__main__":
             },
         'questions':1,
         'full': True,
+        'class_first': True,
         'cased': True,
         "task": 18,
 

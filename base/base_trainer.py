@@ -442,8 +442,8 @@ class BaseTrainer:
                         for key, value in log.items():
                             if self.verbosity>=2 or 'avg' in key or 'val' in key:
                                 self.logger.info('    {:15s}: {}'.format(str(key), value))
-                if (self.monitor_mode == 'min' and self.monitor in log and log[self.monitor] < self.monitor_best)\
-                        or (self.monitor_mode == 'max' and log[self.monitor] > self.monitor_best):
+                if self.monitor in log and ((self.monitor_mode == 'min'  and log[self.monitor] < self.monitor_best)\
+                        or (self.monitor_mode == 'max' and log[self.monitor] > self.monitor_best)):
                     self.monitor_best = log[self.monitor]
                     self._save_checkpoint(self.iteration, log, save_best=True)
 
@@ -571,7 +571,12 @@ class BaseTrainer:
         if not self.reset_iteration:
             self.start_iteration = checkpoint['iteration'] + 1
             self.iteration=self.start_iteration
-        self.monitor_best = checkpoint['monitor_best']
+        if not math.isinf(checkpoint['monitor_best']):
+            self.monitor_best = checkpoint['monitor_best']
+        else:
+            for entry in checkpoint['logger'].entries.values():
+                if self.monitor in entry and ((self.monitor_mode=='min' and entry[self.monitor]<self.monitor_best) or (self.monitor_mode=='max' and entry[self.monitor]>self.monitor_best)):
+                    self.monitor_best = entry[self.monitor]
         #print(checkpoint['state_dict'].keys())
 
         if ('save_mode' not in self.config or self.config['save_mode']=='state_dict') and 'state_dict' in checkpoint:

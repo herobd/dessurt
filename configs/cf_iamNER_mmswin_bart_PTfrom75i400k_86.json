@@ -11,10 +11,16 @@
         "num_workers": 4,
         "shuffle": true,
         "persistent_workers": true,
-        "rescale_range": [0.8,1],
+        "rescale_range": [
+            0.8,
+            1
+        ],
         "rescale_to_crop_size_first": true,
         "crop_params": {
-            "crop_size": [1152,768],
+            "crop_size": [
+                1152,
+                768
+            ],
             "pad": 0,
             "rot_degree_std_dev": 1
         },
@@ -24,9 +30,15 @@
     "validation": {
         "shuffle": false,
         "batch_size": 2,
-        "rescale_range": [1,1],
+        "rescale_range": [
+            1,
+            1
+        ],
         "crop_params": {
-            "crop_size": [1152,768],
+            "crop_size": [
+                1152,
+                768
+            ],
             "pad": 0,
             "random": false
         }
@@ -40,12 +52,12 @@
     "loss": {
         "#answer": "padded_seq_cross_entropy",
         "answer": "label_smoothing",
-	"#mask": "sigmoid_BCE_mask_loss",
-	"mask": "focalLoss"
+        "#mask": "sigmoid_BCE_mask_loss",
+        "mask": "focalLoss"
     },
     "loss_weights": {
         "answer": 1,
-	"mask": 1,
+        "mask": 1,
         "cosine": 0,
         "distillation": 0
     },
@@ -59,7 +71,7 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 4000000,
+        "iterations": 140000,
         "accum_grad_steps": 128,
         "#swa": true,
         "#swa_start": 200000,
@@ -73,9 +85,7 @@
         "monitor": "loss",
         "monitor_mode": "none",
         "retry_count": 0,
-
         "do_ocr": "no",
-
         "#use_learning_schedule": "multi_rise then ramp_to_swa",
         "use_learning_schedule": "multi_rise",
         "warmup_steps": [
@@ -87,7 +97,8 @@
     "arch": "MmSwin",
     "model": {
         "image_size": [
-            1152,768
+            1152,
+            768
         ],
         "use_set_length": true,
         "init_from_pretrained": "bart",
@@ -102,7 +113,7 @@
             4,
             6
         ],
-        "use_swin":[
+        "use_swin": [
             true,
             true,
             true,
@@ -114,7 +125,7 @@
             false,
             false
         ],
-        "swin_cross_attention":[
+        "swin_cross_attention": [
             true,
             true,
             true,
