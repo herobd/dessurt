@@ -131,7 +131,7 @@ def getFormData(model,img,tokenizer,quiet=False):
             tokens = tokens[-25:-4] #allow for overlap
             prompt = tokenizer.decode(tokens,skip_special_tokens=True)
 
-            potentialoverlap = tokenizer.decode(tokens_potentialoverlap,skip_special_tokens=True)
+            potentialoverlap = tokenizer.decode(tokens[-7:],skip_special_tokens=True)
 
         question = 'json~'+prompt
         answer,out_mask = model(img,None,[[question]],RUN=True)
@@ -146,7 +146,7 @@ def getFormData(model,img,tokenizer,quiet=False):
             break #bad repeating going on
         
         #find overlapping region
-        OVERLAP_THRESH=0.2
+        OVERLAP_THRESH=0.3
         best_ed=OVERLAP_THRESH
         perfect_match=False
         for ci in range(len(potentialoverlap)):
@@ -306,8 +306,10 @@ def fixLoadJSON(pred):
                             #we have an unterminated list?
                             #next_quote = pred[char:].find('"')
                             next_quote = findNonEscaped(pred[char:],'"')
-                            assert next_quote!=-1
-                            next_quote += char
+                            if next_quote!=-1:
+                                next_quote += char
+                            else:
+                                next_quote = 999999999999999
                             next_curly = pred[char:].find('}')
                             if next_curly!=-1:
                                 next_curly += char
@@ -331,6 +333,10 @@ def fixLoadJSON(pred):
                                 #extra close quote, remove
                                 pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'remove double quote')
                                 pred = pred[:char]+pred[char+1:]
+                            elif next_quote==999999999999999:
+                                #just cut it off
+                                pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred  [char:char+1],pred[char+1:char+10])+'remove ending characters')
+                                pred = pred[:char]
                             else: 
                                 assert False        
                         else:
