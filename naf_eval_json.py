@@ -21,7 +21,7 @@ import editdistance
 import random
 import re
 from transformers import BartTokenizer
-from funsd_eval_json import fixLoadJSON
+from funsd_eval_json import getFormData #fixLoadJSON
 try:
     import easyocr
 except:
@@ -528,72 +528,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             if gpu:
                 img = img.cuda()
             
-            #First find tables, as those are done seperately (they should do multiline things alread)
-            #TODO multi-step pred for long forms
-
-            #print GT
-            #print('==GT form==')
-            #for ga,gb in pairs:
-            #    print('{} [{}] <=> {} [{}]'.format(transcription_groups[ga],gt_classes[ga],transcription_groups[gb],gt_classes[gb]))
-            #print()
-
-            question='json>'
-            answer,out_mask = model(img,None,[[question]],RUN=True)
-            if not quiet:
-                print('PRED:: '+answer)
-            num_calls=1
-            total_char_pred=len(answer)
-            answer = derepeat(answer)
-            total_answer = answer
-            for i in range(3): #shouldn't need to be more than 4 calls for test set
-                if end_token in total_answer:
-                    break
-                num_calls+=1
-                
-                #how much of a lead? Need it to fit tokenwise in the 20 limit
-                tokens = tokenizer.encode(answer)
-                #tokens = tokens[-19:] #19 to account for start token (CLS) added at beginning
-                tokens_potentialoverlap = tokens[-5:]
-                tokens = tokens[-25:-4] #allow for overlap
-                prompt = tokenizer.decode(tokens,skip_special_tokens=True)
-
-                potentialoverlap = tokenizer.decode(tokens_potentialoverlap,skip_special_tokens=True)
-                question = 'json~'+prompt
-                answer,out_mask = model(img,None,[[question]],RUN=True)
-                total_char_pred += len(answer)
-                if not quiet:
-                    print('CONT:: '+answer)
-                len_before = len(answer)
-                answer = derepeat(answer)
-                len_after = len(answer)
-
-                #import pdb;pdb.set_trace()
-
-                if len_after/len_before<0.45:
-                    break #bad repeating going on
-
-                #find overlapping region
-                OVERLAP_THRESH=0.2
-                best_ed=OVERLAP_THRESH
-                perfect_match=False
-                for ci in range(len(potentialoverlap)):
-                    po_old = potentialoverlap[ci:]
-                    po_new = answer[:len(po_old)]
-                    if po_old==po_new:
-                        answer = answer[len(po_old):]
-                        perfect_match=True
-                        break
-                    else:
-                        ed = norm_ed(po_old,po_new)
-                        if ed<best_ed:
-                            best_ed = ed
-                            best_answer=answer[len(po_old):]
-                if not perfect_match and best_ed<OVERLAP_THRESH:
-                    answer=best_answer
-                total_answer+=answer
-            
-            final_char_pred = len(total_answer)
-            pred_data = fixLoadJSON(total_answer)
+            pred_data, good_char_pred_ratio = getFormData(model,img,tokenizer,quiet)
             
             if not quiet:
                 print('==Corrected==')
@@ -839,9 +774,9 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print('Rel recall:    {}'.format(rel_recall))
                 print('Rel Fm:        {}'.format(2*rel_recall*rel_prec/(rel_recall+rel_prec) if rel_recall+rel_prec>0 else 0))
             else:
-                print('{} ({}, {}) EntityFm: {},  RelFm: {}'.format(instance['imgName'],
+                print('{} (calls:{}, goodChar:{}) EntityFm: {},  RelFm: {}'.format(instance['imgName'],
                     num_calls,
-                    final_char_pred/total_char_pred,
+                    good_char_pred_ratio,
                     2*entity_recall*entity_prec/(entity_recall+entity_prec) if entity_recall+entity_prec>0 else 0,2*rel_recall*rel_prec/(rel_recall+rel_prec) if rel_recall+rel_prec>0 else 0))
 
             total_rel_true_pos += rel_truepos
