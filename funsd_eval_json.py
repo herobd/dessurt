@@ -128,10 +128,10 @@ def getFormData(model,img,tokenizer,quiet=False):
                 tokens = tokenizer.encode(answer)
 
             tokens_potentialoverlap = tokens[-5:]
+            potentialoverlap = tokenizer.decode(tokens[-7:],skip_special_tokens=True)
             tokens = tokens[-25:-4] #allow for overlap
             prompt = tokenizer.decode(tokens,skip_special_tokens=True)
 
-            potentialoverlap = tokenizer.decode(tokens[-7:],skip_special_tokens=True)
 
         question = 'json~'+prompt
         answer,out_mask = model(img,None,[[question]],RUN=True)
@@ -146,6 +146,7 @@ def getFormData(model,img,tokenizer,quiet=False):
             break #bad repeating going on
         
         #find overlapping region
+        import pdb;pdb.set_trace()
         OVERLAP_THRESH=0.3
         best_ed=OVERLAP_THRESH
         perfect_match=False
@@ -219,7 +220,7 @@ def fixLoadJSON(pred):
                 last_char = char
                 
                 if "Expecting ',' delimiter" in typ:
-                    if char==len(pred):
+                    if char==len(pred) or (char==len(pred)-1 and pred[char]==']'):
                         #closing ] or }?
                         #bracket = pred.rfind('[')
                         #curley = pred.rfind('{')
@@ -569,8 +570,8 @@ def fixLoadJSON(pred):
                 pred_chars.append(char)
     except Exception as e:
         print('ERROR correcting JSON')
-        for char,p,did in zip(pred_chars,pred_steps,pred_edits):
-            print('======== char {} =='.format(char))
+        for charx,p,did in zip(pred_chars,pred_steps,pred_edits):
+            print('======== char {} =='.format(charx))
             print(did)
             print(p)
         print('currect context: {}<{}>{} '.format(pred[char-10:char],pred[char],pred[char+1:char+10]))
