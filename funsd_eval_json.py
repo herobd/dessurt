@@ -327,6 +327,10 @@ def fixLoadJSON(pred):
                             pred=pred[:char]+'"'+pred[char:]
                         else:
                             assert False
+                    elif pred[char:].startswith('question"') or pred[char:].startswith('answer"') or pred[char:].startswith('other"') and (pred[char-1]==':' or pred[char-2]==':' ): 
+                        #missed open quote
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open quote2')
+                        pred=pred[:char]+'"'+pred[char:] 
                     else:
                         assert False
                 elif "Expecting ';' delimiter" in typ:
