@@ -189,11 +189,12 @@ def fixLoadJSON(pred):
 
     pred_steps=[pred]
     pred_edits=['init']
+    pred_chars=[-1]
     try: 
         while pred_data is None:
             if len(pred)>start_len+320 or counter==0:
-                #assert False
-                import pdb;pdb.set_trace()
+                assert False
+                #import pdb;pdb.set_trace()
             pred = pred.replace(',,',',')
             pred = pred.replace('{{','{')
             try:
@@ -216,7 +217,6 @@ def fixLoadJSON(pred):
                 if last_char>=char:
                     counter -=1
                 last_char = char
-                print(f'char {char}')
                 
                 if "Expecting ',' delimiter" in typ:
                     if char==len(pred):
@@ -285,7 +285,11 @@ def fixLoadJSON(pred):
                             pred = pred[:char-1]+pred[close_curly:]
                     elif pred[char]==']' and pred[char-1]=='"':
                         assert pred[:char-1].rfind('[')<pred[:char-1].rfind('{')
-                        if pred[char+1]!='}':
+                        if char==len(pred)-1 and pred[char]==']' and pred[char-1]=='"':
+                            #missing }?
+                            pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'closing object (end of doc)')
+                            pred = pred[:char]+'}'+pred[char:]
+                        elif char<len(pred)-1 and pred[char+1]!='}':
                             pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'closing object')
                             pred = pred[:char]+'}'+pred[char:]
                         else:
@@ -541,6 +545,11 @@ def fixLoadJSON(pred):
                         #closed bracket too early?
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'insert comma')
                         pred = pred[:char-1]+','+pred[char:]
+                    elif (pred[char-1]==']' or pred[char-2]==']') and pred[char]=='{' and char<len(pred)-2:
+                        close_bracket = pred[:char].rfind(']')
+                        pred = pred[:close_bracket]+', '+pred[char:]
+                    else:
+                        assert False
                 elif 'Invalid' in typ and 'escape' in typ:
                     if  pred[char-1:char+1] == '\\u':
                         #doesn't have number of char. Just remove
@@ -553,10 +562,11 @@ def fixLoadJSON(pred):
                 
                 #print('corrected pred: '+pred)
                 pred_steps.append(pred)
+                pred_chars.append(char)
     except Exception as e:
         print('ERROR correcting JSON')
-        for p,did in zip(pred_steps,pred_edits):
-            print('========')
+        for char,p,did in zip(pred_chars,pred_steps,pred_edits):
+            print('======== char {} =='.format(char))
             print(did)
             print(p)
         print('currect context: {}<{}>{} '.format(pred[char-10:char],pred[char],pred[char+1:char+10]))
@@ -886,7 +896,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='92586242'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='92657391'):
                 continue
             going_DEBUG=True
 
