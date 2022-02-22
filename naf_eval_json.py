@@ -199,18 +199,20 @@ def parseDict(ent_dict,entities,links):
             prev_id = my_id
     else:
         #a table
-        if cells is not None:
-            cell_ids = defaultdict(dict)
-            for r,row in reversed(list(enumerate(cells))):
-                for c,cell in reversed(list(enumerate(row))):
-                    if cell is not None:
-                        c_id = len(entities)
-                        cell_ids[r][c]=c_id
-                        entities.append(Entity(cell,'answer',c_id))
-                        #if row_headers is not None and len(row_ids)>r:
-                        #    links.append((row_ids[r],c_id))
-                        #if col_headers is not None and len(col_ids)>c:
-                        #    links.append((col_ids[c],c_id))
+        #if cells is not None:
+        #    cell_ids = defaultdict(dict)
+        #    if not isinstance(cells[0],list):
+
+        #    for r,row in reversed(list(enumerate(cells))):
+        #        for c,cell in reversed(list(enumerate(row))):
+        #            if cell is not None:
+        #                c_id = len(entities)
+        #                cell_ids[r][c]=c_id
+        #                entities.append(Entity(cell,'answer',c_id))
+        #                #if row_headers is not None and len(row_ids)>r:
+        #                #    links.append((row_ids[r],c_id))
+        #                #if col_headers is not None and len(col_ids)>c:
+        #                #    links.append((col_ids[c],c_id))
         if row_headers is not None:
             subheaders=defaultdict(list)
             row_ids = list(range(len(entities),len(entities)+len(row_headers)))
@@ -253,15 +255,15 @@ def parseDict(ent_dict,entities,links):
         else:
             col_ids = []
     
-        if cells is not None:
-            for r,row in reversed(list(enumerate(cells))):
-                for c,cell in reversed(list(enumerate(row))):
-                    if cell is not None:
-                        c_id = cell_ids[r][c]
-                        if row_headers is not None and len(row_ids)>r:
-                            links.append((row_ids[r],c_id))
-                        if col_headers is not None and len(col_ids)>c:
-                            links.append((col_ids[c],c_id))
+        #if cells is not None:
+        #    for r,row in reversed(list(enumerate(cells))):
+        #        for c,cell in reversed(list(enumerate(row))):
+        #            if cell is not None:
+        #                c_id = cell_ids[r][c]
+        #                if row_headers is not None and len(row_ids)>r:
+        #                    links.append((row_ids[r],c_id))
+        #                if col_headers is not None and len(col_ids)>c:
+        #                    links.append((col_ids[c],c_id))
 
         return_ids+=row_ids+col_ids
     
@@ -467,7 +469,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='100660788_00018'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='007486024_00025'):
                 continue
             going_DEBUG=True
 
