@@ -135,8 +135,8 @@ def parseDict(ent_dict,entities,links):
         return []
     to_link=[]
     is_table=False
-    row_ent_dicts = None
-    col_ent_dicts = None
+    row_headers = None
+    col_headers = None
     cells = None
     my_text = None
     return_ids=[]
@@ -467,7 +467,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='007641649_00124'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='100660788_00018'):
                 continue
             going_DEBUG=True
 

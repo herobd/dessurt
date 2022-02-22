@@ -331,7 +331,6 @@ def fixLoadJSON(pred):
                         assert False
                 elif "Expecting ';' delimiter" in typ:
                     if char==len(pred):
-                                pred = pred[:char]+','+pred[next_quote:]
                         #what things have colon? class, answers, content
                         if pred.endswith('"content"') or pred.endswith('"answers"') or pred.endswith('"cells"') or pred.endswith('"row headers"') or pred.endswith('"column headers"'):
                             comma= pred.rfind(',')
@@ -810,11 +809,11 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 pad_y = diff_y//2
                 pad_x = diff_x//2
                 if diff_x>=0 and diff_y>=0:
-                    p_img[:,diff_y//2:-(diff_y//2 + diff_y%2),diff_x//2:-(diff_x//2 + diff_x%2)] = img
+                    p_img[:,diff_y//2:do_pad[0]-(diff_y//2 + diff_y%2),diff_x//2:do_pad[1]-(diff_x//2 + diff_x%2)] = img
                 elif diff_x<0 and diff_y>=0:
-                    p_img[:,diff_y//2:-(diff_y//2 + diff_y%2),:] = img[:,:,(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
+                    p_img[:,diff_y//2:do_pad[0]-(diff_y//2 + diff_y%2),:] = img[:,:,(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
                 elif diff_x>=0 and diff_y<0:
-                    p_img[:,diff_x//2:-(diff_x//2 + diff_x%2)] = img[:,(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),:]
+                    p_img[:,:,diff_x//2:do_pad[1]-(diff_x//2 + diff_x%2)] = img[:,(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),:]
                 else:
                     p_img = img[:,(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
                 img=p_img
