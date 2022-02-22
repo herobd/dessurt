@@ -146,7 +146,6 @@ def getFormData(model,img,tokenizer,quiet=False):
             break #bad repeating going on
         
         #find overlapping region
-        import pdb;pdb.set_trace()
         OVERLAP_THRESH=0.3
         best_ed=OVERLAP_THRESH
         perfect_match=False
