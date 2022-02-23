@@ -49,6 +49,7 @@ def collate(batch):
             "bart_logits": torch.cat([b['bart_logits'] for b in batch],dim=0) if 'bart_logits' in batch[0] else None,
             "bart_last_hidden": torch.cat([b['bart_last_hidden'] for b in batch],dim=0) if 'bart_last_hidden' in batch[0] else None,
             "distill_loss_mask": torch.cat([b['distill_loss_mask'] for b in batch],dim=0) if 'distill_loss_mask' in batch[0] and batch[0]['distill_loss_mask'] is not None else None,
+            "noise_token_mask": torch.cat([b['noise_token_mask'] for b in batch],dim=0) if 'noise_token_mask' in batch[0] and batch[0]['noise_token_mask'] is not None else None,
             }
 
 def getMask(shape,boxes):
@@ -137,7 +138,7 @@ class QADataset(torch.utils.data.Dataset):
         return len(self.images)
 
 
-    def qaAdd(self,qa,question,answer,bb_ids=None,in_bbs=[],out_bbs=None,mask_bbs=[]):
+    def qaAdd(self,qa,question,answer,bb_ids=None,in_bbs=[],out_bbs=None,mask_bbs=[],noise_token_mask=None):
         #aif all([(pair['question']!=question or  for pair in qa]): #prevent duplicate q
         qa.append({
             'question':question,
@@ -145,7 +146,8 @@ class QADataset(torch.utils.data.Dataset):
             'bb_ids':bb_ids,
             'in_bbs':in_bbs,
             'out_bbs':out_bbs,
-            'mask_bbs':mask_bbs
+            'mask_bbs':mask_bbs,
+            'noise_token_mask':noise_token_mask
             })
 
     def __getitem__(self,index):
@@ -427,8 +429,12 @@ class QADataset(torch.utils.data.Dataset):
             else:
                 questions = [qa['question'].lower() for qa in questions_and_answers]
                 answers = [qa['answer'].lower() for qa in questions_and_answers]
+            #noise_token_mask = [qa['noise_token_mask'] for qa in questions_and_answers]
+            if questions_and_answers[0]['noise_token_mask'] is not None:
+                assert len(questions_and_answers)==1
+                noise_token_mask = questions_and_answers[0]['noise_token_mask']
         else:
-            questions=answers=None
+            questions=answers=noise_token_mask=None
 
 
 
@@ -450,6 +456,9 @@ class QADataset(torch.utils.data.Dataset):
         if self.do_masks:
             assert len(new_q_inboxes)<=1
             assert new_q_outboxes is None or len(new_q_outboxes)<=1
+
+            assert len(questions)==1
+            assert 'line' not in questions[0] or len(new_q_inboxes[0])==1
             mask = getMask(img.shape,new_q_inboxes[0])
             img = torch.cat((img,mask),dim=1)
             for blank_box in new_q_blankboxes[0]:
@@ -518,6 +527,7 @@ class QADataset(torch.utils.data.Dataset):
                 "form_metadata": form_metadata,
                 "questions": questions,
                 "answers": answers,
+                "noise_token_mask": noise_token_mask,
                 "mask_label": mask_label,
                 "pre-recognition": pre_recog
                 }

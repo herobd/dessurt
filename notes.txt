@@ -116,11 +116,16 @@ docvqa_mmswin_bart_PTfrom98i87k_104 100000
 natural_q~_ED mean:0.39090575856778365,  std:0.44783577527008434
 E_ANLS mean:0.5676065432537071,  std:0.40684078770667953
 
+docvqa_mmswin_bart_PTfrom94ilatest_154 440000
+E_ANLS mean:0.4752
+
 ===========================================
 ==IAM NER===
 iamNERfull_mmswin_bart_PTfrom75i550k_89 100000
 Macro Fm = 0.6912570465965707
 Using ner_full> Fm = 0.6958049293912222
+
+Rerun: Macro Fm = 0.5703  Uh oh, was it with teacherforcing? Yep....
 
 iamNERfull_mmswin_bart_PTfrom75i550k_89 150000
 Macro Fm = 0.7004263689612764
