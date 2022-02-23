@@ -574,9 +574,10 @@ class BaseTrainer:
         if not math.isinf(checkpoint['monitor_best']):
             self.monitor_best = checkpoint['monitor_best']
         else:
-            for entry in checkpoint['logger'].entries.values():
-                if self.monitor in entry and ((self.monitor_mode=='min' and entry[self.monitor]<self.monitor_best) or (self.monitor_mode=='max' and entry[self.monitor]>self.monitor_best)):
-                    self.monitor_best = entry[self.monitor]
+            if checkpoint['logger'] is not None:
+                for entry in checkpoint['logger'].entries.values():
+                    if self.monitor in entry and ((self.monitor_mode=='min' and entry[self.monitor]<self.monitor_best) or (self.monitor_mode=='max' and entry[self.monitor]>self.monitor_best)):
+                        self.monitor_best = entry[self.monitor]
         #print(checkpoint['state_dict'].keys())
 
         if ('save_mode' not in self.config or self.config['save_mode']=='state_dict') and 'state_dict' in checkpoint:

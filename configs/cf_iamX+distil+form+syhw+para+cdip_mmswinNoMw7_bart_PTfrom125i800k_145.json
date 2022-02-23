@@ -196,8 +196,8 @@
                     ],
                     "crop_params": {
                         "crop_size": [
-                            1152,
-                            768
+                            1008,
+                            784
                         ],
                         "pad": 0,
                         "rot_degree_std_dev": 0,

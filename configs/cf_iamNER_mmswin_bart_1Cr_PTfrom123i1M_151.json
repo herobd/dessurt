@@ -79,7 +79,7 @@
         "save_dir": "saved/",
         "val_step": 10000,
         "save_step": 9999999999,
-        "save_step_minor": 256,
+        "save_step_minor": 1024,
         "log_step": 1024,
         "print_pred_every": 1024,
         "verbosity": 1,
