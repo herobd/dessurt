@@ -128,10 +128,10 @@ def getFormData(model,img,tokenizer,quiet=False):
                 tokens = tokenizer.encode(answer)
 
             tokens_potentialoverlap = tokens[-5:]
+            potentialoverlap = tokenizer.decode(tokens[-7:],skip_special_tokens=True)
             tokens = tokens[-25:-4] #allow for overlap
             prompt = tokenizer.decode(tokens,skip_special_tokens=True)
 
-            potentialoverlap = tokenizer.decode(tokens[-7:],skip_special_tokens=True)
 
         question = 'json~'+prompt
         answer,out_mask = model(img,None,[[question]],RUN=True)
@@ -142,7 +142,7 @@ def getFormData(model,img,tokenizer,quiet=False):
         answer = derepeat(answer)
         len_after = len(answer)
 
-        if len_after/len_before<0.25 and not immune:
+        if len_before>0 and len_after/len_before<0.25 and not immune:
             break #bad repeating going on
         
         #find overlapping region
@@ -378,6 +378,24 @@ def fixLoadJSON(pred):
                         #forgot a comma
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'add a comma between objs')
                         pred = pred[:char]+','+pred[char:]
+                    #elif pred[char]!='[' and pred[char]!='{' and pred[char]!=']' and pred[char!='}' and pred[char]!='"':
+                    #        next_quote = findNonEscaped(pred[char:],'"')
+                    #        if next_quote!=-1:
+                    #            next_quote += char
+                    #        else:
+                    #            next_quote=999999999
+                    #        
+                    #        next_close_bracket=pred[char:].find(']')
+                    #        if next_close_bracket==-1:
+                    #            next_close_bracket=999999999999
+                    #        next_close_curley=pred[char:].find('}')
+                    #        if next_close_curley==-1:
+                    #            next_close_curley=999999999999
+                    #        next_close = min(next_close_curley,next_close_bracket)
+                    #        next_close+=char
+
+                    #        if next_quote<next_close:
+                            
                     else:
                         assert False
                 elif 'Unterminated string starting at' in typ:
@@ -571,8 +589,8 @@ def fixLoadJSON(pred):
                 pred_chars.append(char)
     except Exception as e:
         print('ERROR correcting JSON')
-        for char,p,did in zip(pred_chars,pred_steps,pred_edits):
-            print('======== char {} =='.format(char))
+        for charx,p,did in zip(pred_chars,pred_steps,pred_edits):
+            print('======== char {} =='.format(charx))
             print(did)
             print(p)
         print('currect context: {}<{}>{} '.format(pred[char-10:char],pred[char],pred[char+1:char+10]))
@@ -1363,7 +1381,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print('Rel Fm:        {}'.format(2*rel_recall*rel_prec/(rel_recall+rel_prec) if rel_recall+rel_prec>0 else 0))
             else:
                 print('{} (calls:{}, goodChars:{}) EntityFm: {},  RelFm: {}'.format(instance['imgName'],
-                    num_calls,
+                    -1,#num_calls,
                     good_char_pred_ratio,
                     2*entity_recall*entity_prec/(entity_recall+entity_prec) if entity_recall+entity_prec>0 else 0,2*rel_recall*rel_prec/(rel_recall+rel_prec) if rel_recall+rel_prec>0 else 0))
 

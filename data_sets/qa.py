@@ -433,6 +433,8 @@ class QADataset(torch.utils.data.Dataset):
             if questions_and_answers[0]['noise_token_mask'] is not None:
                 assert len(questions_and_answers)==1
                 noise_token_mask = questions_and_answers[0]['noise_token_mask']
+            else:
+                noise_token_mask = None
         else:
             questions=answers=noise_token_mask=None
 
@@ -457,8 +459,6 @@ class QADataset(torch.utils.data.Dataset):
             assert len(new_q_inboxes)<=1
             assert new_q_outboxes is None or len(new_q_outboxes)<=1
 
-            assert len(questions)==1
-            assert 'line' not in questions[0] or len(new_q_inboxes[0])==1
             mask = getMask(img.shape,new_q_inboxes[0])
             img = torch.cat((img,mask),dim=1)
             for blank_box in new_q_blankboxes[0]:

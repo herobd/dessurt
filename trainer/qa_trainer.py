@@ -725,11 +725,11 @@ class QATrainer(BaseTrainer):
                     elif len(gt_words)>0:
                         log['E_approx_CER'].append(1)
 
-                    for gt,pred in aligned[-1][-1]:
-                        if gt[1]==pred[1]:
-                            print('{}\t{}\t\t{}\t{}'.format(gt[1],gt[0],pred[1],pred[0]))
-                        else:
-                            print('{}\t{}\t\t{}\t{} <<< error'.format(gt[1],gt[0],pred[1],pred[0]))
+                    #for gt,pred in aligned[-1][-1]:
+                    #    if gt[1]==pred[1]:
+                    #        print('{}\t{}\t\t{}\t{}'.format(gt[1],gt[0],pred[1],pred[0]))
+                    #    else:
+                    #        print('{}\t{}\t\t{}\t{} <<< error'.format(gt[1],gt[0],pred[1],pred[0]))
 
 
                 elif question.startswith('mk>'):
