@@ -246,6 +246,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
         print('ERROR, unknown dataset: {}'.format(data_set_name))
         exit(1)
     
+    print('getting data ready')
     data_loader, valid_data_loader = getDataLoader(data_config,'train' if not test else 'test')
 
     if test:
@@ -274,14 +275,14 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
     if 'distributed' in config:
         del config['distributed']
     trainer = QATrainer(model,{},None,resume,config,data_loader,valid_data_loader)
+    print('go!')
 
     #data_iter = iter(data_loader)
     metrics = defaultdict(list)
     with torch.no_grad():
 
-        for index,instance in enumerate(valid_data_loader):
-            #if index==10:
-            #    break
+        index=0
+        for instance in valid_data_loader:
             if verbose:
                 print('batch index: {}/{}'.format(index,len(valid_data_loader)),end='\r')
             elif data_set_name=='RVL' and index%100==0:
@@ -294,6 +295,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                         metrics[name]+=value
                     else:
                         metrics[name].append(value)
+            index+=1
     F_measure_prec={}
     F_measure_recall={}
     for name,values in metrics.items():
