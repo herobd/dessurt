@@ -154,6 +154,7 @@ def getFormData(model,img,tokenizer,quiet=False):
             break #bad repeating going on
         
         #find overlapping region
+        #import pdb;pdb.set_trace()
         OVERLAP_THRESH=0.3
         best_ed=OVERLAP_THRESH
         perfect_match=False
@@ -495,6 +496,8 @@ def fixLoadJSON(pred):
                         #missed open quote
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open quote2')
                         pred=pred[:char]+'"'+pred[char:] 
+                    elif pred[char-1]==':' or (pred[char-1]==' ' and pred[char-2]==':'):
+
                     else:
                         assert False
                 elif "Expecting ';' delimiter" in typ:

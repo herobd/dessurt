@@ -474,7 +474,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='101023522_00018'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='007540939_00029'):
                 continue
             going_DEBUG=True
 
