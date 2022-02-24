@@ -333,7 +333,7 @@ if __name__ == '__main__':
                         help='number of images to save out (from each train and valid) (default: 0)')
     parser.add_argument('-g', '--gpu', default=None, type=int,
                         help='gpu number (default: cpu only)')
-    parser.add_argument('-b', '--batchsize', default=None, type=int,
+    parser.add_argument('-B', '--batchsize', default=None, type=int,
                         help='gpu number (default: cpu only)')
     parser.add_argument('-s', '--shuffle', default=False, type=bool,
                         help='shuffle data')
@@ -373,7 +373,7 @@ if __name__ == '__main__':
         exit()
 
     if args.beam_search:
-        run = args.beam_search
+        run = 'beam{}'.format(args.beam_search)
     else:
         run = args.autoregressive
 

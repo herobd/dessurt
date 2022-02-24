@@ -563,7 +563,7 @@ class MmSwin(BaseModel):
 
             else:
                 response_discrete_token = response_decoded.argmax(dim=2)
-                output_tokens = [response_greedy_token[0,0].item()]
+                output_tokens = [response_discrete_token[0,0].item()]
             #print('first token: {}'.format(output_tokens[0]))
 
             offset = 1
@@ -693,13 +693,14 @@ class MmSwin(BaseModel):
                     if best_finish_score-best_beam_score > BEAM_END_THRESH:
                         break
 
-                    if best_finish_score-best_beam_score>0:
-                        final_str = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(best_done_tokens,skip_special_tokens=True))
-                    else:
-                        final_str = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(output_tokens[0],skip_special_tokens=True))
-                    #print(final_str)
+                    #if best_finish_score-best_beam_score>0:
+                    final_str = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(best_done_tokens,skip_special_tokens=True))
+                    print('best finish {} : {}'.format(best_finish_score,final_str))
+                    #else:
+                    final_str = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(output_tokens[0],skip_special_tokens=True))
+                    print('best beam {} : {}'.format(best_beam_score,final_str))
 
-                    #print(f'finish vs best = {best_finish_score-best_beam_score} (positive means finish is best)')
+                    print(f'finish vs best = {best_finish_score-best_beam_score} (positive means finish is best)')
 
                 else:
                     response_discrete_token = response_decoded.argmax(dim=2)
