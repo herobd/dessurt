@@ -35,24 +35,25 @@ cd ~/pairing
 source activate /fslhome/brianld/miniconda3/envs/new
 """
 do_template="""
-echo "{0}" 
-python qa_eval.py -d DocVQA -c saved/{0}/checkpoint-latest.pth -g 0 -v 0 --autoregressive -T
+echo "VALID {0}" 
+python qa_eval.py -d DocVQA -c saved/{0}/model_best.pth -g 0 -v 0 --autoregressive 
+#THIS IS VALIDATION
 """
 
+
+
+
 import sys
-script = template
 if len(sys.argv[1:])>0:
-    for job_name in sys.argv[1:]:
-        script+=do_template.format(job_name)
+    jobs=sys.argv[1:]
 else:
     with open('tmp') as f:
-        jobs = f.readlines()
-    for job in jobs:
-        job = [j for j in job.split(' ') if len(j)>0]
-        assert len(job)==3
-        job_name = job[0]
-        script+=do_template.format(job_name)
-with open('runs/run_docvqa_eval.pbs','w') as f:
-    f.write(script)
-    print('created: runs/run_docvqa_eval.pbs')
+        jobs = f.read().split('\n')
+for job_name in jobs:
+    script = template.format(job_name)
+    script+=do_template.format(job_name)
+    file_name = 'runs/run_docVQA_eval_{}.pbs'.format(job_name)
+    with open(file_name,'w') as f:
+        f.write(script)
+        print('created: {}'.format(file_name))
 

@@ -69,48 +69,141 @@ def derepeat(s):
         #end-=len(m[1]) #keep one
         s = s[:start]+s[end:]
     return s
-
 def findUnmatched(s):
     b_stack=[]
     c_stack=[]
     in_quote=False
+    escaping=False
     for i,c in enumerate(s):
-        if not in_quote:
-            if c=='[':
-                b_stack.append(i)
-            elif c==']':
-                b_stack.pop()
-            elif c=='{':
-                c_stack.append(i)
-            elif c=='}':
-                c_stack.pop()
-            elif c=='"':
-                in_quote=True
-        elif c=='"' and (s[i-1]!='\\' or s[i-2]=='\\'):
-            in_quote=False
-
+        if  c=='\\' and not escaping:
+            escaping=True
+        else:
+            if not in_quote:
+                if c=='[':
+                    b_stack.append(i)
+                elif c==']':
+                    b_stack.pop()
+                elif c=='{':
+                    c_stack.append(i)
+                elif c=='}':
+                    c_stack.pop()
+                elif c=='"' and not escaping:
+                    in_quote=True
+                    #print('start quote {}'.format(s[i-5:i+5]))
+                    #print('                 ^')
+            elif c=='"' and not escaping:
+                in_quote=False
+                #print('end quote {}'.format(s[i-5:i+5]))
+                #print('               ^')
+            if escaping:
+                escaping=False
 
     return b_stack[-1] if len(b_stack) > 0 else -1, c_stack[-1] if len(c_stack) > 0 else -1
+
+def getFormData(model,img,tokenizer,quiet=False,beam_search=False):
+    question='json>'
+    answer,out_mask = model(img,None,[[question]],RUN=True if not beam_search else f'beam{beam_search}')
+    if not quiet:
+        print('PRED:: '+answer)
+    num_calls=1
+    total_char_pred=len(answer)
+    answer = derepeat(answer)
+    total_answer = answer
+    cut_tokens=[]
+    for i in range(5): #shouldn't need to be more than 4 calls for test set, but often more are done to dig out of repeating ruts
+        if end_token in total_answer:
+            break
+        num_calls+=1
+        
+        #how much of a lead? Need it to fit tokenwise in the 20 limit
+        if total_answer.startswith('[question]ø'):
+            total_answer='[{"'
+            potentialoverlap=total_answer
+            prompt=total_answer
+            immune=True
+        else:
+            immune=False
+
+            if CUT_BACK:
+                tokens = tokenizer.encode(total_answer)
+                if len(tokens)>600:
+                    cut = tokens[-100:]
+                    if cut not in cut_tokens:
+                        cut_tokens.append(cut)
+                        tokens = tokens[:-100]
+                        total_answer = tokenizer.decode(tokens,skip_special_tokens=True)
+            else:
+                tokens = tokenizer.encode(answer)
+
+            tokens_potentialoverlap = tokens[-5:]
+            potentialoverlap = tokenizer.decode(tokens[-7:],skip_special_tokens=True)
+            tokens = tokens[-25:-4] #allow for overlap
+            prompt = tokenizer.decode(tokens,skip_special_tokens=True)
+
+
+        question = 'json~'+prompt
+        answer,out_mask = model(img,None,[[question]],RUN=True if not beam_search else f'beam{beam_search}')
+        total_char_pred += len(answer)
+        if not quiet:
+            print('CONT:: '+answer)
+        len_before = len(answer)
+        answer = derepeat(answer)
+        len_after = len(answer)
+
+        if len_before>0 and len_after/len_before<0.25 and not immune:
+            break #bad repeating going on
+        
+        #find overlapping region
+        OVERLAP_THRESH=0.3
+        best_ed=OVERLAP_THRESH
+        perfect_match=False
+        for ci in range(len(potentialoverlap)):
+            po_old = potentialoverlap[ci:]
+            po_new = answer[:len(po_old)]
+            if po_old==po_new:
+                answer = answer[len(po_old):]
+                perfect_match=True
+                break
+            else:
+                ed = norm_ed(po_old,po_new)
+                if ed<best_ed:
+                    best_ed = ed
+                    best_answer=answer[len(po_old):]
+        if not perfect_match and best_ed<OVERLAP_THRESH:
+            answer=best_answer
+        total_answer+=answer
+    
+    final_char_pred = len(total_answer)
+    pred_data = fixLoadJSON(total_answer)
+    return pred_data,  final_char_pred/total_char_pred
 
 def fixLoadJSON(pred):
     pred_data = None
 
+    if pred.startswith('[question]ø'):
+        return []
     #becuase I used backslash as newline, there are often mistakes predicting where it does't do the double backslash. Try and fix this:
     pred = re.sub('([^\\\\])\\\\([a-zA-Z 0-9])',r'\1\\\\\2',pred)
+
+    #speed things up, fix no comma error
+    pred = re.sub('}{|} {','}, {',pred)
 
     start_len = len(pred)
     end_token_loc = pred.find(end_token)
     if end_token_loc != -1:
         pred = pred[:end_token_loc]
-    counter=2000
+    counter=50
+    last_char=-1
+    last_len=len(pred)
 
     pred_steps=[pred]
     pred_edits=['init']
+    pred_chars=[-1]
     try: 
         while pred_data is None:
-            counter -=1
-            if len(pred)>start_len+120 or counter==0:
+            if len(pred)>start_len+320 or counter==0:
                 assert False
+                #import pdb;pdb.set_trace()
             pred = pred.replace(',,',',')
             pred = pred.replace('{{','{')
             try:
@@ -129,7 +222,11 @@ def fixLoadJSON(pred):
                 loc_char = loc.find('char ')
                 loc_char_end = loc.rfind(')')
                 char = int(loc[loc_char+5:loc_char_end])
-
+                
+                if last_char>=char and len(pred)>=last_len:
+                    counter -=1
+                last_char = char
+                last_len = len(pred)
                 
                 if "Expecting ',' delimiter" in typ:
                     if char==len(pred):
@@ -198,7 +295,11 @@ def fixLoadJSON(pred):
                             pred = pred[:char-1]+pred[close_curly:]
                     elif pred[char]==']' and pred[char-1]=='"':
                         assert pred[:char-1].rfind('[')<pred[:char-1].rfind('{')
-                        if pred[char+1]!='}':
+                        if char==len(pred)-1 and pred[char]==']' and pred[char-1]=='"':
+                            #missing }?
+                            pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'closing object (end of doc)')
+                            pred = pred[:char]+'}'+pred[char:]
+                        elif char<len(pred)-1 and pred[char+1]!='}':
                             pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'closing object')
                             pred = pred[:char]+'}'+pred[char:]
                         else:
@@ -219,8 +320,10 @@ def fixLoadJSON(pred):
                             #we have an unterminated list?
                             #next_quote = pred[char:].find('"')
                             next_quote = findNonEscaped(pred[char:],'"')
-                            assert next_quote!=-1
-                            next_quote += char
+                            if next_quote!=-1:
+                                next_quote += char
+                            else:
+                                next_quote = 999999999999999
                             next_curly = pred[char:].find('}')
                             if next_curly!=-1:
                                 next_curly += char
@@ -240,6 +343,14 @@ def fixLoadJSON(pred):
                             elif pred[char]=='}':
                                     pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'close list (at end of object)')
                                     pred = pred[:char]+']'+pred[char:]
+                            elif pred[char]=='"' and (pred[char+1]=='}' or pred[char+1]==']'):
+                                #extra close quote, remove
+                                pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'remove double quote')
+                                pred = pred[:char]+pred[char+1:]
+                            elif next_quote==999999999999999:
+                                #just cut it off
+                                pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred  [char:char+1],pred[char+1:char+10])+'remove ending characters')
+                                pred = pred[:char]
                             else: 
                                 assert False        
                         else:
@@ -259,10 +370,107 @@ def fixLoadJSON(pred):
                                 #maybe it shouldn't have closed
                                 #import pdb;pdb.set_trace()
                                 #pred = pred[:char-1]+pred[char:]
+                            elif prev_bracket>prev_curley:
+                                pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'added a comma yeo')
+                                pred=pred[:char]+',"'+pred[char:]
                             else:
-                                assert False
+                                close_curly = pred[char:].find('}')
+                                close_curly+=char
+                                if close_curly>next_quote:
+                                    pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'added a colon')
+                                    pred=pred[:char]+':"'+pred[char:]
+                                else:
+                                    assert False
 
-                                
+                    elif pred[char]=='{' and (pred[char-1]=='}' or pred[char-2]=='}'):
+                        #forgot a comma
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'add a comma between objs')
+                        pred = pred[:char]+','+pred[char:]
+                    elif pred[char]==',':
+                        bracket_close = pred[char:].find(']')
+                        if bracket_close!=-1:
+                            bracket_close+=char
+                        else:
+                            bracket_close=9999999
+                        curley_close = pred[char:].find('}')
+                        if curley_close!=-1:
+                            curley_close+=char
+                        else:
+                            curley_close=9999999
+                        end = min(bracket_close,curley_close)
+                        quote_locations=[]
+                        in_quote=False
+                        escaped=False
+                        for c in range(char,end):
+                            if not escaped and pred[c]=='"':
+                                quote_locations.append(c)
+                                in_quote = not in_quote
+                            elif not in_quote and pred[c]==',':
+                                break
+                            elif not escaped and pred[c]=='\\':
+                                escaped=True
+                            else:
+                                escaped=False
+                        if len(quote_locations)==3:
+                            #remove bad middle quote
+                            pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'remove extra comma')
+                            pred=pred[:quote_locations[1]]+pred[quote_locations[1]+1:]
+                        else:
+                            assert False
+                    #elif pred[char]!='[' and pred[char]!='{' and pred[char]!=']' and pred[char!='}' and pred[char]!='"':
+                    #        next_quote = findNonEscaped(pred[char:],'"')
+                    #        if next_quote!=-1:
+                    #            next_quote += char
+                    #        else:
+                    #            next_quote=999999999
+                    #        
+                    #        next_close_bracket=pred[char:].find(']')
+                    #        if next_close_bracket==-1:
+                    #            next_close_bracket=999999999999
+                    #        next_close_curley=pred[char:].find('}')
+                    #        if next_close_curley==-1:
+                    #            next_close_curley=999999999999
+                    #        next_close = min(next_close_curley,next_close_bracket)
+                    #        next_close+=char
+
+                    #        if next_quote<next_close:
+
+                    elif pred[char]!=':' and pred[char]!='"':
+                        next_quote = findNonEscaped(pred[char:],'"')
+                        if next_quote!=-1:
+                            next_quote+=char
+                        else:
+                            next_quote=99999999
+                        bracket_close = pred[char:].find(']')
+                        if bracket_close!=-1:
+                            bracket_close+=char
+                        else:
+                            bracket_close=9999999
+                        curley_close = pred[char:].find('}')
+                        if curley_close!=-1:
+                            curley_close+=char
+                        else:
+                            curley_close=9999999
+                        end = min(bracket_close,curley_close)
+                        quote_locations=[]
+                        in_quote=True
+                        escaped=False
+                        for c in range(char,end):
+                            if not escaped and pred[c]=='"':
+                                quote_locations.append(c)
+                                in_quote = not in_quote
+                            elif not in_quote and pred[c]==',':
+                                break
+                            elif not escaped and pred[c]=='\\':
+                                escaped=True
+                            else:
+                                escaped=False
+                        if len(quote_locations)%2==1:
+                            #uneven quotes, add one
+                            pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'add a comma and quote')
+                            pred = pred[:char]+',"'+pred[char:]
+                        else:
+                            assert  False
                     else:
                         assert False
                 elif 'Unterminated string starting at' in typ:
@@ -320,6 +528,10 @@ def fixLoadJSON(pred):
                             pred=pred[:char]+'"'+pred[char:]
                         else:
                             assert False
+                    elif pred[char:].startswith('question"') or pred[char:].startswith('answer"') or pred[char:].startswith('other"') and (pred[char-1]==':' or pred[char-2]==':' ): 
+                        #missed open quote
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open quote2')
+                        pred=pred[:char]+'"'+pred[char:] 
                     else:
                         assert False
                 elif "Expecting ';' delimiter" in typ:
@@ -343,8 +555,18 @@ def fixLoadJSON(pred):
                             next_quote = findNonEscaped(pred[char+1:],'"')
                             assert next_quote!=-1
                             next_quote += char+1
-                            pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'replace extra quote with ,: {}'.format(pred[char:next_quote]))
-                            pred = pred[:char]+','+pred[next_quote:]
+
+                            next_close_quote = findNonEscaped(pred[next_quote+1:],'"')
+                            assert next_close_quote!=-1
+                            next_close_quote+=next_quote+1
+                            p = pred[next_quote+1:next_close_quote]
+                            if p in ('answer','question','header','other'):
+
+                                pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'replace extra quote with ":": {}'.format(pred[char:next_quote]))
+                                pred = pred[:char]+':'+pred[next_quote:]
+                            else:
+                                pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'replace extra quote with ",": {}'.format(pred[char:next_quote]))
+                                pred = pred[:char]+','+pred[next_quote:]
 
                             fixed=True
 
@@ -422,6 +644,11 @@ def fixLoadJSON(pred):
                         #closed bracket too early?
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'insert comma')
                         pred = pred[:char-1]+','+pred[char:]
+                    elif (pred[char-1]==']' or pred[char-2]==']') and pred[char]=='{' and char<len(pred)-2:
+                        close_bracket = pred[:char].rfind(']')
+                        pred = pred[:close_bracket]+', '+pred[char:]
+                    else:
+                        assert False
                 elif 'Invalid' in typ and 'escape' in typ:
                     if  pred[char-1:char+1] == '\\u':
                         #doesn't have number of char. Just remove
@@ -434,13 +661,14 @@ def fixLoadJSON(pred):
                 
                 #print('corrected pred: '+pred)
                 pred_steps.append(pred)
+                pred_chars.append(char)
     except Exception as e:
         print('ERROR correcting JSON')
-        for p,did in zip(pred_steps,pred_edits):
-            print('========')
+        for charx,p,did in zip(pred_chars,pred_steps,pred_edits):
+            print('======== char {} =='.format(charx))
             print(did)
             print(p)
-        print('currect context: {}<{}>{} '.format(pred[char-10:char],pred[char],pred[char+1:char+10]))
+        print('currect context: {}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10]))
         raise e
     return pred_data
 
@@ -515,11 +743,15 @@ def parseDict(header,entities,links):
                     entities.append(Entity(a,'answer',a_id))
                     to_link.append(a_id)
     if not is_table:
-        my_id=len(entities)
-        entities.append(Entity(my_text,my_class,my_id))
-        for other_id in to_link:
-            links.append((my_id,other_id))
-        return_ids.append(my_id)
+        if my_text is not None:
+            my_id=len(entities)
+            entities.append(Entity(my_text,my_class,my_id))
+            for other_id in to_link:
+                links.append((my_id,other_id))
+            return_ids.append(my_id)
+        else:
+            return_ids+=to_link
+
     else:
         #a table
         if cells is not None:
@@ -577,11 +809,10 @@ def parseDict(header,entities,links):
 
 
 
-def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False,max_qa_len=None,quiet=False,BROS=False,ENTITY_MATCH_THRESH=0.6,LINK_MATCH_THRESH=0.6,DEBUG=False):
+def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False,max_qa_len=None,quiet=False,BROS=False,ENTITY_MATCH_THRESH=0.6,LINK_MATCH_THRESH=0.6,DEBUG=False,beam_search=False):
     TRUER=True #False makes this do pair-first alignment, which is kind of cheating
     np.random.seed(1234)
     torch.manual_seed(1234)
-    #DEBUG=True
     if DEBUG:
         print("DEBUG")
         print("EBUG")
@@ -764,7 +995,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='92327794'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='82250337_0338'):
                 continue
             going_DEBUG=True
 
@@ -793,11 +1024,11 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 pad_y = diff_y//2
                 pad_x = diff_x//2
                 if diff_x>=0 and diff_y>=0:
-                    p_img[:,diff_y//2:-(diff_y//2 + diff_y%2),diff_x//2:-(diff_x//2 + diff_x%2)] = img
+                    p_img[:,diff_y//2:do_pad[0]-(diff_y//2 + diff_y%2),diff_x//2:do_pad[1]-(diff_x//2 + diff_x%2)] = img
                 elif diff_x<0 and diff_y>=0:
-                    p_img[:,diff_y//2:-(diff_y//2 + diff_y%2),:] = img[:,:,(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
+                    p_img[:,diff_y//2:do_pad[0]-(diff_y//2 + diff_y%2),:] = img[:,:,(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
                 elif diff_x>=0 and diff_y<0:
-                    p_img[:,diff_x//2:-(diff_x//2 + diff_x%2)] = img[:,(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),:]
+                    p_img[:,:,diff_x//2:do_pad[1]-(diff_x//2 + diff_x%2)] = img[:,(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),:]
                 else:
                     p_img = img[:,(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
                 img=p_img
@@ -823,73 +1054,10 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             #for ga,gb in pairs:
             #    print('{} [{}] <=> {} [{}]'.format(transcription_groups[ga],gt_classes[ga],transcription_groups[gb],gt_classes[gb]))
             #print()
-
-            question='json>'
-            answer,out_mask = model(img,None,[[question]],RUN=True)
-            if not quiet:
-                print('PRED:: '+answer)
-            num_calls=1
-            total_char_pred=len(answer)
-            answer = derepeat(answer)
-            total_answer = answer
-            cut_tokens=[]
-            for i in range(3): #shouldn't need to be more than 4 calls for test set
-                if end_token in total_answer:
-                    break
-                num_calls+=1
-                
-                #how much of a lead? Need it to fit tokenwise in the 20 limit
-                if CUT_BACK:
-                    tokens = tokenizer.encode(total_answer)
-                    if len(tokens)>600:
-                        cut = tokens[-100:]
-                        if cut not in cut_tokens:
-                            cut_tokens.append(cut)
-                            tokens = tokens[:-100]
-                            total_answer = tokenizer.decode(tokens,skip_special_tokens=True)
-                else:
-                    tokens = tokenizer.encode(answer)
-
-                tokens_potentialoverlap = tokens[-5:]
-                tokens = tokens[-25:-4] #allow for overlap
-                prompt = tokenizer.decode(tokens,skip_special_tokens=True)
-
-                potentialoverlap = tokenizer.decode(tokens_potentialoverlap,skip_special_tokens=True)
-
-                question = 'json~'+prompt
-                answer,out_mask = model(img,None,[[question]],RUN=True)
-                total_char_pred += len(answer)
-                if not quiet:
-                    print('CONT:: '+answer)
-                len_before = len(answer)
-                answer = derepeat(answer)
-                len_after = len(answer)
-
-                if len_after/len_before<0.45:
-                    break #bad repeating going on
-                
-                #find overlapping region
-                OVERLAP_THRESH=0.2
-                best_ed=OVERLAP_THRESH
-                perfect_match=False
-                for ci in range(len(potentialoverlap)):
-                    po_old = potentialoverlap[ci:]
-                    po_new = answer[:len(po_old)]
-                    if po_old==po_new:
-                        answer = answer[len(po_old):]
-                        perfect_match=True
-                        break
-                    else:
-                        ed = norm_ed(po_old,po_new)
-                        if ed<best_ed:
-                            best_ed = ed
-                            best_answer=answer[len(po_old):]
-                if not perfect_match and best_ed<OVERLAP_THRESH:
-                    answer=best_answer
-                total_answer+=answer
             
-            final_char_pred = len(total_answer)
-            pred_data = fixLoadJSON(total_answer)
+
+            pred_data, good_char_pred_ratio = getFormData(model,img,tokenizer,quiet,beam_search)
+
             
             if not quiet:
                 print('==Corrected==')
@@ -1287,9 +1455,9 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print('Rel recall:    {}'.format(rel_recall))
                 print('Rel Fm:        {}'.format(2*rel_recall*rel_prec/(rel_recall+rel_prec) if rel_recall+rel_prec>0 else 0))
             else:
-                print('{} ({}, {}) EntityFm: {},  RelFm: {}'.format(instance['imgName'],
-                    num_calls,
-                    final_char_pred/total_char_pred,
+                print('{} (calls:{}, goodChars:{}) EntityFm: {},  RelFm: {}'.format(instance['imgName'],
+                    -1,#num_calls,
+                    good_char_pred_ratio,
                     2*entity_recall*entity_prec/(entity_recall+entity_prec) if entity_recall+entity_prec>0 else 0,2*rel_recall*rel_prec/(rel_recall+rel_prec) if rel_recall+rel_prec>0 else 0))
 
             total_rel_true_pos += rel_truepos
@@ -1399,6 +1567,8 @@ if __name__ == '__main__':
                         help='Edit distance required to have pred entity match a GT one for entity detection')
     parser.add_argument('-L', '--LINK_MATCH_THRESH', default=0.6, type=float,
                         help='Edit distance required to have pred entity match a GT one for linking')
+    parser.add_argument('-b', '--beam_search', default=False, type=int,
+            help='number of beams (default: not beam search)')
 
     args = parser.parse_args()
 
@@ -1415,6 +1585,6 @@ if __name__ == '__main__':
         exit()
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw, quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH,DEBUG=args.DEBUG)
+            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw, quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH,DEBUG=args.DEBUG,beam_search=args.beam_search)
     else:
-        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw,quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH,DEBUG=args.DEBUG)
+        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw,quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH,DEBUG=args.DEBUG,beam_search=args.beam_search)

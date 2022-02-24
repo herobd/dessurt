@@ -54,6 +54,8 @@ def display(data,tokenizer=None):
         
         if tokenizer is not None:
             toks = len(tokenizer.tokenize(a))+2
+        if 'noise_token_mask' in data and data['noise_token_mask'] is not None:
+            print(data['noise_token_mask'])
 
         #widths.append(img.size(1))
         
@@ -114,7 +116,8 @@ if __name__ == "__main__":
         'full': True,
         'class_first': True,
         'cased': True,
-        "task": 18,
+        "task": 6,
+        "use_noise": 0.05
 
 })
 

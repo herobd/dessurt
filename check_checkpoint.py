@@ -10,7 +10,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     assert args.checkpoint is not None
-    saved = torch.load(args.checkpoint,map_location=lambda storage, loc: storage)
+    cp = args.checkpoint
+    if not cp.endswith('.pth'):
+        cp = 'saved/'+cp+'/checkpoint-latest.pth'
+    saved = torch.load(cp,map_location=lambda storage, loc: storage)
 
     #print('arch: {}'.format(saved['arch']))
     #Eprint('arch: {}'.format(saved['config']['arch']))
@@ -18,7 +21,8 @@ if __name__ == '__main__':
     #print(type(saved['logger'].entries))
     if 'swa_state_dict' in saved:
         print(saved['swa_state_dict']['n_averaged'])
-    print(saved['iteration'])
+
+    print('{} / {}'.format(saved['iteration'],saved['config']['trainer']['iterations']))
 
     #for name in saved['state_dict'].keys():
     #    print(name)

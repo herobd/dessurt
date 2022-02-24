@@ -15,7 +15,8 @@ from trainer import QATrainer
 logging.basicConfig(level=logging.INFO, format='')
 
 
-def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, config=None, thresh=None, addToConfig=None, test=False,verbose=2,run=False,smaller_set=False):
+def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, config=None, thresh=None, addToConfig=None, test=False,verbose=2,run=False,smaller_set=False,eval_full=None):
+    assert run
     random.seed(1234)
     np.random.seed(1234)
     torch.manual_seed(1234)
@@ -189,7 +190,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     "full": config['data_loader'].get('full',False),
                     "cased": config['data_loader'].get('cased',False),
                     "task": config['data_loader'].get('task',6),
-                    "eval_full": not test,
+                    "eval_full": not test if eval_full is None else eval_full,
                     "rescale_to_crop_size_first": True,
                     "rescale_range": [
                         1.0,
@@ -332,7 +333,7 @@ if __name__ == '__main__':
                         help='number of images to save out (from each train and valid) (default: 0)')
     parser.add_argument('-g', '--gpu', default=None, type=int,
                         help='gpu number (default: cpu only)')
-    parser.add_argument('-b', '--batchsize', default=None, type=int,
+    parser.add_argument('-B', '--batchsize', default=None, type=int,
                         help='gpu number (default: cpu only)')
     parser.add_argument('-s', '--shuffle', default=False, type=bool,
                         help='shuffle data')
@@ -352,6 +353,10 @@ if __name__ == '__main__':
                         help='Use less of val set')
     parser.add_argument('-v', '--verbosity', default=1, type=int,
                         help='How much stuff to print [0,1,2] (default: 2)')
+    parser.add_argument('-F', '--eval_full', default=None, type=bool,
+                        help='for iamNER, whether to do whole doc (instead of lines)')
+    parser.add_argument('-b', '--beam_search', default=False, type=int,
+                        help='number of beams')
 
     args = parser.parse_args()
 
@@ -367,10 +372,15 @@ if __name__ == '__main__':
         print('Must provide checkpoint (with -c)')
         exit()
 
+    if args.beam_search:
+        run = 'beam{}'.format(args.beam_search)
+    else:
+        run = args.autoregressive
+
     #if args.index is None and args.imgname is not None:
     #    index = args.imgname
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=args.autoregressive,smaller_set=args.smaller_set)
+            main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=run,smaller_set=args.smaller_set,eval_full=args.eval_full)
     else:
-        main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=args.autoregressive,smaller_set=args.smaller_set)
+        main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=run,smaller_set=args.smaller_set,eval_full=args.eval_full)

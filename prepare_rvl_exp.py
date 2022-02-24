@@ -95,10 +95,12 @@ cf['validation']=new_val
 cf['model']['max_a_tokens'] = 8 #doesn't need to predict more than 1
 
 #set validation
-cf['trainer']['iterations']=280000
-cf['trainer']['val_step']=25000
-cf['trainer']['save_step']=50000
+cf['trainer']['iterations']=340099
+cf['trainer']['val_step']=20000
+cf['trainer']['save_step']=5000000000
 cf['trainer']["save_step_minor"]= 1024 
+cf['trainer']['monitor_mode']='max'
+cf['trainer']['monitor']='val_E_class_acc'
 
 #set drop in LR
 cf['trainer']["use_learning_schedule"]= "multi_rise then ramp_to_lower"
