@@ -284,6 +284,8 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
             #    break
             if verbose:
                 print('batch index: {}/{}'.format(index,len(valid_data_loader)),end='\r')
+            elif data_set_name=='RVL' and index%100==0:
+                print('batch index: {}/{}'.format(index,len(valid_data_loader)))
             _,res,_ = trainer.run(instance,valid=True,run=run)
 
             for name,value in res.items():
