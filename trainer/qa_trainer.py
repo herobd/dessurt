@@ -428,8 +428,10 @@ class QATrainer(BaseTrainer):
         if run:
             string_a,pred_mask = self.model(image,ocr_res,questions,RUN=True)
             string_a = [[string_a]]
-        elif distill or 'unlikelihood' in self.loss:
+        elif distill:
             pred_a, target_a, string_a, pred_logits, pred_last_hidden, batch_mask = self.model(image,ocr_res,questions,answers,distill=True)
+        elif 'unlikelihood' in self.loss:
+            pred_a, target_a, string_a, pred_mask, pred_logits = self.model(image,ocr_res,questions,answers,get_logits=True)
         else:
             pred_a, target_a, string_a, pred_mask = self.model(image,ocr_res,questions,answers)
 
