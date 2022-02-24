@@ -100,9 +100,9 @@ def findUnmatched(s):
 
     return b_stack[-1] if len(b_stack) > 0 else -1, c_stack[-1] if len(c_stack) > 0 else -1
 
-def getFormData(model,img,tokenizer,quiet=False):
+def getFormData(model,img,tokenizer,quiet=False,beam_search=False):
     question='json>'
-    answer,out_mask = model(img,None,[[question]],RUN=True)
+    answer,out_mask = model(img,None,[[question]],RUN=True if not beam_search else f'beam{beam_search}')
     if not quiet:
         print('PRED:: '+answer)
     num_calls=1
@@ -142,7 +142,7 @@ def getFormData(model,img,tokenizer,quiet=False):
 
 
         question = 'json~'+prompt
-        answer,out_mask = model(img,None,[[question]],RUN=True)
+        answer,out_mask = model(img,None,[[question]],RUN=True if not beam_search else f'beam{beam_search}')
         total_char_pred += len(answer)
         if not quiet:
             print('CONT:: '+answer)
@@ -809,7 +809,7 @@ def parseDict(header,entities,links):
 
 
 
-def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False,max_qa_len=None,quiet=False,BROS=False,ENTITY_MATCH_THRESH=0.6,LINK_MATCH_THRESH=0.6,DEBUG=False):
+def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False,max_qa_len=None,quiet=False,BROS=False,ENTITY_MATCH_THRESH=0.6,LINK_MATCH_THRESH=0.6,DEBUG=False,beam_search=False):
     TRUER=True #False makes this do pair-first alignment, which is kind of cheating
     np.random.seed(1234)
     torch.manual_seed(1234)
@@ -1056,7 +1056,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             #print()
             
 
-            pred_data, good_char_pred_ratio = getFormData(model,img,tokenizer,quiet)
+            pred_data, good_char_pred_ratio = getFormData(model,img,tokenizer,quiet,beam_search)
 
             
             if not quiet:
@@ -1567,6 +1567,8 @@ if __name__ == '__main__':
                         help='Edit distance required to have pred entity match a GT one for entity detection')
     parser.add_argument('-L', '--LINK_MATCH_THRESH', default=0.6, type=float,
                         help='Edit distance required to have pred entity match a GT one for linking')
+    parser.add_argument('-b', '--beam_search', default=False, type=int,
+            help='number of beams (default: not beam search)')
 
     args = parser.parse_args()
 
@@ -1583,6 +1585,6 @@ if __name__ == '__main__':
         exit()
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw, quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH,DEBUG=args.DEBUG)
+            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw, quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH,DEBUG=args.DEBUG,beam_search=args.beam_search)
     else:
-        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw,quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH,DEBUG=args.DEBUG)
+        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw,quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH,DEBUG=args.DEBUG,beam_search=args.beam_search)
