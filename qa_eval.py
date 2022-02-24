@@ -15,7 +15,7 @@ from trainer import QATrainer
 logging.basicConfig(level=logging.INFO, format='')
 
 
-def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, config=None, thresh=None, addToConfig=None, test=False,verbose=2,run=False,smaller_set=False,eval_full=None):
+def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, config=None, thresh=None, addToConfig=None, test=False,verbose=2,run=False,smaller_set=False,eval_full=None,ner_do_before=False):
     assert run
     random.seed(1234)
     np.random.seed(1234)
@@ -190,6 +190,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     "full": config['data_loader'].get('full',False),
                     "cased": config['data_loader'].get('cased',False),
                     "task": config['data_loader'].get('task',6),
+                    "eval_class_before": ner_do_before,
                     "eval_full": not test if eval_full is None else eval_full,
                     "rescale_to_crop_size_first": True,
                     "rescale_range": [
@@ -361,6 +362,8 @@ if __name__ == '__main__':
                         help='for iamNER, whether to do whole doc (instead of lines)')
     parser.add_argument('-b', '--beam_search', default=False, type=int,
                         help='number of beams')
+    parser.add_argument('-N', '--ner_do_before', default=False, action='store_const', const=True,
+                        help='do NER evaluation backwards')
 
     args = parser.parse_args()
 
@@ -385,6 +388,6 @@ if __name__ == '__main__':
     #    index = args.imgname
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=run,smaller_set=args.smaller_set,eval_full=args.eval_full)
+            main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=run,smaller_set=args.smaller_set,eval_full=args.eval_full,ner_do_before=args.ner_do_before)
     else:
-        main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=run,smaller_set=args.smaller_set,eval_full=args.eval_full)
+        main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=run,smaller_set=args.smaller_set,eval_full=args.eval_full,ner_do_before=args.ner_do_before)
