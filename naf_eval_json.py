@@ -474,7 +474,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='100587124_00356'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='101023522_00018'):
                 continue
             going_DEBUG=True
 
@@ -547,11 +547,11 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             for thing in pred_data[::-1]: #build pred_entities in reverse
                 if isinstance(thing,dict):
                     parseDict(thing,pred_entities,pred_links)
-                elif thing=='':
-                    pass
-                else:
-                    print('non-dict at document level: {}'.format(thing))
-                    assert False
+                #elif thing=='':
+                #    pass
+                #else:
+                #    print('non-dict at document level: {}'.format(thing))
+                #    assert False
                     #import pdb;pdb.set_trace()
 
             #New addition for NAF
