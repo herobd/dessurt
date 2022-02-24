@@ -414,6 +414,7 @@ def fixLoadJSON(pred):
                                 escaped=False
                         if len(quote_locations)==3:
                             #remove bad middle quote
+                            pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'remove extra comma')
                             pred=pred[:quote_locations[1]]+pred[quote_locations[1]+1:]
                         else:
                             assert False
@@ -434,7 +435,43 @@ def fixLoadJSON(pred):
                     #        next_close+=char
 
                     #        if next_quote<next_close:
-                            
+
+                    elif pred[char]!=':' and pred[char]!='"':
+                        next_quote = findNonEscaped(pred[char:],'"')
+                        if next_quote!=-1:
+                            next_quote+=char
+                        else:
+                            next_quote=99999999
+                        bracket_close = pred[char:].find(']')
+                        if bracket_close!=-1:
+                            bracket_close+=char
+                        else:
+                            bracket_close=9999999
+                        curley_close = pred[char:].find('}')
+                        if curley_close!=-1:
+                            curley_close+=char
+                        else:
+                            curley_close=9999999
+                        end = min(bracket_close,curley_close)
+                        quote_locations=[]
+                        in_quote=True
+                        escaped=False
+                        for c in range(char,end):
+                            if not escaped and pred[c]=='"':
+                                quote_locations.append(c)
+                                in_quote = not in_quote
+                            elif not in_quote and pred[c]==',':
+                                break
+                            elif not escaped and pred[c]=='\\':
+                                escaped=True
+                            else:
+                                escaped=False
+                        if len(quote_locations)%2==1:
+                            #uneven quotes, add one
+                            pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'add a comma and quote')
+                            pred = pred[:char]+',"'+pred[char:]
+                        else:
+                            assert  False
                     else:
                         assert False
                 elif 'Unterminated string starting at' in typ:
