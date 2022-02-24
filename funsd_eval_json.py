@@ -143,10 +143,14 @@ def getFormData(model,img,tokenizer,quiet=False):
 
         question = 'json~'+prompt
         answer,out_mask = model(img,None,[[question]],RUN=True)
+
+        
+
         total_char_pred += len(answer)
         if not quiet:
             print('CONT:: '+answer)
         len_before = len(answer)
+        answer = answer.replace('ø[question]','')
         answer = derepeat(answer)
         len_after = len(answer)
 
@@ -520,12 +524,27 @@ def fixLoadJSON(pred):
                             assert False
                     elif ',' == pred[char-1]:
                         next_quote = findNonEscaped(pred[char:],'"')
-                        assert next_quote!=-1
-                        next_quote+=char
-                        if ','==pred[next_quote+1] or ']'==pred[next_quote+1] or '}'==pred[next_quote+1]:
-                            #forgot open quote. Add it
-                            pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open quote')
-                            pred=pred[:char]+'"'+pred[char:]
+                        if next_quote!=-1:
+                            quote_locations=[]
+                            in_quote=False
+                            escaped=False
+                            for c in range(char,end):
+                                if not escaped and pred[c]=='"':
+                                    quote_locations.append(c)
+                                    in_quote = not in_quote
+                                elif not in_quote and pred[c]==',':
+                                    break
+                                elif not escaped and pred[c]=='\\':
+                                    escaped=True
+                                else:
+                                    escaped=False
+                            next_quote+=char
+                            if ','==pred[next_quote+1] or ']'==pred[next_quote+1] or '}'==pred[next_quote+1]:
+                                #forgot open quote. Add it
+                                pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open quote')
+                                pred=pred[:char]+'"'+pred[char:]
+                            else:
+                                assert False
                         else:
                             assert False
                     elif pred[char:].startswith('question"') or pred[char:].startswith('answer"') or pred[char:].startswith('other"') and (pred[char-1]==':' or pred[char-2]==':' ): 
@@ -705,10 +724,13 @@ def parseDict(header,entities,links):
             if not isinstance(value,list):
                 value=[value]
             for a in reversed(value):
-                assert isinstance(a,str)
-                a_id=len(entities)
-                entities.append(Entity(a,'answer',a_id))
-                to_link.append(a_id)
+                if isinstance(a,str):
+                    a_id=len(entities)
+                    entities.append(Entity(a,'answer',a_id))
+                    to_link.append(a_id)
+                else:
+                    assert isinstance(a,dict)
+                    to_link+=parseDict(a,entities,links)
         elif text=='row headers':
             assert isinstance(value,list)
             row_headers = value
@@ -995,7 +1017,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='82250337_0338'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='83624198'):
                 continue
             going_DEBUG=True
 
