@@ -425,7 +425,8 @@ class QATrainer(BaseTrainer):
         if ocr_res is not None and max(len(ocr_b) if ocr_b is not None else -1 for ocr_b in ocr_res)>0 and self.randomly_blank_image>random.random():
             image = None
 
-
+        print('DEBUGGGGGG')
+        distill=True
         if run:
             string_a,pred_mask = self.model(image,ocr_res,questions,RUN=True)
             string_a = [[string_a]]
@@ -460,6 +461,8 @@ class QATrainer(BaseTrainer):
                     pred_a = pred_a * noise_token_mask[:,:,None].to(device) #This will raise the Loss, but prevents model from learning bad (switched) tokens
 
                 losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
+                losses['testLoss'] = self.loss['test'](pred_logits,pred_a,target_a,**self.loss_params['test'])
+                import pdb;pdb.set_trace()
                 if self.debug:
                     print('answer size: {}'.format(pred_a.size()))
             #losses['answerLoss'] = pred_a.sum()

@@ -69,6 +69,10 @@
         "answer": {
             "smoothing": 0.1,
             "padding_idx": 1
+        },
+        "test": {
+            "rank_alpha": 0.8,
+            "padding_idx": 1
         }
     },
     "metrics": [],
@@ -107,14 +111,14 @@
             768
         ],
         "max_q_tokens": 20,
-        "max_a_tokens": 420,
+        "max_a_tokens": 620,
         "use_set_length": true,
         "init_from_pretrained": "bart",
         "use_special_question_tokens": true,
         "no_dropout": false,
         "window_size": 12,
-        "decode_dim": 128,
-        "dim_ff": 128,
+        "decode_dim": 768,
+        "dim_ff": 3072,
         "decode_num_heads": 8,
         "blocks_per_level": [
             4,
