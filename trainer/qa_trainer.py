@@ -347,6 +347,7 @@ class QATrainer(BaseTrainer):
         ocrBoxes = instance['bb_gt']
         questions = instance['questions']
         answers = instance['answers']
+        noise_token_mask = instance['noise_token_mask']
         if self.debug:
             print('=========')
             print(questions)
@@ -450,6 +451,14 @@ class QATrainer(BaseTrainer):
         
         if not run:
             if 'answer' in self.loss:
+                if noise_token_mask is not None:
+                    #This is to mix up tokens (done in dataset) for more robust training
+                    if noise_token_mask.size(1)<pred_a.size(1):
+                        noise_token_mask = F.pad(noise_token_mask,(0,pred_a.size(1)-noise_token_mask.size(1)))
+                    elif noise_token_mask.size(1)>pred_a.size(1):
+                        noise_token_mask = noise_token_mask[:,:pred_a.size(1)]
+                    pred_a = pred_a * noise_token_mask[:,:,None].to(device) #This will raise the Loss, but prevents model from learning bad (switched) tokens
+
                 losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
                 if self.debug:
                     print('answer size: {}'.format(pred_a.size()))

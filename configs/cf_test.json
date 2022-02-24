@@ -54,6 +54,7 @@
     "loss": {
         "#answer": "padded_seq_cross_entropy",
         "answer": "label_smoothing",
+        "test": "unlikelihoodLoss",
         "#mask": "sigmoid_BCE_mask_loss",
         "mask": "focalLoss"
     },

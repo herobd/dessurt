@@ -2,7 +2,10 @@ import json
 import os
 import sys
 from change_checkpoint_reset_for_training import readRemoveWrite
-from make_run import create
+try:
+    from make_run import create
+except ModuleNotFoundError:
+    pass
 
 
 if len(sys.argv)==1:
