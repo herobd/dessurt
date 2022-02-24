@@ -430,6 +430,7 @@ class QATrainer(BaseTrainer):
             string_a = [[string_a]]
         elif distill or 'unlikelihood' in self.loss:
             pred_a, target_a, string_a, pred_logits, pred_last_hidden, batch_mask = self.model(image,ocr_res,questions,answers,distill=True)
+        else:
             pred_a, target_a, string_a, pred_mask = self.model(image,ocr_res,questions,answers)
 
         #pred_a[:,0].sum().backward()
