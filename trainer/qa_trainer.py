@@ -425,15 +425,11 @@ class QATrainer(BaseTrainer):
         if ocr_res is not None and max(len(ocr_b) if ocr_b is not None else -1 for ocr_b in ocr_res)>0 and self.randomly_blank_image>random.random():
             image = None
 
-        print('DEBUGGGGGG')
-        distill=True
         if run:
             string_a,pred_mask = self.model(image,ocr_res,questions,RUN=True)
             string_a = [[string_a]]
-        elif distill:
+        elif distill or 'unlikelihood' in self.loss:
             pred_a, target_a, string_a, pred_logits, pred_last_hidden, batch_mask = self.model(image,ocr_res,questions,answers,distill=True)
-            pred_mask = None
-        else:
             pred_a, target_a, string_a, pred_mask = self.model(image,ocr_res,questions,answers)
 
         #pred_a[:,0].sum().backward()
@@ -461,10 +457,13 @@ class QATrainer(BaseTrainer):
                     pred_a = pred_a * noise_token_mask[:,:,None].to(device) #This will raise the Loss, but prevents model from learning bad (switched) tokens
 
                 losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
-                losses['testLoss'] = self.loss['test'](pred_logits,pred_a,target_a,**self.loss_params['test'])
-                import pdb;pdb.set_trace()
                 if self.debug:
                     print('answer size: {}'.format(pred_a.size()))
+
+            if 'unlikelihood' in self.loss:
+                assert noise_token_mask is None
+                losses['unlikelihoodLoss'] = self.loss['unlikelihood'](pred_logits,pred_a,target_a,**self.loss_params['unlikelihood'])
+
             #losses['answerLoss'] = pred_a.sum()
             if 'mask' in self.loss and gt_mask is not None and pred_mask is not None: #we allow gt_mask to be none to not supervise
                 mask_labels_batch_mask = instance['mask_labels_batch_mask'].to(device)

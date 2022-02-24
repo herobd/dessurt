@@ -5,7 +5,7 @@ import torch.nn.functional as F
 #NEURAL TEXT DEGENERATION WITH UNLIKELIHOOD TRAINING
 #https://github.com/facebookresearch/unlikelihood_training/blob/c012770d3560c287e70908b56c9e832137bf868f/custom/candidate_penalty_ce_loss.py
 #def forward(self, model, sample, reduce=True, compute_custom_metrics=True):
-def unlikelihoodLoss(net_output_logits,net_output_logs,target,rank_alpha=1,padding_idx=1,immune_indexes=[]):
+def unlikelihoodLoss(net_output_logits,net_output_logs,target,rank_alpha=1,padding_idx=1,immune_indexes=[],immune_weight=0):
     net_output = net_output_logits#model(**sample['net_input'])
     #target = model.get_targets(sample, net_output)
     nsentences = target.size(0)
@@ -41,9 +41,9 @@ def unlikelihoodLoss(net_output_logits,net_output_logs,target,rank_alpha=1,paddi
     # - compute loss
     one_minus_probs = torch.clamp((1.0 - lprobs.exp()), min=1e-5)
     for skip_idx in immune_indexes:
-        negative_targets[:,skip_idx]*=0.001
+        negative_targets[:,skip_idx]*=immune_weight
     custom_loss = -torch.log(one_minus_probs)*negative_targets
     custom_loss = custom_loss.sum()
 
     loss = mle_loss + rank_alpha * custom_loss
-    return loss/nsentences
+    return loss/(target!=padding_idx).sum()
