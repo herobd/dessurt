@@ -69,26 +69,34 @@ def derepeat(s):
         #end-=len(m[1]) #keep one
         s = s[:start]+s[end:]
     return s
-
 def findUnmatched(s):
     b_stack=[]
     c_stack=[]
     in_quote=False
+    escaping=False
     for i,c in enumerate(s):
-        if not in_quote:
-            if c=='[':
-                b_stack.append(i)
-            elif c==']':
-                b_stack.pop()
-            elif c=='{':
-                c_stack.append(i)
-            elif c=='}':
-                c_stack.pop()
-            elif c=='"':
-                in_quote=True
-        elif c=='"' and (s[i-1]!='\\' or s[i-2]=='\\'):
-            in_quote=False
-
+        if  c=='\\' and not escaping:
+            escaping=True
+        else:
+            if not in_quote:
+                if c=='[':
+                    b_stack.append(i)
+                elif c==']':
+                    b_stack.pop()
+                elif c=='{':
+                    c_stack.append(i)
+                elif c=='}':
+                    c_stack.pop()
+                elif c=='"' and not escaping:
+                    in_quote=True
+                    #print('start quote {}'.format(s[i-5:i+5]))
+                    #print('                 ^')
+            elif c=='"' and not escaping:
+                in_quote=False
+                #print('end quote {}'.format(s[i-5:i+5]))
+                #print('               ^')
+            if escaping:
+                escaping=False
 
     return b_stack[-1] if len(b_stack) > 0 else -1, c_stack[-1] if len(c_stack) > 0 else -1
 
@@ -378,6 +386,37 @@ def fixLoadJSON(pred):
                         #forgot a comma
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'add a comma between objs')
                         pred = pred[:char]+','+pred[char:]
+                    elif pred[char]==',':
+                        bracket_close = pred[char:].find(']')
+                        if bracket_close!=-1:
+                            bracket_close+=char
+                        else:
+                            bracket_close=9999999
+                        curley_close = pred[char:].find('}')
+                        if curley_close!=-1:
+                            curley_close+=char
+                        else:
+                            curley_close=9999999
+                        end = min(bracket_close,curley_close)
+                        quote_locations=[]
+                        in_quote=False
+                        escaped=False
+                        for c in range(char,end):
+                            if not escaped and pred[c]=='"':
+                                quote_locations.append(c)
+                                in_quote = not in_quote
+                            elif not in_quote and pred[c]==',':
+                                break
+                            elif not escaped and pred[c]=='\\':
+                                escaped=True
+                            else:
+                                escaped=False
+                        if len(quote_locations)==3:
+                            #remove bad middle quote
+                            pred=pred[:quote_locations[1]]+pred[quote_locations[1]+1:]
+                        else:
+                            assert False
+                            
                     else:
                         assert False
                 elif 'Unterminated string starting at' in typ:
@@ -575,7 +614,7 @@ def fixLoadJSON(pred):
             print('======== char {} =='.format(char))
             print(did)
             print(p)
-        print('currect context: {}<{}>{} '.format(pred[char-10:char],pred[char],pred[char+1:char+10]))
+        print('currect context: {}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10]))
         raise e
     return pred_data
 
@@ -902,7 +941,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='93455715'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='82250337_0338'):
                 continue
             going_DEBUG=True
 
