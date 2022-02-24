@@ -291,7 +291,7 @@ class MmSwin(BaseModel):
 
 
     #we're building this for fixed images size
-    def forward(self,image,ocrRes,questions,answers=None,useCurvedBBs=False,RUN=False,get_tokens=False,distill=False):
+    def forward(self,image,ocrRes,questions,answers=None,useCurvedBBs=False,RUN=False,get_tokens=False,distill=False,get_logits=False):
 
 
         device = image.device
@@ -504,7 +504,11 @@ class MmSwin(BaseModel):
             response_decoded = self.answer_softmax(response_decoded)
             if get_tokens:
                 response_decoded_all = response_decoded
-            response_greedy_token = response_decoded.argmax(dim=2)
+
+            if RUN=='beam':
+                TODO()
+            else:
+                response_greedy_token = response_decoded.argmax(dim=2)
 
 
 
@@ -626,6 +630,8 @@ class MmSwin(BaseModel):
 
         if distill:
             return response_decoded, target_decoded.to(device), batch_string_response, response_logits, self.ditillation_adapter(response), ~a_padding_mask
+        elif get_logits:
+            return response_decoded, target_decoded.to(device), batch_string_response, out_mask, response_logits
         else:
             return response_decoded, target_decoded.to(device), batch_string_response, out_mask
 

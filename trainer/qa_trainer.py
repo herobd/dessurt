@@ -347,6 +347,7 @@ class QATrainer(BaseTrainer):
         ocrBoxes = instance['bb_gt']
         questions = instance['questions']
         answers = instance['answers']
+        noise_token_mask = instance['noise_token_mask']
         if self.debug:
             print('=========')
             print(questions)
@@ -424,13 +425,13 @@ class QATrainer(BaseTrainer):
         if ocr_res is not None and max(len(ocr_b) if ocr_b is not None else -1 for ocr_b in ocr_res)>0 and self.randomly_blank_image>random.random():
             image = None
 
-
         if run:
             string_a,pred_mask = self.model(image,ocr_res,questions,RUN=True)
             string_a = [[string_a]]
         elif distill:
             pred_a, target_a, string_a, pred_logits, pred_last_hidden, batch_mask = self.model(image,ocr_res,questions,answers,distill=True)
-            pred_mask = None
+        elif 'unlikelihood' in self.loss:
+            pred_a, target_a, string_a, pred_mask, pred_logits = self.model(image,ocr_res,questions,answers,get_logits=True)
         else:
             pred_a, target_a, string_a, pred_mask = self.model(image,ocr_res,questions,answers)
 
@@ -450,9 +451,22 @@ class QATrainer(BaseTrainer):
         
         if not run:
             if 'answer' in self.loss:
+                if noise_token_mask is not None:
+                    #This is to mix up tokens (done in dataset) for more robust training
+                    if noise_token_mask.size(1)<pred_a.size(1):
+                        noise_token_mask = F.pad(noise_token_mask,(0,pred_a.size(1)-noise_token_mask.size(1)))
+                    elif noise_token_mask.size(1)>pred_a.size(1):
+                        noise_token_mask = noise_token_mask[:,:pred_a.size(1)]
+                    pred_a = pred_a * noise_token_mask[:,:,None].to(device) #This will raise the Loss, but prevents model from learning bad (switched) tokens
+
                 losses['answerLoss'] = self.loss['answer'](pred_a,target_a,**self.loss_params['answer'])
                 if self.debug:
                     print('answer size: {}'.format(pred_a.size()))
+
+            if 'unlikelihood' in self.loss:
+                assert noise_token_mask is None
+                losses['unlikelihoodLoss'] = self.loss['unlikelihood'](pred_logits,pred_a,target_a,**self.loss_params['unlikelihood'])
+
             #losses['answerLoss'] = pred_a.sum()
             if 'mask' in self.loss and gt_mask is not None and pred_mask is not None: #we allow gt_mask to be none to not supervise
                 mask_labels_batch_mask = instance['mask_labels_batch_mask'].to(device)
@@ -725,11 +739,11 @@ class QATrainer(BaseTrainer):
                     elif len(gt_words)>0:
                         log['E_approx_CER'].append(1)
 
-                    for gt,pred in aligned[-1][-1]:
-                        if gt[1]==pred[1]:
-                            print('{}\t{}\t\t{}\t{}'.format(gt[1],gt[0],pred[1],pred[0]))
-                        else:
-                            print('{}\t{}\t\t{}\t{} <<< error'.format(gt[1],gt[0],pred[1],pred[0]))
+                    #for gt,pred in aligned[-1][-1]:
+                    #    if gt[1]==pred[1]:
+                    #        print('{}\t{}\t\t{}\t{}'.format(gt[1],gt[0],pred[1],pred[0]))
+                    #    else:
+                    #        print('{}\t{}\t\t{}\t{} <<< error'.format(gt[1],gt[0],pred[1],pred[0]))
 
 
                 elif question.startswith('mk>'):

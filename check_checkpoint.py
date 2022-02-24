@@ -10,7 +10,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     assert args.checkpoint is not None
-    saved = torch.load(args.checkpoint,map_location=lambda storage, loc: storage)
+    cp = args.checkpoint
+    if not cp.endswith('.pth'):
+        cp = 'saved/'+cp+'/checkpoint-latest.pth'
+    saved = torch.load(cp,map_location=lambda storage, loc: storage)
 
     #print('arch: {}'.format(saved['arch']))
     #Eprint('arch: {}'.format(saved['config']['arch']))

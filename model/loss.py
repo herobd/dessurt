@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import torch.nn.functional as F
 import utils
+from model.unlikelihood_loss import unlikelihoodLoss
 #import torch.nn as nn
 from model.alignment_loss import alignment_loss, box_alignment_loss, iou_alignment_loss
 from model.yolo_loss import YoloLoss, YoloDistLoss, LineLoss

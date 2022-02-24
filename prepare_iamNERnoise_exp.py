@@ -37,7 +37,7 @@ print('from '+itera)
 
 broken = name.split('_')
 old_id = broken[-1]
-new_name='iamNER_'+('_'.join(broken[1:-2]))+'_PTfrom{}i{}_{}'.format(old_id,itera,new_id)
+new_name='iamNERnoise_'+('_'.join(broken[1:-2]))+'_PTfrom{}i{}_{}'.format(old_id,itera,new_id)
 print(new_name)
 
 old_cf = 'configs/cf_{}.json'.format(name)
@@ -59,6 +59,8 @@ new_dataset= {
         "data_dir": "../data/IAM",
         "cased": True,
         "full": True,
+        #"class_first": True,
+        "use_noise": 0.09,
         "batch_size": 1,
         "num_workers": 6,
         "shuffle": True,
@@ -91,7 +93,7 @@ cf['validation']=new_val
 cf['model']['max_a_tokens'] = 730  #full 800 not required
 
 #set validation
-cf['trainer']['iterations']=201200
+cf['trainer']['iterations']=200099
 cf['trainer']['val_step']=10000
 cf['trainer']['save_step']=1400000000
 cf['trainer']["save_step_minor"]= 1024 
