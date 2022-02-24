@@ -355,6 +355,8 @@ if __name__ == '__main__':
                         help='How much stuff to print [0,1,2] (default: 2)')
     parser.add_argument('-F', '--eval_full', default=None, type=bool,
                         help='for iamNER, whether to do whole doc (instead of lines)')
+    parser.add_argument('-b', '--beam_search', default=False, type=int,
+                        help='number of beams')
 
     args = parser.parse_args()
 
@@ -370,10 +372,15 @@ if __name__ == '__main__':
         print('Must provide checkpoint (with -c)')
         exit()
 
+    if args.beam_search:
+        run = args.beam_search
+    else:
+        run = args.autoregressive
+
     #if args.index is None and args.imgname is not None:
     #    index = args.imgname
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=args.autoregressive,smaller_set=args.smaller_set,eval_full=args.eval_full)
+            main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=run,smaller_set=args.smaller_set,eval_full=args.eval_full)
     else:
-        main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=args.autoregressive,smaller_set=args.smaller_set,eval_full=args.eval_full)
+        main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=run,smaller_set=args.smaller_set,eval_full=args.eval_full)
