@@ -1,5 +1,5 @@
 {
-    "name": "test",
+    "name": "funsd_mmswin_bart_PTfrom94ilatest_162",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
@@ -58,29 +58,21 @@
     },
     "loss": {
         "#answer": "padded_seq_cross_entropy",
-        "#answer": "label_smoothing",
-        "unlikelihood": "unlikelihoodLoss",
+        "answer": "label_smoothing",
         "#mask": "sigmoid_BCE_mask_loss",
         "mask": "focalLoss"
     },
     "loss_weights": {
-        "#answer": 1,
-        "unlikelihood": 100,
+        "answer": 1,
         "mask": 1,
         "cosine": 0,
         "distillation": 2.5
     },
     "loss_params": {
-        "#answer": {},
-        "#answer": {
+        "xanswer": {},
+        "answer": {
             "smoothing": 0.1,
             "padding_idx": 1
-        },
-        "unlikelihood": {
-            "rank_alpha": 1,
-            "padding_idx": 1,
-            "immune_indexes": [45152, 24303, 10975, 17523, 35],
-            "immune_weight": 0.1
         }
     },
     "metrics": [],
@@ -124,11 +116,11 @@
         "use_special_question_tokens": true,
         "max_q_tokens": 20,
         "#max_a_tokens": 3400,
-        "max_a_tokens": 200,
+        "max_a_tokens": 800,
         "no_dropout": false,
         "window_size": 12,
-        "decode_dim": 128,
-        "dim_ff": 128,
+        "decode_dim": 768,
+        "dim_ff": 3072,
         "decode_num_heads": 8,
         "blocks_per_level": [
             4,
