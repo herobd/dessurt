@@ -346,6 +346,7 @@ class MmSwin(BaseModel):
             a_t = self.tokenizer(answers,return_tensors="pt",padding=True)
             a_input_ids = a_t['input_ids']
             a_attention_mask = a_t['attention_mask']
+
         num_q = q_input_ids.size(1)
         num_a = a_input_ids.size(1)-1 #remove last SEP token
         qa_tokens = self.text_embedding(torch.cat((q_input_ids,a_input_ids[:,:-1]),dim=1).to(device))

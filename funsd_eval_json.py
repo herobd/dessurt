@@ -617,7 +617,17 @@ def fixLoadJSON(pred):
                             pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'merging/appending to strings')
                             pred=pred[:close_quote]+pred[char:]
                         else:
-                            assert False
+                            colon = pred[:char].rfind(':')
+                            end_prev_quote = rfindNonEscaped(pred[:colon],'"')
+                            open_prev_quote = rfindNonEscaped(pred[:end_prev_quote],'"')
+                            prev_thing = pred[open_prev_quote+1:end_prev_quote]
+                            if prev_thing in ['answers','column headers',' row headers','content']:
+                                assert False
+                            else:
+                                pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open quote (Should be a string)')
+                                pred=pred[:char]+'"'+pred[char:]
+                                
+                                
 
                     elif pred[char]!=']' and pred[char]!='[' and pred[char]!='{' and pred[char]!='}' and pred[char]!=':' and pred[char]!=',':
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open quote(just for anything really)')
