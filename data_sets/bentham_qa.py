@@ -27,7 +27,7 @@ class BenthamQA(QADataset):
 
         split=''
 
-        qa_file = os.path.join(dirPath,'BenthamQA_'+split+'_v1.0.json')
+        qa_file = os.path.join(dirPath,'BenthamQA_'+split+'_1.0.json')
         with open(qa_file) as f:
             data = json.load(f)['data']
 
@@ -39,18 +39,19 @@ class BenthamQA(QADataset):
                 #answer = random.choice(instance['answers'])
                 for qa in instance['qas']:
                     question = qa['question']
-                    answer=[]
-                    start_word = qa['answers']['answer_start_word_no']
-                    end_word = qa['answers']['answer_end_word_no']
-                    last_word_no=-1
-                    for word in instance['document_image']['gold_standard_transcription']:
-                        if word['wordno']>=start_word:
-                            answer.append(word['text'])
-                        assert word['wordno']==last_word_no+1
-                        last_word_no=word['wordno']
-                    answer = ' '.join(answer)
+                    for ans in qa['answers']:
+                        answer=[]
+                        start_word = ans['answer_start_word_no']
+                        end_word = ans['answer_end_word_no']
+                        last_word_no=-1
+                        for word in instance['document_image']['gold_standard_transcription']:
+                            if word['wordno']>=start_word:
+                                answer.append(word['text'])
+                            assert word['wordno']==last_word_no+1
+                            last_word_no=word['wordno']
+                        answer = ' '.join(answer)
 
-                    self.images.append({'id':qa['questionId'], 'imageName':image_path, 'imagePath':image_path, 'annotationPath':(question,answer), 'rescaled':1 })
+                        self.images.append({'id':qa['question_id'], 'imageName':image_path, 'imagePath':image_path, 'annotationPath':(question,answer), 'rescaled':1 })
 
 
 
