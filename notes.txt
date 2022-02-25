@@ -73,8 +73,17 @@ natural_q~_ED mean:0.48452313633422356,  std:0.6293027521905793
 E_ANLS mean:0.6405274921852738,  std:0.432247051142594
 
 ==============================================
-==DocVQA== (autoregressive)
+==DocVQA== 
 
+
+docvqa_mmswin_bart_PTfrom73i219k_84 330k
+E_ANLS mean:0.444
+
+
+docvqa_mmswin_bart_PTfrom94ilatest_154 440000
+E_ANLS mean:0.475
+
+#It looks like all the old evaluations were actually done with teacherforcing
 docvqa_mmswin_bart_PTfrom73i219k_84 150000
 natural_q~_ED mean:0.45365528238795916,  std:0.4859999776214717
 E_ANLS mean:0.5231658977224071,  std:0.4136786186738585
@@ -116,8 +125,6 @@ docvqa_mmswin_bart_PTfrom98i87k_104 100000
 natural_q~_ED mean:0.39090575856778365,  std:0.44783577527008434
 E_ANLS mean:0.5676065432537071,  std:0.40684078770667953
 
-docvqa_mmswin_bart_PTfrom94ilatest_154 440000
-E_ANLS mean:0.4752
 
 ===========================================
 ==IAM NER===
