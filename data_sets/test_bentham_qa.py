@@ -1,4 +1,4 @@
-from data_sets import iam_ner
+from data_sets import bentham_qa
 import math
 import sys
 from matplotlib import pyplot as plt
@@ -8,8 +8,6 @@ import numpy as np
 import torch
 import utils.img_f as cv2
 from collections import defaultdict
-from transformers import BartTokenizer
-
 widths=[]
 
 def display(data,tokenizer=None):
@@ -30,20 +28,9 @@ def display(data,tokenizer=None):
             img[:,:,2] *= 1-data['mask_label'][b,0]
         #img[2,img[2]<1]=0
 
-        #label = data['label']
-        #gt = data['gt'][b]
-        #print(label[:data['label_lengths'][b],b])
-        print(data['imgName'][b])
-        #if data['spaced_label'] is not None:
-        #    print('spaced label:')
-        #    print(data['spaced_label'][:,b])
-        #for bb,text in zip(data['bb_gt'][b],data['transcription'][b]):
-        #    print('ocr: {} {}'.format(text,bb))
-        #print('questions: {}'.format(data['questions'][b]))
-        #print('answers: {}'.format(data['answers'][b]))
         print('questions and answers')
         for q,a in zip(data['questions'][b],data['answers'][b]):
-            print(q+' : '+a)
+            print(q+' [:] '+a)
             
             loc = q.find('~')
             if loc ==-1:
@@ -53,14 +40,10 @@ def display(data,tokenizer=None):
             question_types.append(q[:loc])
         
         if tokenizer is not None:
-            toks = len(tokenizer.tokenize(a))+2
-        if 'noise_token_mask' in data and data['noise_token_mask'] is not None:
-            print(data['noise_token_mask'])
-
+            tok_len = len(tokenizer.tokenize(a))+2
         #widths.append(img.size(1))
         
-        #draw='WORK_OF_ART' in a
-        draw=True
+        draw=True#'0w' in q or 'w0' in q or 'l0' in q
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -70,10 +53,10 @@ def display(data,tokenizer=None):
             #cv2.imwrite('out/changed_img{}.png'.format(b),changed_img.numpy()*255)
             #plt.imshow(img.numpy()[:,:,0], cmap='gray')
             #plt.show()
-            cv2.imshow('x',(img*255).numpy().astype(np.uint8))
+            img = (img*255).numpy().astype(np.uint8)
+            cv2.imshow('x',img)
             cv2.show()
 
-            #cv2.imwrite('testsinglesize_1024.png',img.numpy()[:,:,0])
 
         #fig = plt.figure()
 
@@ -86,13 +69,13 @@ def display(data,tokenizer=None):
 
         #plt.show()
     print('batch complete')
-    return toks#question_types
+    #return tok_len
 
 if __name__ == "__main__":
     if len(sys.argv)>1:
         dirPath = sys.argv[1]
     else:
-        dirPath = '../data/IAM'
+        dirPath = '../data/BenthamQA'
     if len(sys.argv)>2:
         start = int(sys.argv[2])
     else:
@@ -101,53 +84,43 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=iam_ner.IAMNER(dirPath=dirPath,split='test',config={
-        'rescale_range': [0.75,1],
-        '#rescale_range': [0.9,0.9],
+    data=bentham_qa.BenthamQA(dirPath=dirPath,split='train',config={
+        'batch_size':1,
+        #'gt_ocr': True,
+        'rescale_range':[0.9,1.1],
         'rescale_to_crop_size_first': True,
         'crop_params': {
-            "#crop_size":[960,1280],
             "crop_size":[768,768],
             "pad":0,
-            "rot_degree_std_dev": 1,
-            "#random": False
+            "rot_degree_std_dev": 1
             },
         'questions':1,
-        'full': True,
-        'class_first': True,
-        'cased': True,
-        "task": 6,
-        "eval_class_before": True,
-        "use_noise": 0.05
+        "image_size":[768,768],
+        "prefetch_factor": 5,
+        "persistent_workers": True,
+        "cased": True
 
 })
 
-    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False, num_workers=0, collate_fn=iam_ner.collate)
-    print('dataset size: {}'.format(len(dataLoader)))
+    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=bentham_qa.collate)
     dataLoaderIter = iter(dataLoader)
-
-    tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
-
+    #tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
         #if start==0:
         #display(data[0])
     for i in range(0,start):
         print(i)
         dataLoaderIter.next()
         #display(data[i])
-    max_tok_len=0
+    max_tok_len = 0
     try:
         question_types = defaultdict(int)
         while True:
             #print('?')
-            tok_len=display(dataLoaderIter.next(),tokenizer)
-            #for q in q_t:
-            #    question_types[q]+=1
-            #print('question_types:')
-            #print(question_types)
-            max_tok_len = max(tok_len,max_tok_len)
+            display(dataLoaderIter.next())
+            #max_tok_len = max(tok_len,max_tok_len)
     except StopIteration:
-        print('max token length {}'.format(max_tok_len))
+        print('max tok len: {}'.format(max_tok_len))
 
     #print('width mean: {}'.format(np.mean(widths)))
     #print('width std: {}'.format(np.std(widths)))
-    #print('width max: {}'.format(np.max(widths)).
+    #print('width max: {}'.format(np.max(widths)))

@@ -73,8 +73,21 @@ natural_q~_ED mean:0.48452313633422356,  std:0.6293027521905793
 E_ANLS mean:0.6405274921852738,  std:0.432247051142594
 
 ==============================================
-==DocVQA== (autoregressive)
+==DocVQA== 
 
+
+docvqa_mmswin_bart_PTfrom94ilatest_154 best
+ANLS = 0.475
+with fast beam: 0.4496
+
+docvqa_mmswin_bart_PTfrom73i219k_84 330k
+E_ANLS mean:0.444
+
+
+docvqa_mmswin_bart_PTfrom94ilatest_154 440000
+E_ANLS mean:0.475
+
+#It looks like all the old evaluations were actually done with teacherforcing
 docvqa_mmswin_bart_PTfrom73i219k_84 150000
 natural_q~_ED mean:0.45365528238795916,  std:0.4859999776214717
 E_ANLS mean:0.5231658977224071,  std:0.4136786186738585
@@ -116,8 +129,6 @@ docvqa_mmswin_bart_PTfrom98i87k_104 100000
 natural_q~_ED mean:0.39090575856778365,  std:0.44783577527008434
 E_ANLS mean:0.5676065432537071,  std:0.40684078770667953
 
-docvqa_mmswin_bart_PTfrom94ilatest_154 440000
-E_ANLS mean:0.4752
 
 ===========================================
 ==IAM NER===
@@ -268,6 +279,23 @@ old Total rel recall, prec, Fm: 0.409   0.311   0.353
 New Total rel recall, prec, Fm: 0.424   0.341   0.378
 
 JSON Eval ==============
+NEW LOSS EXP
+funsd_mmswin_bart_PTfrom94ilatest_242
+Total entity recall, prec, Fm:  0.564   0.703   0.626
+Total rel recall, prec, Fm:     0.376   0.581   0.456
+
+funsd_mmswin_bart_PTfrom94ilatest_242ALT
+Total entity recall, prec, Fm:  0.589   0.71    0.644
+Total rel recall, prec, Fm:     0.384   0.586   0.464
+
+funsd_mmswin_bart_unlik_PTfrom94ilatest_253
+Total entity recall, prec, Fm:  0.51    0.603   0.552
+Total rel recall, prec, Fm:     0.254   0.45    0.325
+
+funsd_mmswin_bart_unlikIm_PTfrom94ilatest_254
+Total entity recall, prec, Fm:  0.518   0.621   0.565
+Total rel recall, prec, Fm:     0.266   0.471   0.34
+
 NEW==
 funsd_mmswin_bart_PTfrom94ilatest_162 -L 0.5 -E 0.25
 Total entity recall, prec, Fm:  0.575   0.668   0.618

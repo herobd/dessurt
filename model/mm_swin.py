@@ -24,6 +24,8 @@ from testtest import PRINT_ATT,ATT_TEXT,attDisplay,NUMS
 import timeit
 
 BEAM_END_THRESH=0.05
+TOP_K = 5
+CHECK_ONLY_EVERY=15
 
 class MmSwin(BaseModel):
     def __init__(self,config):
@@ -294,7 +296,7 @@ class MmSwin(BaseModel):
     def forward(self,image,ocrRes,questions,answers=None,useCurvedBBs=False,RUN=False,get_tokens=False,distill=False,get_logits=False):
 
         time_log=defaultdict(int)
-        start_time = timeit.default_timer()
+        #start_time = timeit.default_timer()
 
 
         device = image.device
@@ -346,6 +348,7 @@ class MmSwin(BaseModel):
             a_t = self.tokenizer(answers,return_tensors="pt",padding=True)
             a_input_ids = a_t['input_ids']
             a_attention_mask = a_t['attention_mask']
+
         num_q = q_input_ids.size(1)
         num_a = a_input_ids.size(1)-1 #remove last SEP token
         qa_tokens = self.text_embedding(torch.cat((q_input_ids,a_input_ids[:,:-1]),dim=1).to(device))
@@ -427,8 +430,8 @@ class MmSwin(BaseModel):
             init_im_tokens = im_tokens
             init_a_tokens = a_tokens.requires_grad_()
 
-        time_log['setup']+=timeit.default_timer()-start_time
-        start_time = timeit.default_timer()
+        #time_log['setup']+=timeit.default_timer()-start_time
+        #start_time = timeit.default_timer()
 
         for i,(swin_layer, proj_d2i, autoregr_layer, proj_i2d, im_downsample, ocr_downsample, q_downsample) in enumerate(self.swin_layers):
 
@@ -483,8 +486,8 @@ class MmSwin(BaseModel):
                 all_att_mask = all_att_mask[:,-(num_im+num_q+num_a):,-(num_im+num_q+num_a):] #this is uniform except at the end (a), so we can just take the bottom slice of it
                 all_padding_mask = torch.cat( (im_padding_mask,q_padding_mask,a_padding_mask), dim=1)
 
-        time_log['swin layers']+=timeit.default_timer()-start_time
-        start_time = timeit.default_timer()
+        #time_log['swin layers']+=timeit.default_timer()-start_time
+        #start_time = timeit.default_timer()
 
         response = a_tokens
 
@@ -498,8 +501,8 @@ class MmSwin(BaseModel):
         else:
             out_mask = None
 
-        time_log['vis output']+=timeit.default_timer()-start_time
-        start_time = timeit.default_timer()
+        #time_log['vis output']+=timeit.default_timer()-start_time
+        #start_time = timeit.default_timer()
                     
         if RUN: #assuming batchsize of 1
             #Forward inference (answer not known)
@@ -531,14 +534,14 @@ class MmSwin(BaseModel):
                     saved_q_tokens[li] = saved_q_tokens[li].expand(num_beams,-1,-1)
                     saved_proj_im_tokens[li] = saved_proj_im_tokens[li].expand(num_beams,-1,-1)
 
-                #new_scores = []
+                #cur_scores = []
                 #response_decoded_cpu = response_decoded.cpu()
                 #for ti in range(response_decoded_cpu.size(2)):
-                #    new_scores.append((response_decoded_cpu[0,0,ti].item(),ti))
-                #new_scores.sort(key=lambda a:a[0],reverse=True)
+                #    cur_scores.append((response_decoded_cpu[0,0,ti].item(),ti))
+                #cur_scores.sort(key=lambda a:a[0],reverse=True)
 
-                #if new_scores[0][1] == self.SEP_TOKEN:
-                #    best_finish_score = new_scores[0][0]
+                #if cur_scores[0][1] == self.SEP_TOKEN:
+                #    best_finish_score = cur_scores[0][0]
                 #    best_done_tokens = [self.SEP_TOKEN]
                 #else:
                 #    best_finish_score = 999999999
@@ -547,30 +550,33 @@ class MmSwin(BaseModel):
                 #beam_sum_scores=[]
                 #output_tokens=[]
                 #response_discrete_token = torch.LongTensor(num_beams,1)
-                #for bi,(score,ti) in enumerate(new_scores[:num_beams]):
+                #for bi,(score,ti) in enumerate(cur_scores[:num_beams]):
                 #    beam_scores.append([score])
                 #    beam_sum_scores.append(score)
                 #    output_tokens.append([ti])
                 #    response_discrete_token[bi,0]=ti
-                new_scores,indices = torch.sort(response_decoded[0,0],descending=True)
-                prev_scores = new_scores[:num_beams]
+                cur_scores,indices = torch.sort(response_decoded[0,0],descending=True)
+                cur_scores = cur_scores[:num_beams]
                 indices = indices[:num_beams]
                 old_tis = indices
                 beam_scores = torch.FloatTensor(num_beams,max_pred_len).zero_().to(device)
-                beam_scores[:,0]=prev_scores
+                beam_scores[:,0]=cur_scores
                 response_discrete_token = old_tis[:,None]
-                output_tokens=[]
-                for new_bi,index in enumerate(indices):
-                    ti = indexes_t_cpu[index].item()
-                    output_tokens.append([ti])
+                #output_tokens=[]
+                #for new_bi,index in enumerate(indices):
+                #    ti = indexes_t_cpu[index].item()
+                #    output_tokens.append([ti])
+                output_tokens = torch.LongTensor(num_beams,max_pred_len).fill_(1).to(device)
+                output_tokens[:,0] = indices
 
                 if indices[0] == self.SEP_TOKEN:
-                    best_finish_score = new_scores[0]
+                    best_finish_score = cur_scores[0]
                     best_done_tokens = [self.SEP_TOKEN]
                 else:
                     #best_finish_score = -1
                     best_finish_score = torch.FloatTensor([-1])[0].to(device)
                     best_done_tokens=None
+                time_log['beam iter']=[]
 
             else:
                 response_discrete_token = response_decoded.argmax(dim=2)
@@ -579,10 +585,11 @@ class MmSwin(BaseModel):
 
             offset = 1
 
-            time_log['beam setup']+=timeit.default_timer()-start_time
+            #time_log['beam setup']+=timeit.default_timer()-start_time
 
 
             while (beam_search or output_tokens[-1] != self.SEP_TOKEN) and offset<max_pred_len:
+                start_time_iter=timeit.default_timer()
                 ans = self.text_embedding(response_discrete_token)
                 if self.a_pos_1d_enc is None:
                     ans += self.pos_enc_adapter(self.pos_1d_enc(ans.size(),past_key_values_length=num_q+offset))
@@ -590,8 +597,7 @@ class MmSwin(BaseModel):
                     ans = self.a_pos_1d_enc(ans,offset=offset)
                 num_a += 1
 
-                time_log['beam pos enc']+=timeit.default_timer()-start_time
-                start_time=timeit.default_timer()
+                #time_log['beam pos enc']+=timeit.default_timer()-start_time
 
 
                 level=0
@@ -622,101 +628,170 @@ class MmSwin(BaseModel):
                     if im_downsample is not None:
                         level+=1
                 #Done Swin (RUN)
-                time_log['beam layers']+=timeit.default_timer()-start_time
-                start_time=timeit.default_timer()
+                #time_log['beam layers']+=timeit.default_timer()-start_time
+                #start_time=timeit.default_timer()
 
                 response_decoded = self.answer_decode(ans)
                 response_decoded = F.softmax(response_decoded,dim=-1)#self.answer_softmax(response_decoded)
                 if get_tokens:
                     response_decoded_all = torch.cat((response_decoded_all,response_decoded),dim=1)
-                time_log['beam first decode']+=timeit.default_timer()-start_time
+                #time_log['beam first decode']+=timeit.default_timer()-start_time
                 start_time=timeit.default_timer()
 
                 if beam_search:
 
                     ###tensorized###
                     response_decoded =response_decoded[:,0]
-
-                    #First check if we have any good terminating sequences
-
-                    end_token_score = response_decoded[:,self.SEP_TOKEN]
-                    #start_time2=timeit.default_timer()
-                    finish_scores = torch.cat((beam_scores,end_token_score[:,None]),dim=1)
-                    #time_log['   beam finish cat']+=timeit.default_timer()-start_time2
-                    #start_time2=timeit.default_timer()
-                    finish_score = finish_scores.sum(dim=1)/(finish_scores!=0).sum(dim=1)
-                    #time_log['   beam finish sum']+=timeit.default_timer()-start_time2
-                    #start_time2=timeit.default_timer()
-                    top_finish_score, top_finish_bi = finish_score.max(dim=0)
-                    #time_log['   beam finish max']+=timeit.default_timer()-start_time2
-                    #start_time2=timeit.default_timer()
-
-                    if top_finish_score>best_finish_score:
-                        best_finish_score = top_finish_score
-                        best_done_tokens = output_tokens[top_finish_bi]+[self.SEP_TOKEN]
-                    #time_log['   beam finish update']+=timeit.default_timer()-start_time2
-
-                    #has_best = top_finish_score>best_finish_score
-                    #time_log['   beam comp']+=timeit.default_timer()-start_time2
-                    #start_time2=timeit.default_timer()
-                    #has_best = has_best.cpu()
-                    #time_log['   beam bool cpu']+=timeit.default_timer()-start_time2
-                    #if has_best:
-                    #    start_time2=timeit.default_timer()
-                    #    best_finish_score = top_finish_score
-                    #    time_log['   beam assign']+=timeit.default_timer()-start_time2
-                    #    start_time2=timeit.default_timer()
-                    #    best_done_tokens = output_tokens[top_finish_bi]+[self.SEP_TOKEN]
-                    #    time_log['   beam cat']+=timeit.default_timer()-start_time2
-
-
-
-
-                    start_time2=timeit.default_timer()
-                    response_decoded[:,self.SEP_TOKEN]=response_decoded.min() #we shouldn't follow paths after end token
-                    time_log['    beam clear']+=timeit.default_timer()-start_time2
-                    time_log['beam finish check']+=timeit.default_timer()-start_time
+                        
+                    ###W#New beam #######
                     start_time=timeit.default_timer()
 
-                    new_scores = response_decoded+prev_scores[:,None]
-                    new_scores = new_scores.view(-1)
-                    new_scores,indices = torch.sort(new_scores,descending=True)
+                    cur_scores = response_decoded+cur_scores[:,None]
+                    cur_scores = cur_scores.view(-1)
+                    
+                    cur_scores,indices = torch.sort(cur_scores,descending=True)
+                    cur_scores = cur_scores[:num_beams]
+                    indices = indices[:num_beams]
+
+                    ##bubble sort 
+                    #cur_scores_a = []
+                    #indices = []
+                    #for i in range(num_beams):
+                    #    top,index = cur_scores.max(dim=0)
+                    #    cur_scores_a.append(top[None])
+                    #    indices.append(index[None])
+                    #    #cur_scores[index]=-999
+                    #    cur_scores = torch.cat((cur_scores[:index],cur_scores[index+1:]))
+                    #cur_scores = torch.cat(cur_scores_a)
+                    #indices = torch.cat(indices)
 
                     time_log['beam sort']+=timeit.default_timer()-start_time
                     start_time=timeit.default_timer()
 
-                    prev_scores = new_scores[:num_beams]
-                    indices = indices[:num_beams]
-                    old_bis = indexes_b[indices]
-                    old_tis = indexes_t[indices]
+                    start_time2=timeit.default_timer()
+                    ordered_bis = indexes_b[indices]
+                    ordered_tis = indexes_t[indices]
+                    time_log['   prep indices']+=timeit.default_timer()-start_time2
+                    start_time2=timeit.default_timer()
                     for li in range(len(saved_a_tokens)):
-                        saved_a_tokens[li]=saved_a_tokens[li][old_bis]
-                    beam_scores=beam_scores[old_bis]
-                    beam_scores[:,offset]=response_decoded[old_bis,old_tis]
-                    response_discrete_token[:,0] = old_tis
-                    new_output_tokens=[]
-                    for new_bi,index in enumerate(indices):
-                        bi = indexes_b_cpu[index].item()
-                        ti = indexes_t_cpu[index].item()
-                        new_output_tokens.append(output_tokens[bi]+[ti])
+                        saved_a_tokens[li]=saved_a_tokens[li][ordered_bis]
+                    time_log['   prep update saved']+=timeit.default_timer()-start_time2
+                    start_time2=timeit.default_timer()
+                    
+                    beam_scores=beam_scores[ordered_bis]
+                    beam_scores[:,offset]=response_decoded[ordered_bis,ordered_tis]
+                    time_log['   prep update scores']+=timeit.default_timer()-start_time2
+                    start_time2=timeit.default_timer()
 
-                    output_tokens = new_output_tokens
-                    best_beam_score = beam_scores[0].sum()/(beam_scores[0]!=0).sum()
+                    response_discrete_token[:,0] = ordered_tis
+                    time_log['   prep update discrete']+=timeit.default_timer()-start_time2
+                    start_time2=timeit.default_timer()
+                    #new_output_tokens=[]
+                    #for new_bi,index in enumerate(indices):
+                    #    bi = indexes_b_cpu[index].item()
+                    #    ti = indexes_t_cpu[index].item()
+                    #    new_output_tokens.append(output_tokens[bi]+[ti])
+                    output_tokens = output_tokens[ordered_bis]
+                    output_tokens[:,offset]=ordered_tis
+                    time_log['   prep update outpu tokens']+=timeit.default_timer()-start_time2
+
+
+                    time_log['beam prep next']+=timeit.default_timer()-start_time
+                    start_time=timeit.default_timer()
+
+                    if offset%CHECK_ONLY_EVERY==CHECK_ONLY_EVERY-1 and (output_tokens[:TOP_K]==self.SEP_TOKEN).any():
+                        for k in range(TOP_K):
+                            if (output_tokens[k]==self.SEP_TOKEN).any():
+                                output_tokens[0]==output_tokens[k]
+                                #best_beam_score = beam_scores[k].sum()/(beam_scores[k]!=0).sum()
+                                break
+                        break
+                    time_log['beam check']+=timeit.default_timer()-start_time
+
+
+                    #############
+                    ##OLD
+
+                    ##First check if we have any good terminating sequences
+
+                    #end_token_score = response_decoded[:,self.SEP_TOKEN]
+                    ##start_time2=timeit.default_timer()
+                    #finish_scores = torch.cat((beam_scores,end_token_score[:,None]),dim=1)
+                    ##time_log['   beam finish cat']+=timeit.default_timer()-start_time2
+                    ##start_time2=timeit.default_timer()
+                    #finish_score = finish_scores.sum(dim=1)/(finish_scores!=0).sum(dim=1)
+                    ##time_log['   beam finish sum']+=timeit.default_timer()-start_time2
+                    ##start_time2=timeit.default_timer()
+                    #top_finish_score, top_finish_bi = finish_score.max(dim=0)
+                    ##time_log['   beam finish max']+=timeit.default_timer()-start_time2
+                    ##start_time2=timeit.default_timer()
+
+                    #if top_finish_score>best_finish_score:
+                    #    best_finish_score = top_finish_score
+                    #    best_done_tokens = output_tokens[top_finish_bi]+[self.SEP_TOKEN]
+                    ##time_log['   beam finish update']+=timeit.default_timer()-start_time2
+
+                    ##has_best = top_finish_score>best_finish_score
+                    ##time_log['   beam comp']+=timeit.default_timer()-start_time2
+                    ##start_time2=timeit.default_timer()
+                    ##has_best = has_best.cpu()
+                    ##time_log['   beam bool cpu']+=timeit.default_timer()-start_time2
+                    ##if has_best:
+                    ##    start_time2=timeit.default_timer()
+                    ##    best_finish_score = top_finish_score
+                    ##    time_log['   beam assign']+=timeit.default_timer()-start_time2
+                    ##    start_time2=timeit.default_timer()
+                    ##    best_done_tokens = output_tokens[top_finish_bi]+[self.SEP_TOKEN]
+                    ##    time_log['   beam cat']+=timeit.default_timer()-start_time2
+
+
+
+
+                    ##start_time2=timeit.default_timer()
+                    #response_decoded[:,self.SEP_TOKEN]=response_decoded.min() #we shouldn't follow paths after end token
+                    ##time_log['    beam clear']+=timeit.default_timer()-start_time2
+                    #time_log['beam finish check']+=timeit.default_timer()-start_time
+                    #start_time=timeit.default_timer()
+
+                    #cur_scores = response_decoded+cur_scores[:,None]
+                    #cur_scores = cur_scores.view(-1)
+                    #cur_scores,indices = torch.sort(cur_scores,descending=True)
+
+                    #time_log['beam sort']+=timeit.default_timer()-start_time
+                    #start_time=timeit.default_timer()
+
+                    #cur_scores = cur_scores[:num_beams]
+                    #indices = indices[:num_beams]
+                    #old_bis = indexes_b[indices]
+                    #old_tis = indexes_t[indices]
+                    #for li in range(len(saved_a_tokens)):
+                    #    saved_a_tokens[li]=saved_a_tokens[li][old_bis]
+                    #beam_scores=beam_scores[old_bis]
+                    #beam_scores[:,offset]=response_decoded[old_bis,old_tis]
+                    #response_discrete_token[:,0] = old_tis
+                    #new_output_tokens=[]
+                    #for new_bi,index in enumerate(indices):
+                    #    bi = indexes_b_cpu[index].item()
+                    #    ti = indexes_t_cpu[index].item()
+                    #    new_output_tokens.append(output_tokens[bi]+[ti])
+
+                    #output_tokens = new_output_tokens
+                    #best_beam_score = beam_scores[0].sum()/(beam_scores[0]!=0).sum()
 
                     #time_log['beam prep next']+=timeit.default_timer()-start_time
                     #start_time=timeit.default_timer()
 
-                    ###
+                    ####
 
 
-                    #final_str = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(best_done_tokens,skip_special_tokens=True))
-                    #print('best finish {} : {}'.format(best_finish_score,final_str))
-                    #final_str = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(output_tokens[0],skip_special_tokens=True))
-                    #print('best beam {} : {}'.format(best_beam_score,final_str))
+                    ##final_str = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(best_done_tokens,skip_special_tokens=True))
+                    ##print('best finish {} : {}'.format(best_finish_score,final_str))
+                    ##final_str = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(output_tokens[0],skip_special_tokens=True))
+                    ##print('best beam {} : {}'.format(best_beam_score,final_str))
 
-                    #print(f'finish vs best = {best_finish_score-best_beam_score} (positive means finish is best)')
-                    if best_finish_score-best_beam_score > BEAM_END_THRESH and offset>5:
-                        break
+                    ##print(f'finish vs best = {best_finish_score-best_beam_score} (positive means finish is best)')
+                    #if best_finish_score-best_beam_score > BEAM_END_THRESH and offset>5:
+                    #    break
 
                 else:
                     response_discrete_token = response_decoded.argmax(dim=2)
@@ -726,19 +801,30 @@ class MmSwin(BaseModel):
                     output_tokens.append(response_discrete_token[0,0].item())
                 #print('next token: {}'.format(output_tokens[-1]))
                 offset += 1
+                
+                if beam_search:
+                    time_log['beam iter'].append(timeit.default_timer()-start_time_iter)
 
                 #print('time {}'.format(timeit.default_timer()-time))
 
             if beam_search:
-                if best_beam_score > best_finish_score:
-                    output_tokens = output_tokens[0]
-                else:
-                    output_tokens = best_done_tokens
+                #if best_beam_score > best_finish_score:
+                #    output_tokens = output_tokens[0]
+                #else:
+                #    output_tokens = best_done_tokens
+                output_tokens = output_tokens[0].cpu()
+                stop_spots = (output_tokens==self.SEP_TOKEN).nonzero(as_tuple=True)[0]
+                if len(stop_spots)>0:
+                    output_tokens[stop_spots[0]+1:] = 1 #clear predictions after stop
+
 
             
             final_str = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(output_tokens,skip_special_tokens=True))
             #print('FINISHED, FINAL PRED = '+final_str)
+            #print('Mean iter time = {}'.format(np.mean(time_log['beam iter'])))
             #for name,time in time_log.items():
+            #    if name=='beam iter':
+            #        continue
             #    print(f'{name}: {time}')
             
             if PRINT_ATT:
