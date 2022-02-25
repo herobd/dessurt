@@ -772,6 +772,7 @@ class QATrainer(BaseTrainer):
                     if answer==pred:
                         log['E_class_acc'].append(1)
                     else:
+                        import pdb;pdb.set_trace()
                         log['E_class_acc'].append(0)
                 elif question.startswith('record~'):
                     ed = editdistance.eval(answer,pred)
