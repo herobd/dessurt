@@ -15,7 +15,7 @@ from trainer import QATrainer
 logging.basicConfig(level=logging.INFO, format='')
 
 
-def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, config=None, thresh=None, addToConfig=None, test=False,verbose=2,run=False,smaller_set=False,eval_full=None):
+def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, config=None, thresh=None, addToConfig=None, test=False,verbose=2,run=False,smaller_set=False,eval_full=None,ner_do_before=False):
     assert run
     random.seed(1234)
     np.random.seed(1234)
@@ -190,6 +190,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     "full": config['data_loader'].get('full',False),
                     "cased": config['data_loader'].get('cased',False),
                     "task": config['data_loader'].get('task',6),
+                    "eval_class_before": ner_do_before,
                     "eval_full": not test if eval_full is None else eval_full,
                     "rescale_to_crop_size_first": True,
                     "rescale_range": [
@@ -246,6 +247,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
         print('ERROR, unknown dataset: {}'.format(data_set_name))
         exit(1)
     
+    print('getting data ready')
     data_loader, valid_data_loader = getDataLoader(data_config,'train' if not test else 'test')
 
     if test:
@@ -274,16 +276,18 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
     if 'distributed' in config:
         del config['distributed']
     trainer = QATrainer(model,{},None,resume,config,data_loader,valid_data_loader)
+    print('go!')
 
     #data_iter = iter(data_loader)
     metrics = defaultdict(list)
     with torch.no_grad():
 
-        for index,instance in enumerate(valid_data_loader):
-            #if index==10:
-            #    break
+        index=0
+        for instance in valid_data_loader:
             if verbose:
                 print('batch index: {}/{}'.format(index,len(valid_data_loader)),end='\r')
+            elif data_set_name=='RVL' and index%100==0:
+                print('batch index: {}/{}'.format(index,len(valid_data_loader)))
             _,res,_ = trainer.run(instance,valid=True,run=run)
 
             for name,value in res.items():
@@ -292,6 +296,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                         metrics[name]+=value
                     else:
                         metrics[name].append(value)
+            index+=1
     F_measure_prec={}
     F_measure_recall={}
     for name,values in metrics.items():
@@ -333,7 +338,7 @@ if __name__ == '__main__':
                         help='number of images to save out (from each train and valid) (default: 0)')
     parser.add_argument('-g', '--gpu', default=None, type=int,
                         help='gpu number (default: cpu only)')
-    parser.add_argument('-b', '--batchsize', default=None, type=int,
+    parser.add_argument('-B', '--batchsize', default=None, type=int,
                         help='gpu number (default: cpu only)')
     parser.add_argument('-s', '--shuffle', default=False, type=bool,
                         help='shuffle data')
@@ -355,6 +360,10 @@ if __name__ == '__main__':
                         help='How much stuff to print [0,1,2] (default: 2)')
     parser.add_argument('-F', '--eval_full', default=None, type=bool,
                         help='for iamNER, whether to do whole doc (instead of lines)')
+    parser.add_argument('-b', '--beam_search', default=False, type=int,
+                        help='number of beams')
+    parser.add_argument('-N', '--ner_do_before', default=False, action='store_const', const=True,
+                        help='do NER evaluation backwards')
 
     args = parser.parse_args()
 
@@ -370,10 +379,15 @@ if __name__ == '__main__':
         print('Must provide checkpoint (with -c)')
         exit()
 
+    if args.beam_search:
+        run = 'beam{}'.format(args.beam_search)
+    else:
+        run = args.autoregressive
+
     #if args.index is None and args.imgname is not None:
     #    index = args.imgname
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=args.autoregressive,smaller_set=args.smaller_set,eval_full=args.eval_full)
+            main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=run,smaller_set=args.smaller_set,eval_full=args.eval_full,ner_do_before=args.ner_do_before)
     else:
-        main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=args.autoregressive,smaller_set=args.smaller_set,eval_full=args.eval_full)
+        main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=run,smaller_set=args.smaller_set,eval_full=args.eval_full,ner_do_before=args.ner_do_before)
