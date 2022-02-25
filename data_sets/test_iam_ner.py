@@ -101,7 +101,7 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=iam_ner.IAMNER(dirPath=dirPath,split='train',config={
+    data=iam_ner.IAMNER(dirPath=dirPath,split='test',config={
         'rescale_range': [0.75,1],
         '#rescale_range': [0.9,0.9],
         'rescale_to_crop_size_first': True,
@@ -117,6 +117,7 @@ if __name__ == "__main__":
         'class_first': True,
         'cased': True,
         "task": 6,
+        "eval_class_before": True,
         "use_noise": 0.05
 
 })

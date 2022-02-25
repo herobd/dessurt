@@ -693,10 +693,18 @@ def fixLoadJSON(pred):
                                 #find opening quote
                                 open_quote = rfindNonEscaped(pred[:char-1],'"')
                                 bracket = pred[:open_quote].rfind('{')
-                                colon = pred[:open_quote].rfind(':')
+                                colon = open_quote
                             else:
                                 bracket = pred[:char-1].rfind('{')
-                                colon = pred[:char-1].rfind(':')
+                                colon = char-1
+                            
+                            #There can be colons in strings, but it's unlikely a string starts with colon, so just be sure there's an (unescaped) quote before it
+                            colons = [m.end()-1 for m in re.finditer(r'[^\\]":',pred[:colon])]
+                            if len(colons)==0:
+                                colon=-1
+                            else:
+                                colon = colons[-1]
+
                             if bracket>colon:
                                 #this is missing the class prediction
                                 pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'add just class')
@@ -712,6 +720,8 @@ def fixLoadJSON(pred):
 
                                 assert close_quote!=-1
                                 close_quote += open_quote+1
+
+                                assert close_quote<char
 
                                 pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'remove thing: {}'.format(pred[close_quote+1:char]))
                                 pred =pred[:close_quote+1]+pred[char:] #REMOVE
@@ -1100,7 +1110,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='007540939_00029'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='92327794'):
                 continue
             going_DEBUG=True
 
