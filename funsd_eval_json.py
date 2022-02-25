@@ -205,7 +205,7 @@ def fixLoadJSON(pred):
     pred_chars=[-1]
     try: 
         while pred_data is None:
-            if len(pred)>start_len+320 or counter==0:
+            if len(pred)>start_len+1020 or counter==0:
                 #assert False
                 import pdb;pdb.set_trace()
             pred = pred.replace(',,',',')
@@ -506,7 +506,7 @@ def fixLoadJSON(pred):
                     elif char==len(pred)-1 and pred[char]!='"':
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'(2nd) blank string')
                         pred+='""'
-                    elif pred[char]=='}' and pred[:char].rfind('{')<pred[:char].rfind('}'):
+                    elif pred[char]=='}' and pred[:char].rfind('{')<=pred[:char].rfind('}'):
                         #random extra close curelybrace
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'remove extra close curley')
                         pred = pred[:char]+pred[char+1:]
@@ -632,7 +632,11 @@ def fixLoadJSON(pred):
                     elif pred[char]!=']' and pred[char]!='[' and pred[char]!='{' and pred[char]!='}' and pred[char]!=':' and pred[char]!=',':
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open quote(just for anything really)')
                         pred=pred[:char]+'"'+pred[char:] 
-                            
+                    
+                    elif pred[char]==',':
+                        #remove it
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'removing comma (wants value)')
+                        pred=pred[:char]+pred[char+1:] 
                     else:
                         assert False
 
