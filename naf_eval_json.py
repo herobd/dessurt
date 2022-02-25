@@ -558,29 +558,29 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             #Break all entities into individual ones, and redo linking
             pred_entities,pred_links = breakIntoLines(pred_entities,pred_links)
 
+            if len(pred_entities)>0:
+                #we're going to do a check for repeats of the last entity. This frequently happens
+                last_entity = pred_entities[-1]
+                remove = None
+                entities_with_link = None
+                for i in range(len(pred_entities)-2,0,-1):
+                    if pred_entities[i].text==last_entity.text and pred_entities[i].cls==last_entity.cls:
+                        if entities_with_link is None:
+                            entities_with_link = set()
+                            for a,b in pred_links:
+                                entities_with_link.add(a)
+                                entities_with_link.add(b)
 
-            #we're going to do a check for repeats of the last entity. This frequently happens
-            last_entity = pred_entities[-1]
-            remove = None
-            entities_with_link = None
-            for i in range(len(pred_entities)-2,0,-1):
-                if pred_entities[i].text==last_entity.text and pred_entities[i].cls==last_entity.cls:
-                    if entities_with_link is None:
-                        entities_with_link = set()
-                        for a,b in pred_links:
-                            entities_with_link.add(a)
-                            entities_with_link.add(b)
-
-                    if i not in entities_with_link:
-                        remove=i+1
+                        if i not in entities_with_link:
+                            remove=i+1
+                        else:
+                            break
                     else:
                         break
-                else:
-                    break
-            if remove is not None:
-                if not quiet:
-                    print('removing duplicate end entities: {}'.format(pred_entities[remove:]))
-                    pred_entities = pred_entities[:remove]
+                if remove is not None:
+                    if not quiet:
+                        print('removing duplicate end entities: {}'.format(pred_entities[remove:]))
+                        pred_entities = pred_entities[:remove]
                 
             #align entities to GT ones
             #pred_to_gt={}
