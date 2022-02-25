@@ -149,6 +149,7 @@ def getFormData(model,img,tokenizer,quiet=False,beam_search=False):
             print('CONT:: '+answer)
         len_before = len(answer)
         answer = answer.replace('ø[question]','')
+        answer = answer.replace('[question]ø','')
         answer = derepeat(answer)
         len_after = len(answer)
 
@@ -296,7 +297,7 @@ def fixLoadJSON(pred):
                             pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'removing double colon/value')
                             pred = pred[:char-1]+pred[close_curly:]
                     elif pred[char]==']' and pred[char-1]=='"':
-                        assert pred[:char-1].rfind('[')<pred[:char-1].rfind('{')
+                        #assert pred[:char-1].rfind('[')<pred[:char-1].rfind('{')
                         if char==len(pred)-1 and pred[char]==']' and pred[char-1]=='"':
                             #missing }?
                             pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'closing object (end of doc)')
@@ -381,7 +382,11 @@ def fixLoadJSON(pred):
                                 if close_curly>next_quote:
                                     pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'added a colon')
                                     pred=pred[:char]+':"'+pred[char:]
+                                elif pred[char]!='[' and pred[char]!=']' and pred[char]!='{' and pred[char]!='}' and pred[char]!=':' and pred[char]!=',':
+                                    pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'remove the quote (merge) blindly')
+                                    pred=pred[:char-1]+pred[char:]
                                 else:
+
                                     assert False
 
                     elif pred[char]=='{' and (pred[char-1]=='}' or pred[char-2]=='}'):
@@ -474,7 +479,9 @@ def fixLoadJSON(pred):
                         else:
                             assert  False
                     else:
-                        assert False
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'well, it asked for a comma')
+                        pred = pred[:char]+','+pred[char:]
+                        #assert False
                 elif 'Unterminated string starting at' in typ:
                     pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'close quote')
                     pred+='"'
@@ -523,6 +530,17 @@ def fixLoadJSON(pred):
                     elif ',' == pred[char-1]:
                         next_quote = findNonEscaped(pred[char:],'"')
                         if next_quote!=-1:
+                            bracket_close = pred[char:].find(']')
+                            if bracket_close!=-1:
+                                bracket_close+=char
+                            else:
+                                bracket_close=9999999
+                            curley_close = pred[char:].find('}')
+                            if curley_close!=-1:
+                                curley_close+=char
+                            else:
+                                curley_close=9999999
+                            end = min(bracket_close,curley_close)
                             quote_locations=[]
                             in_quote=False
                             escaped=False
@@ -541,6 +559,10 @@ def fixLoadJSON(pred):
                                 #forgot open quote. Add it
                                 pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open quote')
                                 pred=pred[:char]+'"'+pred[char:]
+                            if char>len(pred)-6:
+                                #just cut it
+                                pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'removing bad end')
+                                pred=pred[:char]
                             else:
                                 assert False
                         else:
@@ -548,6 +570,9 @@ def fixLoadJSON(pred):
                     elif pred[char:].startswith('question"') or pred[char:].startswith('answer"') or pred[char:].startswith('other"') and (pred[char-1]==':' or pred[char-2]==':' ): 
                         #missed open quote
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open quote2')
+                        pred=pred[:char]+'"'+pred[char:] 
+                    elif pred[char]!=']' and pred[char]!='[' and pred[char]!='{' and pred[char]!='}' and pred[char]!=':' and pred[char]!=',':
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open quote(just for anything really)')
                         pred=pred[:char]+'"'+pred[char:] 
                     else:
                         assert False
@@ -1015,7 +1040,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='83624198'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='87125460'):
                 continue
             going_DEBUG=True
 
@@ -1089,12 +1114,12 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             for thing in pred_data[::-1]: #build pred_entities in reverse
                 if isinstance(thing,dict):
                     parseDict(thing,pred_entities,pred_links)
-                elif thing=='':
-                    pass
-                else:
-                    print('non-dict at document level: {}'.format(thing))
-                    assert False
-                    #import pdb;pdb.set_trace()
+                #elif thing=='':
+                #    pass
+                #else:
+                #    print('non-dict at document level: {}'.format(thing))
+                #    assert False
+                #    #import pdb;pdb.set_trace()
 
 
             #we're going to do a check for repeats of the last entity. This frequently happens
