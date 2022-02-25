@@ -35,6 +35,7 @@ class IAMNER(QADataset):
         if self.full:
             assert self.cased
         self.eval_full = config.get('eval_full',True)
+        self.eval_class_before = config.get('eval_class_before',True)
 
         task = config['task'] if 'task' in config else 6
 
@@ -135,6 +136,8 @@ class IAMNER(QADataset):
 
         if self.full:
             class_after = (not self.train) or random.random()<0.5 or (not self.class_first)
+            if self.eval_class_before and not self.train:
+                class_after=False
             if (self.eval_full and not self.train) or (self.train and random.random()<0.5):
                 q='ner_full>' if class_after else 'ner_full_c1>'
                 corrupt_a=[]
