@@ -182,11 +182,15 @@ def parseDict(ent_dict,entities,links):
                 is_table=True
                 cells = value
     if not is_table:
-        my_id=len(entities)
-        entities.append(Entity(my_text,my_class,my_id))
-        for other_id in to_link:
-            links.append((my_id,other_id))
-        return_ids.append(my_id)
+        if my_text is not None:
+            my_id=len(entities)
+            entities.append(Entity(my_text,my_class,my_id))
+            for other_id in to_link:
+                links.append((my_id,other_id))
+            return_ids.append(my_id)
+        else:
+            return_ids+=to_link
+            my_id=None
 
         prev_id=my_id
         for my_text,my_class,to_link in reversed(prose):
@@ -194,7 +198,8 @@ def parseDict(ent_dict,entities,links):
             entities.append(Entity(my_text,my_class,my_id))
             for other_id in to_link:
                 links.append((my_id,other_id))
-            links.append((my_id,prev_id))
+            if prev_id is not None:
+                links.append((my_id,prev_id))
             return_ids.append(my_id)
             prev_id = my_id
     else:
@@ -469,7 +474,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='007486024_00025'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='007270209_00003'):
                 continue
             going_DEBUG=True
 
@@ -542,11 +547,11 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             for thing in pred_data[::-1]: #build pred_entities in reverse
                 if isinstance(thing,dict):
                     parseDict(thing,pred_entities,pred_links)
-                elif thing=='':
-                    pass
-                else:
-                    print('non-dict at document level: {}'.format(thing))
-                    assert False
+                #elif thing=='':
+                #    pass
+                #else:
+                #    print('non-dict at document level: {}'.format(thing))
+                #    assert False
                     #import pdb;pdb.set_trace()
 
             #New addition for NAF

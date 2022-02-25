@@ -142,11 +142,14 @@ def getFormData(model,img,tokenizer,quiet=False,beam_search=False):
 
 
         question = 'json~'+prompt
+        answer,out_mask = model(img,None,[[question]],RUN=True)
         answer,out_mask = model(img,None,[[question]],RUN=True if not beam_search else f'beam{beam_search}')
         total_char_pred += len(answer)
         if not quiet:
             print('CONT:: '+answer)
         len_before = len(answer)
+        answer = answer.replace('ø[question]','')
+        answer = answer.replace('[question]ø','')
         answer = derepeat(answer)
         len_after = len(answer)
 
@@ -154,6 +157,7 @@ def getFormData(model,img,tokenizer,quiet=False,beam_search=False):
             break #bad repeating going on
         
         #find overlapping region
+        #import pdb;pdb.set_trace()
         OVERLAP_THRESH=0.3
         best_ed=OVERLAP_THRESH
         perfect_match=False
@@ -202,8 +206,8 @@ def fixLoadJSON(pred):
     try: 
         while pred_data is None:
             if len(pred)>start_len+320 or counter==0:
-                assert False
-                #import pdb;pdb.set_trace()
+                #assert False
+                import pdb;pdb.set_trace()
             pred = pred.replace(',,',',')
             pred = pred.replace('{{','{')
             try:
@@ -229,7 +233,7 @@ def fixLoadJSON(pred):
                 last_len = len(pred)
                 
                 if "Expecting ',' delimiter" in typ:
-                    if char==len(pred):
+                    if char==len(pred) or (char==len(pred)-1 and pred[char]==']'):
                         #closing ] or }?
                         #bracket = pred.rfind('[')
                         #curley = pred.rfind('{')
@@ -272,7 +276,7 @@ def fixLoadJSON(pred):
                                         #is fill-in-prose
                                         close_quote_b = rfindNonEscaped(pred[:bracket],'"')
                                         open_quote_b = rfindNonEscaped(pred[:close_quote_b],'"')
-                                        assert pred[open_quote_b+1:close_quote_b]=='answers'
+                                        #assert pred[open_quote_b+1:close_quote_b]=='answers'
                                         close_bracket = pred[char:].find(']')
                                         close_curley = pred[char:].find('}')
                                         if close_bracket<close_curley:
@@ -294,7 +298,7 @@ def fixLoadJSON(pred):
                             pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'removing double colon/value')
                             pred = pred[:char-1]+pred[close_curly:]
                     elif pred[char]==']' and pred[char-1]=='"':
-                        assert pred[:char-1].rfind('[')<pred[:char-1].rfind('{')
+                        #assert pred[:char-1].rfind('[')<pred[:char-1].rfind('{')
                         if char==len(pred)-1 and pred[char]==']' and pred[char-1]=='"':
                             #missing }?
                             pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'closing object (end of doc)')
@@ -379,7 +383,17 @@ def fixLoadJSON(pred):
                                 if close_curly>next_quote:
                                     pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'added a colon')
                                     pred=pred[:char]+':"'+pred[char:]
+                                elif (pred[char-2]==',' or pred[char-3]==',') and (pred[char-3]=='"' or pred[char-4]=='"'):
+                                    #missed closequote?
+                                    comma = pred[:char].rfind(',')
+                                    pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'added a quote, dfd')
+                                    pred=pred[:comma]+'"'+pred[comma:]
+                                elif pred[char]!='[' and pred[char]!=']' and pred[char]!='{' and pred[char]!='}' and pred[char]!=':' and pred[char]!=',':
+                                    pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'remove the quote (merge) blindly')
+                                    pred=pred[:char-1]+pred[char:]
+
                                 else:
+
                                     assert False
 
                     elif pred[char]=='{' and (pred[char-1]=='}' or pred[char-2]=='}'):
@@ -472,7 +486,9 @@ def fixLoadJSON(pred):
                         else:
                             assert  False
                     else:
-                        assert False
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'well, it asked for a comma')
+                        pred = pred[:char]+','+pred[char:]
+                        #assert False
                 elif 'Unterminated string starting at' in typ:
                     pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'close quote')
                     pred+='"'
@@ -520,20 +536,106 @@ def fixLoadJSON(pred):
                             assert False
                     elif ',' == pred[char-1]:
                         next_quote = findNonEscaped(pred[char:],'"')
-                        assert next_quote!=-1
-                        next_quote+=char
-                        if ','==pred[next_quote+1] or ']'==pred[next_quote+1] or '}'==pred[next_quote+1]:
-                            #forgot open quote. Add it
-                            pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open quote')
-                            pred=pred[:char]+'"'+pred[char:]
+                        if next_quote!=-1:
+                            bracket_close = pred[char:].find(']')
+                            if bracket_close!=-1:
+                                bracket_close+=char
+                            else:
+                                bracket_close=9999999
+                            curley_close = pred[char:].find('}')
+                            if curley_close!=-1:
+                                curley_close+=char
+                            else:
+                                curley_close=9999999
+                            end = min(bracket_close,curley_close)
+                            quote_locations=[]
+                            in_quote=False
+                            escaped=False
+                            for c in range(char,end):
+                                if not escaped and pred[c]=='"':
+                                    quote_locations.append(c)
+                                    in_quote = not in_quote
+                                elif not in_quote and pred[c]==',':
+                                    break
+                                elif not escaped and pred[c]=='\\':
+                                    escaped=True
+                                else:
+                                    escaped=False
+                            next_quote+=char
+                            if ','==pred[next_quote+1] or ']'==pred[next_quote+1] or '}'==pred[next_quote+1]:
+                                #forgot open quote. Add it
+                                pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open quote')
+                                pred=pred[:char]+'"'+pred[char:]
+                            if char>len(pred)-6:
+                                #just cut it
+                                pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'removing bad end')
+                                pred=pred[:char]
+                            else:
+                                assert False
                         else:
                             assert False
                     elif pred[char:].startswith('question"') or pred[char:].startswith('answer"') or pred[char:].startswith('other"') and (pred[char-1]==':' or pred[char-2]==':' ): 
                         #missed open quote
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open quote2')
                         pred=pred[:char]+'"'+pred[char:] 
+
+                    elif pred[char-1]==':' or (pred[char-1]==' ' and pred[char-2]==':'):
+                        bracket_close = pred[char:].find(']')
+                        if bracket_close!=-1:
+                            bracket_close+=char
+                        else:
+                            bracket_close=9999999
+                        curley_close = pred[char:].find('}')
+                        if curley_close!=-1:
+                            curley_close+=char
+                        else:
+                            curley_close=9999999
+                        end = min(bracket_close,curley_close,len(pred))
+                        quote_locations=[]
+                        in_quote=True
+                        escaped=False
+                        signature=''
+                        for c in range(char,end):
+                            if not escaped and pred[c]=='"':
+                                quote_locations.append(c)
+                                in_quote = not in_quote
+                                signature+='"'
+                            elif not in_quote and pred[c]==',':
+                                break
+                            elif not in_quote and pred[c]==':':
+                                signature+=':'
+                            elif not escaped and pred[c]=='\\':
+                                escaped=True
+                            else:
+                                escaped=False
+                        if len(quote_locations)==1 and signature[0]=='"':
+                            pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open quote (obj)')
+                            pred=pred[:char]+'"'+pred[char:]
+                        elif signature[:3]=='":"':
+                            #merge this with prev string
+                            close_quote = pred[:char].rfind('"')
+                            pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'merging/appending to strings')
+                            pred=pred[:close_quote]+pred[char:]
+                        else:
+                            colon = pred[:char].rfind(':')
+                            end_prev_quote = rfindNonEscaped(pred[:colon],'"')
+                            open_prev_quote = rfindNonEscaped(pred[:end_prev_quote],'"')
+                            prev_thing = pred[open_prev_quote+1:end_prev_quote]
+                            if prev_thing in ['answers','column headers',' row headers','content']:
+                                assert False
+                            else:
+                                pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open quote (Should be a string)')
+                                pred=pred[:char]+'"'+pred[char:]
+                                
+                                
+
+                    elif pred[char]!=']' and pred[char]!='[' and pred[char]!='{' and pred[char]!='}' and pred[char]!=':' and pred[char]!=',':
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open quote(just for anything really)')
+                        pred=pred[:char]+'"'+pred[char:] 
+                            
                     else:
                         assert False
+
                 elif "Expecting ';' delimiter" in typ:
                     if char==len(pred):
                         #what things have colon? class, answers, content
@@ -705,10 +807,13 @@ def parseDict(header,entities,links):
             if not isinstance(value,list):
                 value=[value]
             for a in reversed(value):
-                assert isinstance(a,str)
-                a_id=len(entities)
-                entities.append(Entity(a,'answer',a_id))
-                to_link.append(a_id)
+                if isinstance(a,str):
+                    a_id=len(entities)
+                    entities.append(Entity(a,'answer',a_id))
+                    to_link.append(a_id)
+                else:
+                    assert isinstance(a,dict)
+                    to_link+=parseDict(a,entities,links)
         elif text=='row headers':
             assert isinstance(value,list)
             row_headers = value
@@ -995,7 +1100,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='82250337_0338'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='007540939_00029'):
                 continue
             going_DEBUG=True
 
@@ -1069,12 +1174,12 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             for thing in pred_data[::-1]: #build pred_entities in reverse
                 if isinstance(thing,dict):
                     parseDict(thing,pred_entities,pred_links)
-                elif thing=='':
-                    pass
-                else:
-                    print('non-dict at document level: {}'.format(thing))
-                    assert False
-                    #import pdb;pdb.set_trace()
+                #elif thing=='':
+                #    pass
+                #else:
+                #    print('non-dict at document level: {}'.format(thing))
+                #    assert False
+                #    #import pdb;pdb.set_trace()
 
 
             #we're going to do a check for repeats of the last entity. This frequently happens
