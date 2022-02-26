@@ -763,8 +763,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             #######End cheating       
 
                     
-            entity_recall = entities_truepos/len(transcription_groups)
-            entity_prec = entities_truepos/len(pred_entities)
+            entity_recall = entities_truepos/len(transcription_groups) if len(transcription_groups)>0 else 1
+            entity_prec = entities_truepos/len(pred_entities) if len(pred_entities)>0 else 1
             rel_recall = rel_truepos/len(pairs) if len(pairs)>0 else 1
             rel_prec = rel_truepos/len(pred_links) if len(pred_links)>0 else 1
 
