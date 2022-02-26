@@ -233,7 +233,11 @@ def fixLoadJSON(pred):
                 last_len = len(pred)
                 
                 if "Expecting ',' delimiter" in typ:
-                    if char==len(pred) or (char==len(pred)-1 and pred[char]==']'):
+                    if counter<20:
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'blindly add ","')
+                        pred = pred[:char]+','+pred[char:]
+
+                    elif char==len(pred) or (char==len(pred)-1 and pred[char]==']'):
                         #closing ] or }?
                         #bracket = pred.rfind('[')
                         #curley = pred.rfind('{')
@@ -492,8 +496,12 @@ def fixLoadJSON(pred):
                 elif 'Unterminated string starting at' in typ:
                     pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'close quote')
                     pred+='"'
+
                 elif 'Expecting value' in typ:
-                    if char==len(pred) and pred[char-1]==':':
+                    if counter<20:
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'blindly add " (value)')
+                        pred=pred[:char]+'"'+pred[char:]
+                    elif char==len(pred) and pred[char-1]==':':
                         #We'll just remove this incomplete prediction
                         bracket = pred.rfind('{')
                         assert bracket > pred.rfind('}')
@@ -641,7 +649,11 @@ def fixLoadJSON(pred):
                         assert False
 
                 elif "Expecting ';' delimiter" in typ:
-                    if char==len(pred):
+                    if counter<20:
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'add ":" blindly')
+                        pred = pred[:char]+':'+pred[char:]
+
+                    elif char==len(pred):
                         #what things have colon? class, answers, content
                         if pred.endswith('"content"') or pred.endswith('"answers"') or pred.endswith('"cells"') or pred.endswith('"row headers"') or pred.endswith('"column headers"'):
                             comma= pred.rfind(',')
@@ -731,7 +743,11 @@ def fixLoadJSON(pred):
                                 pred =pred[:close_quote+1]+pred[char:] #REMOVE
                             
                 elif 'Expecting property name enclosed in double quotes' in typ:
-                    if char==len(pred) or char==len(pred)-1:
+                    if counter<20:
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'blindly add "')
+                        pred=pred[:char]+'"'+pred[char:]
+
+                    elif char==len(pred) or char==len(pred)-1:
                         if pred[-1]=='"':
                             pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'peel back')
                             pred = pred[:-1]
@@ -747,11 +763,20 @@ def fixLoadJSON(pred):
                         #forgot to close object
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'close obj }')
                         pred=pred[:char]+'}'+pred[char:]
+                    elif pred[char]=='}':
+                        #extra comma
+                        comma = pred[char:].rfind(',')
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'remove extra comma in object')
+                        pred=pred[:comma]+pred[char:]
 
                     else:
                         assert False
                 elif 'Expecting value' in typ:
-                    if pred[-1]==',' and (char==len(pred) or char==len(pred)-1):
+                    if counter<20:
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'blindly add " (value)')
+                        pred=pred[:char]+'"'+pred[char:]
+
+                    elif pred[-1]==',' and (char==len(pred) or char==len(pred)-1):
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'remove end comma')
                         pred=pred[:-1]
                     else:
@@ -891,21 +916,27 @@ def parseDict(header,entities,links):
                         #if col_headers is not None and len(col_ids)>c:
                         #    links.append((col_ids[c],c_id))
         if row_headers is not None:
-            row_ids = list(range(len(entities),len(entities)+len(row_headers)))
+            #row_ids = list(range(len(entities),len(entities)+len(row_headers)))
+            row_ids=[]
             for rh in reversed(row_headers):
-                if '<<' in rh and '>>' in rh:
-                    #subheader
-                    raise NotImplementedError("subheader is not implemented")
-                entities.append(Entity(rh,'question',len(entities)))
+                if rh is not None:
+                    if '<<' in rh and '>>' in rh:
+                        #subheader
+                        raise NotImplementedError("subheader is not implemented")
+                    row_ids.append(len(entities))
+                    entities.append(Entity(rh,'question',len(entities)))
         else:
             row_ids = []
         if col_headers is not None:
-            col_ids = list(range(len(entities),len(entities)+len(col_headers)))
+            #col_ids = list(range(len(entities),len(entities)+len(col_headers)))
+            col_ids = []
             for ch in reversed(col_headers):
-                if '<<' in ch and '>>' in ch:
-                    #subheader
-                    raise NotImplementedError("subheader is not implemented")
-                entities.append(Entity(ch,'question',len(entities)))
+                if ch is not None:
+                    if '<<' in ch and '>>' in ch:
+                        #subheader
+                        raise NotImplementedError("subheader is not implemented")
+                    col_ids.append(len(entities))
+                    entities.append(Entity(ch,'question',len(entities)))
         else:
             col_ids = []
         if cells is not None:

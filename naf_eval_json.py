@@ -220,17 +220,19 @@ def parseDict(ent_dict,entities,links):
         #                #    links.append((col_ids[c],c_id))
         if row_headers is not None:
             subheaders=defaultdict(list)
-            row_ids = list(range(len(entities),len(entities)+len(row_headers)))
+            row_ids=[]
+            #row_ids = list(range(len(entities),len(entities)+len(row_headers)))
             for rh in reversed(row_headers):
-                if rh is not None and '<<' in rh and '>>' in rh:
-                    #subent_dict
-                    assert rh[:2]=='<<'
-                    sub_end = rh.find('>>')
-                    sub =  rh[2:sub_end]
-                    rh=rh[sub_end+2:]
-                    subheaders[sub].append(len(entities))
-
-                entities.append(Entity(rh,'question',len(entities)))
+                if rh is not None:
+                    if '<<' in rh and '>>' in rh:
+                        #subent_dict
+                        assert rh[:2]=='<<'
+                        sub_end = rh.find('>>')
+                        sub =  rh[2:sub_end]
+                        rh=rh[sub_end+2:]
+                        subheaders[sub].append(len(entities))
+                    row_ids.append(len(entities))
+                    entities.append(Entity(rh,'question',len(entities)))
 
             for subh,sub_links in subheaders.items():
                 subi = len(entities)
@@ -241,16 +243,19 @@ def parseDict(ent_dict,entities,links):
             row_ids = []
         if col_headers is not None:
             subheaders=defaultdict(list)
-            col_ids = list(range(len(entities),len(entities)+len(col_headers)))
+            #col_ids = list(range(len(entities),len(entities)+len(col_headers)))
+            col_ids = []
             for ch in reversed(col_headers):
-                if ch is not None and '<<' in ch and '>>' in ch:
-                    #subent_dict
-                    assert ch[:2]=='<<'
-                    sub_end = ch.find('>>')
-                    sub =  ch[2:sub_end]
-                    ch=ch[sub_end+2:]
-                    subheaders[sub].append(len(entities))
-                entities.append(Entity(ch,'question',len(entities)))
+                if ch is not None:
+                    if '<<' in ch and '>>' in ch:
+                        #subent_dict
+                        assert ch[:2]=='<<'
+                        sub_end = ch.find('>>')
+                        sub =  ch[2:sub_end]
+                        ch=ch[sub_end+2:]
+                        subheaders[sub].append(len(entities))
+                    col_ids.append(len(entities))
+                    entities.append(Entity(ch,'question',len(entities)))
 
             for subh,sub_links in subheaders.items():
                 subi = len(entities)
