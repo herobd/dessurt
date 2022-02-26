@@ -101,6 +101,7 @@ class QADataset(torch.utils.data.Dataset):
             self.crop_size = config['crop_params']['crop_size']
         if type(self.rescale_range) is float:
             self.rescale_range = [self.rescale_range,self.rescale_range]
+        self.rearrange_tall_images = False
         if 'cache_resized_images' in config:
             self.cache_resized = config['cache_resized_images']
             if self.cache_resized:
@@ -232,8 +233,31 @@ class QADataset(torch.utils.data.Dataset):
             #        scale_width = self.crop_size[1]/np_img.shape[0]
 
             scale = min(scale_height, scale_width)
+
+            if self.rearrange_tall_images:# and s*np_img.shape[1]<2.1*self.crop_size[1]:
+                alt_w = np_img.shape[1]*2
+                alt_h = np_img.shape[0]//2
+                scale_height = self.crop_size[0]/alt_h
+                scale_width = self.crop_size[1]/alt_w
+                alt_scale = min(scale_height, scale_width)
+                if alt_scale>scale:
+                    
+                    #print('too tall, width {} < {}'.format(s*np_img.shape[1],2.1*self.crop_size[1]))
+                    #print('scale was {}'.format(s))
+                    left = np_img[:np_img.shape[0]//2]
+                    right = np_img[np_img.shape[0]//2:]
+                    if right.shape[0]>left.shape[0]:
+                        left = np.pad(left,(0,1))
+                    np_img = np.concatenate((left,right),axis=1)
+                    #recompute scale
+                    scale_height = self.crop_size[0]/np_img.shape[0]
+                    scale_width = self.crop_size[1]/np_img.shape[1]
+                    scale = min(scale_height, scale_width)
+                #print('scale is now {}'.format(s))
+
             partial_rescale = s*scale
             s=partial_rescale
+
         elif self.rescale_to_crop_width_first:
             if rescaled!=1:
                 raise NotImplementedError('havent implemented caching with match resizing')
