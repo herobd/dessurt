@@ -1197,27 +1197,28 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
 
 
             #we're going to do a check for repeats of the last entity. This frequently happens
-            last_entity = pred_entities[-1]
-            remove = None
-            entities_with_link = None
-            for i in range(len(pred_entities)-2,0,-1):
-                if pred_entities[i].text==last_entity.text and pred_entities[i].cls==last_entity.cls:
-                    if entities_with_link is None:
-                        entities_with_link = set()
-                        for a,b in pred_links:
-                            entities_with_link.add(a)
-                            entities_with_link.add(b)
+            if len(pred_entities)>0:
+                last_entity = pred_entities[-1]
+                remove = None
+                entities_with_link = None
+                for i in range(len(pred_entities)-2,0,-1):
+                    if pred_entities[i].text==last_entity.text and pred_entities[i].cls==last_entity.cls:
+                        if entities_with_link is None:
+                            entities_with_link = set()
+                            for a,b in pred_links:
+                                entities_with_link.add(a)
+                                entities_with_link.add(b)
 
-                    if i not in entities_with_link:
-                        remove=i+1
+                        if i not in entities_with_link:
+                            remove=i+1
+                        else:
+                            break
                     else:
                         break
-                else:
-                    break
-            if remove is not None:
-                if not quiet:
-                    print('removing duplicate end entities: {}'.format(pred_entities[remove:]))
-                    pred_entities = pred_entities[:remove]
+                if remove is not None:
+                    if not quiet:
+                        print('removing duplicate end entities: {}'.format(pred_entities[remove:]))
+                        pred_entities = pred_entities[:remove]
                 
             #align entities to GT ones
             #pred_to_gt={}
@@ -1556,8 +1557,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             #######End cheating       
 
                     
-            entity_recall = entities_truepos/len(transcription_groups)
-            entity_prec = entities_truepos/len(pred_entities)
+            entity_recall = entities_truepos/len(transcription_groups) if len(transcription_groups) else 1
+            entity_prec = entities_truepos/len(pred_entities) if len(pred_entities)>0 else 1
             rel_recall = rel_truepos/len(pairs) if len(pairs)>0 else 1
             rel_prec = rel_truepos/len(pred_links) if len(pred_links)>0 else 1
 
