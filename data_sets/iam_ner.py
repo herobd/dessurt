@@ -35,7 +35,7 @@ class IAMNER(QADataset):
         if self.full:
             assert self.cased
         self.eval_full = config.get('eval_full',True)
-        self.eval_class_before = config.get('eval_class_before',True)
+        self.eval_class_before = config.get('eval_class_before',False)
 
         task = config['task'] if 'task' in config else 6
 

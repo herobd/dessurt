@@ -753,7 +753,7 @@ class QATrainer(BaseTrainer):
                     scores = []
                     assert len(b_metadata['all_answers'])==1
                     for ans in b_metadata['all_answers'][0]:
-                        ed = editdistance.eval(ans,pred)
+                        ed = editdistance.eval(ans.lower(),pred)
                         NL = ed/max(len(ans),len(pred))
                         scores.append(1-NL if NL<0.5 else 0)
                     log['E_ANLS'].append(max(scores))
