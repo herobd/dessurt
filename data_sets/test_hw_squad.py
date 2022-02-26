@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import utils.img_f as cv2
 from collections import defaultdict
+from transformers import BartTokenizer
 widths=[]
 
 def display(data,tokenizer=None):
@@ -43,7 +44,7 @@ def display(data,tokenizer=None):
             tok_len = len(tokenizer.tokenize(a))+2
         #widths.append(img.size(1))
         
-        draw=True#'0w' in q or 'w0' in q or 'l0' in q
+        draw=False#'0w' in q or 'w0' in q or 'l0' in q
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -69,7 +70,7 @@ def display(data,tokenizer=None):
 
         #plt.show()
     print('batch complete')
-    #return tok_len
+    return tok_len
 
 if __name__ == "__main__":
     if len(sys.argv)>1:
@@ -104,7 +105,7 @@ if __name__ == "__main__":
 
     dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=hw_squad.collate)
     dataLoaderIter = iter(dataLoader)
-    #tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
+    tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
         #if start==0:
         #display(data[0])
     for i in range(0,start):
@@ -116,8 +117,8 @@ if __name__ == "__main__":
         question_types = defaultdict(int)
         while True:
             #print('?')
-            display(dataLoaderIter.next())
-            #max_tok_len = max(tok_len,max_tok_len)
+            tok_len = display(dataLoaderIter.next(),tokenizer)
+            max_tok_len = max(tok_len,max_tok_len)
     except StopIteration:
         print('max tok len: {}'.format(max_tok_len))
 
