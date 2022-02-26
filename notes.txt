@@ -79,6 +79,7 @@ E_ANLS mean:0.6405274921852738,  std:0.432247051142594
 docvqa_mmswin_bart_PTfrom94ilatest_154 best
 ANLS = 0.475
 with fast beam: 0.4496
+with slow beam: 0.42498
 
 docvqa_mmswin_bart_PTfrom73i219k_84 330k
 E_ANLS mean:0.444

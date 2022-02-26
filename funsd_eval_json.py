@@ -743,6 +743,11 @@ def fixLoadJSON(pred):
                             if pred[-1]==',':
                                 pred=pred[:-1]
                             pred+='}'
+                    elif pred[char]=='{':
+                        #forgot to close object
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'close obj }')
+                        pred=pred[:char]+'}'+pred[char:]
+
                     else:
                         assert False
                 elif 'Expecting value' in typ:
