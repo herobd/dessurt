@@ -435,6 +435,8 @@ class QATrainer(BaseTrainer):
         else:
             pred_a, target_a, string_a, pred_mask = self.model(image,ocr_res,questions,answers)
 
+        print(answers)
+
         #pred_a[:,0].sum().backward()
         #print(self.model.start_token.grad)
         #pred_a.sum().backward()
@@ -756,7 +758,13 @@ class QATrainer(BaseTrainer):
                         ed = editdistance.eval(ans.lower(),pred)
                         NL = ed/max(len(ans),len(pred))
                         scores.append(1-NL if NL<0.5 else 0)
+    
+                        #for HW-QA datasets
+                        if len(b_metadata['all_answers'][0])==1:
+                            log['E_acc@NL0.5'].append(1 if NL<0.5 else 0)
+
                     log['E_ANLS'].append(max(scores))
+
 
                 #elif question=='json>':
                 #    pred_data = fixLoadJSON(pred)

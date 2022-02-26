@@ -182,11 +182,15 @@ def parseDict(ent_dict,entities,links):
                 is_table=True
                 cells = value
     if not is_table:
-        my_id=len(entities)
-        entities.append(Entity(my_text,my_class,my_id))
-        for other_id in to_link:
-            links.append((my_id,other_id))
-        return_ids.append(my_id)
+        if my_text is not None:
+            my_id=len(entities)
+            entities.append(Entity(my_text,my_class,my_id))
+            for other_id in to_link:
+                links.append((my_id,other_id))
+            return_ids.append(my_id)
+        else:
+            return_ids+=to_link
+            my_id=None
 
         prev_id=my_id
         for my_text,my_class,to_link in reversed(prose):
@@ -194,7 +198,8 @@ def parseDict(ent_dict,entities,links):
             entities.append(Entity(my_text,my_class,my_id))
             for other_id in to_link:
                 links.append((my_id,other_id))
-            links.append((my_id,prev_id))
+            if prev_id is not None:
+                links.append((my_id,prev_id))
             return_ids.append(my_id)
             prev_id = my_id
     else:
@@ -215,17 +220,19 @@ def parseDict(ent_dict,entities,links):
         #                #    links.append((col_ids[c],c_id))
         if row_headers is not None:
             subheaders=defaultdict(list)
-            row_ids = list(range(len(entities),len(entities)+len(row_headers)))
+            row_ids=[]
+            #row_ids = list(range(len(entities),len(entities)+len(row_headers)))
             for rh in reversed(row_headers):
-                if '<<' in rh and '>>' in rh:
-                    #subent_dict
-                    assert rh[:2]=='<<'
-                    sub_end = rh.find('>>')
-                    sub =  rh[2:sub_end]
-                    rh=rh[sub_end+2:]
-                    subheaders[sub].append(len(entities))
-
-                entities.append(Entity(rh,'question',len(entities)))
+                if rh is not None:
+                    if '<<' in rh and '>>' in rh:
+                        #subent_dict
+                        assert rh[:2]=='<<'
+                        sub_end = rh.find('>>')
+                        sub =  rh[2:sub_end]
+                        rh=rh[sub_end+2:]
+                        subheaders[sub].append(len(entities))
+                    row_ids.append(len(entities))
+                    entities.append(Entity(rh,'question',len(entities)))
 
             for subh,sub_links in subheaders.items():
                 subi = len(entities)
@@ -236,16 +243,19 @@ def parseDict(ent_dict,entities,links):
             row_ids = []
         if col_headers is not None:
             subheaders=defaultdict(list)
-            col_ids = list(range(len(entities),len(entities)+len(col_headers)))
+            #col_ids = list(range(len(entities),len(entities)+len(col_headers)))
+            col_ids = []
             for ch in reversed(col_headers):
-                if '<<' in ch and '>>' in ch:
-                    #subent_dict
-                    assert ch[:2]=='<<'
-                    sub_end = ch.find('>>')
-                    sub =  ch[2:sub_end]
-                    ch=ch[sub_end+2:]
-                    subheaders[sub].append(len(entities))
-                entities.append(Entity(ch,'question',len(entities)))
+                if ch is not None:
+                    if '<<' in ch and '>>' in ch:
+                        #subent_dict
+                        assert ch[:2]=='<<'
+                        sub_end = ch.find('>>')
+                        sub =  ch[2:sub_end]
+                        ch=ch[sub_end+2:]
+                        subheaders[sub].append(len(entities))
+                    col_ids.append(len(entities))
+                    entities.append(Entity(ch,'question',len(entities)))
 
             for subh,sub_links in subheaders.items():
                 subi = len(entities)
@@ -469,7 +479,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print()
                 print(instance['imgName'])
 
-            if DEBUG and (not going_DEBUG and instance['imgName']!='007486024_00025'):
+            if DEBUG and (not going_DEBUG and instance['imgName']!='007270209_00003'):
                 continue
             going_DEBUG=True
 
@@ -542,40 +552,40 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             for thing in pred_data[::-1]: #build pred_entities in reverse
                 if isinstance(thing,dict):
                     parseDict(thing,pred_entities,pred_links)
-                elif thing=='':
-                    pass
-                else:
-                    print('non-dict at document level: {}'.format(thing))
-                    assert False
+                #elif thing=='':
+                #    pass
+                #else:
+                #    print('non-dict at document level: {}'.format(thing))
+                #    assert False
                     #import pdb;pdb.set_trace()
 
             #New addition for NAF
             #Break all entities into individual ones, and redo linking
             pred_entities,pred_links = breakIntoLines(pred_entities,pred_links)
 
+            if len(pred_entities)>0:
+                #we're going to do a check for repeats of the last entity. This frequently happens
+                last_entity = pred_entities[-1]
+                remove = None
+                entities_with_link = None
+                for i in range(len(pred_entities)-2,0,-1):
+                    if pred_entities[i].text==last_entity.text and pred_entities[i].cls==last_entity.cls:
+                        if entities_with_link is None:
+                            entities_with_link = set()
+                            for a,b in pred_links:
+                                entities_with_link.add(a)
+                                entities_with_link.add(b)
 
-            #we're going to do a check for repeats of the last entity. This frequently happens
-            last_entity = pred_entities[-1]
-            remove = None
-            entities_with_link = None
-            for i in range(len(pred_entities)-2,0,-1):
-                if pred_entities[i].text==last_entity.text and pred_entities[i].cls==last_entity.cls:
-                    if entities_with_link is None:
-                        entities_with_link = set()
-                        for a,b in pred_links:
-                            entities_with_link.add(a)
-                            entities_with_link.add(b)
-
-                    if i not in entities_with_link:
-                        remove=i+1
+                        if i not in entities_with_link:
+                            remove=i+1
+                        else:
+                            break
                     else:
                         break
-                else:
-                    break
-            if remove is not None:
-                if not quiet:
-                    print('removing duplicate end entities: {}'.format(pred_entities[remove:]))
-                    pred_entities = pred_entities[:remove]
+                if remove is not None:
+                    if not quiet:
+                        print('removing duplicate end entities: {}'.format(pred_entities[remove:]))
+                        pred_entities = pred_entities[:remove]
                 
             #align entities to GT ones
             #pred_to_gt={}
@@ -758,8 +768,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             #######End cheating       
 
                     
-            entity_recall = entities_truepos/len(transcription_groups)
-            entity_prec = entities_truepos/len(pred_entities)
+            entity_recall = entities_truepos/len(transcription_groups) if len(transcription_groups)>0 else 1
+            entity_prec = entities_truepos/len(pred_entities) if len(pred_entities)>0 else 1
             rel_recall = rel_truepos/len(pairs) if len(pairs)>0 else 1
             rel_prec = rel_truepos/len(pred_links) if len(pred_links)>0 else 1
 
