@@ -59,7 +59,7 @@ image_size = cf['model']['image_size']
 
 new_dataset= {
 	"data_set_name": "HWSQuAD",
-	"data_dir": "../data/HW-SQuAD"
+	"data_dir": "../data/HW-SQuAD",
         "prefetch_factor": 5,
         "persistent_workers": True,
         "batch_size": 1,
@@ -94,7 +94,7 @@ cf['data_loader']=new_dataset
 
 cf['validation']=new_val
 
-cf['model']['max_a_tokens'] = 200 #50
+cf['model']['max_a_tokens'] = 50
 
 #set validation
 cf['trainer']['iterations']=340000
