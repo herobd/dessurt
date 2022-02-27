@@ -578,6 +578,10 @@ def fixLoadJSON(pred):
                                 #just cut it
                                 pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'removing bad end')
                                 pred=pred[:char]
+                            elif pred[char-2]=='}':
+                                pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open obj')
+                                pred=pred[:char]+'{'+pred[char:]
+                                
                             else:
                                 assert False
                         else:
@@ -743,11 +747,8 @@ def fixLoadJSON(pred):
                                 pred =pred[:close_quote+1]+pred[char:] #REMOVE
                             
                 elif 'Expecting property name enclosed in double quotes' in typ:
-                    if counter<20:
-                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'blindly add "')
-                        pred=pred[:char]+'"'+pred[char:]
 
-                    elif char==len(pred) or char==len(pred)-1:
+                    if char==len(pred) or char==len(pred)-1:
                         if pred[-1]=='"':
                             pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'peel back')
                             pred = pred[:-1]
@@ -759,6 +760,9 @@ def fixLoadJSON(pred):
                             if pred[-1]==',':
                                 pred=pred[:-1]
                             pred+='}'
+                    elif counter<20:
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'blindly add "')
+                        pred=pred[:char]+'"'+pred[char:]
                     elif pred[char]=='{':
                         #forgot to close object
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'close obj }')
@@ -768,9 +772,10 @@ def fixLoadJSON(pred):
                         comma = pred[char:].rfind(',')
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'remove extra comma in object')
                         pred=pred[:comma]+pred[char:]
-
+                    
                     else:
-                        assert False
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'blindly add " (end)')
+                        pred=pred[:char]+'"'+pred[char:]
                 elif 'Expecting value' in typ:
                     if counter<20:
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'blindly add " (value)')
