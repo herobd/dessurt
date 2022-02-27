@@ -555,7 +555,7 @@ def fixLoadJSON(pred):
                                 curley_close+=char
                             else:
                                 curley_close=9999999
-                            end = min(bracket_close,curley_close)
+                            end = min(bracket_close,curley_close,len(pred))
                             quote_locations=[]
                             in_quote=False
                             escaped=False
