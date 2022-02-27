@@ -578,9 +578,12 @@ def fixLoadJSON(pred):
                                 #just cut it
                                 pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'removing bad end')
                                 pred=pred[:char]
-                            elif pred[char-2]=='}':
+                            elif pred[char-2:char]=='},' or pred[char-3:char]=='}, ':
                                 pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open obj')
                                 pred=pred[:char]+'{'+pred[char:]
+                            elif pred[char-2:char]==': ' or pred[char-2:char]==', ' or pred[char-1]==':' or pred[char-1]==',':
+                                pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open string')
+                                pred=pred[:char]+'"'+pred[char:]
                                 
                             else:
                                 assert False
