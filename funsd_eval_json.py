@@ -233,6 +233,7 @@ def fixLoadJSON(pred):
                 last_len = len(pred)
                 
                 if "Expecting ',' delimiter" in typ:
+
                     if char==len(pred) or (char==len(pred)-1 and pred[char]==']'):
                         #closing ] or }?
                         #bracket = pred.rfind('[')
@@ -245,6 +246,9 @@ def fixLoadJSON(pred):
                         else:
                             pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'add }')
                             pred+='}'
+                    elif counter<20:
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'blindly add ","')
+                        pred = pred[:char]+','+pred[char:]
                     elif pred[char]==':':
                         #it didn't close a list
                         if pred[:char-1].rfind('[')>pred[:char-1].rfind('{'):
@@ -492,8 +496,12 @@ def fixLoadJSON(pred):
                 elif 'Unterminated string starting at' in typ:
                     pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'close quote')
                     pred+='"'
+
                 elif 'Expecting value' in typ:
-                    if char==len(pred) and pred[char-1]==':':
+                    if counter<20:
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'blindly add " (value)')
+                        pred=pred[:char]+'"'+pred[char:]
+                    elif char==len(pred) and pred[char-1]==':':
                         #We'll just remove this incomplete prediction
                         bracket = pred.rfind('{')
                         assert bracket > pred.rfind('}')
@@ -547,7 +555,7 @@ def fixLoadJSON(pred):
                                 curley_close+=char
                             else:
                                 curley_close=9999999
-                            end = min(bracket_close,curley_close)
+                            end = min(bracket_close,curley_close,len(pred))
                             quote_locations=[]
                             in_quote=False
                             escaped=False
@@ -570,6 +578,13 @@ def fixLoadJSON(pred):
                                 #just cut it
                                 pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'removing bad end')
                                 pred=pred[:char]
+                            elif pred[char-2:char]=='},' or pred[char-3:char]=='}, ':
+                                pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open obj')
+                                pred=pred[:char]+'{'+pred[char:]
+                            elif pred[char-2:char]==': ' or pred[char-2:char]==', ' or pred[char-1]==':' or pred[char-1]==',':
+                                pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'adding open string')
+                                pred=pred[:char]+'"'+pred[char:]
+                                
                             else:
                                 assert False
                         else:
@@ -641,7 +656,11 @@ def fixLoadJSON(pred):
                         assert False
 
                 elif "Expecting ';' delimiter" in typ:
-                    if char==len(pred):
+                    if counter<20:
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'add ":" blindly')
+                        pred = pred[:char]+':'+pred[char:]
+
+                    elif char==len(pred):
                         #what things have colon? class, answers, content
                         if pred.endswith('"content"') or pred.endswith('"answers"') or pred.endswith('"cells"') or pred.endswith('"row headers"') or pred.endswith('"column headers"'):
                             comma= pred.rfind(',')
@@ -731,6 +750,7 @@ def fixLoadJSON(pred):
                                 pred =pred[:close_quote+1]+pred[char:] #REMOVE
                             
                 elif 'Expecting property name enclosed in double quotes' in typ:
+
                     if char==len(pred) or char==len(pred)-1:
                         if pred[-1]=='"':
                             pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'peel back')
@@ -743,6 +763,9 @@ def fixLoadJSON(pred):
                             if pred[-1]==',':
                                 pred=pred[:-1]
                             pred+='}'
+                    elif counter<20:
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'blindly add "')
+                        pred=pred[:char]+'"'+pred[char:]
                     elif pred[char]=='{':
                         #forgot to close object
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'close obj }')
@@ -752,11 +775,16 @@ def fixLoadJSON(pred):
                         comma = pred[char:].rfind(',')
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'remove extra comma in object')
                         pred=pred[:comma]+pred[char:]
-
+                    
                     else:
-                        assert False
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'blindly add " (end)')
+                        pred=pred[:char]+'"'+pred[char:]
                 elif 'Expecting value' in typ:
-                    if pred[-1]==',' and (char==len(pred) or char==len(pred)-1):
+                    if counter<20:
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'blindly add " (value)')
+                        pred=pred[:char]+'"'+pred[char:]
+
+                    elif pred[-1]==',' and (char==len(pred) or char==len(pred)-1):
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'remove end comma')
                         pred=pred[:-1]
                     else:

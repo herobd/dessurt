@@ -32,6 +32,7 @@ class IAMNER(QADataset):
         self.warp_lines = None
         self.full = config.get('full',False)
         self.class_first = config.get('class_first',False)
+        self.short_class = config.get('short_class',False)
         if self.full:
             assert self.cased
         self.eval_full = config.get('eval_full',True)
@@ -157,15 +158,23 @@ class IAMNER(QADataset):
                         maxX = max(maxX,rX)
                         minY = min(minY,tY)
                         maxY = max(maxY,bY)
-                        
+                        #«»       
                         if class_after:
-                            a.append(word[1]+'[NE:'+cls+']')
+                            if self.short_class:
+                                cls = '['+cls+']'
+                            else:
+                                cls = '[NE:'+cls+']'
+                            a.append(word[1]+cls)
                             if self.use_noise and self.train:
-                                corrupt_a.append(self.corrupt(word[1])+'[NE:'+cls+']')
+                                corrupt_a.append(self.corrupt(word[1])+cls)
                         else:
-                            a.append('{NE:'+cls+'}'+word[1])
+                            if self.short_class:
+                                cls = '{'+cls+'}'
+                            else:
+                                cls = '{NE:'+cls+'}'
+                            a.append(cls+word[1])
                             if self.use_noise and self.train:
-                                corrupt_a.append('{NE:'+cls+'}'+self.corrupt(word[1]))
+                                corrupt_a.append(cls+self.corrupt(word[1]))
 
 
                     lX=minX
