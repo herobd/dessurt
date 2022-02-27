@@ -233,11 +233,8 @@ def fixLoadJSON(pred):
                 last_len = len(pred)
                 
                 if "Expecting ',' delimiter" in typ:
-                    if counter<20:
-                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'blindly add ","')
-                        pred = pred[:char]+','+pred[char:]
 
-                    elif char==len(pred) or (char==len(pred)-1 and pred[char]==']'):
+                    if char==len(pred) or (char==len(pred)-1 and pred[char]==']'):
                         #closing ] or }?
                         #bracket = pred.rfind('[')
                         #curley = pred.rfind('{')
@@ -249,6 +246,9 @@ def fixLoadJSON(pred):
                         else:
                             pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'add }')
                             pred+='}'
+                    elif counter<20:
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'blindly add ","')
+                        pred = pred[:char]+','+pred[char:]
                     elif pred[char]==':':
                         #it didn't close a list
                         if pred[:char-1].rfind('[')>pred[:char-1].rfind('{'):
