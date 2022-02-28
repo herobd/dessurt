@@ -72,6 +72,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
     image_h,image_w = config['model']['image_size']
     if data_set_name is None:
         data_set_name = config['data_loader']['data_set_name']
+    get=None
     if data_set_name=='SynthParaQA':
         data_config={
                 "data_loader": {
@@ -156,6 +157,8 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                         },
                 "validation":{}
                 }
+        if test:
+            get=['pred']
     elif data_set_name=='RVL':
         data_config={
                 "data_loader": {
@@ -280,6 +283,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
 
     #data_iter = iter(data_loader)
     metrics = defaultdict(list)
+    collected_preds=[]
     with torch.no_grad():
 
         index=0
@@ -288,7 +292,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                 print('batch index: {}/{}'.format(index,len(valid_data_loader)),end='\r')
             elif data_set_name=='RVL' and index%100==0:
                 print('batch index: {}/{}'.format(index,len(valid_data_loader)))
-            _,res,_ = trainer.run(instance,valid=True,run=run)
+            _,res,out = trainer.run(instance,valid=True,run=run,get=get)
 
             for name,value in res.items():
                 if 'oss' not in name:#name.startswith('mk_firsttoken_top'):
@@ -296,6 +300,13 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                         metrics[name]+=value
                     else:
                         metrics[name].append(value)
+            if 'pred' in out:
+                collected_preds.append({
+                    'questionId': int(instance['id'][0]),
+                    'answer': out['pred']
+                    })
+                break####
+
             index+=1
     F_measure_prec={}
     F_measure_recall={}
@@ -323,6 +334,11 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                 total_Fms+=f
                 print('{} Fm={},  P={},  R={}'.format(name,f,p,r))
             print('Macro Fm = {}'.format(total_Fms/len(names)))
+
+    if len(collected_preds)>0:
+        with open('DocVQA_OUT.json','w') as f:
+            json.dump(collected_preds,f)
+        print(' wrote DocVQA_OUT.json')
 
 if __name__ == '__main__':
     logger = logging.getLogger()
