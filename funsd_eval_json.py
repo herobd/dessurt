@@ -498,10 +498,7 @@ def fixLoadJSON(pred):
                     pred+='"'
 
                 elif 'Expecting value' in typ:
-                    if counter<20:
-                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'blindly add " (value)')
-                        pred=pred[:char]+'"'+pred[char:]
-                    elif char==len(pred) and pred[char-1]==':':
+                    if char==len(pred) and pred[char-1]==':':
                         #We'll just remove this incomplete prediction
                         bracket = pred.rfind('{')
                         assert bracket > pred.rfind('}')
@@ -514,6 +511,9 @@ def fixLoadJSON(pred):
                     elif char==len(pred)-1 and pred[char]!='"':
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'(2nd) blank string')
                         pred+='""'
+                    elif counter<20:
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'blindly add " (value)')
+                        pred=pred[:char]+'"'+pred[char:]
                     elif pred[char]=='}' and pred[:char].rfind('{')<=pred[:char].rfind('}'):
                         #random extra close curelybrace
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'remove extra close curley')
@@ -656,11 +656,8 @@ def fixLoadJSON(pred):
                         assert False
 
                 elif "Expecting ';' delimiter" in typ:
-                    if counter<20:
-                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'add ":" blindly')
-                        pred = pred[:char]+':'+pred[char:]
 
-                    elif char==len(pred):
+                    if char==len(pred):
                         #what things have colon? class, answers, content
                         if pred.endswith('"content"') or pred.endswith('"answers"') or pred.endswith('"cells"') or pred.endswith('"row headers"') or pred.endswith('"column headers"'):
                             comma= pred.rfind(',')
@@ -669,6 +666,9 @@ def fixLoadJSON(pred):
                         else:
                             pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'add class pred')
                             pred+=': "other"}'
+                    elif counter<20:
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'add ":" blindly')
+                        pred = pred[:char]+':'+pred[char:]
                     else:
                         fixed = False
                         #first check if this is a bad ", maybe unescaped
@@ -780,15 +780,13 @@ def fixLoadJSON(pred):
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'blindly add " (end)')
                         pred=pred[:char]+'"'+pred[char:]
                 elif 'Expecting value' in typ:
-                    if counter<20:
-                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'blindly add " (value)')
-                        pred=pred[:char]+'"'+pred[char:]
 
-                    elif pred[-1]==',' and (char==len(pred) or char==len(pred)-1):
+                    if pred[-1]==',' and (char==len(pred) or char==len(pred)-1):
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'remove end comma')
                         pred=pred[:-1]
                     else:
-                        assert False
+                        pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'blindly add " (value)')
+                        pred=pred[:char]+'"'+pred[char:]
                 elif 'Extra data' in typ :
                     if len(pred)==char:
                         assert pred[-1]==','
