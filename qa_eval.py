@@ -305,7 +305,6 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     'questionId': int(instance['id'][0]),
                     'answer': out['pred']
                     })
-                break####
 
             index+=1
     F_measure_prec={}

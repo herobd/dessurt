@@ -36,7 +36,7 @@ class DocVQA(QADataset):
         for instance in data:
             image_path = os.path.join(dirPath,split,instance['image'])
             #answer = random.choice(instance['answers'])
-            qa = (instance['question'],instance['answers'])
+            qa = (instance['question'],instance.get('answers'))
             self.images.append({'id':instance['questionId'], 'imageName':instance['image'], 'imagePath':image_path, 'annotationPath':qa, 'rescaled':1 })
 
         if config.get('half',False):
@@ -51,7 +51,7 @@ class DocVQA(QADataset):
         qa=[]
         self.qaAdd(qa,
             'natural_q~'+question,
-            random.choice(answers)
+            random.choice(answers) if answers is not None else None
             )
         
         form_metadata={'all_answers':[answers]}

@@ -435,7 +435,7 @@ class QATrainer(BaseTrainer):
         else:
             pred_a, target_a, string_a, pred_mask = self.model(image,ocr_res,questions,answers)
 
-        print(answers)
+        #print(answers)
 
         #pred_a[:,0].sum().backward()
         #print(self.model.start_token.grad)
@@ -526,30 +526,31 @@ class QATrainer(BaseTrainer):
         pred_index = 0
         for b_answers,b_pred,b_questions in zip(answers,string_a,questions):
             for answer,pred,question in zip(b_answers,b_pred,b_questions):
-                if len(answer)>0 or len(pred)>0:
-                    score_ed.append( editdistance.eval(answer.lower(),pred.lower())/((len(answer)+len(pred))/2) )
-                else:
-                    score_ed.append( 0 )
-
-                if len(answer)>0:
-                    #get question start
-                    q_end = question.find('~')
-                    if q_end < 0:
-                        q_end = question.find('>')
-                    if q_end <0:
-                        print('WARNING, logging sees unhandeled question: '+question)
+                if answer is not None:
+                    if len(answer)>0 or len(pred)>0:
+                        score_ed.append( editdistance.eval(answer.lower(),pred.lower())/((len(answer)+len(pred))/2) )
                     else:
-                        q_type = question[0:q_end+1]
-                        q_type_scores[q_type].append(score_ed[-1])
+                        score_ed.append( 0 )
 
-                if question.startswith('mk>') and not run:
-                    #get topN accuracy for first token prediction.
-                    #this is for internal evaluation of model LM performance
-                    right_token = target_a[pred_index,0]
-                    scores,preds = torch.sort(pred_a[pred_index,0],descending=True)
-                    for N in [10,50,100]:
-                        hitN = (preds[:N]==right_token).any()#.float().mean()
-                        log['mk_firsttoken_top{}'.format(N)].append(hitN.int().item())
+                    if len(answer)>0:
+                        #get question start
+                        q_end = question.find('~')
+                        if q_end < 0:
+                            q_end = question.find('>')
+                        if q_end <0:
+                            print('WARNING, logging sees unhandeled question: '+question)
+                        else:
+                            q_type = question[0:q_end+1]
+                            q_type_scores[q_type].append(score_ed[-1])
+
+                    if question.startswith('mk>') and not run:
+                        #get topN accuracy for first token prediction.
+                        #this is for internal evaluation of model LM performance
+                        right_token = target_a[pred_index,0]
+                        scores,preds = torch.sort(pred_a[pred_index,0],descending=True)
+                        for N in [10,50,100]:
+                            hitN = (preds[:N]==right_token).any()#.float().mean()
+                            log['mk_firsttoken_top{}'.format(N)].append(hitN.int().item())
                 pred_index += 1
 
                 
@@ -570,7 +571,7 @@ class QATrainer(BaseTrainer):
                 assert len(b_questions)==1
                 #print('pred '+b_pred[0])
                 #print('true '+b_answers[0])
-                answer = b_answers[0].lower()
+                answer = b_answers[0].lower() if b_answers[0] is not None else None
                 pred = b_pred[0].lower()
                 question = b_questions[0]
                 
@@ -756,16 +757,17 @@ class QATrainer(BaseTrainer):
                     #Compute Average Normalized Levenshtein Similarity (ANLS).
                     scores = []
                     assert len(b_metadata['all_answers'])==1
-                    for ans in b_metadata['all_answers'][0]:
-                        ed = editdistance.eval(ans.lower(),pred)
-                        NL = ed/max(len(ans),len(pred))
-                        scores.append(1-NL if NL<0.5 else 0)
-    
-                        #for HW-QA datasets
-                        if len(b_metadata['all_answers'][0])==1:
-                            log['E_acc@NL0.5'].append(1 if NL<0.5 else 0)
+                    if b_metadata['all_answers'][0] is not None:
+                        for ans in b_metadata['all_answers'][0]:
+                            ed = editdistance.eval(ans.lower(),pred)
+                            NL = ed/max(len(ans),len(pred))
+                            scores.append(1-NL if NL<0.5 else 0)
+        
+                            #for HW-QA datasets
+                            if len(b_metadata['all_answers'][0])==1:
+                                log['E_acc@NL0.5'].append(1 if NL<0.5 else 0)
 
-                    log['E_ANLS'].append(max(scores))
+                        log['E_ANLS'].append(max(scores))
 
 
                 #elif question=='json>':
