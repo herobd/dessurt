@@ -27,7 +27,7 @@ class IAMNER(QADataset):
 
         self.do_masks=True
         self.crop_to_data=True
-        split_by = 'rwth'
+        split_by = config.get('data_split','rwth')
         self.cache_resized = False
         self.warp_lines = None
         self.full = config.get('full',False)

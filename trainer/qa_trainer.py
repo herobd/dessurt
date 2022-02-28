@@ -435,7 +435,7 @@ class QATrainer(BaseTrainer):
         else:
             pred_a, target_a, string_a, pred_mask = self.model(image,ocr_res,questions,answers)
 
-        print(answers)
+        #print(answers)
 
         #pred_a[:,0].sum().backward()
         #print(self.model.start_token.grad)
