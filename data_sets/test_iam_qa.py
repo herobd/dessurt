@@ -93,7 +93,7 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=iam_qa.IAMQA(dirPath=dirPath,split='valid',config={
+    data=iam_qa.IAMQA(dirPath=dirPath,split='train',config={
         'rescale_range': [0.5,1],
         'rescale_to_crop_size_first': True,
         'crop_params': {

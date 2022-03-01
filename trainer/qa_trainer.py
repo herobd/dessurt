@@ -652,6 +652,8 @@ class QATrainer(BaseTrainer):
                 elif question == 'read_block0>':
                     ed = editdistance.eval(answer,pred)
                     log['E_line_based_CER'].append(ed/len(answer) if len(answer)>0 else ed)
+                elif question == 'read_block>':
+                    pass #let it be handled by basic ED
                 elif question.startswith('ne>'):
                     pred_type,pred_word = processNER(pred)
                     gt_type,gt_word = processNER(answer)
@@ -748,7 +750,7 @@ class QATrainer(BaseTrainer):
                     elif len(gt_words)>0:
                         log['E_approx_CER'].append(1)
 
-                    log['E_true_CER'].append(editdistnace.eval(pred_full,gt_full)/len(gt_full))
+                    log['E_true_CER'].append(editdistance.eval(pred_full,gt_full)/len(gt_full))
 
                     #for gt,pred in aligned[-1][-1]:
                     #    if gt[1]==pred[1]:
@@ -837,6 +839,9 @@ class QATrainer(BaseTrainer):
                 elif 'pred'==name:
                     assert len(string_a)==1 and len(string_a[0])==1
                     got[name]=string_a[0][0]
+                elif 'gt'==name:
+                    assert len(answers)==1 and len(answers[0])==1
+                    got[name]=answers[0][0]
                 else:
                     raise NotImplementedError('Cannot get [{}], unknown'.format(name))
         if not valid:

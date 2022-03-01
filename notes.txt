@@ -1,5 +1,42 @@
 New IAM NER experiments
 Validation
+iamNER18noise_mmswin_bart_PTfrom94ilatest_249
+Macro Fm = 0.405
+
+iamNER18c1noise_mmswin_bart_PTfrom94ilatest_250
+Macro Fm = 0.3116
+
+iamNER18c1_mmswin_bart_PTfrom94ilatest_232
+Macro Fm = 0.351
+
+iamNER18_mmswin_bart_PTfrom94ilatest_201
+Macro Fm = 0.3460
+
+
+iamNERc1_mmswin_bart_PTfrom94ilatest_248
+Macro Fm = 0.6557
+
+iamNERnoise_mmswin_bart_PTfrom94ilatest_246
+Macro Fm = 0.6102
+
+iamNERc1noise_mmswin_bart_PTfrom94ilatest_247
+Macro Fm = 0.6419
+
+iamNER_mmswin_bart_PTfrom94ilatest_163
+Macro Fm = 0.6099
+
+
+
+iamNERc1noise_mmswin_bart_PTfrom142ilatest_251
+Macro Fm = 0.6221
+
+iamNERc1noise_mmswin_bart_PTfrom119i1M_252
+Macro Fm = 0.5997
+
+iamNER_mmswin_bart_PTfrom119i1M_222
+Macro Fm = 0.598
+
+=======
 iamNER18c1_mmswin_bart_PTfrom94ilatest_232
 Macro Fm = 0.351
 

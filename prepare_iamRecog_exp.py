@@ -2,10 +2,7 @@ import json
 import os
 import sys
 from change_checkpoint_reset_for_training import readRemoveWrite
-try:
-    from make_run import create
-except:
-    pass
+from make_run import create
 
 
 if len(sys.argv)==1:
@@ -40,7 +37,7 @@ print('from '+itera)
 
 broken = name.split('_')
 old_id = broken[-1]
-new_name='hwsquad_'+('_'.join(broken[1:-2]))+'_PTfrom{}i{}_{}'.format(old_id,itera,new_id)
+new_name='iamRecog_'+('_'.join(broken[1:-2]))+'_PTfrom{}i{}_{}'.format(old_id,itera,new_id)
 print(new_name)
 
 old_cf = 'configs/cf_{}.json'.format(name)
@@ -58,16 +55,16 @@ with open(old_cf) as f:
 image_size = cf['model']['image_size']
 
 new_dataset= {
-	"data_set_name": "HWSQuAD",
-	"data_dir": "../data/HW-SQuAD",
-        "prefetch_factor": 5,
-        "persistent_workers": True,
+        "data_set_name": "IAMQA",
+        "data_dir": "../data/IAM",
+        "cased": True,
+        'mode': 'IAM_para',
+        "data_split": "Coquenet",
         "batch_size": 1,
-        "num_workers": 4,
-        "rescale_range": [
-            0.9,
-            1.1
-        ],
+        "num_workers": 6,
+        "shuffle": True,
+        "persistent_workers": True,
+        "rescale_range": [0.5,1],
         "rescale_to_crop_size_first": True,
         "crop_params": {
             "crop_size": image_size,
@@ -75,18 +72,17 @@ new_dataset= {
             "rot_degree_std_dev": 1
         },
         "questions": 1,
-        "cased": True
+        'max_qa_len': 220000,
             }
 new_val =  {
         "shuffle": False,
         "batch_size": 3,
-	"rescale_range": [1,1],
-	"rescale_to_crop_size_first": True,
-	"crop_params": {
-	    "crop_size": image_size,
-	    "pad": 0,
-	    "random": False
-	}
+        "rescale_range": [0.9,0.9],
+        "crop_params": {
+            "crop_size": image_size,
+            "pad": 0,
+            "random": False
+        },
     }
 
 cf['name']=new_name
@@ -94,19 +90,19 @@ cf['data_loader']=new_dataset
 
 cf['validation']=new_val
 
-cf['model']['max_a_tokens'] = 50
+cf['model']['max_a_tokens'] = 730  #full 800 not required
 
 #set validation
-cf['trainer']['iterations']=340000
+cf['trainer']['iterations']=201200
 cf['trainer']['val_step']=10000
-cf['trainer']['save_step']=200000
+cf['trainer']['save_step']=1400000000
 cf['trainer']["save_step_minor"]= 1024 
-cf['trainer']['monitor_mode']='max'
-cf['trainer']['monitor']='val_E_ANLS'
+cf['trainer']['monitor_mode']='min'
+cf['trainer']['monitor']='val_read_block>_ED'
 
 #set drop in LR
 cf['trainer']["use_learning_schedule"]= "multi_rise then ramp_to_lower"
-cf['trainer']["lr_down_start"]= 200000
+cf['trainer']["lr_down_start"]= 90000
 cf['trainer']["ramp_down_steps"]= 10000
 cf['trainer']["lr_mul"]= 0.1
 

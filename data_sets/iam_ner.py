@@ -27,7 +27,7 @@ class IAMNER(QADataset):
 
         self.do_masks=True
         self.crop_to_data=True
-        split_by = 'rwth'
+        split_by = config.get('data_split','rwth')
         self.cache_resized = False
         self.warp_lines = None
         self.full = config.get('full',False)
@@ -36,7 +36,7 @@ class IAMNER(QADataset):
         if self.full:
             assert self.cased
         self.eval_full = config.get('eval_full',True)
-        self.eval_class_before = config.get('eval_class_before',True)
+        self.eval_class_before = config.get('eval_class_before',False)
 
         task = config['task'] if 'task' in config else 6
 

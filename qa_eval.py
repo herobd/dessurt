@@ -11,6 +11,10 @@ import math
 from collections import defaultdict
 import random
 from trainer import QATrainer
+from funsd_eval_json import derepeat
+import editdistance
+import re
+from transformers import BartTokenizer
 
 logging.basicConfig(level=logging.INFO, format='')
 
@@ -287,9 +291,8 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     "data_set_name": "IAMQA",
                     "data_dir": "../data/IAM",
                     "batch_size": config['data_loader']['batch_size']*(3 if 'full' in config['data_loader'] else 2) if not run else 1,
-                    "full": config['data_loader'].get('full',False),
-                    "cased": config['data_loader'].get('cased',False),
-                    "mode": "IAM_valid",
+                    "cased": config['data_loader'].get('cased',True),
+                    "mode": "IAM_para",
                     "rescale_to_crop_size_first": True,
                     "rescale_range": [
                         1.0,
@@ -303,7 +306,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     },
                     "questions": 1,
                         "max_qa_len_in": 640,
-                        "max_qa_len_out": 2560,
+                        "max_qa_len_out": 25600000,
                     "image_size": [
                             image_h-4,image_w-4
                     ],
@@ -312,6 +315,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                 "validation":{}
                 }
         get=['pred','gt']
+        tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
     else:
         print('ERROR, unknown dataset: {}'.format(data_set_name))
         exit(1)
@@ -373,10 +377,32 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     'questionId': int(instance['id'][0]),
                     'answer': out['pred']
                     })
-            elif data_set_name==='IAMQA':
+            elif data_set_name=='IAMQA':
+                #CER: 0.2710194841164712,  WER: 0.40655598126862497 with second call
+                #CER: 0.27773897545820186,  WER: 0.4087 without
                 gts.append(out['gt'])
-                preds.append(out['pred'])
-
+                init_len = len(out['pred'])
+                fixed = derepeat(out['pred'])
+                if verbose:
+                    print('==================')
+                    print('GT: '+gts[-1])
+                    print('PRED: '+fixed)
+                if init_len>len(fixed):
+                    #query again to try and recover lost text
+                    #only do this once
+                    tokens = tokenizer.encode(fixed)
+                    tokens = tokens[-12:]
+                    prompt = 're~'+tokenizer.decode(tokens,skip_special_tokens=True)
+                    instance['questions'] = [[prompt]]
+                    _,res,out = trainer.run(instance,valid=True,run=run,get=get)
+                    response = derepeat(out['pred'])
+                    fixed += response
+                    if verbose:
+                        print('FINAL PRED: '+fixed)
+                if fixed[-1]=='‡':
+                    fixed = fixed[:-1]
+                preds.append(fixed)
+            
 
             index+=1
     F_measure_prec={}
