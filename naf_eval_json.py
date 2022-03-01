@@ -424,6 +424,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
     config['data_loader']['no_graphics']=True
     config['data_loader']['only_opposite_pairs']=False
     config['data_loader']['no_groups']=True
+    config['data_loader']['rotation']=True
+    
 
     if DEBUG:
         config['data_loader']['num_workers']=0
@@ -439,6 +441,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
     config['validation']['no_graphics']=True
     config['validation']['only_opposite_pairs']=False
     config['validation']['no_groups']=True
+    config['validation']['rotation']=True
 
     if not test:
         data_loader, valid_data_loader = getDataLoader(config,'train')

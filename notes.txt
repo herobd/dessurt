@@ -294,6 +294,10 @@ funsd_mmswin_bart_PTfrom94ilatest_242ALT
 Total entity recall, prec, Fm:  0.589   0.71    0.644
 Total rel recall, prec, Fm:     0.384   0.586   0.464
 
+funsd_mmswin_bart_unlikImTotal_PTfrom94ilatest_256
+Total entity recall, prec, Fm:  0.512   0.619   0.56
+Total rel recall, prec, Fm:     0.264   0.416   0.323
+
 funsd_mmswin_bart_unlik_PTfrom94ilatest_253
 Total entity recall, prec, Fm:  0.51    0.603   0.552
 Total rel recall, prec, Fm:     0.254   0.45    0.325
