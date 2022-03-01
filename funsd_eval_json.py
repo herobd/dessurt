@@ -488,7 +488,9 @@ def fixLoadJSON(pred):
                             pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'add a comma and quote')
                             pred = pred[:char]+',"'+pred[char:]
                         else:
-                            assert  False
+                            pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'well, it asked for a comma2')
+                            pred = pred[:char]+','+pred[char:]
+                            #assert False
                     else:
                         pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'well, it asked for a comma')
                         pred = pred[:char]+','+pred[char:]

@@ -2,154 +2,102 @@
     "name": "test",
     "cuda": true,
     "gpu": 0,
+    "super_computer":false,
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
-        "data_set_name": "IAMNER",
-        "data_dir": "../data/IAM",
-        "cased": true,
-        "full": true,
-        "short_class": true,
-        "class_first": true,
-        "use_noise": 0.09,
-        "batch_size": 1,
-        "num_workers": 6,
+        "data_set_name": "FormsBoxDetect",
+        "data_dir": "../data/forms",
+        "batch_size": 2,
         "shuffle": true,
-        "persistent_workers": true,
-        "rescale_range": [
-            0.8,
-            1
-        ],
-        "rescale_to_crop_size_first": true,
+        "num_workers": 2,
+        "crop_to_page":false,
+        "color":false,
+        "rescale_range": [0.4,0.65],
         "crop_params": {
-            "crop_size": [
-                1152,
-                768
-            ],
-            "pad": 0,
-            "rot_degree_std_dev": 1
+            "crop_size":[652,1608],
+            "pad":0,
+            "flip_horz": true,
+            "rot_degree_std_dev": 0.7
         },
-        "questions": 1
+        "no_blanks": true,
+        "swap_circle":true,
+        "no_graphics":true,
+        "cache_resized_images": true,
+        "only_types": {
+            "boxes":true
+        },
+        "rotation": false
+
+
     },
     "validation": {
         "shuffle": false,
-        "batch_size": 3,
-        "rescale_range": [
-            0.9,
-            0.9
-        ],
-        "crop_params": {
-            "crop_size": [
-                1152,
-                768
-            ],
-            "pad": 0,
-            "random": false
-        }
+        "crop_to_page":false,
+        "color":false,
+        "rescale_range": [0.52,0.52],
+        "only_types": {
+            "boxes":true
+        },
+        "no_blanks": true,
+        "swap_circle":true,
+        "no_graphics":true,
+        "batch_size": 1,
+        "rotation": false
     },
+
+    
     "lr_scheduler_type": "none",
-    "optimizer_type": "AdamW",
+ 
+    "optimizer_type": "Adam",
     "optimizer": {
-        "lr": 0.0001,
-        "weight_decay": 0.01
+        "lr": 0.01,
+        "weight_decay": 0
     },
     "loss": {
-        "#answer": "padded_seq_cross_entropy",
-        "answer": "label_smoothing",
-        "#mask": "sigmoid_BCE_mask_loss",
-        "mask": "focalLoss"
-    },
-    "loss_weights": {
-        "answer": 1,
-        "mask": 1,
-        "cosine": 0,
-        "distillation": 2.5
+        "box":"YoloLoss"
     },
     "loss_params": {
-        "xanswer": {},
-        "answer": {
-            "smoothing": 0.1,
-            "padding_idx": 1
+        "box": {
+            "ignore_thresh": 0.5,
+            "bad_conf_weight": 20.0
         }
     },
+    "loss_weights":{"box":1.0},
     "metrics": [],
     "trainer": {
-        "class": "QATrainer",
-        "iterations": 200099,
-        "accum_grad_steps": 128,
-        "#swa": true,
-        "#swa_start": 200000,
+        "class": "BoxDetectTrainer",
+        "iterations": 250000,
         "save_dir": "saved/",
         "val_step": 10000,
-        "save_step": 110000,
-        "save_step_minor": 1024,
-        "log_step": 1024,
-        "print_pred_every": 1024,
+        "save_step": 50000,
+        "save_step_minor": 500,
+        "log_step": 500,
         "verbosity": 1,
-        "monitor": "val_F_Measure_MACRO",
-        "monitor_mode": "max",
-        "retry_count": 0,
-        "do_ocr": "no",
-        "#use_learning_schedule": "multi_rise then ramp_to_swa",
-        "use_learning_schedule": "multi_rise then ramp_to_lower",
-        "warmup_steps": [
-            1000
-        ],
-        "#ramp_down_steps": 10000,
-        "#swa_lr_mul": 0.01,
-        "lr_down_start": 12000,
-        "ramp_down_steps": 10000,
-        "lr_mul": 0.1
+        "monitor": "loss",
+        "monitor_mode": "none",
+        "warmup_steps": 1000,
+        "thresh_conf":0.88,
+        "thresh_intersect":0.4,
+
+        "use_learning_schedule": "detector"
     },
-    "arch": "MmSwin",
+    "arch": "YoloBoxDetector", 
     "model": {
-        "image_size": [
-            1152,
-            768
-        ],
-        "use_set_length": true,
-        "init_from_pretrained": "bart",
-        "use_special_question_tokens": true,
-        "max_q_tokens": 20,
-        "#max_a_tokens": 3400,
-        "max_a_tokens": 100,
-        "no_dropout": false,
-        "window_size": 12,
-        "decode_dim": 128,
-        "dim_ff": 128,
-        "decode_num_heads": 8,
-        "blocks_per_level": [
-            4,
-            6
-        ],
-        "use_swin": [
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-            false,
-            false
-        ],
-        "swin_cross_attention": [
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-            true,
-            false,
-            false
-        ],
-        "swin_nheads": [
-            4,
-            8
-        ],
-        "im_embed_dim": 128
+        "color":false,
+        "pred_num_neighbors": true,
+        "number_of_box_types": 2,
+        "number_of_point_types": 0,
+        "number_of_pixel_types": 0,
+        "norm_type": "group_norm",
+        "dropout": true,
+        "down_layers_cfg": [1,"k5-32", "M", 
+                                64, 64,  "M", 
+                                "hd2-128", "vd1-128", "hd4-128", 128,  "M", 
+                                "hd4-256", "vd1-256", "hd8-256", 256,  "M", 
+                                "hd8-512","vd1-512","hd16-512",512, 512],
+        "up_layers_cfg":[],
+        "anchors_file": "anchors_noRot_new_25.json",
+        "rotation":false
     }
 }

@@ -224,9 +224,8 @@ def parseDict(ent_dict,entities,links):
             #row_ids = list(range(len(entities),len(entities)+len(row_headers)))
             for rh in reversed(row_headers):
                 if rh is not None:
-                    if '<<' in rh and '>>' in rh:
+                    if '<<' == rh[:2] and '>>' in rh:
                         #subent_dict
-                        assert rh[:2]=='<<'
                         sub_end = rh.find('>>')
                         sub =  rh[2:sub_end]
                         rh=rh[sub_end+2:]
@@ -247,9 +246,8 @@ def parseDict(ent_dict,entities,links):
             col_ids = []
             for ch in reversed(col_headers):
                 if ch is not None:
-                    if '<<' in ch and '>>' in ch:
+                    if '<<' == ch[:2] and '>>' in ch:
                         #subent_dict
-                        assert ch[:2]=='<<'
                         sub_end = ch.find('>>')
                         sub =  ch[2:sub_end]
                         ch=ch[sub_end+2:]

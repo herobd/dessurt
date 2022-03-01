@@ -28,7 +28,7 @@ class IAMQA(ParaQADataset):
         
         self.crop_to_data=True
         self.warp_lines = config.get('warp_lines',0.999)
-        split_by = 'rwth'
+        split_by = config.get('data_split','rwth') #custom / standard
         self.cache_resized = False
         #NEW the document must have a block_score above thresh for anything useing blocks (this is newline following too)
         self.block_score_thresh = 0.73 #eye-balled this one
@@ -36,6 +36,11 @@ class IAMQA(ParaQADataset):
 
         if images is not None:
             self.images=images
+        if split_by=='standard':
+            split_file = './data_sets/iam_standard_sets.json'
+            with open(split_file) as f:
+                splits = json.load(f)
+            doc_set = splits[split]
         else:
             split_file = os.path.join(dirPath,'ne_annotations','iam',split_by,'iam_{}_{}_6_all.txt'.format(split,split_by))
             doc_set = set()
