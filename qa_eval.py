@@ -15,6 +15,71 @@ from trainer import QATrainer
 logging.basicConfig(level=logging.INFO, format='')
 
 
+# OCR METRICS: https://github.com/FactoDeepLearning/VerticalAttentionOCR/blob/master/basic/utils.py
+
+
+def edit_cer_from_list(truth, pred):
+    edit = 0
+    for t, p in zip(truth, pred):
+        edit += editdistance.eval(t, p)
+    return edit
+
+
+def format_string_for_wer(string):
+    string = string.replace('\\',' ')#my own newline predictions
+    string = re.sub('([\[\]{}/\\()\"\'&+*=<>?.;:,!\-—_€#%°])', r' \1 ', string)
+    string = re.sub('([ \n])+', " ", string).strip()
+    return string
+
+
+def edit_wer_from_list(truth, pred):
+    edit = 0
+    for pred, gt in zip(pred, truth):
+        gt = format_string_for_wer(gt)
+        pred = format_string_for_wer(pred)
+        gt = gt.split(" ")
+        pred = pred.split(" ")
+        edit += editdistance.eval(gt, pred)
+    return edit
+
+
+def nb_words_from_list(list_gt):
+    len_ = 0
+    for gt in list_gt:
+        gt = format_string_for_wer(gt)
+        gt = gt.split(" ")
+        len_ += len(gt)
+    return len_
+
+
+def nb_chars_from_list(list_gt):
+    return sum([len(t) for t in list_gt])
+
+
+def cer_from_list_str(str_gt, str_pred):
+        len_ = 0
+        edit = 0
+        for pred, gt in zip(str_pred, str_gt):
+            edit += editdistance.eval(gt, pred)
+            len_ += len(gt)
+        cer = edit / len_
+        return cer
+
+
+def wer_from_list_str(str_gt, str_pred):
+    len_ = 0
+    edit = 0
+    for pred, gt in zip(str_pred, str_gt):
+        gt = format_string_for_wer(gt)
+        pred = format_string_for_wer(pred)
+        gt = gt.split(" ")
+        pred = pred.split(" ")
+        edit += editdistance.eval(gt, pred)
+        len_ += len(gt)
+    cer = edit / len_
+    return cer
+
+
 def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, config=None, thresh=None, addToConfig=None, test=False,verbose=2,run=False,smaller_set=False,eval_full=None,ner_do_before=False):
     assert run
     random.seed(1234)
@@ -245,6 +310,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                         },
                 "validation":{}
                 }
+        get=['pred','gt']
     else:
         print('ERROR, unknown dataset: {}'.format(data_set_name))
         exit(1)
@@ -283,6 +349,8 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
     #data_iter = iter(data_loader)
     metrics = defaultdict(list)
     collected_preds=[]
+    gts=[]
+    preds=[]
     with torch.no_grad():
 
         index=0
@@ -299,11 +367,15 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                         metrics[name]+=value
                     else:
                         metrics[name].append(value)
-            if 'pred' in out:
+            if data_set_name=='DocVQA':
                 collected_preds.append({
                     'questionId': int(instance['id'][0]),
                     'answer': out['pred']
                     })
+            elif data_set_name==='IAMQA':
+                gts.append(out['gt'])
+                preds.append(out['pred'])
+
 
             index+=1
     F_measure_prec={}
@@ -332,6 +404,11 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                 total_Fms+=f
                 print('{} Fm={},  P={},  R={}'.format(name,f,p,r))
             print('Macro Fm = {}'.format(total_Fms/len(names)))
+
+    if data_set_name=='IAMQA':
+        cer = cer_from_list_str(gts,preds)
+        wer = wer_from_list_str(gts,preds)
+        print('CER: {},  WER: {}'.format(cer,wer))
 
     if len(collected_preds)>0:
         with open('DocVQA_OUT.json','w') as f:
