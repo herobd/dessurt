@@ -672,6 +672,10 @@ class QATrainer(BaseTrainer):
                 elif question.startswith('ner_'):
                     pred_words = processNERLine(pred)#.split(' ')
                     gt_words = processNERLine(answer)
+                    pred_full = ' '.join(w[0] for w in pred_words)
+                    pred_full = pred_full.replace(' .','.').replace(' ,',',').replace(' ?','?').replace(' !','!').replace(' ;',';').replace(' :',':').replace(' (','(').replace(' )',')')
+                    gt_full = ' '.join(w[0] for w in gt_words)
+                    gt_full = gt_full.replace(' .','.').replace(' ,',',').replace(' ?','?').replace(' !','!').replace(' ;',';').replace(' :',':').replace(' (','(').replace(' )',')')
 
                     #we now step through at be sure we mactch the words up
                     p=0 #pred index
@@ -743,6 +747,8 @@ class QATrainer(BaseTrainer):
                         log['E_approx_CER'].append(eds[-1][-1]/total_gt_len)
                     elif len(gt_words)>0:
                         log['E_approx_CER'].append(1)
+
+                    log['E_true_CER'].append(editdistnace.eval(pred_full,gt_full)/len(gt_full))
 
                     #for gt,pred in aligned[-1][-1]:
                     #    if gt[1]==pred[1]:

@@ -2,10 +2,10 @@ from zss import simple_distance, Node
 
 A = (
     Node("f")
-        .addkid(Node("abaa")
-            .addkid(Node("h"))
+        .addkid(Node("xxxaba")
+            .addkid(Node("d"))
             .addkid(Node("c")
-                .addkid(Node("l"))))
+                .addkid(Node("b"))))
         .addkid(Node("f"))
         .addkid(Node("g"))
         .addkid(Node("1")
@@ -20,11 +20,13 @@ A = (
     )
 B = (
     Node("f")
-        .addkid(Node("abar")
+        .addkid(Node("xxxaba")
             .addkid(Node("d"))
             .addkid(Node("c")
                 .addkid(Node("b"))))
         .addkid(Node("e"))
+        .addkid(Node("f"))
+        .addkid(Node("g"))
         .addkid(Node("2")
             .addkid(Node("3"))
             .addkid(Node("444"))
