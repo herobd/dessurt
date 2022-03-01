@@ -1,3 +1,8 @@
+New IAM NER experiments
+Validation
+iamNER18c1_mmswin_bart_PTfrom94ilatest_232
+Macro Fm = 0.351
+
 IAMNER18
 
 org Fm=0.3937007874015749,  P=0.2840909090909091,  R=0.6410256410256411
