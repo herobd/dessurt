@@ -839,6 +839,9 @@ class QATrainer(BaseTrainer):
                 elif 'pred'==name:
                     assert len(string_a)==1 and len(string_a[0])==1
                     got[name]=string_a[0][0]
+                elif 'gt'==name:
+                    assert len(answers)==1 and len(answers[0])==1
+                    got[name]=answers[0][0]
                 else:
                     raise NotImplementedError('Cannot get [{}], unknown'.format(name))
         if not valid:
