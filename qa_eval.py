@@ -222,9 +222,8 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     "data_set_name": "IAMQA",
                     "data_dir": "../data/IAM",
                     "batch_size": config['data_loader']['batch_size']*(3 if 'full' in config['data_loader'] else 2) if not run else 1,
-                    "full": config['data_loader'].get('full',False),
                     "cased": config['data_loader'].get('cased',False),
-                    "mode": "IAM_valid",
+                    "mode": "IAM_para",
                     "rescale_to_crop_size_first": True,
                     "rescale_range": [
                         1.0,
@@ -238,7 +237,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     },
                     "questions": 1,
                         "max_qa_len_in": 640,
-                        "max_qa_len_out": 2560,
+                        "max_qa_len_out": 25600000,
                     "image_size": [
                             image_h-4,image_w-4
                     ],
