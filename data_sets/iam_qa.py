@@ -27,15 +27,19 @@ class IAMQA(ParaQADataset):
         self.augment_shade = config['augment_shade'] if 'augment_shade' in config else True
         
         self.crop_to_data=True
-        self.warp_lines = config.get('warp_lines',0.999)
-        split_by = 'rwth'
+        self.warp_lines = config.get('warp_lines',0.999 if self.train else None) 
+        split_by = config.get('data_split','rwth') #custom / standard
         self.cache_resized = False
-        #NEW the document must have a block_score above thresh for anything useing blocks (this is newline following too)
-        self.block_score_thresh = 0.73 #eye-balled this one
 
 
         if images is not None:
             self.images=images
+        if split_by in ['standard','Coquenet']:
+            #data_sets/iam_Coquenet_splits.json
+            split_file = './data_sets/iam_{}_splits.json'.format(split_by)
+            with open(split_file) as f:
+                splits = json.load(f)
+            doc_set = splits[split]
         else:
             split_file = os.path.join(dirPath,'ne_annotations','iam',split_by,'iam_{}_{}_6_all.txt'.format(split,split_by))
             doc_set = set()
@@ -46,20 +50,20 @@ class IAMQA(ParaQADataset):
                 if len(parts)>1:
                     name = '-'.join(parts[:2])
                     doc_set.add(name)
-            rescale=1.0
-            self.images=[]
-            for name in doc_set:
-                xml_path = os.path.join(dirPath,'xmls',name+'.xml')
-                image_path = os.path.join(dirPath,'forms',name+'.png')
-                #if self.train:
-                self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':xml_path, 'rescaled':rescale })
-                #else:
-                #    _,_,_,_,_,qa = self.parseAnn(xml_path,rescale)
-                #    #qa = self.makeQuestions(rescale,entries))
-                #    import pdb;pdb.set_trace()
-                #    for _qa in qa:
-                #        _qa['bb_ids']=None
-                #        self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':xml_path, 'rescaled':rescale, 'qa':[_qa]})
+        rescale=1.0
+        self.images=[]
+        for name in doc_set:
+            xml_path = os.path.join(dirPath,'xmls',name+'.xml')
+            image_path = os.path.join(dirPath,'forms',name+'.png')
+            #if self.train:
+            self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':xml_path, 'rescaled':rescale })
+            #else:
+            #    _,_,_,_,_,qa = self.parseAnn(xml_path,rescale)
+            #    #qa = self.makeQuestions(rescale,entries))
+            #    import pdb;pdb.set_trace()
+            #    for _qa in qa:
+            #        _qa['bb_ids']=None
+            #        self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':xml_path, 'rescaled':rescale, 'qa':[_qa]})
 
 
 
@@ -85,8 +89,8 @@ class IAMQA(ParaQADataset):
                 maxY = max(maxY,word[0][1])
         crop = [max(0,round(minX-40)),
                 max(0,round(minY-40)),
-                min(image_h,round(maxX+40)),
-                min(image_w,round(maxY+40))]
+                round(maxX+40),
+                round(maxY+40)]
         self.current_crop=crop[:2]
 
         crop_x,crop_y = self.current_crop

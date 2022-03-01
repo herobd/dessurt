@@ -93,7 +93,7 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=iam_qa.IAMQA(dirPath=dirPath,split='train',config={
+    data=iam_qa.IAMQA(dirPath=dirPath,split='valid',config={
         'rescale_range': [0.5,1],
         'rescale_to_crop_size_first': True,
         'crop_params': {
@@ -103,8 +103,10 @@ if __name__ == "__main__":
             "rot_degree_std_dev": 1
             },
         'questions':1,
-        'max_qa_len': 2200,
-        'mode': 'IAM',
+        'max_qa_len': 220000,
+        'mode': 'IAM_para',
+        "data_split": "Coquenet",
+        "cased": True
 
 })
 

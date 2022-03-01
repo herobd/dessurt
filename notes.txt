@@ -36,6 +36,10 @@ Macro Fm = 0.5997
 iamNER_mmswin_bart_PTfrom119i1M_222
 Macro Fm = 0.598
 
+=======
+iamNER18c1_mmswin_bart_PTfrom94ilatest_232
+Macro Fm = 0.351
+
 IAMNER18
 
 org Fm=0.3937007874015749,  P=0.2840909090909091,  R=0.6410256410256411

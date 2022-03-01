@@ -300,6 +300,13 @@ class ParaQADataset(QADataset):
             self.q_types_noblock = {
                     'read_block0': 1.0
                     }
+        elif mode == 'IAM_para':
+            self.q_types = {
+                    'read_block': 1.0
+                    }
+            self.q_types_noblock = {
+                    'read_block': 1.0
+                    }
         elif mode == 'easy_bart':
             self.q_types = {
                     #'read_blanked':1,
