@@ -84,14 +84,16 @@ def main(rank,config, resume,world_size=None):
         config['super_computer'] = '{}_{}'.format(config['name'],rank)
 
     #np.random.seed(1234) I don't have a way of restarting the DataLoader at the same place, so this makes it totaly random
+    if config.get('PRINT_MODEL',False):
+        model = eval(config['arch'])(config['model'])
+        model.summary()
+        exit()
 
     split = config['split'] if 'split' in config else 'train'
     data_loader, valid_data_loader = getDataLoader(config,split,rank,world_size)
     #valid_data_loader = data_loader.split_validation()
 
     model = eval(config['arch'])(config['model'])
-    if config.get('PRINT_MODEL',False):
-        model.summary()
 
     if type(config['loss'])==dict:
         loss={}#[eval(l) for l in config['loss']]

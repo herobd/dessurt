@@ -11,7 +11,7 @@ import math
 from collections import defaultdict
 import random
 from trainer import QATrainer
-from funsd_eval_json import derepeat
+from funsd_eval_json import derepeat,fixLoadJSON
 import editdistance
 import re
 from transformers import BartTokenizer
@@ -228,6 +228,36 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                 }
         if test:
             get=['pred']
+    elif data_set_name=='SROIE':
+        data_config={
+                "data_loader": {
+                    "data_set_name": "SROIE",
+                    "data_dir": "../data/SROIE",
+                    "batch_size": config['data_loader']['batch_size']*3 if not run else 1,
+                    "rescale_to_crop_size_first": True,
+                    "rescale_range": [
+                        1.0,
+                        1.0
+                    ],
+                    "crop_params": {
+                        "crop_size": [
+                            image_h,image_w
+                        ],
+                        "random": False
+                    },
+                    "questions": 1,
+                        "max_qa_len_in": 640,
+                        "max_qa_len_out": 2560,
+                    "cased": True,
+                    "image_size": [
+                            image_h-4,image_w-4
+                    ],
+                    "shuffle": False
+                        },
+                "validation":{}
+                }
+        if test:
+            get=['pred']
     elif data_set_name=='RVL':
         data_config={
                 "data_loader": {
@@ -377,6 +407,13 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     'questionId': int(instance['id'][0]),
                     'answer': out['pred']
                     })
+            elif data_set_name=='SROIE':
+                name = instance['imgName'][instance['imgName'].rfind('/')+1:]
+                data =fixLoadJSON(out['pred']) 
+                with open('sroie_results/{}.txt'.format(name),'w') as f:
+                    json.dump(data,f)
+                if index==2:
+                    break
             elif data_set_name=='IAMQA':
                 #CER: 0.2710194841164712,  WER: 0.40655598126862497 with second call
                 #CER: 0.27773897545820186,  WER: 0.4087 without

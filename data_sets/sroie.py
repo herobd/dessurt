@@ -23,7 +23,7 @@ class SROIE(QADataset):
 
     def __init__(self, dirPath=None, split=None, config=None, images=None):
         super(SROIE, self).__init__(dirPath,split,config,images)
-
+        self.do_masks=True
         self.augment_shade = config['augment_shade'] if 'augment_shade' in config else True
         self.cased = config.get('cased',True)
         self.rescale_to_crop_size_first = config.get('rescale_to_crop_size_first',True)

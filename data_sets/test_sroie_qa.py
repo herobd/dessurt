@@ -8,10 +8,11 @@ import numpy as np
 import torch
 import utils.img_f as cv2
 import json
+from transformers import BartTokenizer
 
 widths=[]
 
-def display(data):
+def display(data,tokenizer):
     batchSize = data['img'].size(0)
     #mask = makeMask(data['image'])
     for b in range(batchSize):
@@ -43,15 +44,10 @@ def display(data):
                 a = json.dumps(a,indent=3)
             print(q+' : '+a)
 
-        #widths.append(img.size(1))
-        draw = True
-        #for x in ['json>']:#['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
-        #    if x in q and '<<' in a:
-        #        draw = True
-        #        break
-        #draw = draw and '\\' in a
-        #if 'json' not in q and ('>>' in a or '>>' in q):
-        #    draw = True
+        tok_len=tokenizer(a,return_tensors="pt")['input_ids'].shape[1]
+
+        #widths.append(img.size(1)       
+        draw = False
 
         if draw :
             #cv2.imshow('line',img.numpy())
@@ -77,7 +73,7 @@ def display(data):
         #    ax_im.imshow(img)
 
         #plt.show()
-    print('batch complete')
+    return tok_len
 
 
 if __name__ == "__main__":
@@ -93,7 +89,7 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=sroie.SROIE(dirPath=dirPath,split='train',config={
+    data=sroie.SROIE(dirPath=dirPath,split='test',config={
         '#rescale_range':[0.8,1.2],
         'rescale_range':[1,1],
         'rescale_to_crop_size_first': True,
@@ -111,6 +107,11 @@ if __name__ == "__main__":
     dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False, num_workers=0, collate_fn=sroie.collate)
     dataLoaderIter = iter(dataLoader)
 
+    tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
+    #add = ['"answer"',"question","other","header","},{",'"answers":','"content":']
+    #tokenizer.add_tokens(add, special_tokens=True)
+    #max_tok_len=0S
+    tok_lens=[]
         #if start==0:
         #display(data[0])
     for i in range(0,start):
@@ -120,9 +121,10 @@ if __name__ == "__main__":
     try:
         while True:
             #print('?')
-            display(dataLoaderIter.next())
+            tok_lens.append(display(dataLoaderIter.next(),tokenizer))
     except StopIteration:
-        print('done')
+        print(tok_lens)
+        print('max tok len : {}'.format(np.max(tok_lens)))
 
     #print('width mean: {}'.format(np.mean(widths)))
     #print('width std: {}'.format(np.std(widths)))
