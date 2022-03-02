@@ -256,8 +256,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                         },
                 "validation":{}
                 }
-        if test:
-            get=['pred']
+        get=['pred']
     elif data_set_name=='RVL':
         data_config={
                 "data_loader": {
@@ -408,12 +407,13 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     'answer': out['pred']
                     })
             elif data_set_name=='SROIE':
-                name = instance['imgName'][instance['imgName'].rfind('/')+1:]
-                data =fixLoadJSON(out['pred']) 
+                name = instance['imgName'][0][instance['imgName'][0].rfind('/')+1:]
+                try:
+                    data =fixLoadJSON(out['pred']) 
+                except:
+                    data = {}
                 with open('sroie_results/{}.txt'.format(name),'w') as f:
                     json.dump(data,f)
-                if index==2:
-                    break
             elif data_set_name=='IAMQA':
                 #CER: 0.2710194841164712,  WER: 0.40655598126862497 with second call
                 #CER: 0.27773897545820186,  WER: 0.4087 without

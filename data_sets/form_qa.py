@@ -527,24 +527,40 @@ class FormQA(QADataset):
         if json_text is not None:
             json_tokens = self.tokenizer(json_text,return_tensors="pt")['input_ids']
             tok_len = json_tokens.shape[1]
-            if tok_len>self.max_a_tokens:
-                if tok_len-(self.max_q_tokens+self.max_a_tokens)>0:
-                    if self.train:
-                        if random.random()<0.1:
-                            r = random.randrange(tok_len-(self.max_q_tokens+self.max_a_tokens))
-                        else:
-                            r = random.randrange(tok_len-self.max_q_tokens-2)
-                    else:
-                        r = tok_len-(self.max_q_tokens+self.max_a_tokens)
+            #if tok_len>self.max_a_tokens:
+            #    if tok_len-(self.max_q_tokens+self.max_a_tokens)>0:
+            #        if self.train:
+            #            if random.random()<0.1:
+            #                r = random.randrange(tok_len-(self.max_q_tokens+self.max_a_tokens))
+            #            else:
+            #                r = random.randrange(tok_len-self.max_q_tokens-2)
+            #        else:
+            #            r = tok_len-(self.max_q_tokens+self.max_a_tokens)
+            #    else:
+            #        r=0
+            #    q_json_tokens = json_tokens[0,r:r+self.max_q_tokens]
+            #    json_tokens = json_tokens[0,r+self.max_q_tokens:]
+
+            #    json_text = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(json_tokens,skip_special_tokens=True))
+            #    q_json_text = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(q_json_tokens,skip_special_tokens=True))
+            #else:
+            #    q_json_text = None
+            do_from_start = (tok_len+1<=self.max_a_tokens and not self.train) or (self.train and random.random()<0.5 and not (tok_len+1>self.max_a_tokens and not self.train))
+            if do_from_start:
+                q_json_text = None
+            else:
+                if not self.train:
+                    r = max(tok_len-(self.max_q_tokens+self.max_a_tokens),0)
+                elif tok_len>self.max_q_tokens+self.max_a_tokens and random.random()<0.1:
+                    r = random.randrange(tok_len-(self.max_q_tokens+self.max_a_tokens))
                 else:
-                    r=0
+                    r = random.randrange(tok_len-self.max_q_tokens-2)
                 q_json_tokens = json_tokens[0,r:r+self.max_q_tokens]
                 json_tokens = json_tokens[0,r+self.max_q_tokens:]
 
                 json_text = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(json_tokens,skip_special_tokens=True))
                 q_json_text = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(q_json_tokens,skip_special_tokens=True))
-            else:
-                q_json_text = None
+
 
 
 
