@@ -276,7 +276,7 @@ class FormQA(QADataset):
         self.max_json_words=5
 
         self.max_q_tokens = config.get('max_q_tokens',20)
-        self.max_a_tokens = config.get('max_q_tokens',800)
+        self.max_a_tokens = config.get('max_a_tokens',800)
         if use_json:
             self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
 
