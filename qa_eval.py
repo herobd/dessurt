@@ -412,7 +412,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     data =fixLoadJSON(out['pred']) 
                 except:
                     data = {}
-                with open('sroie_results/{}.txt'.format(name),'w') as f:
+                with open('sroie_results{}/{}.txt'.format(run if type(run) is str else '',name),'w') as f:
                     json.dump(data,f)
             elif data_set_name=='IAMQA':
                 #CER: 0.2710194841164712,  WER: 0.40655598126862497 with second call
