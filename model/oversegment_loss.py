@@ -5,7 +5,6 @@ import torch
 import numpy as np
 import math
 from utils.yolo_tools import allIOU, allDist
-from matplotlib import pyplot as plt
 from model.overseg_box_detector import MAX_H_PRED, MAX_W_PRED, NUM_ANCHORS
 from utils.util import plotRect, xyrhwToCorners, inv_tanh
 from shapely.geometry import Polygon
@@ -1249,6 +1248,7 @@ def build_oversegmented_targets_multiscale(
 
 
         if VISUAL_DEBUG:
+            from matplotlib import pyplot as plt
             for level in range(len(nHs)):
                 colorIndex=0
                 print('draw level {}'.format(level))
