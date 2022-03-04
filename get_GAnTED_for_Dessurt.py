@@ -174,6 +174,22 @@ def main(predictions,data_set_name,test=False,match_thresh=1,twice=False,shuffle
                         },
                 "validation":{}
                 }
+    elif data_set_name=='NAF':
+        data_config={
+                "data_loader": {
+                    "data_set_name": "NAFQA",
+                    "data_dir": "../data/forms",
+                    "use_json": "only",
+                    "max_a_tokens": 2000000000000,
+                    "cased": True,
+                    "batch_size": 1,
+                    "num_workers": 2,
+                    "questions": 1,
+                    "rescale_range": [1.0,1.0],
+                    "shuffle": False,
+                        },
+                "validation":{}
+                }
     else:
         print('Unknown dataset: '+data_set_name)
         exit()
@@ -219,7 +235,8 @@ def main(predictions,data_set_name,test=False,match_thresh=1,twice=False,shuffle
         if shuffle:
             shuffleTree(tree_pred)
 
-        if len(gt_tables)==0 and len(pred_tables)==0:
+        if (len(gt_tables)==0 and len(pred_tables)==0) or data_set_name=='NAF':
+            #NAF has no cells 
             vanilla_score = nTED(tree_pred,tree_gt)
             score = GAnTED(tree_pred,tree_gt,match_thresh=match_thresh)
             if twice:
@@ -239,6 +256,7 @@ def main(predictions,data_set_name,test=False,match_thresh=1,twice=False,shuffle
 
         if twice:
             print('{}: {}  v:{}, 2nd:{}'.format(instance['imgName'],score,vanilla_score,second_score))
+        else:
             print('{}: {}  v:{}'.format(instance['imgName'],score,vanilla_score))
         scores.append(score)
         vanilla_scores.append(vanilla_score)
