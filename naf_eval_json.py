@@ -282,7 +282,7 @@ def parseDict(ent_dict,entities,links):
 
 
 
-def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False,max_qa_len=None,quiet=False,BROS=False,ENTITY_MATCH_THRESH=0.6,LINK_MATCH_THRESH=0.6,DEBUG=False):
+def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False,max_qa_len=None,quiet=False,BROS=False,ENTITY_MATCH_THRESH=0.6,LINK_MATCH_THRESH=0.6,DEBUG=False,write=False):
     TRUER=True #False makes this do pair-first alignment, which is kind of cheating
     np.random.seed(1234)
     torch.manual_seed(1234)
@@ -464,6 +464,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
     total_rel_gt2 =0
 
     tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
+    to_write = {}
 
     going_DEBUG=False
     with torch.no_grad():
@@ -546,6 +547,8 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
             if not quiet:
                 print('==Corrected==')
                 print(json.dumps(pred_data,indent=2))
+            if write:
+                to_write[instance['imgName']]=pred_data
             
             #get entities and links
             pred_entities=[]
@@ -871,6 +874,10 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
         total_rel_F = 2*total_rel_prec*total_rel_recall/(total_rel_recall+total_rel_prec) if total_rel_recall+total_rel_prec>0 else 0
         print('Total rel recall, prec, Fm:\t{:.3}\t{:.3}\t{:.3}'.format(total_rel_recall,total_rel_prec,total_rel_F))
 
+        if write:
+            with open(write, 'w') as f:
+                json.dump(to_write,f)
+
 
 if __name__ == '__main__':
     logger = logging.getLogger()
@@ -904,6 +911,8 @@ if __name__ == '__main__':
                         help='Edit distance required to have pred entity match a GT one for entity detection')
     parser.add_argument('-L', '--LINK_MATCH_THRESH', default=0.6, type=float,
                         help='Edit distance required to have pred entity match a GT one for linking')
+    parser.add_argument('-w', '--write', default=False, type=str,
+                        help='path to write all jsons to')
 
     args = parser.parse_args()
 
@@ -920,6 +929,6 @@ if __name__ == '__main__':
         exit()
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw, quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH,DEBUG=args.DEBUG)
+            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw, quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH,DEBUG=args.DEBUG,write=args.write)
     else:
-        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw,quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH,DEBUG=args.DEBUG)
+        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw,quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH,DEBUG=args.DEBUG,write=args.write)

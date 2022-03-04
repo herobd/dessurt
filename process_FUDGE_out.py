@@ -31,7 +31,7 @@ def sortByY(eis,entities):
         ret+=b[0]
     return ret
 
-def parse(this_i,entities,link_down_to,same_link,used):
+def parse(this_i,entities,link_down_to,same_link,used,answers=False):
     used.add(this_i)
     if entities[this_i]['class'] == 'header':
         ele = {entities[this_i]['tesseract_text']:'header'}
@@ -45,10 +45,12 @@ def parse(this_i,entities,link_down_to,same_link,used):
         to_link = [ei for ei in link_down_to[this_i] + same_link[this_i] if ei not in used]
         if len(to_link)>0:
             to_link = sortByY(to_link,entities)
-            children=[parse(ei,entities,link_down_to,same_link,used) for ei in to_link]
+            children=[parse(ei,entities,link_down_to,same_link,used,True) for ei in to_link]
             ele['answers']=children
-    else:
+    elif answers:
         ele = entities[this_i]['tesseract_text']
+    else:
+        ele = {entities[this_i]['tesseract_text']:entities[this_i]['class']}
 
     return ele
 
