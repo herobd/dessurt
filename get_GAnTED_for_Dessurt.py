@@ -9,7 +9,7 @@ from collections import defaultdict
 import random
 import editdistance
 import re
-from utils.GAnTED import  GAnTED,nTED
+from utils.GAnTED import  GAnTED,nTED,shuffleTree
 from utils.GAnTED import TableNode
 from utils.GAnTED import FormNode as Node
 import numpy as np
@@ -155,7 +155,7 @@ def getScore(scorer,pred,gt,tables):
     ret += getScore(scorer,pred,gt,tables[1:])
     return ret
 
-def main(predictions,data_set_name,test=False,match_thresh=1,twice=False):
+def main(predictions,data_set_name,test=False,match_thresh=1,twice=False,shuffle=False):
 
     if data_set_name=='FUNSD':
         data_config={
@@ -215,6 +215,10 @@ def main(predictions,data_set_name,test=False,match_thresh=1,twice=False):
 
         all_tables = pred_tables+gt_tables
 
+
+        if shuffle:
+            shuffleTree(tree_pred)
+
         if len(gt_tables)==0 and len(pred_tables)==0:
             vanilla_score = nTED(tree_pred,tree_gt)
             score = GAnTED(tree_pred,tree_gt,match_thresh=match_thresh)
@@ -233,8 +237,9 @@ def main(predictions,data_set_name,test=False,match_thresh=1,twice=False):
                 tab_scores=getScore(GAnTED,tree_pred,tree_gt,all_tables)
                 second_score=min(tab_scores)
 
-
-        print('{}: {}  v:{}, 2nd:{}'.format(instance['imgName'],score,vanilla_score,second_score))
+        if twice:
+            print('{}: {}  v:{}, 2nd:{}'.format(instance['imgName'],score,vanilla_score,second_score))
+            print('{}: {}  v:{}'.format(instance['imgName'],score,vanilla_score))
         scores.append(score)
         vanilla_scores.append(vanilla_score)
         if twice:
@@ -265,9 +270,11 @@ if __name__ == '__main__':
                         help='nED to threshold for a matching string')
     parser.add_argument('-2', '--twice', default=False, action='store_const', const=True,
                         help='Run alignment twice')
+    parser.add_argument('-s', '--shuffle', default=False, action='store_const', const=True,
+                        help='Run alignment twice')
 
     args = parser.parse_args()
 
     assert args.predictions is not None and args.data_set_name is not None
 
-    main(args.predictions,args.data_set_name,args.test,args.match_thresh)
+    main(args.predictions,args.data_set_name,args.test,args.match_thresh,args.twice,args.shuffle)

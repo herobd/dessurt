@@ -6,6 +6,14 @@ no thres
 Overall   nTED: 0.39555088000831967
 Overall GAnTED: 0.2072000180669673
 
+shuffled
+Overall   nTED: 0.7458594029251637
+Overall GAnTED: 0.2860110071040905
+Overall second: 0.2462910460137094
+
+
+SROIE test results
+"precision": 0.7792207792207793, "recall": 0.7780979827089337, "hmean": 0.7786589762076424
 
 New IAM NER experiments
 Validation

@@ -2,6 +2,7 @@ from zss import simple_distance, Node
 import editdistance
 import itertools
 import math
+import random
 
 #GAnTED metric: Greedy-Aligned normalized Tree Edit Distance
 
@@ -147,6 +148,10 @@ def printTree(node,depth=0):
     for c in node.children:
         printTree(c,depth+1)
 
+def shuffleTree(node):
+    random.shuffle(node.children)
+    for c in node.children:
+        shuffleTree(c)
 
 
 class TableNode(Node):
