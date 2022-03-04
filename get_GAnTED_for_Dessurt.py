@@ -155,7 +155,7 @@ def getScore(scorer,pred,gt,tables):
     ret += getScore(scorer,pred,gt,tables[1:])
     return ret
 
-def main(predictions,data_set_name,test=False,match_thresh=1):
+def main(predictions,data_set_name,test=False,match_thresh=1,twice=False):
 
     if data_set_name=='FUNSD':
         data_config={
@@ -218,7 +218,8 @@ def main(predictions,data_set_name,test=False,match_thresh=1):
         if len(gt_tables)==0 and len(pred_tables)==0:
             vanilla_score = nTED(tree_pred,tree_gt)
             score = GAnTED(tree_pred,tree_gt,match_thresh=match_thresh)
-            second_score = GAnTED(tree_pred,tree_gt)
+            if twice:
+                second_score = GAnTED(tree_pred,tree_gt)
         else:
             assert len(all_tables)<10 #need new method if too many tables
 
@@ -228,20 +229,22 @@ def main(predictions,data_set_name,test=False,match_thresh=1):
             #Try every combination of row/col major on tables
             tab_scores=getScore(lambda a,b:GAnTED(a,b,match_thresh),tree_pred,tree_gt,all_tables)
             score=min(tab_scores)
-
-            tab_scores=getScore(GAnTED,tree_pred,tree_gt,all_tables)
-            second_score=min(tab_scores)
+            if twice:
+                tab_scores=getScore(GAnTED,tree_pred,tree_gt,all_tables)
+                second_score=min(tab_scores)
 
 
         print('{}: {}  v:{}, 2nd:{}'.format(instance['imgName'],score,vanilla_score,second_score))
         scores.append(score)
         vanilla_scores.append(vanilla_score)
-        second_scores.append(second_score)
+        if twice:
+            second_scores.append(second_score)
 
     final_score = np.mean(scores)
     print('Overall   nTED: {}'.format(np.mean(vanilla_scores)))
     print('Overall GAnTED: {}'.format(final_score))
-    #print('Overall second: {}'.format(np.mean(second_scores)))
+    if twice:
+        print('Overall second: {}'.format(np.mean(second_scores)))
 
 
 
@@ -260,6 +263,8 @@ if __name__ == '__main__':
                         help='Run test set')
     parser.add_argument('-t', '--match_thresh', default=1, type=float,
                         help='nED to threshold for a matching string')
+    parser.add_argument('-2', '--twice', default=False, action='store_const', const=True,
+                        help='Run alignment twice')
 
     args = parser.parse_args()
 

@@ -1,3 +1,12 @@
+thresh 0.5
+Overall   nTED: 0.39555088000831967
+Overall GAnTED: 0.21432802981437765
+
+no thres
+Overall   nTED: 0.39555088000831967
+Overall GAnTED: 0.2072000180669673
+
+
 New IAM NER experiments
 Validation
 iamNER18noise_mmswin_bart_PTfrom94ilatest_249
