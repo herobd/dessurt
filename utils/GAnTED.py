@@ -25,11 +25,11 @@ def nestedPermute(getScore,level):
 
 
 
-def GAnTED(pred,gt):
-    level = [pred]
-    getScore = lambda :simple_distance(pred,gt,label_dist=nEditDistance)
+def GAnTED(pred,gt,match_thresh=1):
+    getScore = lambda :simple_distance(pred,gt,label_dist=lambda a,b:matchNEditDistance(a,b,match_thresh))
     best_score = getScore()
-    print('original score: {}'.format(best_score/simple_distance(gt, Node(''),  label_dist=nEditDistance)))
+    #print('original score: {}'.format(best_score/simple_distance(gt, Node(''),  label_dist=nEditDistance)))
+    level = [pred]
     i=0
     while len(level)>0:
         #print('level {} has {}'.format(i,len(level)))
@@ -42,6 +42,8 @@ def GAnTED(pred,gt):
             next_level+=node.children
             
             original_children=node.children
+
+            #for align_pass in range(num_align_passes):
             did=[]
             child_i=0
             while child_i<len(original_children):
@@ -71,7 +73,7 @@ def GAnTED(pred,gt):
                     
 
         level = next_level
-    assert getScore() == best_score
+    #assert getScore() == best_score
     return best_score/simple_distance(gt, Node(''),  label_dist=nEditDistance)
         
 
@@ -119,6 +121,14 @@ def nEditDistance(a,b):
     if len(a)==0 and len(b)==0:
         return 0
     return editdistance.eval(a,b)/(0.5*(len(a)+len(b)))
+def matchNEditDistance(a,b,thresh=0.5):
+    if len(a)==0 and len(b)==0:
+        return 0
+    ned = editdistance.eval(a,b)/(0.5*(len(a)+len(b)))
+    if ned<thresh:
+        return ned
+    else:
+        return 1
 
 def nTED(pred,gt):
     empty_tree = Node("") #not sure if there's a better way to define this
@@ -147,6 +157,10 @@ class TableNode(Node):
         self.cells=cells
         self.title=title
 
+        self.refresh()
+        self.children = self.row_major.children
+
+    def refresh(self):
         row_major = Node("") #should have class?
         col_major = Node("") #should have class?
 
@@ -211,10 +225,10 @@ class TableNode(Node):
         self.row_major = row_major
         self.col_major = col_major
 
-        self.children = self.row_major.children
 
 
     def set_row_major(self,row_major):
+        self.refresh() #as things get scrambled when GAnTED is called
         if row_major:
             self.children = self.row_major.children
         else:

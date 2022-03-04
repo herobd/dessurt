@@ -222,7 +222,8 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
     if data_loader is not None:
         train_iter = iter(data_loader)
     valid_iter = iter(valid_data_loader)
-
+    
+    out_pred={}
     #print("WARNING GRAD ENABLED")
     with torch.no_grad():
         if index is None:
@@ -443,9 +444,18 @@ def main(resume,saveDir,numberOfImages,index,gpu=None, shuffle=False, setBatch=N
                             idsVal=[]
                             spacedVal=[]
                             stringsVal=[]
+                    if 'save_pred' in config:
+                        out_pred[instance['imgName']]=aux
+
             except StopIteration:
                 print('ERROR: ran out of valid batches early. Expected {} more'.format(len(valid_data_loader)-vi))
             ####
+
+
+            if 'save_pred' in config:
+                with open(config['save_pred'],'w') as f:
+                    json.dump(out_pred,f)
+                print('wrote '+config['save_pred'])
 
             with warnings.catch_warnings():   
                 warnings.simplefilter('error')

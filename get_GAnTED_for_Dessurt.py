@@ -155,7 +155,7 @@ def getScore(scorer,pred,gt,tables):
     ret += getScore(scorer,pred,gt,tables[1:])
     return ret
 
-def main(predictions,data_set_name,test=False):
+def main(predictions,data_set_name,test=False,match_thresh=1):
 
     if data_set_name=='FUNSD':
         data_config={
@@ -190,7 +190,7 @@ def main(predictions,data_set_name,test=False):
 
     scores=[]
     vanilla_scores=[]
-    vanillaA_scores=[]
+    second_scores=[]
     for instance in valid_data_loader:
         ans = instance['answers'][0][0]
         assert ans[-1]=='‡'
@@ -217,8 +217,8 @@ def main(predictions,data_set_name,test=False):
 
         if len(gt_tables)==0 and len(pred_tables)==0:
             vanilla_score = nTED(tree_pred,tree_gt)
-            score = GAnTED(tree_pred,tree_gt)
-            vanilla_scoreA = nTED(tree_pred,tree_gt)
+            score = GAnTED(tree_pred,tree_gt,match_thresh=match_thresh)
+            second_score = GAnTED(tree_pred,tree_gt)
         else:
             assert len(all_tables)<10 #need new method if too many tables
 
@@ -226,22 +226,22 @@ def main(predictions,data_set_name,test=False):
             vanilla_score=min(tab_scores)
 
             #Try every combination of row/col major on tables
-            tab_scores=getScore(GAnTED,tree_pred,tree_gt,all_tables)
+            tab_scores=getScore(lambda a,b:GAnTED(a,b,match_thresh),tree_pred,tree_gt,all_tables)
             score=min(tab_scores)
 
-            tab_scores=getScore(nTED,tree_pred,tree_gt,all_tables)
-            vanilla_scoreA=min(tab_scores)
+            tab_scores=getScore(GAnTED,tree_pred,tree_gt,all_tables)
+            second_score=min(tab_scores)
 
 
-        print('{}: {}  v:{}, afterv:{}'.format(instance['imgName'],score,vanilla_score,vanilla_scoreA))
+        print('{}: {}  v:{}, 2nd:{}'.format(instance['imgName'],score,vanilla_score,second_score))
         scores.append(score)
         vanilla_scores.append(vanilla_score)
-        vanillaA_scores.append(vanilla_scoreA)
+        second_scores.append(second_score)
 
     final_score = np.mean(scores)
-    print('Overall GAnTED: {}'.format(final_score))
     print('Overall   nTED: {}'.format(np.mean(vanilla_scores)))
-    print('Overall afnTED: {}'.format(np.mean(vanillaA_scores)))
+    print('Overall GAnTED: {}'.format(final_score))
+    #print('Overall second: {}'.format(np.mean(second_scores)))
 
 
 
@@ -258,9 +258,11 @@ if __name__ == '__main__':
                         help='name of dataset to eval')
     parser.add_argument('-T', '--test', default=False, action='store_const', const=True,
                         help='Run test set')
+    parser.add_argument('-t', '--match_thresh', default=1, type=float,
+                        help='nED to threshold for a matching string')
 
     args = parser.parse_args()
 
     assert args.predictions is not None and args.data_set_name is not None
 
-    main(args.predictions,args.data_set_name,args.test)
+    main(args.predictions,args.data_set_name,args.test,args.match_thresh)
