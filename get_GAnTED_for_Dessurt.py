@@ -9,7 +9,9 @@ from collections import defaultdict
 import random
 import editdistance
 import re
-from utils.GAnTED import GAnTED,TableNode,Node
+from utils.GAnTED import  GAnTED,nTED
+from utils.GAnTED import TableNode
+from utils.GAnTED import FormNode as Node
 import numpy as np
 
 
@@ -143,14 +145,14 @@ def parseDict(obj):
 
     return to_ret,all_tables
 
-def getScore(pred,gt,tables):
+def getScore(scorer,pred,gt,tables):
     if len(tables) == 0:
-        return [GAnTED(tree_pred,tree_gt)]
+        return [scorer(pred,gt)]
     ret = []
     tables[0].set_row_major(True)
-    ret += getScore(pred,gt,tables[1:])
+    ret += getScore(scorer,pred,gt,tables[1:])
     tables[0].set_row_major(False)
-    ret += getScore(pred,gt,tables[1:])
+    ret += getScore(scorer,pred,gt,tables[1:])
     return ret
 
 def main(predictions,data_set_name,test=False):
@@ -187,6 +189,8 @@ def main(predictions,data_set_name,test=False):
         valid_data_loader = data_loader
 
     scores=[]
+    vanilla_scores=[]
+    vanillaA_scores=[]
     for instance in valid_data_loader:
         ans = instance['answers'][0][0]
         assert ans[-1]=='‡'
@@ -212,19 +216,32 @@ def main(predictions,data_set_name,test=False):
         all_tables = pred_tables+gt_tables
 
         if len(gt_tables)==0 and len(pred_tables)==0:
+            vanilla_score = nTED(tree_pred,tree_gt)
             score = GAnTED(tree_pred,tree_gt)
+            vanilla_scoreA = nTED(tree_pred,tree_gt)
         else:
             assert len(all_tables)<10 #need new method if too many tables
 
+            tab_scores=getScore(nTED,tree_pred,tree_gt,all_tables)
+            vanilla_score=min(tab_scores)
+
             #Try every combination of row/col major on tables
-            tab_scores=getScore(tree_pred,tree_gt,all_tables)
+            tab_scores=getScore(GAnTED,tree_pred,tree_gt,all_tables)
             score=min(tab_scores)
 
-        print('{}: {}'.format(instance['imgName'],score))
+            tab_scores=getScore(nTED,tree_pred,tree_gt,all_tables)
+            vanilla_scoreA=min(tab_scores)
+
+
+        print('{}: {}  v:{}, afterv:{}'.format(instance['imgName'],score,vanilla_score,vanilla_scoreA))
         scores.append(score)
+        vanilla_scores.append(vanilla_score)
+        vanillaA_scores.append(vanilla_scoreA)
 
     final_score = np.mean(scores)
     print('Overall GAnTED: {}'.format(final_score))
+    print('Overall   nTED: {}'.format(np.mean(vanilla_scores)))
+    print('Overall afnTED: {}'.format(np.mean(vanillaA_scores)))
 
 
 
