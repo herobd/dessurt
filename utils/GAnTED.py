@@ -204,8 +204,9 @@ class TableNode(Node):
             if isinstance(header,str):
                 col = Node(header)
                 #for cell in self.cells[r]:
-                for row in self.cells:
-                    col.addkid(Node(row[c]))
+                if self.cells is not None:
+                    for row in self.cells:
+                        col.addkid(Node(row[c]))
                 col_major.addkid(col)
 
                 col = Node(header)
@@ -218,8 +219,9 @@ class TableNode(Node):
                 for sub_header in sub_headers:
                     sub_col = Node(sub_header)
                     #for cell in self.cells[r]:
-                    for row in self.cells:
-                        col.addkid(Node(row[c]))
+                    if self.cells is not None:
+                        for row in self.cells:
+                            col.addkid(Node(row[c]))
                     col.addkid(sub_col)
 
                     sub_col = Node(header)
