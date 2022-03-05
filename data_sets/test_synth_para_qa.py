@@ -58,7 +58,7 @@ def display(data):
 
         #widths.append(img.size(1))
         
-        draw='k0' in q
+        draw=True
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -69,7 +69,7 @@ def display(data):
             #plt.imshow(img.numpy()[:,:,0], cmap='gray')
             #plt.show()
             img = (img*255).numpy().astype(np.uint8)
-            cv2.imwrite('test_paraSmaller.png',img)
+            cv2.imwrite('synth_para_example.png',img)
             cv2.imshow('x',img)
             cv2.show()
 
