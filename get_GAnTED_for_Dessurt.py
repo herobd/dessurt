@@ -202,10 +202,21 @@ def main(predictions,data_set_name,test=False,match_thresh=1,twice=False,shuffle
         print('Unknown dataset: '+data_set_name)
         exit()
 
-    
+    name = predictions
+    if '/' in name: 
+        name = name[name.rfind('/')+1:]
+    progress_file = 'progress_'+name
+
     with open(predictions) as f:
         predictions = json.load(f)
+    
 
+
+    try:
+        with open(progress_file) as f:
+            already_done = json.load(f)
+    except:
+        already_done = {}
     
     data_loader, valid_data_loader = getDataLoader(data_config,'train' if not test else 'test')
 
@@ -216,52 +227,63 @@ def main(predictions,data_set_name,test=False,match_thresh=1,twice=False,shuffle
     vanilla_scores=[]
     second_scores=[]
     for instance in valid_data_loader:
-        ans = instance['answers'][0][0]
-        assert ans[-1]=='‡'
-        gt = json.loads(ans[:-1])
-        pred = predictions[instance['imgName'][0]]
+        if instance['imgName'][0] not in already_done:
 
-        tree_gt = Node('')
-        gt_tables = []
-        for ele in gt:
-            nodes,tables = parseDict(ele)
-            for node in nodes:
-                tree_gt.addkid(node)
-            gt_tables+=tables
+            ans = instance['answers'][0][0]
+            assert ans[-1]=='‡'
+            gt = json.loads(ans[:-1])
+            pred = predictions[instance['imgName'][0]]
 
-        tree_pred = Node('')
-        pred_tables = []
-        for ele in pred:
-            nodes,tables = parseDict(ele)
-            for node in nodes:
-                tree_pred.addkid(node)
-            pred_tables+=tables
+            tree_gt = Node('')
+            gt_tables = []
+            for ele in gt:
+                nodes,tables = parseDict(ele)
+                for node in nodes:
+                    tree_gt.addkid(node)
+                gt_tables+=tables
 
-        all_tables = pred_tables+gt_tables
+            tree_pred = Node('')
+            pred_tables = []
+            for ele in pred:
+                nodes,tables = parseDict(ele)
+                for node in nodes:
+                    tree_pred.addkid(node)
+                pred_tables+=tables
+
+            all_tables = pred_tables+gt_tables
 
 
-        if shuffle:
-            shuffleTree(tree_pred)
+            if shuffle:
+                shuffleTree(tree_pred)
 
-        if (len(gt_tables)==0 and len(pred_tables)==0) or data_set_name=='NAF':
-            #NAF has no cells 
-            vanilla_score = nTED(tree_pred,tree_gt)
-            score = GAnTED(tree_pred,tree_gt,match_thresh=match_thresh)
+            if (len(gt_tables)==0 and len(pred_tables)==0) or data_set_name=='NAF':
+                #NAF has no cells 
+                vanilla_score = nTED(tree_pred,tree_gt)
+                score = GAnTED(tree_pred,tree_gt,match_thresh=match_thresh)
+                if twice:
+                    second_score = GAnTED(tree_pred,tree_gt)
+            else:
+                assert len(all_tables)<10 #need new method if too many tables
+
+                tab_scores=getScore(nTED,tree_pred,tree_gt,all_tables)
+                vanilla_score=min(tab_scores)
+
+                #Try every combination of row/col major on tables
+                tab_scores=getScore(lambda a,b:GAnTED(a,b,match_thresh),tree_pred,tree_gt,all_tables)
+                score=min(tab_scores)
+                if twice:
+                    tab_scores=getScore(GAnTED,tree_pred,tree_gt,all_tables)
+                    second_score=min(tab_scores)
+
             if twice:
-                second_score = GAnTED(tree_pred,tree_gt)
+                already_done[instance['imgName'][0]] =(score,vanilla_score,second_score)
+            else:
+                already_done[instance['imgName'][0]] =(score,vanilla_score,None)
+
+            with open(progress_file, 'w') as f:
+                json.dump(already_done,f)
         else:
-            assert len(all_tables)<10 #need new method if too many tables
-
-            tab_scores=getScore(nTED,tree_pred,tree_gt,all_tables)
-            vanilla_score=min(tab_scores)
-
-            #Try every combination of row/col major on tables
-            tab_scores=getScore(lambda a,b:GAnTED(a,b,match_thresh),tree_pred,tree_gt,all_tables)
-            score=min(tab_scores)
-            if twice:
-                tab_scores=getScore(GAnTED,tree_pred,tree_gt,all_tables)
-                second_score=min(tab_scores)
-
+            score,vanilla_score,second_score = already_done[instance['imgName'][0]]
         if twice:
             print('{}: {}  v:{}, 2nd:{}'.format(instance['imgName'],score,vanilla_score,second_score))
         else:
