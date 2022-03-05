@@ -119,6 +119,10 @@ def greedyAlign(A,B):
     A.children = new_a_children
 
 def nEditDistance(a,b):
+    if a is None:
+        a=''
+    if b is None:
+        b=''
     if len(a)==0 and len(b)==0:
         return 0
     return editdistance.eval(a,b)/(0.5*(len(a)+len(b)))
