@@ -193,7 +193,7 @@ class TableNode(Node):
                             row.addkid(Node(cell))
                     row.addkid(sub_row)
 
-                    sub_row = Node(header)
+                    sub_row = Node(sub_header)
                     minor_row.addkid(sub_row)
                     r+=1
                 row_major.addkid(row)
@@ -224,7 +224,7 @@ class TableNode(Node):
                             col.addkid(Node(row[c]))
                     col.addkid(sub_col)
 
-                    sub_col = Node(header)
+                    sub_col = Node(sub_header)
                     minor_col.addkid(sub_col)
                     c+=1
                 row_major.addkid(minor_col)
@@ -254,6 +254,7 @@ class TableNode(Node):
 class FormNode(Node):
     def __init__(self,label):
         super().__init__(label if label is not None else "")
+        assert isinstance(self.label,str)
 
     def __sub__(self, other):
         if isinstance(other,TableNode):
