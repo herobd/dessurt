@@ -23,8 +23,8 @@ def parseDict(obj):
         all_tables=[]
         for thing in obj:
             ret,tab = parseDict(thing)
-            to_ret.append(ret)
-            all_tables.append(tab)
+            to_ret+=ret
+            all_tables+=tab
         return to_ret,all_tables
     my_children=[]
     is_table=False
@@ -163,7 +163,7 @@ def getScore(scorer,pred,gt,tables):
     ret += getScore(scorer,pred,gt,tables[1:])
     return ret
 
-def main(predictions,data_set_name,test=False,match_thresh=1,twice=False,shuffle=False):
+def main(predictions,data_set_name,test=False,match_thresh=1,twice=False,shuffle=False,parallel=1):
 
     if data_set_name=='FUNSD':
         data_config={
@@ -259,9 +259,9 @@ def main(predictions,data_set_name,test=False,match_thresh=1,twice=False,shuffle
             if (len(gt_tables)==0 and len(pred_tables)==0) or data_set_name=='NAF':
                 #NAF has no cells 
                 vanilla_score = nTED(tree_pred,tree_gt)
-                score = GAnTED(tree_pred,tree_gt,match_thresh=match_thresh)
+                score = GAnTED(tree_pred,tree_gt,match_thresh=match_thresh,num_processes=parallel)
                 if twice:
-                    second_score = GAnTED(tree_pred,tree_gt)
+                    second_score = GAnTED(tree_pred,tree_gt,num_processes=parallel)
             else:
                 assert len(all_tables)<10 #need new method if too many tables
 
@@ -269,10 +269,10 @@ def main(predictions,data_set_name,test=False,match_thresh=1,twice=False,shuffle
                 vanilla_score=min(tab_scores)
 
                 #Try every combination of row/col major on tables
-                tab_scores=getScore(lambda a,b:GAnTED(a,b,match_thresh),tree_pred,tree_gt,all_tables)
+                tab_scores=getScore(lambda a,b:GAnTED(a,b,match_thresh,num_processes=parallel),tree_pred,tree_gt,all_tables)
                 score=min(tab_scores)
                 if twice:
-                    tab_scores=getScore(GAnTED,tree_pred,tree_gt,all_tables)
+                    tab_scores=getScore(lambda a,b:GAnTED(a,b,match_thresh,num_processes=parallel),tree_pred,tree_gt,all_tables)
                     second_score=min(tab_scores)
 
             if twice:
@@ -320,9 +320,11 @@ if __name__ == '__main__':
                         help='Run alignment twice')
     parser.add_argument('-s', '--shuffle', default=False, action='store_const', const=True,
                         help='Run alignment twice')
+    parser.add_argument('-P', '--parallel', default=1, type=int,
+                        help='number of processes')
 
     args = parser.parse_args()
 
     assert args.predictions is not None and args.data_set_name is not None
 
-    main(args.predictions,args.data_set_name,args.test,args.match_thresh,args.twice,args.shuffle)
+    main(args.predictions,args.data_set_name,args.test,args.match_thresh,args.twice,args.shuffle,args.parallel)

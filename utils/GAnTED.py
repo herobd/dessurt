@@ -3,8 +3,35 @@ import editdistance
 import itertools
 import math
 import random
+from multiprocessing import Pool
 
 #GAnTED metric: Greedy-Aligned normalized Tree Edit Distance
+
+def customEditDistance(pred,gt):
+    #code modified from https://stackoverflow.com/a/19928962/1018830
+    len_1=len(pred)
+
+    len_2=len(gt)
+
+    x =[[0]*(len_2+1) for _ in range(len_1+1)]#the matrix whose last element ->edit distance
+
+    for i in range(0,len_1+1): #initialization of base case values
+
+        x[i][0]=i
+    for j in range(0,len_2+1):
+
+        x[0][j]=j
+    for i in range (1,len_1+1):
+
+        for j in range(1,len_2+1):
+
+            if pred[i-1]==gt[j-1] or gt[j-1]=='¿' or gt[j-1]=='§':
+                x[i][j] = x[i-1][j-1] 
+
+            else :
+                x[i][j]= min(x[i][j-1],x[i-1][j],x[i-1][j-1])+1
+
+    return x[i][j]
 
 def nestedPermute(getScore,level):
     best_score = 999999
@@ -24,22 +51,43 @@ def nestedPermute(getScore,level):
     level[0].children = best_perm
     return best_score
 
+def scoreOfLocation(data):
+    without,move_to,node_i,node_ni,child,pred,gt,match_thresh = data
+    #init = simple_distance(pred,gt,label_dist=lambda a,b:matchNEditDistance(a,b,match_thresh))
+    level = [pred]
+    i=0
+    while len(level)>0 and i<node_i:
+        next_level=[]
+        for ni,node in enumerate(level):
+            next_level+=node.children
+        level = next_level
+        i+=1
+    node = level[node_ni]
+    node.children = without[:move_to]+[child]+without[move_to:]
+    score = simple_distance(pred,gt,label_dist=lambda a,b:matchNEditDistance(a,b,match_thresh))
+    #assert init!=score
+    return score, move_to
 
 
-def GAnTED(pred,gt,match_thresh=1):
+def GAnTED(pred,gt,match_thresh=1,num_processes=1):
     getScore = lambda :simple_distance(pred,gt,label_dist=lambda a,b:matchNEditDistance(a,b,match_thresh))
     best_score = getScore()
     #print('original score: {}'.format(best_score/simple_distance(gt, Node(''),  label_dist=nEditDistance)))
+    if num_processes>1:
+        pool = Pool(processes=num_processes)
+        chunk = 10
+    else:
+        pool = None
+
     level = [pred]
     i=0
     while len(level)>0:
-        #print('level {} has {}'.format(i,len(level)))
-        i+=1
+        print('level {} has {}'.format(i,len(level)))
 
         #score=nestedPermute(getScore,level)
 
         next_level=[]
-        for node in level:
+        for ni,node in enumerate(level):
             next_level+=node.children
             
             original_children=node.children
@@ -48,17 +96,29 @@ def GAnTED(pred,gt,match_thresh=1):
             did=[]
             child_i=0
             while child_i<len(original_children):
-                #print(child_i)
+                print('child {}/{}'.format(child_i,len(original_children)))
                 child = original_children[child_i]
                 if child not in did:
                     without = original_children[:child_i]+original_children[child_i+1:]
                     best=None
-                    for move_to in range(len(original_children)):
-                        node.children = without[:move_to]+[child]+without[move_to:]
-                        score=getScore()
-                        if score<best_score:
-                            best = move_to
-                            best_score = score
+                    if pool is None:
+                        for move_to in range(len(original_children)):
+                            if move_to==child_i:
+                                continue
+                            print(f'{move_to} / {len(original_children)}')
+                            node.children = without[:move_to]+[child]+without[move_to:]
+                            score=getScore()
+                            if score<best_score:
+                                best = move_to
+                                best_score = score
+                    else:
+                        jobs=[(without,move_to,i,ni,child,pred,gt,match_thresh) for move_to in range(len(original_children)) if move_to!=child_i]
+                        results = pool.imap_unordered(scoreOfLocation, jobs, chunksize=chunk)
+                        for score,move_to in results:
+                            if score<best_score:
+                                best = move_to
+                                best_score = score
+
 
                     if best is None:
                         child_i+=1
@@ -74,6 +134,7 @@ def GAnTED(pred,gt,match_thresh=1):
                     
 
         level = next_level
+        i+=1
     #assert getScore() == best_score
     return best_score/simple_distance(gt, Node(''),  label_dist=nEditDistance)
         
@@ -263,6 +324,10 @@ class FormNode(Node):
     def __init__(self,label):
         super().__init__(label if label is not None else "")
         assert isinstance(self.label,str)
+
+    def addkid(self,child):
+        assert isinstance(child,Node)
+        super().addkid(child)
 
     def __sub__(self, other):
         if isinstance(other,TableNode):
