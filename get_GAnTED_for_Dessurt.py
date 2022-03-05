@@ -18,6 +18,14 @@ import numpy as np
 def parseDict(obj):
     if isinstance(obj, str):
         return [Node(obj)],[]
+    elif isinstance(obj, list):
+        to_ret=[]
+        all_tables=[]
+        for thing in obj:
+            ret,tab = parseDict(thing)
+            to_ret.append(ret)
+            all_tables.append(tab)
+        return to_ret,all_tables
     my_children=[]
     is_table=False
     row_headers = None
