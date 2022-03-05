@@ -98,7 +98,7 @@ def parseDict(obj):
                         super_end = rh.find('>>')
                         super_h =  rh[2:super_end]
                         rh=rh[super_end+2:]
-                        if isinstance(headers[-1],tuple) and headers[-1][0]==super_h:
+                        if len(headers)>0 and isinstance(headers[-1],tuple) and headers[-1][0]==super_h:
                             headers[-1][1].append(rh)
                         else:
                             headers.append((super_h,[rh]))
@@ -121,7 +121,7 @@ def parseDict(obj):
                         super_end = ch.find('>>')
                         super_h =  ch[2:super_end]
                         ch=ch[super_end+2:]
-                        if isinstance(headers[-1],tuple) and headers[-1][0]==super_h:
+                        if len(headers)>0 and isinstance(headers[-1],tuple) and headers[-1][0]==super_h:
                             headers[-1][1].append(ch)
                         else:
                             headers.append((super_h,[ch]))
