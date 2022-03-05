@@ -7,7 +7,7 @@ from matplotlib.patches import Polygon
 import numpy as np
 import torch
 import utils.img_f as cv2
-from transformers import BartTokenizer
+#from transformers import BartTokenizer
 
 widths=[]
 
@@ -39,6 +39,11 @@ def display(data,write,tokenizer=None):
         print('questions and answers')
         for q,a in zip(data['questions'][b],data['answers'][b]):
             print(q+' : '+a)
+        if q=='json>':
+            a=a[:-1]
+            data=json.loads(a)
+            with open('synth_form_example.json','w') as f:
+                json.dump(data,indent=4)
         #tok_len = tokenizer(a,return_tensors="pt")['input_ids'].shape[1]
         tok_len=-1
 
@@ -51,9 +56,9 @@ def display(data,write,tokenizer=None):
         #    if x in q:
         #        draw = True
         #        break
-        draw = False
-        if write:
-            cv2.imwrite('test_single_512.png',(img.numpy()*255)[:,:,0].astype(np.uint8))
+        draw = True
+        if True:
+            cv2.imwrite('synth_form_example.png',(img.numpy()*255)[:,:,0].astype(np.uint8))
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -137,11 +142,15 @@ if __name__ == "__main__":
         "font_dir": "../data/fonts",
         "batch_size": 1000,
         "rescale_range": [1.0,1.0],
-        "crop_params": None,
+        "crop_params": {
+                "crop_size":[1152,768],
+                "pad":0,
+                "rot_degree_std_dev": 1
+            },
         "questions": 1,
         "image_size": [1150,760],
         "cased": True,
-        "use_json": True,
+        "use_json": 'only',
         "shuffle": True,
         "max_qa_len_out": 1000000,
         "max_qa_len_in": 5000,
