@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import utils.img_f as cv2
 #from transformers import BartTokenizer
+import json
 
 widths=[]
 
@@ -43,7 +44,7 @@ def display(data,write,tokenizer=None):
             a=a[:-1]
             data=json.loads(a)
             with open('synth_form_example.json','w') as f:
-                json.dump(data,indent=4)
+                json.dump(data,f,indent=4)
         #tok_len = tokenizer(a,return_tensors="pt")['input_ids'].shape[1]
         tok_len=-1
 

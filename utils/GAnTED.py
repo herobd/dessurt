@@ -97,22 +97,26 @@ def GAnTED(pred,gt,match_thresh=1,num_processes=1):
             child_i=0
             while child_i<len(original_children):
                 print('child {}/{}'.format(child_i,len(original_children)))
+                #permutation_range = range(len(original_children)
+                #TEST tight
+
                 child = original_children[child_i]
                 if child not in did:
+                    permutation_range = range(max(0,child_i-10),min(len(original_children),child_i+10))
                     without = original_children[:child_i]+original_children[child_i+1:]
                     best=None
                     if pool is None:
-                        for move_to in range(len(original_children)):
+                        for move_to in permutation_range:
                             if move_to==child_i:
                                 continue
-                            print(f'{move_to} / {len(original_children)}')
+                            #print(f'{move_to} / {len(original_children)}')
                             node.children = without[:move_to]+[child]+without[move_to:]
                             score=getScore()
                             if score<best_score:
                                 best = move_to
                                 best_score = score
                     else:
-                        jobs=[(without,move_to,i,ni,child,pred,gt,match_thresh) for move_to in range(len(original_children)) if move_to!=child_i]
+                        jobs=[(without,move_to,i,ni,child,pred,gt,match_thresh) for move_to in permutation_range if move_to!=child_i]
                         results = pool.imap_unordered(scoreOfLocation, jobs, chunksize=chunk)
                         for score,move_to in results:
                             if score<best_score:
