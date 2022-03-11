@@ -14,7 +14,7 @@ from utils.yolo_tools import non_max_sup_iou, AP_iou, non_max_sup_dist, AP_dist,
 from model.optimize import optimizeRelationships, optimizeRelationshipsSoft
 import json
 from utils.forms_annotations import fixAnnotations, getBBInfo
-from evaluators.draw_graph import draw_graph
+from evaluators.draw_graph import draw_graph, getCorners
 
 
 
@@ -117,43 +117,6 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         if type(useDetections) is str:#useDetections=='gt':
             useGT+=useDetections
         losses, log, out = trainer.newRun(instance,useGT,get=toEval)
-    #elif useDetections=='gtSpaceOnly':
-    #    losses, log, out = trainer.newRun(instance,False,useOnlyGTSpace=True,get=toEval,useGTGroups=useGTGroups)
-    #elif type(useDetections) is str:
-    #    raise NotImplementedError('using saved detections not adjusted for new eval')
-    #    dataset=config['DATASET']
-    #    jsonPath = os.path.join(useDetections,imageName+'.json')
-    #    with open(os.path.join(jsonPath)) as f:
-    #        annotations = json.loads(f.read())
-    #    fixAnnotations(dataset,annotations)
-    #    savedBoxes = torch.FloatTensor(len(annotations['byId']),6+model.detector.predNumNeighbors+numClasses)
-    #    for i,(id,bb) in enumerate(annotations['byId'].items()):
-    #        qX, qY, qH, qW, qR, qIsText, qIsField, qIsBlank, qNN = getBBInfo(bb,dataset.rotate,useBlankClass=not dataset.no_blanks)
-    #        savedBoxes[i,0]=1 #conf
-    #        savedBoxes[i,1]=qX*scale #x-center, already scaled
-    #        savedBoxes[i,2]=qY*scale #y-center
-    #        savedBoxes[i,3]=qR #rotation
-    #        savedBoxes[i,4]=qH*scale/2
-    #        savedBoxes[i,5]=qW*scale/2
-    #        if model.detector.predNumNeighbors:
-    #            extra=1
-    #            savedBoxes[i,6]=qNN
-    #        else:
-    #            extra=0
-    #        savedBoxes[i,6+extra]=qIsText
-    #        savedBoxes[i,7+extra]=qIsField
-    #        
-    #    if gpu is not None:
-    #        savedBoxes=savedBoxes.to(gpu)
-    #    outputBoxes, outputOffsets, relPred, relIndexes, bbPred = model(dataT,savedBoxes,None,"saved",
-    #            otherThresh=confThresh,
-    #            otherThreshIntur=1 if confThresh is not None else None,
-    #            hard_detect_limit=600,
-    #            old_nn=True)
-    #    outputBoxes=savedBoxes.cpu()
-    #elif useDetections:
-    #    print('Unknown detection flag: '+useDetections)
-    #    exit()
     else:
         if trainer.mergeAndGroup:
             losses, log, out = trainer.newRun(instance,False,get=toEval)
@@ -263,6 +226,49 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
         finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = out['final']
         draw_graph(finalOutputBoxes,trainer.model.used_threshConf,None,None,finalEdgeIndexes,finalPredGroups,data,out['final_edgePredTypes'],out['final_missedRels'],out['final_missedGroups'],targetBoxes,trainer.classMap,path,bbTrans=finalBBTrans,useTextLines=trainer.model.useCurvedBBs,targetGroups=instance['gt_groups'],targetPairs=instance['gt_groups_adj'],verbosity=draw_verbosity)
 
+    ############
+    ##NEW##
+
+    classes=['header','question','answer','other']
+
+    finalOutputBoxes, finalPredGroups, finalEdgeIndexes, finalBBTrans = out['final']
+    pred_entities=[]
+    for group in finalPredGroups:
+        clsVotes = defaultdict(int)
+        lines
+        for lineID in group:
+            maxIndex =np.argmax(finalOutputBoxes[lineID,6:6+numClasses])
+            cls = classes[maxIndex]
+            clsVotes.append(cls)
+            tl,tr,br,bl=getCorners(finalOutputBoxes[lineID,1:6])
+
+            lines.append({
+                'corners':[tl,tr,br,bl],
+                'gt_text': finalBBTrans[line_id]
+                })
+
+        best_cls=None
+        best_votes=0
+        for cls,votes in clsVotes.items():
+            if votes>best_votes:
+                best_votes=votes
+                best_cls=cls
+
+        pred_entities.append({
+            'class':cls,
+            'lines': lines
+            })
+
+    #links=[]
+    #for a,b
+
+    predictions={
+            'entities':pred_entities,
+            'links': finalEdgeIndexes
+            }
+
+    ########
+
     for key in losses.keys():
         losses[key] = losses[key].item()
 
@@ -304,7 +310,7 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
     #    retData['no_targs']=1
     return (
              retData,
-             None
+             predictions
             )
 
 

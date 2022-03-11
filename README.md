@@ -14,6 +14,7 @@ Don't use conda for the following libraries:
 * huggingface datasets
 * timm
 * editdistance
+* zss (for new metric)
 
 Actually it's kind of important to do it in this order:
 
