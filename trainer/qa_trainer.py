@@ -274,7 +274,11 @@ class QATrainer(BaseTrainer):
             for batch_idx, instance in enumerate(self.valid_data_loader):
                 if not self.logged:
                     print('iter:{} valid batch: {}/{}'.format(self.iteration,batch_idx,len(self.valid_data_loader)), end='\r')
+                #elif batch_idx%100==0:
+                #    self.logger.info('iter:{} valid batch: {}/{}'.format(self.iteration,batch_idx,len(self.valid_data_loader)))
                 losses,log_run, out = self.run(instance,valid=True)
+                #if batch_idx%100==0:
+                #    self.logger.info('    finished valid batch: {}/{}'.format(batch_idx,len(self.valid_data_loader)))
 
                 for name,value in log_run.items():
                     if value is not None:
