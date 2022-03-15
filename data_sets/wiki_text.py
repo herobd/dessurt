@@ -1,4 +1,7 @@
-from datasets import load_dataset, load_from_disk
+try:
+    from datasets import load_dataset, load_from_disk
+except:
+    print('could not import datasets')
 import random
 import os
 from utils.util import ensure_dir

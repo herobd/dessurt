@@ -4,12 +4,10 @@ import torch.nn as nn
 import numpy as np
 from collections import defaultdict
 try:
-    import gensim.downloader as api
-    from bpemb import BPEmb
     from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
     from transformers import AutoTokenizer, AutoModel
 except:
-    pass
+    print('could not import transformers')
 
 class DistilBertAdapter(nn.Module):
     def __init__(self,out_size):

@@ -4,8 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from model import *
-#from model.graph_net import GraphNet
-#from model.meta_graph_net import MetaGraphNet
 from model.binary_pair_net import BinaryPairNet
 from model.binary_pair_real import BinaryPairReal
 from torchvision.ops import RoIAlign
@@ -26,6 +24,13 @@ import random
 import json
 from collections import defaultdict
 import utils.img_f as img_f
+try:
+    from model.yolo_box_detector import YoloBoxDetector
+    from model.graph_net import GraphNet
+    from model.meta_graph_net import MetaGraphNet
+except:
+    print('Could not import YoloBoxDetector')
+
 
 import timeit
 import torch.autograd.profiler as profiler
