@@ -111,8 +111,15 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do
             model_special = model.state_dict()['query_special_start_token_embedder.emb.weight']
 
             if loading_special.size(0) != model_special.size(0):
-                model_special[:loading_special.size(0)] = load_state_dict[:model_special.size(0)]
-                new_state_dict['query_special_start_token_embedder.emb.weight'  ] = model_special
+                model_special[:loading_special.size(0)] = loading_special[:model_special.size(0)]
+                new_state_dict['query_special_start_token_embedder.emb.weight'] = model_special
+        if 'query_special_token_embedder.emb.weight' in new_state_dict:
+            loading_special = new_state_dict['query_special_token_embedder.emb.weight']
+            model_special = model.state_dict()['query_special_token_embedder.emb.weight']
+
+            if loading_special.size(0) != model_special.size(0):
+                model_special[:loading_special.size(0)] = loading_special[:model_special.size(0)]
+                new_state_dict['query_special_token_embedder.emb.weight'] = model_special
 
 
         model.load_state_dict(new_state_dict)

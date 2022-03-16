@@ -198,6 +198,31 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                         },
                 "validation":{}
                 }
+    elif data_set_name=='NAFRead':
+        data_config={
+                "data_loader": {
+                    "data_set_name": "NAFRead",
+                    "data_dir": "../data/forms",
+                    "batch_size": config['data_loader']['batch_size']*3 if not run else 1,
+                    "rescale_to_crop_size_first": True,
+                    "rescale_range": [
+                        1.0,
+                        1.0
+                    ],
+                    "crop_params": {
+                        "crop_size": [
+                            image_h,image_w
+                        ],
+                        "random": False
+                    },
+                    "questions": 1,
+                        "max_qa_len_in": 640,
+                        "max_qa_len_out": 256000,
+                    "cased": True,
+                    "shuffle": False
+                        },
+                "validation":{}
+                }
     elif data_set_name=='DocVQA':
         data_config={
                 "data_loader": {

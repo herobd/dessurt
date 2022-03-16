@@ -43,7 +43,7 @@ def display(data,write,tokenizer=None):
         if q=='json>':
             a=a[:-1]
             data=json.loads(a)
-            with open('synth_form_example.json','w') as f:
+            with open('synth_form_example_new.json','w') as f:
                 json.dump(data,f,indent=4)
         #tok_len = tokenizer(a,return_tensors="pt")['input_ids'].shape[1]
         tok_len=-1
@@ -57,9 +57,9 @@ def display(data,write,tokenizer=None):
         #    if x in q:
         #        draw = True
         #        break
-        draw = True
+        draw = 'row header' not in a
         if True:
-            cv2.imwrite('synth_form_example.png',(img.numpy()*255)[:,:,0].astype(np.uint8))
+            cv2.imwrite('synth_form_example_new.png',(img.numpy()*255)[:,:,0].astype(np.uint8))
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
