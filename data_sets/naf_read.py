@@ -141,8 +141,13 @@ class NAFRead(QADataset):
             if bb_id not in annotations['transcriptions']:
                 continue
             response = annotations['transcriptions'][bb_id]
-            if response=='':
+            if response=='' or '§' in response:
                 continue
+
+            if '¿' in response:
+                count = sum(1 if c=='¿' else 0 for c in response)
+                if count/len(response)>=0.1:
+                    continue
 
             #get mid points
             lX = (tlX+blX)/2.0

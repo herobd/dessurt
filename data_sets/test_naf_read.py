@@ -31,7 +31,7 @@ def display(data):
         #label = data['label']
         #gt = data['gt'][b]
         #print(label[:data['label_lengths'][b],b])
-        #print(data['imgName'][b])
+        print(data['imgName'][b])
         #if data['spaced_label'] is not None:
         #    print('spaced label:')
         #    print(data['spaced_label'][:,b])
@@ -49,7 +49,7 @@ def display(data):
             print(q+' : '+a)
 
         #widths.append(img.size(1))
-        draw = False
+        draw = len(a)>55
         #for x in ['json>']:#['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
         #    if x in q and '<<' in a:
         #        draw = True
@@ -115,12 +115,12 @@ if __name__ == "__main__":
         'questions':1,
         'max_qa_len': 9999000,
         'crop_to_q': True,
-        'min_text_height': 20,
+        'min_text_height': 21,
         #'only': 'print'
 
 })
 
-    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False, num_workers=0, collate_fn=naf_read.collate)
+    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=naf_read.collate)
     dataLoaderIter = iter(dataLoader)
 
     print('size {}'.format(len(dataLoader)))

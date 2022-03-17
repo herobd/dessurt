@@ -300,22 +300,30 @@ class QADataset(torch.utils.data.Dataset):
             bb = qa['in_bbs'][0]
             assert len(bb)==16
             bb_height = math.sqrt( ((bb[-4]-bb[-2])**2) + ((bb[-3]-bb[-1])**2) )
+            bb_width = math.sqrt( ((bb[-8]-bb[-6])**2) + ((bb[-7]-bb[-5])**2) )
             if bb_height*s < self.min_text_height:
                 s=partial_rescale = self.min_text_height/bb_height
+
+                #fit_width_s = self.crop_size[1]/bb_width
+                #s = max(s,fit_width_s)
+                if s*bb_width>self.crop_size[1]:
+                    s=partial_rescale = self.crop_size[1]/bb_width
             
             bb_x = bb[-4]*s
             bb_y = bb[1]*s
             cropPoint_x = max(0,round(bb_x-self.crop_size[1]/2))
             cropPoint_y = max(0,round(bb_y-self.crop_size[0]/2))
 
-            if cropPoint_x + self.crop_size[1]//2>np_img.shape[1]:
-                cropPoint_x -= cropPoint_x + self.crop_size[1]//2 - np_img.shape[1]
+            if cropPoint_x + self.crop_size[1]>int(s*np_img.shape[1]):
+                cropPoint_x -= cropPoint_x + self.crop_size[1] - s*np_img.shape[1]
                 if cropPoint_x<0:
                     cropPoint_x = 0
-            if cropPoint_y + self.crop_size[0]//2>np_img.shape[0]:
-                cropPoint_y -= cropPoint_y + self.crop_size[0]//2 - np_img.shape[0]
+            if cropPoint_y + self.crop_size[0]>int(s*np_img.shape[0]):
+                cropPoint_y -= cropPoint_y + self.crop_size[0] - s*np_img.shape[0]
                 if cropPoint_y<0:
                     cropPoint_y = 0
+
+            cropPoint = (int(cropPoint_x),int(cropPoint_y))
                 
         if (not self.train or self.crop_to_q) and 'qa' in self.images[index]:
             questions_and_answers = self.images[index]['qa']
