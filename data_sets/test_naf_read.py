@@ -120,6 +120,8 @@ if __name__ == "__main__":
     dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False, num_workers=0, collate_fn=naf_read.collate)
     dataLoaderIter = iter(dataLoader)
 
+    print('size {}'.format(len(dataLoader)))
+
         #if start==0:
         #display(data[0])
     for i in range(0,start):

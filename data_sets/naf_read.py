@@ -59,6 +59,10 @@ class NAFRead(QADataset):
             group_names = list(groups_to_use.keys())
             group_names.sort()
             
+            #to prevent bad BBs
+            assert self.rescale_range[1]==self.rescale_range[0]
+            assert self.rescale_range[1]==1
+
             for groupName in group_names:
                 imageNames=groups_to_use[groupName]
                 
@@ -94,7 +98,6 @@ class NAFRead(QADataset):
                         #    self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':name})
                         #
                         #else:
-                        #    assert self.rescale_range[1]==self.rescale_range[0]
                         assert self.questions==1
                         #create questions for each image
                         with open(jsonPath) as f:
