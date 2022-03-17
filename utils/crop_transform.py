@@ -16,6 +16,12 @@ def perform_crop(img, gt, crop):
         scaled_gt = cropped_gt #img_f.resize(cropped_gt, (cs, cs))
         if len(scaled_gt.shape)==2:
             scaled_gt = scaled_gt[...,None]
+    #padY=(crop['dim0'][1]-crop['dim0'][0])-cropped_gt_img.shape[0]
+    #padX=(crop['dim1'][1]-crop['dim1'][0])-cropped_gt_img.shape[1]
+    #if padY>0 or padX>0:
+    #    assert padY>=0 and padX>=0
+    #    cropped_gt_img = np.pad(cropped_gt_img, ((padY,padY),(padX,padX),(0,0)), 'constant', constant_values=0)
+
     return scaled_gt_img, scaled_gt
 
 
@@ -286,6 +292,8 @@ def generate_random_crop(img, pixel_gt, line_gts, point_gts, params, bb_gt=None,
                 if point_gts is not None:
                     for name in point_gt_match:
                         point_gt_match[name] = np.where(point_gt_match[name]!=0)
+                assert csX == cropped_gt_img.shape[1]
+                assert csY == cropped_gt_img.shape[0]
                 return crop, cropped_gt_img, cropped_pixel_gt, line_gt_match, point_gt_match, bb_gt, bb_auxs, (dim1,dim0)
 
         cnt += 1
