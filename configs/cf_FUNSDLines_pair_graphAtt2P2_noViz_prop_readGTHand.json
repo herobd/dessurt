@@ -93,38 +93,28 @@
     },
     "arch": "PairingGroupingGraph", 
     "model": {
-        "detector_checkpoint": "saved/FUNSDLines_detect_augRFh_staggerLighter_NN/checkpoint-latest.pth",
+        "detector_checkpoint": "saved/FUNSDLines_detect_augR_staggerLighter/checkpoint-iteration250000.pth",
         "conf_thresh": 0.5,
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
         "percent_rel_to_keep": 0.4,
-        "max_rel_to_keep": 300,
+        "max_rel_to_keep": 400,
+        "roi_batch_size": 400,
 
-	"use_rel_shape_feats": "corner",
-        "use_detect_layer_feats": 16,
-        "use_2nd_detect_layer_feats": 0,
-        "use_2nd_detect_scale_feats": 2,
-        "use_2nd_detect_feats_size": 64,
-        "use_fixed_masks": true,
+	"use_rel_shape_feats": "only",
         
 
         "blankRelFeats": true,
         "noBBVisualFeats": true,
 
-        "expand_rel_context": 20,
-        "featurizer_start_h": 12,
-        "featurizer_start_w": 12,
-        "featurizer_conv": ["sep128","M","sep128","sep128","M","sep256","sep256","M",238],
-        "featurizer_fc": null,
+        "featurizer_fc": [],
 
         "pred_nn": false,
         "pred_class": true,
-        "expand_bb_context": 20,
-        "featurizer_bb_start_h": 2,
-        "featurizer_bb_start_w": 2,
-        "bb_featurizer_conv": ["sep64","M","sep64","sep64","M","sep128","sep128","M",250],
+        "bb_featurizer_fc": [],
 
         "fix_bi_dir": true,
+        "reintroduce_visual_features": "fixed map",
         "graph_config": [{
             "arch": "MetaGraphNet",
             "in_channels": 384,

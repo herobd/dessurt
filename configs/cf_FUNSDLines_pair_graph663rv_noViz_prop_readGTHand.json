@@ -67,13 +67,13 @@
         "swa_c_iters": 10000,
         "save_dir": "saved/",
         "val_step": 10000,
-        "save_step": 25000,
+        "save_step": 250000000,
         "save_step_minor": 200,
         "log_step": 250,
         "save_images_every": -1,
         "verbosity": 1,
-        "monitor": "loss",
-        "monitor_mode": "none",
+        "monitor": "val_final_rel_BROS_Fm",
+        "monitor_mode": "max",
         "warmup_steps": 1000,
         "conf_thresh_init": 0.5,
         "conf_thresh_change_iters": 0,
@@ -89,14 +89,17 @@
 
 	"freeze_param_names": ["text_rec","languagemodel"],
 
-        "use_learning_schedule": true,
+        "use_learning_schedule": "multi_rise then ramp_to_swa",
+"ramp_down_steps": 10000,
+        "warmup_steps": [1000],
+        "swa_lr_mul": 0.1,
         "adapt_lr": false,
 
         "use_gt_trans": true
     },
     "arch": "PairingGroupingGraph", 
     "model": {
-        "detector_checkpoint": "saved/FUNSDLines_detect_augRFh_staggerLighter_NN/checkpoint-latest.pth",
+        "detector_checkpoint": "saved/FUNSDLines_detect_augR_staggerLighter/checkpoint-iteration250000.pth",
         "conf_thresh": 0.5,
         "start_frozen": true,
         "relationship_proposal": "feature_nn",

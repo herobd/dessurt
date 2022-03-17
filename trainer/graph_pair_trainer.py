@@ -151,7 +151,7 @@ class GraphPairTrainer(BaseTrainer):
 
         self.fixedAlign = config['trainer']['fixed_align'] if 'fixed_align' in config['trainer'] else False
 
-        self.use_gt_trans = config['trainer']['use_gt_trans'] if 'use_gt_trans' in config['trainer'] else False
+        self.use_gt_trans = config['trainer']['use_gt_trans'] if 'use_gt_trans' in config['trainer'] else True
 
         self.merge_first_only_until = config['trainer']['merge_first_only_until'] if 'merge_first_only_until' in config['trainer'] else 0
         self.init_merge_rule = config['trainer']['init_merge_rule'] if 'init_merge_rule' in config['trainer'] else None
@@ -2691,6 +2691,7 @@ class GraphPairTrainer(BaseTrainer):
         
         XLM_predCount=0
         relPrec_XLM=0
+        hit_XLM=True
         for pi,(n0,n1) in enumerate(predPairs):
             bb0 = predGroups[n0][0]
             bb1 = predGroups[n0][0]
