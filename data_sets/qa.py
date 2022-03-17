@@ -305,7 +305,17 @@ class QADataset(torch.utils.data.Dataset):
             
             bb_x = bb[-4]*s
             bb_y = bb[1]*s
-            cropPoint = (max(0,round(bb_x-self.crop_size[1]/2)),max(0,round(bb_y-self.crop_size[0]/2)))
+            cropPoint_x = max(0,round(bb_x-self.crop_size[1]/2))
+            cropPoint_y = max(0,round(bb_y-self.crop_size[0]/2))
+
+            if cropPoint_x + self.crop_size[1]//2>np_img.shape[1]:
+                cropPoint_x -= cropPoint_x + self.crop_size[1]//2 - np_img.shape[1]
+                if cropPoint_x<0:
+                    cropPoint_x = 0
+            if cropPoint_y + self.crop_size[0]//2>np_img.shape[0]:
+                cropPoint_y -= cropPoint_y + self.crop_size[0]//2 - np_img.shape[0]
+                if cropPoint_y<0:
+                    cropPoint_y = 0
                 
         if (not self.train or self.crop_to_q) and 'qa' in self.images[index]:
             questions_and_answers = self.images[index]['qa']
@@ -393,6 +403,9 @@ class QADataset(torch.utils.data.Dataset):
                 
             }, cropPoint)
             np_img = out['img']
+
+            assert np_img.shape[0] == self.crop_size[0]
+            assert np_img.shape[1] == self.crop_size[1]
 
 
             new_q_inboxes=defaultdict(list)

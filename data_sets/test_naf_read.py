@@ -25,6 +25,9 @@ def display(data):
         img[:,:,1] *= ~show
         if data['mask_label'] is not None:
             img[:,:,2] *= 1-data['mask_label'][b,0]
+
+        assert img.shape[0]==1152
+        assert img.shape[1]==768
         #label = data['label']
         #gt = data['gt'][b]
         #print(label[:data['label_lengths'][b],b])
@@ -46,7 +49,7 @@ def display(data):
             print(q+' : '+a)
 
         #widths.append(img.size(1))
-        draw = True
+        draw = False
         #for x in ['json>']:#['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
         #    if x in q and '<<' in a:
         #        draw = True
