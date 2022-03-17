@@ -220,7 +220,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                         "max_qa_len_out": 256000,
                     "cased": True,
                     'crop_to_q': True,
-                    'min_text_height': 22,
+                    'min_text_height': 21,
                     "shuffle": False
                         },
                 "validation":{}

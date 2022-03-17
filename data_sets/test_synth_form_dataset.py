@@ -151,7 +151,7 @@ if __name__ == "__main__":
         "questions": 1,
         "image_size": [1150,760],
         "cased": True,
-        "use_json": 'only',
+        "use_json": 'streamlined',
         "shuffle": True,
         "max_qa_len_out": 1000000,
         "max_qa_len_in": 5000,

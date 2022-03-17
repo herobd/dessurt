@@ -404,8 +404,6 @@ class QADataset(torch.utils.data.Dataset):
             }, cropPoint)
             np_img = out['img']
 
-            assert np_img.shape[0] == self.crop_size[0]
-            assert np_img.shape[1] == self.crop_size[1]
 
 
             new_q_inboxes=defaultdict(list)
