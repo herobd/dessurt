@@ -89,25 +89,23 @@ class NAFRead(QADataset):
                                         fy=self.rescale_range[1], 
                                         )
                                 img_f.imwrite(path,resized)
-                        if self.train:
-                            name = imageName[:imageName.rfind('.')]
-                            self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':name})
-                            if name in do_twice:
-                                self.images.append({'id':imageName+'2', 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':name})
-
-                        else:
-                            assert self.rescale_range[1]==self.rescale_range[0]
-                            assert self.questions==1
-                            #create questions for each image
-                            with open(jsonPath) as f:
-                                annotations = json.load(f)
-                            #all_entities,entity_link,tables,proses,minored_fields,bbs,link_dict = self.getEntitiesAndSuch(annotations,rescale)
-                            #qa = self.makeQuestions(self.rescale_range[1],all_entities,entity_link,tables,all_entities,link_dict,proses=proses,minored_fields=minored_fields)
-                            qa = self.makeQuestions(annotations,self.rescale_range[1])
-                            #import pdb;pdb.set_trace()
-                            for _qa in qa:
-                                _qa['bb_ids']=None
-                                self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
+                        #if self.train:
+                        #    name = imageName[:imageName.rfind('.')]
+                        #    self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':name})
+                        #
+                        #else:
+                        #    assert self.rescale_range[1]==self.rescale_range[0]
+                        assert self.questions==1
+                        #create questions for each image
+                        with open(jsonPath) as f:
+                            annotations = json.load(f)
+                        #all_entities,entity_link,tables,proses,minored_fields,bbs,link_dict = self.getEntitiesAndSuch(annotations,rescale)
+                        #qa = self.makeQuestions(self.rescale_range[1],all_entities,entity_link,tables,all_entities,link_dict,proses=proses,minored_fields=minored_fields)
+                        qa = self.makeQuestions(annotations,self.rescale_range[1])
+                        #import pdb;pdb.set_trace()
+                        for _qa in qa:
+                            _qa['bb_ids']=None
+                            self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
 
 
     def parseAnn(self,annotations,s):
@@ -115,11 +113,10 @@ class NAFRead(QADataset):
         #all_entities,entity_link,tables,proses,minored_fields,bbs,link_dict = self.getEntitiesndSuch(annotations,s)
 
 
-        if self.train:
-            assert False #only for eval
-            #qa = self.makeQuestions(s,all_entities,entity_link,tables,all_entities,link_dict,proses=proses,minored_fields=minored_fields)
-        else:
-            qa = None #This is pre-computed
+        #if self.train:
+        #    qa = self.makeQuestions(annotations,s)
+        #else:
+        qa = None #This is pre-computed
 
         ocr=None
         #ocr = [self.corrupt(text) for text in ocr]

@@ -658,6 +658,7 @@ class QATrainer(BaseTrainer):
                     if '§' not in answer and '¿' not in answer:
                         ed = editdistance.eval(answer,pred)
                         log['E_line_based_CER'].append(ed/len(answer) if len(answer)>0 else ed)
+                        import pdb;pdb.set_trace()
                 elif question.startswith('ne>'):
                     pred_type,pred_word = processNER(pred)
                     gt_type,gt_word = processNER(answer)

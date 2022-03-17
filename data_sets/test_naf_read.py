@@ -99,23 +99,25 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=naf_read.NAFRead(dirPath=dirPath,split='valid',config={
+    data=naf_read.NAFRead(dirPath=dirPath,split='train',config={
         #'rescale_range':[0.9,1.1],
         'rescale_range':[1,1],
         'rescale_to_crop_size_first':True,
         'crop_params': {
             "crop_size":[1152,768],
             "pad":0,
-            #"rot_degree_std_dev": 1,
-            "random": False
+            "rot_degree_std_dev": 1,
+            #"random": False
             },
         'questions':1,
         'max_qa_len': 9999000,
-        'only': 'print'
+        'crop_to_q': True,
+        'min_text_height': 20,
+        #'only': 'print'
 
 })
 
-    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=naf_read.collate)
+    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False, num_workers=0, collate_fn=naf_read.collate)
     dataLoaderIter = iter(dataLoader)
 
         #if start==0:
