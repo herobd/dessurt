@@ -10,6 +10,7 @@ from collections import defaultdict, OrderedDict
 from utils.funsd_annotations import createLines
 import timeit
 from data_sets.qa import QADataset, collate
+from transformers import BartTokenizer
 
 #The creates a MLM run instance (based on BART)
 #used by distillation dataset too
@@ -164,6 +165,10 @@ class ParaQADataset(QADataset):
         self.min_read_start_with_mask=1
 
         self.end_token = '‡'
+
+        self.max_q_tokens = config.get('max_q_tokens',20)
+        self.max_a_tokens = config.get('max_a_tokens',800)
+        self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART') #needed fpr correct read-on
 
 
         self.punc_regex = re.compile('[%s]' % re.escape(string.punctuation))
@@ -494,6 +499,19 @@ class ParaQADataset(QADataset):
                     'masked_lm':4.0,
                     'long_mlm':12.0,
                     'put_in_place':1.0}
+        elif mode == 'streamlined':
+            self.q_types = {
+                    'masked_lm':0.08,
+                    'long_mlm':0.82,
+                    'put_in_place':0.08,
+                    'read_on no_highlight':0.02,
+                    }
+            self.q_types_noblock = {
+                    'masked_lm':0.08,
+                    'long_mlm':0.82,
+                    'put_in_place':0.08,
+                    'read_on no_highlight':0.02
+                    }
         elif mode == 'mk_only':
             self.q_types = {'masked_lm':4.0}
             self.q_types_noblock = {'masked_lm':4.0}
@@ -923,13 +941,13 @@ class ParaQADataset(QADataset):
                 qa.append([question+prompt,response,allmaps,None,it_word_maps,allmaps])
 
             #elif question_type ==8 or question_type==9:
-            elif question_type =='read_on' or question_type=='read_backwards':
+            elif 'read_on' in question_type or question_type=='read_backwards':
                 #8. Read from prompt (no highlight) including new lines (stops at block end) and draw where you read
                 # . Read from prompt (with highlight) including new lines (stops at block end) and draw where you read
                 #9. Read backwards from prompt (no highlight) including new lines (stops at block end) and draw where you read
                 # . Read backwards from prompt (with highlight) including new lines (stops at block end) and draw where you read
-                forward = question_type =='read_on'
-                use_highlight = random.random()<0.5 and self.use_highlight
+                forward = 'read_on' in question_type
+                use_highlight = random.random()<0.5 and self.use_highlight and 'no_highlight' not in question_type
                 if use_highlight:
                     min_read_start = self.min_read_start_with_mask
                 else:
@@ -1064,6 +1082,15 @@ class ParaQADataset(QADataset):
                 #outmask = highlightAll(image_h,image_w,ocr,[wordmap[i] for i in words_in_response])
                 outmask = [wordmap[i] for i in words_in_response]
                 #outmask = allBoxes(ocr,indexes)
+
+                ####FIX for getting the right tokens
+                prompt_tokens = self.tokenizer(prompt,return_tensors="pt")['input_ids']
+                tok_len = prompt_tokens.shape[1] +1#for task token
+                if tok_len>self.max_q_tokens:
+                    over = tok_len-self.max_q_tokens
+                    prompt_tokens = prompt_tokens[0,:-(over+1)] #+1 becuase trimming the end (SEP) token doesn't count
+                    prompt = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(prompt_tokens,skip_special_tokens=True))
+                #######
 
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
                 #print('para len:{}, goal len:{}, actual len:{}'.format(para_len,goal_prompt_len,len(prompt)))
