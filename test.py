@@ -1,50 +1,50 @@
-from zss import simple_distance, Node
+from data_sets.gen_daemon import GenDaemon
+import numpy as np
+from utils import img_f
 
-A = Node("")
-B = Node("f").addkid(Node("h").addkid(Node("g")))
+H=1300
+W=1500
+word='Dessurt'
+word_height=16
 
-for b in B.children:
-    print(b)
-    print( simple_distance(A,b))
+gen = GenDaemon('../data/fonts',clear_fonts=True)
+used = set()
 
-print('====')
-#A = (
-#    Node("f")
-#        .addkid(Node("xxxaba")
-#            .addkid(Node("d"))
-#            .addkid(Node("c")
-#                .addkid(Node("b"))))
-#        .addkid(Node("f"))
-#        .addkid(Node("g"))
-#        .addkid(Node("1")
-#            .addkid(Node("xx"))
-#            .addkid(Node("aaa"))
-#            )
-#        .addkid(Node("e"))
-#        .addkid(Node("2")
-#            .addkid(Node("3"))
-#            .addkid(Node("444"))
-#            )
-#    )
-#B = (
-#    Node("f")
-#        .addkid(Node("xxxaba")
-#            .addkid(Node("d"))
-#            .addkid(Node("c")
-#                .addkid(Node("b"))))
-#        .addkid(Node("e"))
-#        .addkid(Node("f"))
-#        .addkid(Node("g"))
-#        .addkid(Node("2")
-#            .addkid(Node("3"))
-#            .addkid(Node("444"))
-#            )
-#        .addkid(Node("1")
-#            .addkid(Node("xx"))
-#            .addkid(Node("aaa"))
-#            )
-#    )
-print(simple_distance(A, B))
+page = np.zeros((2000,1500),dtype=np.uint8)
+x=2
+y=2
+max_x=0
+count=0
+while True:
+    ows = gen.generate(word,used=used)
+    w,img=ows[0]
+
+    scale = 16/img.shape[0]
+    img = img_f.resize(img,[0],fx=scale,fy=scale)
+
+    if x+img.shape[1]<W:
+
+        page[y:y+img.shape[0],x:x+img.shape[1]]=img
+        count+=1
+
+    y+=word_height+5
+    max_x = max(max_x,x+img.shape[1])
+    
+    if y+word_height>=H:
+        y=2
+        x=max_x+7
+        max_x=x
+
+        if x+7>=W:
+            break
+
+    if count==586:
+        break
+
+page = 255-page
+
+print('Count {}'.format(count))
+img_f.imwrite('easy_font_image.png',page)
 
 
 #from utils import img_f

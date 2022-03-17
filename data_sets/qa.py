@@ -132,6 +132,9 @@ class QADataset(torch.utils.data.Dataset):
         #t#self.opt_history = defaultdict(list)#t#
 
         self.crop_to_data = False
+        self.crop_to_q = config.get('crop_to_q',False)
+        if self.crop_to_q: 
+            self.min_text_height = config['min_text_height']
 
 
 
@@ -289,13 +292,29 @@ class QADataset(torch.utils.data.Dataset):
         #Parse annotation file
         bbs,ids,trans, metadata, form_metadata, questions_and_answers = self.parseAnn(annotations,s)
 
-        if not self.train and 'qa' in self.images[index]:
+        if self.crop_to_q:
+            questions_and_answers = self.images[index]['qa']
+            assert len(questions_and_answers)==1
+            qa = questions_and_answers[0]
+            assert len(qa['in_bbs'])==1
+            bb = qa['in_bbs'][0]
+            assert len(bb)==16
+            bb_height = math.sqrt( ((bb[-4]-bb[-2])**2) + ((bb[-3]-bb[-1])**2) )
+            if bb_height*s < self.min_text_height:
+                s=partial_rescale = self.min_text_height/bb_height
+            
+            bb_x = bb[-4]*s
+            bb_y = bb[1]*s
+            cropPoint = (max(0,round(bb_x-self.crop_size[1]/2)),max(0,round(bb_y-self.crop_size[0]/2)))
+                
+        if (not self.train or self.crop_to_q) and 'qa' in self.images[index]:
             questions_and_answers = self.images[index]['qa']
             #But the scale doesn't match! So fix it
             for qa in questions_and_answers:
                 for bb_name in ['in_bbs','out_bbs','mask_bbs']:
                     if qa[bb_name] is not None:
                         qa[bb_name] = [ [s*v for v in bb] for bb in qa[bb_name] ]
+            
 
 
 

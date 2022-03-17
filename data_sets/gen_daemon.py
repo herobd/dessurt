@@ -87,7 +87,7 @@ class GenDaemon:
 
         return did
 
-    def generate(self,text=None,font=None,ret_font=False):
+    def generate(self,text=None,font=None,ret_font=False,used=None):
         if text is None:
             words = self.getTextSample()
         else:
@@ -96,6 +96,11 @@ class GenDaemon:
         #words = text.split(' ')
         if font is None:
             font,font_name,fontN,fontN_name = self.gen.getFont()
+            if used is not None:
+                while font_name in used:
+                    font,font_name,fontN,fontN_name = self.gen.getFont()
+                used.add(font_name)
+                    
             #if font_name!=fontN_name:
             #    print('@got font pair {} / {}'.format(font_name,fontN_name))
         else:

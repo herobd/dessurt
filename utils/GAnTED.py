@@ -75,7 +75,7 @@ def GAnTED(pred,gt,match_thresh=1,num_processes=1):
     #print('original score: {}'.format(best_score/simple_distance(gt, Node(''),  label_dist=nEditDistance)))
     if num_processes>1:
         pool = Pool(processes=num_processes)
-        chunk = 10
+        chunk = 3
     else:
         pool = None
 

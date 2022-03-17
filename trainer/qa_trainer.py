@@ -658,6 +658,11 @@ class QATrainer(BaseTrainer):
                     log['E_line_based_CER'].append(ed/len(answer) if len(answer)>0 else ed)
                 elif question == 'read_block>':
                     pass #let it be handled by basic ED
+                elif question == 'w0>':
+                    if '§' not in answer and '¿' not in answer:
+                        ed = editdistance.eval(answer,pred)
+                        log['E_line_based_CER'].append(ed/len(answer) if len(answer)>0 else ed)
+                        import pdb;pdb.set_trace()
                 elif question.startswith('ne>'):
                     pred_type,pred_word = processNER(pred)
                     gt_type,gt_word = processNER(answer)

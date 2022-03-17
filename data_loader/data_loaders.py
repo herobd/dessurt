@@ -21,6 +21,7 @@ from data_sets import test_qa
 from data_sets import sroie
 from data_sets import funsd_qa
 from data_sets import naf_qa
+from data_sets import naf_read
 from data_sets import cdip_qa
 from data_sets import cdip_cloud_qa
 from data_sets import iam_qa
@@ -169,6 +170,8 @@ def getDataLoader(config,split,rank=None,world_size=None):
             return withCollate(funsd_qa.FUNSDQA,funsd_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='NAFQA':
             return withCollate(naf_qa.NAFQA,naf_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='NAFRead':
+            return withCollate(naf_read.NAFRead,naf_read.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='SROIE':
             return withCollate(sroie.SROIE,sroie.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='CDIPQA':
@@ -222,7 +225,7 @@ def getDataLoader(config,split,rank=None,world_size=None):
             dataLoader = torch.utils.data.DataLoader(data,batch_size=batch_size, shuffle=shuffle, num_workers=numDataWorkers,collate_fn=random_maxpairs.collate)
             return dataLoader,dataLoader
         else:
-            print('Error, no dataloader has no set for {}'.format(data_set_name))
+            print('Error, dataloader has no set for {}'.format(data_set_name))
             exit()
 
 
