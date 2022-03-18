@@ -103,7 +103,7 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=naf_read.NAFRead(dirPath=dirPath,split='valid',config={
+    data=naf_read.NAFRead(dirPath=dirPath,split='train',config={
         #'rescale_range':[0.9,1.1],
         'rescale_range':[1,1],
         'rescale_to_crop_size_first':True,
@@ -118,6 +118,7 @@ if __name__ == "__main__":
         'crop_to_q': True,
         'min_text_height': 21,
         #'only': 'print'
+        'balance': True
 
 })
 

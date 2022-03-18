@@ -112,17 +112,17 @@ class NAFRead(QADataset):
                             _qa['bb_ids']=None
                             self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
                             if balance:
-                                if len(_qa['response'])> 20:
+                                if len(_qa['answer'])> 20:
                                     #add again
                                     self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
-                                if len(_qa['response'])> 75:
+                                if len(_qa['answer'])> 75:
                                     #add third time
                                     self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
-                                if len(_qa['response'])> 110:
+                                if len(_qa['answer'])> 110:
                                     #add fourth time
                                     self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
 
-                                #len_bin = len(_qa['response'])//10
+                                #len_bin = len(_qa['answer'])//10
 
                                 #bins[len_bin].append((_qa,imageName,path,jsonPath,rescale))
         #if balance:
