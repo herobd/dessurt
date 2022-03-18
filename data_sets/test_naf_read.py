@@ -25,10 +25,13 @@ def display(data):
         img[:,:,1] *= ~show
         if data['mask_label'] is not None:
             img[:,:,2] *= 1-data['mask_label'][b,0]
+
+        assert img.shape[0]==1152
+        assert img.shape[1]==768
         #label = data['label']
         #gt = data['gt'][b]
         #print(label[:data['label_lengths'][b],b])
-        #print(data['imgName'][b])
+        print(data['imgName'][b])
         #if data['spaced_label'] is not None:
         #    print('spaced label:')
         #    print(data['spaced_label'][:,b])
@@ -46,7 +49,7 @@ def display(data):
             print(q+' : '+a)
 
         #widths.append(img.size(1))
-        draw = True
+        draw = False#len(a)>55
         #for x in ['json>']:#['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
         #    if x in q and '<<' in a:
         #        draw = True
@@ -84,6 +87,7 @@ def display(data):
     #if 'json~' in q:
     #    print(data['imgName'][b])
     #return q[4]
+    return len(a)
 
 
 if __name__ == "__main__":
@@ -99,24 +103,29 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=naf_read.NAFRead(dirPath=dirPath,split='valid',config={
+    data=naf_read.NAFRead(dirPath=dirPath,split='train',config={
         #'rescale_range':[0.9,1.1],
         'rescale_range':[1,1],
         'rescale_to_crop_size_first':True,
         'crop_params': {
             "crop_size":[1152,768],
             "pad":0,
-            #"rot_degree_std_dev": 1,
-            "random": False
+            "rot_degree_std_dev": 1,
+            #"random": False
             },
         'questions':1,
         'max_qa_len': 9999000,
-        'only': 'print'
+        'crop_to_q': True,
+        'min_text_height': 21,
+        #'only': 'print'
+        'balance': True
 
 })
 
-    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=naf_read.collate)
+    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False, num_workers=0, collate_fn=naf_read.collate)
     dataLoaderIter = iter(dataLoader)
+
+    print('size {}'.format(len(dataLoader)))
 
         #if start==0:
         #display(data[0])
@@ -124,16 +133,17 @@ if __name__ == "__main__":
         print('test {}'.format(i))
         dataLoaderIter.next()
         #display(data[i])
-    typs=defaultdict(int)
+    bins=defaultdict(int)
     try:
         while True:
             #print('?')
-            display(dataLoaderIter.next())
+            l=display(dataLoaderIter.next())
             #typs[typ]+=1
+            bins[l//10]+=1
     except StopIteration:
         #print('done')
         pass
-    print(typs)
+    print(bins)
 
     #print('width mean: {}'.format(np.mean(widths)))
     #print('width std: {}'.format(np.std(widths)))

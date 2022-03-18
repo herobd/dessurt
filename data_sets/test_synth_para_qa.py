@@ -58,7 +58,7 @@ def display(data):
 
         #widths.append(img.size(1))
         
-        draw=True
+        draw='re~' in q
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -69,7 +69,7 @@ def display(data):
             #plt.imshow(img.numpy()[:,:,0], cmap='gray')
             #plt.show()
             img = (img*255).numpy().astype(np.uint8)
-            cv2.imwrite('synth_para_example.png',img)
+            #cv2.imwrite('synth_para_example.png',img)
             cv2.imshow('x',img)
             cv2.show()
 
@@ -105,7 +105,7 @@ if __name__ == "__main__":
         #'gt_ocr': True,
         'rescale_range':[0.9,1.1],
         '#mode': 'hard_word',
-        'mode': 'pretrain_nomask',
+        'mode': 'streamlined',
         'cased': True,
         'augment_shade': 1,
         'crop_params': {

@@ -219,6 +219,8 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                         "max_qa_len_in": 640,
                         "max_qa_len_out": 256000,
                     "cased": True,
+                    'crop_to_q': True,
+                    'min_text_height': 21,
                     "shuffle": False
                         },
                 "validation":{}
@@ -253,6 +255,34 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                 }
         if test:
             get=['pred']
+    elif data_set_name=='HWSQuAD':
+        data_config={
+                "data_loader": {
+                    "data_set_name": "HWSQuAD",
+                    "data_dir": "../data/HW-SQuAD",
+                    "batch_size": config['data_loader']['batch_size']*3 if not run else 1,
+                    "rescale_to_crop_size_first": True,
+                    "rescale_range": [
+                        1.0,
+                        1.0
+                    ],
+                    "crop_params": {
+                        "crop_size": [
+                            image_h,image_w
+                        ],
+                        "random": False
+                    },
+                    "questions": 1,
+                        "max_qa_len_in": 640,
+                        "max_qa_len_out": 2560,
+                    "cased": True,
+                    "image_size": [
+                            image_h-4,image_w-4
+                    ],
+                    "shuffle": False
+                        },
+                "validation":{}
+                }
     elif data_set_name=='SROIE':
         data_config={
                 "data_loader": {
@@ -316,6 +346,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                     "full": config['data_loader'].get('full',False),
                     "cased": config['data_loader'].get('cased',False),
                     "task": config['data_loader'].get('task',6),
+                    "data_split": config['data_loader'].get('data_split','rwth'),
                     "eval_class_before": ner_do_before,
                     "eval_full": not test if eval_full is None else eval_full,
                     "rescale_to_crop_size_first": True,

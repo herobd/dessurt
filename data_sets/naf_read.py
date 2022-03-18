@@ -30,6 +30,8 @@ class NAFRead(QADataset):
         self.only_handwriting = only=='handwriting'
         self.only_print = only=='print'
 
+        balance = self.train and config.get('balance',False)
+
         self.do_masks=True
         self.cased=True
 
@@ -59,6 +61,10 @@ class NAFRead(QADataset):
             group_names = list(groups_to_use.keys())
             group_names.sort()
             
+            #to prevent bad BBs
+            assert self.rescale_range[1]==self.rescale_range[0]
+            assert self.rescale_range[1]==1
+
             for groupName in group_names:
                 imageNames=groups_to_use[groupName]
                 
@@ -89,25 +95,47 @@ class NAFRead(QADataset):
                                         fy=self.rescale_range[1], 
                                         )
                                 img_f.imwrite(path,resized)
-                        if self.train:
-                            name = imageName[:imageName.rfind('.')]
-                            self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':name})
-                            if name in do_twice:
-                                self.images.append({'id':imageName+'2', 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':name})
+                        #if self.train:
+                        #    name = imageName[:imageName.rfind('.')]
+                        #    self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':name})
+                        #
+                        #else:
+                        assert self.questions==1
+                        #create questions for each image
+                        with open(jsonPath) as f:
+                            annotations = json.load(f)
+                        #all_entities,entity_link,tables,proses,minored_fields,bbs,link_dict = self.getEntitiesAndSuch(annotations,rescale)
+                        #qa = self.makeQuestions(self.rescale_range[1],all_entities,entity_link,tables,all_entities,link_dict,proses=proses,minored_fields=minored_fields)
+                        qa = self.makeQuestions(annotations,self.rescale_range[1])
+                        #import pdb;pdb.set_trace()
+                        for _qa in qa:
+                            _qa['bb_ids']=None
+                            self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
+                            if balance:
+                                if len(_qa['answer'])> 20:
+                                    #add again
+                                    self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
+                                if len(_qa['answer'])> 75:
+                                    #add third time
+                                    self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
+                                if len(_qa['answer'])> 110:
+                                    #add fourth time
+                                    self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
 
-                        else:
-                            assert self.rescale_range[1]==self.rescale_range[0]
-                            assert self.questions==1
-                            #create questions for each image
-                            with open(jsonPath) as f:
-                                annotations = json.load(f)
-                            #all_entities,entity_link,tables,proses,minored_fields,bbs,link_dict = self.getEntitiesAndSuch(annotations,rescale)
-                            #qa = self.makeQuestions(self.rescale_range[1],all_entities,entity_link,tables,all_entities,link_dict,proses=proses,minored_fields=minored_fields)
-                            qa = self.makeQuestions(annotations,self.rescale_range[1])
-                            #import pdb;pdb.set_trace()
-                            for _qa in qa:
-                                _qa['bb_ids']=None
-                                self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
+                                #len_bin = len(_qa['answer'])//10
+
+                                #bins[len_bin].append((_qa,imageName,path,jsonPath,rescale))
+        #if balance:
+            #max_len = max(len(b) for b in bins.values())
+            #for l in bins:
+            #    if len(bins[l])<max_len:
+            #        num = max_len//len(bins[l])
+            #        orig = bins[l]
+            #        for n in range(nums-1):
+            #            bins[l]+=orig
+            #    for _qa,imageName,path,jsonPath,rescale in bins[l]:
+            #        self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
+
 
 
     def parseAnn(self,annotations,s):
@@ -115,11 +143,10 @@ class NAFRead(QADataset):
         #all_entities,entity_link,tables,proses,minored_fields,bbs,link_dict = self.getEntitiesndSuch(annotations,s)
 
 
-        if self.train:
-            assert False #only for eval
-            #qa = self.makeQuestions(s,all_entities,entity_link,tables,all_entities,link_dict,proses=proses,minored_fields=minored_fields)
-        else:
-            qa = None #This is pre-computed
+        #if self.train:
+        #    qa = self.makeQuestions(annotations,s)
+        #else:
+        qa = None #This is pre-computed
 
         ocr=None
         #ocr = [self.corrupt(text) for text in ocr]
@@ -141,8 +168,13 @@ class NAFRead(QADataset):
             if bb_id not in annotations['transcriptions']:
                 continue
             response = annotations['transcriptions'][bb_id]
-            if response=='':
+            if response=='' or '§' in response:
                 continue
+
+            if '¿' in response:
+                count = sum(1 if c=='¿' else 0 for c in response)
+                if count/len(response)>=0.1:
+                    continue
 
             #get mid points
             lX = (tlX+blX)/2.0

@@ -791,7 +791,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,dr
                 print('Rel Fm:        {}'.format(2*rel_recall*rel_prec/(rel_recall+rel_prec) if rel_recall+rel_prec>0 else 0))
             else:
                 print('{} (calls:{}, goodChar:{}) EntityFm: {},  RelFm: {}'.format(instance['imgName'],
-                    num_calls,
+                    -1,
                     good_char_pred_ratio,
                     2*entity_recall*entity_prec/(entity_recall+entity_prec) if entity_recall+entity_prec>0 else 0,2*rel_recall*rel_prec/(rel_recall+rel_prec) if rel_recall+rel_prec>0 else 0))
 

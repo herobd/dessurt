@@ -274,7 +274,11 @@ class QATrainer(BaseTrainer):
             for batch_idx, instance in enumerate(self.valid_data_loader):
                 if not self.logged:
                     print('iter:{} valid batch: {}/{}'.format(self.iteration,batch_idx,len(self.valid_data_loader)), end='\r')
+                #elif batch_idx%100==0:
+                #    self.logger.info('iter:{} valid batch: {}/{}'.format(self.iteration,batch_idx,len(self.valid_data_loader)))
                 losses,log_run, out = self.run(instance,valid=True)
+                #if batch_idx%100==0:
+                #    self.logger.info('    finished valid batch: {}/{}'.format(batch_idx,len(self.valid_data_loader)))
 
                 for name,value in log_run.items():
                     if value is not None:
@@ -658,6 +662,11 @@ class QATrainer(BaseTrainer):
                     if '§' not in answer and '¿' not in answer:
                         ed = editdistance.eval(answer,pred)
                         log['E_line_based_CER'].append(ed/len(answer) if len(answer)>0 else ed)
+                        short_ed = editdistance.eval(answer[:len(pred)+2],pred)
+                        log['E_short_CER'].append(short_ed/len(pred) if len(pred)>0 else short_ed)
+
+                        #if log['E_short_CER'][-1]>1:
+                        #    import pdb;pdb.set_trace()
                 elif question.startswith('ne>'):
                     pred_type,pred_word = processNER(pred)
                     gt_type,gt_word = processNER(answer)

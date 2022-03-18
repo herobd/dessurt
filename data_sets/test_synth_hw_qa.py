@@ -16,7 +16,7 @@ def display(data):
     #mask = makeMask(data['image'])
     question_types=[]
     for b in range(batchSize):
-        #print (data['img'].size())
+        print (data['img'].size())
         img = (1-data['img'][b,0:1].permute(1,2,0))/2.0
         #img[:,:,1][img[:,:,1]<1]=0
         #img = torch.cat((img,1-data['img'][b,1:2].permute(1,2,0),1-data['mask_label'][b].permute(1,2,0)),dim=2)
@@ -58,7 +58,7 @@ def display(data):
 
         #widths.append(img.size(1))
         
-        draw=False#'mk>' in q
+        draw=True#'mk>' in q
         if draw :
             #cv2.imshow('line',img.numpy())
             #cv2.imshow('mask',maskb.numpy())
@@ -69,9 +69,11 @@ def display(data):
             #plt.imshow(img.numpy()[:,:,0], cmap='gray')
             #plt.show()
             img = (img*255).numpy().astype(np.uint8)
-            #cv2.imwrite('test_hwSmaller.png',img)
-            cv2.imshow('x',img)
-            cv2.show()
+            print(img.shape)
+            cv2.imwrite('synth_hw_example.png',img)
+            x=input('dfd')
+            #cv2.imshow('x',img)
+            #cv2.show()
 
 
         #fig = plt.figure()
@@ -100,27 +102,30 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
+    print('obj')
     data=synth_hw_qa.SynthHWQA(dirPath=dirPath,split='train',config={
         'batch_size':1,
         #'gt_ocr': True,
         'cased': True,
         'rescale_range':[0.9,1.1],
-        'crop_hwms': {
-            "crop_size":[768,768],
+        'crop_params': {
+            "crop_size":[1152,768],
             "pad":0,
             "rot_degree_std_dev": 1
             },
         'questions':1,
         "max_qa_len_in": 64000,
         "max_qa_len_out": 256000,
-        "image_size":[768,768],
-        "prefetch_factor": 10,
+        "image_size":[1148,764],
+        "prefetch_factor": 1,
         "persistent_workers": True
 
 })
 
+    print('loader')
     dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=synth_hw_qa.collate)
     dataLoaderIter = iter(dataLoader)
+    print('ready')
 
         #if start==0:
         #display(data[0])
