@@ -49,7 +49,7 @@ def display(data):
             print(q+' : '+a)
 
         #widths.append(img.size(1))
-        draw = len(a)>55
+        draw = False#len(a)>55
         #for x in ['json>']:#['g0','gs','gm','z0','zx','zm']:#['r@','c@','r&','c&','rh~','rh>','ch~','ch>']:#['#r~', '#c~','$r~','$c~',
         #    if x in q and '<<' in a:
         #        draw = True
@@ -87,6 +87,7 @@ def display(data):
     #if 'json~' in q:
     #    print(data['imgName'][b])
     #return q[4]
+    return len(a)
 
 
 if __name__ == "__main__":
@@ -102,7 +103,7 @@ if __name__ == "__main__":
         repeat = int(sys.argv[3])
     else:
         repeat=1
-    data=naf_read.NAFRead(dirPath=dirPath,split='train',config={
+    data=naf_read.NAFRead(dirPath=dirPath,split='valid',config={
         #'rescale_range':[0.9,1.1],
         'rescale_range':[1,1],
         'rescale_to_crop_size_first':True,
@@ -120,7 +121,7 @@ if __name__ == "__main__":
 
 })
 
-    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=naf_read.collate)
+    dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=False, num_workers=0, collate_fn=naf_read.collate)
     dataLoaderIter = iter(dataLoader)
 
     print('size {}'.format(len(dataLoader)))
@@ -131,16 +132,17 @@ if __name__ == "__main__":
         print('test {}'.format(i))
         dataLoaderIter.next()
         #display(data[i])
-    typs=defaultdict(int)
+    bins=defaultdict(int)
     try:
         while True:
             #print('?')
-            display(dataLoaderIter.next())
+            l=display(dataLoaderIter.next())
             #typs[typ]+=1
+            bins[l//10]+=1
     except StopIteration:
         #print('done')
         pass
-    print(typs)
+    print(bins)
 
     #print('width mean: {}'.format(np.mean(widths)))
     #print('width std: {}'.format(np.std(widths)))

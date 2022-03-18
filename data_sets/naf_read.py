@@ -108,6 +108,7 @@ class NAFRead(QADataset):
                         #import pdb;pdb.set_trace()
                         for _qa in qa:
                             _qa['bb_ids']=None
+                            #if not self.train:
                             self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
 
 
