@@ -4,7 +4,7 @@
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
-    "super_computer":false,
+    "super_computer": false,
     "data_loader": {
         "data_set_name": "FUNSDGraphPair",
         "data_dir": "../data/FUNSD",
@@ -12,26 +12,30 @@
         "shuffle": true,
         "num_workers": 3,
         "split_to_lines": true,
-        "crop_to_page":false,
-        "color":false,
-        "rescale_range": [0.8,1.2],
+        "crop_to_page": false,
+        "color": false,
+        "rescale_range": [
+            0.8,
+            1.2
+        ],
         "crop_params": {
-            "crop_size":[800,800],
-	    "pad":50
+            "crop_size": [
+                800,
+                800
+            ],
+            "pad": 50
         }
-
-
     },
     "validation": {
         "shuffle": false,
-        "rescale_range": [1,1],
+        "rescale_range": [
+            1,
+            1
+        ],
         "crop_params": null,
         "batch_size": 1
     },
-
-    
     "lr_scheduler_type": "none",
- 
     "optimizer_type": "Adam",
     "optimizer": {
         "lr": 0.001,
@@ -53,12 +57,13 @@
         "classFinal": 0.5,
         "confFinal": 0.5
     },
-    "loss_params": 
-        {
-            "box": {"ignore_thresh": 0.5,
-                    "bad_conf_weight": 20.0,
-                    "multiclass":true}
-        },
+    "loss_params": {
+        "box": {
+            "ignore_thresh": 0.5,
+            "bad_conf_weight": 20.0,
+            "multiclass": true
+        }
+    },
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
@@ -67,106 +72,109 @@
         "swa_start": 600000,
         "swa_c_iters": 10000,
         "save_dir": "saved/",
-        "val_step": 20000,
-        "save_step": 20000,
-        "save_step_minor": 200,
-        "log_step": 250,
-	"save_images_every": -1,
+        "val_step": 10000,
+        "save_step": 20000000000,
+        "save_step_minor": 1000,
+        "log_step": 1000,
+        "save_images_every": -1,
         "verbosity": 1,
-        "monitor": "loss",
-        "monitor_mode": "none",
-        "warmup_steps": 1000,
+        "monitor": "val_final_rel_BROS_Fm",
+        "monitor_mode": "max",
+        "warmup_steps": [
+            1000
+        ],
         "conf_thresh_init": 0.5,
         "conf_thresh_change_iters": 0,
-        "retry_count":1,
-
+        "retry_count": 1,
         "mergeAndGroup": true,
-
         "unfreeze_detector": 2000,
         "partial_from_gt": 0,
         "stop_from_gt": 20000,
         "max_use_pred": 0.5,
         "use_all_bb_pred_for_rel_loss": true,
-
-	"freeze_param_names": ["text_rec","languagemodel.transformer.layer.0","languagemodel.transformer.layer.1","languagemodel.transformer.layer.2","languagemodel.transformer.layer.3"],
-	"slow_param_names": ["languagemodel.transformer.layer.5"],
-        "slower_param_names": ["languagemodel.transformer.layer.4"],
-
-        "use_learning_schedule": true,
+        "freeze_param_names": [
+            "text_rec",
+            "languagemodel.transformer.layer.0",
+            "languagemodel.transformer.layer.1",
+            "languagemodel.transformer.layer.2",
+            "languagemodel.transformer.layer.3"
+        ],
+        "slow_param_names": [
+            "languagemodel.transformer.layer.5"
+        ],
+        "slower_param_names": [
+            "languagemodel.transformer.layer.4"
+        ],
+        "use_learning_schedule": "multi_rise then ramp_to_swa",
+        "ramp_down_steps": 10000,
+        "swa_lr_mul": 0.1,
         "adapt_lr": false,
-
         "use_gt_trans": true
     },
-    "arch": "PairingGroupingGraph", 
+    "arch": "PairingGroupingGraph",
     "model": {
-        "detector_checkpoint": "saved/FUNSDLines_detect_augRFh_staggerLighter_NN/checkpoint-latest.pth",
+        "detector_checkpoint": "saved/FUNSDLines_detect_augR_staggerLighter/checkpoint-iteration250000.pth",
         "conf_thresh": 0.5,
         "start_frozen": true,
         "relationship_proposal": "feature_nn",
         "percent_rel_to_keep": 0.5,
         "max_rel_to_keep": 400,
         "roi_batch_size": 400,
-
-	"use_rel_shape_feats": "only",
-        
+        "use_rel_shape_feats": "only",
         "feat_norm": "group_norm",
-
         "featurizer_fc": [],
-
         "pred_nn": false,
         "pred_class": true,
         "bb_featurizer_fc": [],
-
         "fix_bi_dir": true,
         "reintroduce_visual_features": "fixed map",
         "graph_config": [
-	    {
-            "arch": "MetaGraphNet",
-            "in_channels": 512,
-            "node_out": 5,
-            "edge_out": 5,
-            "num_layers": 6,
-            "num_heads": 4,
-            "repetitions": 1,
-            "use_repetition_res": false,
-            "encode_type": "attention",
-            "better_norm_attention": true,
-            "merge_thresh": 0.8,
-            "group_thresh": 0.95,
-            "keep_edge_thresh": 0.1
-        },
-        {
-            "arch": "MetaGraphNet",
-            "in_channels": 512,
-            "node_out": 5,
-            "edge_out": 5,
-            "num_layers": 6,
-            "num_heads": 4,
-            "repetitions": 1,
-            "use_repetition_res": false,
-            "encode_type": "attention",
-            "better_norm_attention": true,
-            "merge_thresh": 0.9,
-            "group_thresh": 0.9,
-            "keep_edge_thresh": 0.2
-        },
-        {
-            "arch": "MetaGraphNet",
-            "in_channels": 512,
-            "node_out": 5,
-            "edge_out": 5,
-            "num_layers": 3,
-            "num_heads": 4,
-            "repetitions": 1,
-            "use_repetition_res": false,
-            "encode_type": "attention",
-            "better_norm_attention": true,
-            "merge_thresh": 0.9,
-            "group_thresh": 0.6,
-            "keep_edge_thresh": 0.5
-        }
+            {
+                "arch": "MetaGraphNet",
+                "in_channels": 512,
+                "node_out": 5,
+                "edge_out": 5,
+                "num_layers": 6,
+                "num_heads": 4,
+                "repetitions": 1,
+                "use_repetition_res": false,
+                "encode_type": "attention",
+                "better_norm_attention": true,
+                "merge_thresh": 0.8,
+                "group_thresh": 0.95,
+                "keep_edge_thresh": 0.1
+            },
+            {
+                "arch": "MetaGraphNet",
+                "in_channels": 512,
+                "node_out": 5,
+                "edge_out": 5,
+                "num_layers": 6,
+                "num_heads": 4,
+                "repetitions": 1,
+                "use_repetition_res": false,
+                "encode_type": "attention",
+                "better_norm_attention": true,
+                "merge_thresh": 0.9,
+                "group_thresh": 0.9,
+                "keep_edge_thresh": 0.2
+            },
+            {
+                "arch": "MetaGraphNet",
+                "in_channels": 512,
+                "node_out": 5,
+                "edge_out": 5,
+                "num_layers": 3,
+                "num_heads": 4,
+                "repetitions": 1,
+                "use_repetition_res": false,
+                "encode_type": "attention",
+                "better_norm_attention": true,
+                "merge_thresh": 0.9,
+                "group_thresh": 0.6,
+                "keep_edge_thresh": 0.5
+            }
         ],
-
         "text_rec": {
             "model": "SmallCRNN",
             "num_char": 131,

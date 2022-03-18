@@ -76,11 +76,11 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 250000,
+        "iterations": 321200,
         "accum_grad_steps": 128,
         "#swa": true,
         "#swa_start": 200000,
-        "save_dir": "/fslhome/mwh1998/saved/",
+        "save_dir": "saved/",
         "val_step": 10000,
         "save_step": 1400000000,
         "save_step_minor": 1024,
@@ -101,8 +101,7 @@
         "DEBUG": "DEBUG",
         "lr_down_start": 90000,
         "ramp_down_steps": 10000,
-        "lr_mul": 0.1,
-        "seperate_log_at": "logs"
+        "lr_mul": 0.1
     },
     "arch": "MmSwin",
     "model": {

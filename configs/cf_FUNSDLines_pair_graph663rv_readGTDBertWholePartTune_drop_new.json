@@ -11,26 +11,30 @@
         "shuffle": true,
         "num_workers": 3,
         "split_to_lines": true,
-        "crop_to_page":false,
-        "color":false,
-        "rescale_range": [0.8,1.2],
+        "crop_to_page": false,
+        "color": false,
+        "rescale_range": [
+            0.8,
+            1.2
+        ],
         "crop_params": {
-            "crop_size":[800,800],
-	    "pad":50
+            "crop_size": [
+                800,
+                800
+            ],
+            "pad": 50
         }
-
-
     },
     "validation": {
         "shuffle": false,
-        "rescale_range": [1,1],
+        "rescale_range": [
+            1,
+            1
+        ],
         "crop_params": null,
         "batch_size": 1
     },
-
-    
     "lr_scheduler_type": "none",
- 
     "optimizer_type": "AdamW",
     "optimizer": {
         "lr": 0.001,
@@ -51,12 +55,13 @@
         "classFinal": 0.5,
         "confFinal": 0.5
     },
-    "loss_params": 
-        {
-            "box": {"ignore_thresh": 0.5,
-                    "bad_conf_weight": 20.0,
-                    "multiclass":true}
-        },
+    "loss_params": {
+        "box": {
+            "ignore_thresh": 0.5,
+            "bad_conf_weight": 20.0,
+            "multiclass": true
+        }
+    },
     "metrics": [],
     "trainer": {
         "class": "GraphPairTrainer",
@@ -64,38 +69,44 @@
         "swa": true,
         "swa_start": 600000,
         "save_dir": "saved/",
-        "val_step": 25000,
-        "save_step": 50000,
-        "save_step_minor": 200,
-        "log_step": 250,
+        "val_step": 10000,
+        "save_step": 5000000000000,
+        "save_step_minor": 1000,
+        "log_step": 1000,
         "verbosity": 1,
-        "monitor": "loss",
-        "monitor_mode": "none",
+        "monitor": "val_final_rel_BROS_Fm",
+        "monitor_mode": "max",
         "conf_thresh_init": 0.5,
         "conf_thresh_change_iters": 0,
-        "retry_count":1,
-
+        "retry_count": 1,
         "mergeAndGroup": true,
-
         "unfreeze_detector": 2000,
         "partial_from_gt": 0,
         "stop_from_gt": 2,
         "max_use_pred": 0.5,
         "use_all_bb_pred_for_rel_loss": true,
-
-	"freeze_param_names": ["text_rec","languagemodel.transformer.layer.0","languagemodel.transformer.layer.1","languagemodel.transformer.layer.2"],
-	"slow_param_names": ["languagemodel.transformer.layer.4"],
-        "slower_param_names": ["languagemodel.transformer.layer.3"],
-
+        "freeze_param_names": [
+            "text_rec",
+            "languagemodel.transformer.layer.0",
+            "languagemodel.transformer.layer.1",
+            "languagemodel.transformer.layer.2"
+        ],
+        "slow_param_names": [
+            "languagemodel.transformer.layer.4"
+        ],
+        "slower_param_names": [
+            "languagemodel.transformer.layer.3"
+        ],
         "use_gt_trans": true,
-
         "use_learning_schedule": "multi_rise then ramp_to_swa",
-"ramp_down_steps": 10000,
-        "warmup_steps": [1000],
+        "ramp_down_steps": 10000,
+        "warmup_steps": [
+            1000
+        ],
         "swa_lr_mul": 0.1,
         "adapt_lr": false
     },
-    "arch": "PairingGroupingGraph", 
+    "arch": "PairingGroupingGraph",
     "model": {
         "detector_checkpoint": "saved/FUNSDLines_detect_augR_staggerLighter/checkpoint-iteration250000.pth",
         "detect_conf_thresh": 0.5,
@@ -104,89 +115,94 @@
         "percent_rel_to_keep": 0.5,
         "max_rel_to_keep": 400,
         "roi_batch_size": 400,
-
-	"use_rel_shape_feats": "corner",
+        "use_rel_shape_feats": "corner",
         "use_detect_layer_feats": 16,
         "use_2nd_detect_layer_feats": 0,
         "use_2nd_detect_scale_feats": 2,
         "use_2nd_detect_feats_size": 64,
         "use_fixed_masks": true,
-        
         "feat_norm": "group_norm",
-
         "expand_rel_context": 20,
         "featurizer_start_h": 16,
         "featurizer_start_w": 16,
-        "featurizer_conv": ["sep128","sep128","M","sep256","sep256","M"],
+        "featurizer_conv": [
+            "sep128",
+            "sep128",
+            "M",
+            "sep256",
+            "sep256",
+            "M"
+        ],
         "featurizer_conv_auto": true,
         "featurizer_fc": null,
-
         "pred_nn": false,
         "pred_class": true,
         "expand_bb_context": 20,
         "featurizer_bb_start_h": 10,
         "featurizer_bb_start_w": 10,
-        "bb_featurizer_conv": ["sep64","sep64","M","sep128"],
-
+        "bb_featurizer_conv": [
+            "sep64",
+            "sep64",
+            "M",
+            "sep128"
+        ],
         "fix_bi_dir": true,
         "reintroduce_visual_features": "fixed map",
         "graph_config": [
-	    {
-            "arch": "MetaGraphNet",
-            "in_channels": 512,
-            "node_out": 5,
-            "edge_out": 5,
-            "num_layers": 6,
-            "num_heads": 4,
-            "repetitions": 1,
-            "use_repetition_res": false,
-            "encode_type": "attention",
-            "better_norm_attention": true,
-            "node_att_thinker": "cat",
-            "att_mod": "fixed",
-            "merge_thresh": 0.8,
-            "group_thresh": 0.95,
-            "keep_edge_thresh": 0.1
-        },
-        {
-            "arch": "MetaGraphNet",
-            "in_channels": 512,
-            "node_out": 5,
-            "edge_out": 5,
-            "num_layers": 6,
-            "num_heads": 4,
-            "repetitions": 1,
-            "use_repetition_res": false,
-            "encode_type": "attention",
-            "better_norm_attention": true,
-            "node_att_thinker": "cat",
-            "att_mod": "fixed",
-            "merge_thresh": 0.9,
-            "group_thresh": 0.9,
-            "keep_edge_thresh": 0.1
-        },
-        {
-            "arch": "MetaGraphNet",
-            "in_channels": 512,
-            "node_out": 5,
-            "edge_out": 5,
-            "num_layers": 3,
-            "num_heads": 4,
-            "repetitions": 1,
-            "use_repetition_res": false,
-            "encode_type": "attention",
-            "better_norm_attention": true,
-            "node_att_thinker": "cat",
-            "att_mod": "fixed",
-            "merge_thresh": 0.9,
-            "group_thresh": 0.6,
-            "keep_edge_thresh": 0.5
-        }
+            {
+                "arch": "MetaGraphNet",
+                "in_channels": 512,
+                "node_out": 5,
+                "edge_out": 5,
+                "num_layers": 6,
+                "num_heads": 4,
+                "repetitions": 1,
+                "use_repetition_res": false,
+                "encode_type": "attention",
+                "better_norm_attention": true,
+                "node_att_thinker": "cat",
+                "att_mod": "fixed",
+                "merge_thresh": 0.8,
+                "group_thresh": 0.95,
+                "keep_edge_thresh": 0.1
+            },
+            {
+                "arch": "MetaGraphNet",
+                "in_channels": 512,
+                "node_out": 5,
+                "edge_out": 5,
+                "num_layers": 6,
+                "num_heads": 4,
+                "repetitions": 1,
+                "use_repetition_res": false,
+                "encode_type": "attention",
+                "better_norm_attention": true,
+                "node_att_thinker": "cat",
+                "att_mod": "fixed",
+                "merge_thresh": 0.9,
+                "group_thresh": 0.9,
+                "keep_edge_thresh": 0.1
+            },
+            {
+                "arch": "MetaGraphNet",
+                "in_channels": 512,
+                "node_out": 5,
+                "edge_out": 5,
+                "num_layers": 3,
+                "num_heads": 4,
+                "repetitions": 1,
+                "use_repetition_res": false,
+                "encode_type": "attention",
+                "better_norm_attention": true,
+                "node_att_thinker": "cat",
+                "att_mod": "fixed",
+                "merge_thresh": 0.9,
+                "group_thresh": 0.6,
+                "keep_edge_thresh": 0.5
+            }
         ],
-
-	"blind_during_gt": 0.5,
-	"no_text_during_no_gt": 0.5,
-
+        "blind_during_gt": 0.5,
+        "no_text_during_no_gt": 0.5,
         "text_rec": {
             "model": "SmallCRNN",
             "num_char": 131,

@@ -30,6 +30,8 @@ class NAFRead(QADataset):
         self.only_handwriting = only=='handwriting'
         self.only_print = only=='print'
 
+        balance = self.train and config.get('balance',False)
+
         self.do_masks=True
         self.cased=True
 
@@ -108,8 +110,23 @@ class NAFRead(QADataset):
                         #import pdb;pdb.set_trace()
                         for _qa in qa:
                             _qa['bb_ids']=None
-                            #if not self.train:
-                            self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
+                            if not balance:
+                                self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
+                            else:
+                                len_bin = len(_qa['response'])//10
+
+                                bins[len_bin].append((_qa,imageName,path,jsonPath,rescale))
+        if balance:
+            max_len = max(len(b) for b in bins.values())
+            for l in bins:
+                if len(bins[l])<max_len:
+                    num = max_len//len(bins[l])
+                    orig = bins[l]
+                    for n in range(nums-1):
+                        bins[l]+=orig
+                for _qa,imageName,path,jsonPath,rescale in bins[l]:
+                    self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
+
 
 
     def parseAnn(self,annotations,s):
