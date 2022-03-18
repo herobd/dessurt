@@ -2742,8 +2742,8 @@ class GraphPairTrainer(BaseTrainer):
                         if outputBoxes[bb0][6:6+numClasses].argmax()!=0 and outputBoxes[bb1][6:6+numClasses].argmax()!=0:
                             relPrec_XLMstrict+=1
                             gtRelHit_XLMstrict.add((min(gtG0,gtG1),max(gtG0,gtG1)))
-                            if not hit_XML:
-                                import pdb;pdb.set_trace()
+                            #if not hit_XML:
+                            #    import pdb;pdb.set_trace()
                         #TODO failed in training
                         #assert BROS_gtG0==gtG0
                         #assert BROS_gtG1==gtG1
