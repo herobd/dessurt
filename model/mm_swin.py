@@ -87,14 +87,14 @@ class MmSwin(BaseModel):
             self.SEP_TOKEN=self.tokenizer.SEP_index
             self.CLS_TOKEN=self.tokenizer.CLS_index
         elif token_type == 'word':
-            if init_from_pretrained=='bart':
-                self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
-                self.SEP_TOKEN= 2
-                self.CLS_TOKEN= 0
-            else:
-                self.tokenizer = DistilBertTokenizer.from_pretrained('./cache_huggingface/distilbert-base-uncased')
-                self.SEP_TOKEN= 102
-                self.CLS_TOKEN= 101
+            assert init_from_pretrained=='bart'
+            self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
+            self.SEP_TOKEN= 2
+            self.CLS_TOKEN= 0
+            #else:
+            #    self.tokenizer = DistilBertTokenizer.from_pretrained('./cache_huggingface/distilbert-base-uncased')
+            #    self.SEP_TOKEN= 102
+            #    self.CLS_TOKEN= 101
 
         if config.get('form_tokens',False):
             add = ['"answer"',"question","other","header","},{",'"answers":','"content":']
@@ -515,6 +515,7 @@ class MmSwin(BaseModel):
             #response = all_tokens[:,-(num_a):]
             response_decoded = self.answer_decode(response)
             response_decoded = F.softmax(response_decoded,dim=-1)#self.answer_softmax(response_decoded)
+            self.preventSpecial(response_decoded)
             if get_tokens:
                 response_decoded_all = response_decoded
 
@@ -633,6 +634,7 @@ class MmSwin(BaseModel):
 
                 response_decoded = self.answer_decode(ans)
                 response_decoded = F.softmax(response_decoded,dim=-1)#self.answer_softmax(response_decoded)
+                self.preventSpecial(response_decoded)
                 if get_tokens:
                     response_decoded_all = torch.cat((response_decoded_all,response_decoded),dim=1)
                 #time_log['beam first decode']+=timeit.default_timer()-start_time
@@ -927,3 +929,7 @@ class MmSwin(BaseModel):
 
             layer.norm2.weight.data = init_layer.final_layer_norm.weight.data
             layer.norm2.bias.data = init_layer.final_layer_norm.bias.data
+
+    def preventSpecial(self, response_decoded):
+        response_decoded[:,:,47847]=0 #prevent prediction of '§'
+        response_decoded[:,:,4056]=0 #prevent prediction of '¿' (and potentially other special characters

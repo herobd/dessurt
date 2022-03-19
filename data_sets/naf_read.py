@@ -114,13 +114,13 @@ class NAFRead(QADataset):
                             if balance:
                                 if len(_qa['answer'])> 20:
                                     #add again
-                                    self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
-                                if len(_qa['answer'])> 75:
+                                    self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[dict(_qa)]})
+                                if len(dict(_qa)['answer'])> 75:
                                     #add third time
-                                    self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
-                                if len(_qa['answer'])> 110:
+                                    self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[dict(_qa)]})
+                                if len(dict(_qa)['answer'])> 110:
                                     #add fourth time
-                                    self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
+                                    self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[dict(_qa)]})
 
                                 #len_bin = len(_qa['answer'])//10
 
@@ -214,6 +214,9 @@ class NAFRead(QADataset):
                     ]
             #qa.append([question,response,inmask+outmask,inmask,outmask,None])
             self.qaAdd(qa,question,response,None,inmask)
+
+        for _qa in qa:
+            assert len(_qa['in_bbs'])==1
 
         return qa
 
