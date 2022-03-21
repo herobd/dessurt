@@ -12,6 +12,7 @@ from utils.group_pairing import getGTGroup, pure, purity
 from data_sets.testforms_graph_pair import display
 import random, os, math
 import editdistance
+from utils import img_f
 
 try:
     import easyocr
@@ -353,12 +354,20 @@ class QATrainer(BaseTrainer):
         answers = instance['answers']
         noise_token_mask = instance['noise_token_mask']
         if self.debug:
+
             print('=========')
             print(questions)
             print(' - - - -')
             print(answers)
             print('Q Lengths '+' '.join([str(len(a[0])) for a in questions])+' .....................')
             print('A Lengths '+' '.join([str(len(a[0])) for a in answers])+' .....................')
+            #print('GT  : '+answer)
+            #print('pred: '+pred)
+            img = (128*(1+image[0])).cpu()
+            img = torch.cat((img,img[0:1]),dim=0).permute(1,2,0).numpy()
+            img_f.imshow('',img.astype(np.uint8))
+            img_f.show()
+
         gt_mask = instance['mask_label']
         if gt_mask is not None:
             gt_mask = gt_mask.to(device)
@@ -662,11 +671,18 @@ class QATrainer(BaseTrainer):
                     if '§' not in answer and '¿' not in answer:
                         ed = editdistance.eval(answer,pred)
                         log['E_line_based_CER'].append(ed/len(answer) if len(answer)>0 else ed)
-                        short_ed = editdistance.eval(answer[:len(pred)+2],pred)
-                        log['E_short_CER'].append(short_ed/len(pred) if len(pred)>0 else short_ed)
+                        #short_ed = editdistance.eval(answer[:len(pred)+2],pred)
+                        #log['E_short_CER'].append(short_ed/len(pred) if len(pred)>0 else short_ed)
 
-                        if log['E_short_CER'][-1]>1:
-                            import pdb;pdb.set_trace()
+                        #if log['E_short_CER'][-1]>1 or True:
+                        #    print('GT  : '+answer)
+                        #    print('pred: '+pred)
+                        #    img = (128*(1+image[0])).cpu()
+                        #    img = torch.cat((img,img[0:1]),dim=0).permute(1,2,0).numpy()
+                        #    img_f.imshow('',img.astype(np.uint8))
+                        #    img_f.show()
+
+                            #import pdb;pdb.set_trace()
                 elif question.startswith('ne>'):
                     pred_type,pred_word = processNER(pred)
                     gt_type,gt_word = processNER(answer)
