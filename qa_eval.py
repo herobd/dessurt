@@ -213,6 +213,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                         "crop_size": [
                             image_h,image_w
                         ],
+                        "pad": 0,
                         "random": False
                     },
                     "questions": 1,
@@ -457,7 +458,7 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
                         metrics[name]+=value
                     else:
                         metrics[name].append(value)
-            if data_set_name=='DocVQA':
+            if data_set_name=='DocVQA' and test:
                 collected_preds.append({
                     'questionId': int(instance['id'][0]),
                     'answer': out['pred']
