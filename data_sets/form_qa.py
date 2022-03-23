@@ -286,13 +286,13 @@ class FormQA(QADataset):
             if use_json=='test':
                 self.rel_vs_any_link_prob=0.001
                 self.q_types = {
-                        'readline': 3,
+                        'read': 3,
                         }
                 self.q_types_no_table = {
-                        'readline': 3,
+                        'read': 3,
                         }
                 self.q_types_only_table = {
-                        'readline': 2,
+                        'read': 2,
                         }
                 self.q_types_for_np = ['class-link-all','class-linkdown-all','class-linkup-all','read','cell','row-header','col-header','full-all-col','full-all-row', 'full-list-row-headers','full-list-col-headers']
             elif use_json=='only':
@@ -1131,7 +1131,7 @@ class FormQA(QADataset):
                 else:
                     entity = instance
                     text = entity.text
-                if len(text)<3:
+                if len(text.split())<2: #force multiple words
                     continue
 
                 if (self.train and random.random()<0.5) or switch or self.words:

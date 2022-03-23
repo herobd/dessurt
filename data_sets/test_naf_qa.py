@@ -100,7 +100,7 @@ if __name__ == "__main__":
     else:
         repeat=1
     data=naf_qa.NAFQA(dirPath=dirPath,split='train',config={
-        'rescale_range':[0.9,1.1],
+        'rescale_range':[0.95,1.2],
         #'rescale_range':[1,1],
         'rescale_to_crop_size_first':True,
         'crop_params': {
