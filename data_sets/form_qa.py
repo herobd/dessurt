@@ -638,8 +638,10 @@ class FormQA(QADataset):
                     r = max(tok_len-(self.max_q_tokens+self.max_a_tokens),0)
                 elif tok_len>self.max_q_tokens+self.max_a_tokens and random.random()<0.1:
                     r = random.randrange(tok_len-(self.max_q_tokens+self.max_a_tokens))
-                else:
+                elif tok_len-self.max_q_tokens-2>0:
                     r = random.randrange(tok_len-self.max_q_tokens-2)
+                else:
+                    r = 0
                 q_json_tokens = json_tokens[0,r:r+self.max_q_tokens]
                 json_tokens = json_tokens[0,r+self.max_q_tokens:]
 
