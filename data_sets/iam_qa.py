@@ -69,7 +69,7 @@ class IAMQA(ParaQADataset):
 
 
 
-    def getCropAndLines(self,xmlfile):
+    def getCropAndLines(self,xmlfile,shape):
         W_lines,lines, writer,image_h,image_w = getWordAndLineBoundaries(xmlfile)
         #W_lines is list of lists
         # inner list has ([minY,maxY,minX,maxX],text,id) id=gt for NER

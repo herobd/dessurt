@@ -199,9 +199,11 @@ class QADataset(torch.utils.data.Dataset):
         else:
             np_img = None#np.zeros([1000,1000])
 
+
         if self.crop_to_data:
             #This exists for the IAM dataset so we don't include the form prompt text (which would be easy to cheat from)
-            crop, line_bbs = self.getCropAndLines(annotations)
+            #This is used by the NAF dataset to sometimes cut landscape documents in half
+            crop, line_bbs = self.getCropAndLines(annotations,np_img.shape)
             x1,y1,x2,y2 = crop
             np_img = np_img[y1:y2,x1:x2]
             
