@@ -285,12 +285,8 @@ class RelPosTransformerLayer(nn.Module):
         return tokens
 
 class QTransformerLayer(nn.Module):
-    r"""TransformerEncoderLayer is made up of self-attn and feedforward network.
-    This standard encoder layer is based on the paper "Attention Is All You Need".
-    Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
-    Lukasz Kaiser, and Illia Polosukhin. 2017. Attention is all you need. In Advances in
-    Neural Information Processing Systems, pages 6000-6010. Users may modify or implement
-    in a different way during application.
+    r"""Attention for query tokens.
+    This implemented as attention between two sets of tokens (the all_tokens includes the query tokens)
 
     Args:
         d_model: the number of expected features in the input (required).

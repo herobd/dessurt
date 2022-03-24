@@ -18,6 +18,10 @@ from transformers import BartTokenizer
 
 logging.basicConfig(level=logging.INFO, format='')
 
+##
+#This script will run evaluation of all of the datasets except FUNSD and NAF, which have their own special scripts
+
+
 
 # OCR METRICS: https://github.com/FactoDeepLearning/VerticalAttentionOCR/blob/master/basic/utils.py
 
@@ -84,7 +88,7 @@ def wer_from_list_str(str_gt, str_pred):
     return cer
 
 
-def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, config=None, thresh=None, addToConfig=None, test=False,verbose=2,run=False,smaller_set=False,eval_full=None,ner_do_before=False):
+def main(resume,data_set_name,gpu=None,  config=None, addToConfig=None, test=False,verbose=2,run=False,smaller_set=False,eval_full=None,ner_do_before=False):
     assert run
     random.seed(1234)
     np.random.seed(1234)
@@ -105,10 +109,6 @@ def main(resume,saveDir,data_set_name,gpu=None, shuffle=False, setBatch=None, co
     else:
         config['cuda']=True
         config['gpu']=gpu
-    if thresh is not None:
-        config['THRESH'] = thresh
-        if verbose:
-            print('Threshold at {}'.format(thresh))
     if addToConfig is not None:
         for add in addToConfig:
             addTo=config
@@ -541,41 +541,29 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='PyTorch Evaluator/Displayer')
     parser.add_argument('-c', '--checkpoint', default=None, type=str,
-                        help='path to latest checkpoint (default: None)')
+                        help='path to latest checkpoint (required)')
     parser.add_argument('-d', '--data_set_name', default=None, type=str,
-                        help='name of dataset to eval')
-    parser.add_argument('-o', '--savedir', default=None, type=str,
-                        help='path to directory to save result images (default: None)')
-    parser.add_argument('-n', '--number', default=0, type=int,
-                        help='number of images to save out (from each train and valid) (default: 0)')
+                        help='name of dataset to eval (required)')
     parser.add_argument('-g', '--gpu', default=None, type=int,
                         help='gpu number (default: cpu only)')
-    parser.add_argument('-B', '--batchsize', default=None, type=int,
-                        help='gpu number (default: cpu only)')
-    parser.add_argument('-s', '--shuffle', default=False, type=bool,
-                        help='shuffle data')
     parser.add_argument('-f', '--config', default=None, type=str,
-                        help='config override')
-    parser.add_argument('-m', '--imgname', default=None, type=str,
-                        help='specify image')
-    parser.add_argument('-t', '--thresh', default=None, type=float,
-                        help='Confidence threshold for detections')
+                        help='override config with supplied json')
     parser.add_argument('-a', '--addtoconfig', default=None, type=str,
                         help='Arbitrary key-value pairs to add to config of the form "k1=v1,k2=v2,...kn=vn"')
     parser.add_argument('-T', '--test', default=False, action='store_const', const=True,
-                        help='Run test set')
-    parser.add_argument('-A', '--autoregressive', default=False, action='store_const', const=True,
-                        help='Run with autoregressive prediction')
+                        help='Run test set (default is validation set). For DocVQA outputs submission file DocVQA_OUT.json')
+    parser.add_argument('-b', '--beam_search', default=False, type=int,
+                        help='Do beam search using this number of beams')
+    parser.add_argument('-1', '--teacherforcing', default=False, action='store_const', const=True,
+                        help='Run with teacher forcing')
     parser.add_argument('-S', '--smaller_set', default=False, action='store_const', const=True,
-                        help='Use less of val set')
+                        help='Use less of val set, ONLY FOR SQUAD')
     parser.add_argument('-v', '--verbosity', default=1, type=int,
                         help='How much stuff to print [0,1,2] (default: 2)')
     parser.add_argument('-F', '--eval_full', default=None, type=bool,
                         help='for iamNER, whether to do whole doc (instead of lines)')
-    parser.add_argument('-b', '--beam_search', default=False, type=int,
-                        help='number of beams')
     parser.add_argument('-N', '--ner_do_before', default=False, action='store_const', const=True,
-                        help='do NER evaluation backwards')
+                        help='do NER evaluation class first (as opposed to word first like normal)')
 
     args = parser.parse_args()
 
@@ -594,12 +582,10 @@ if __name__ == '__main__':
     if args.beam_search:
         run = 'beam{}'.format(args.beam_search)
     else:
-        run = args.autoregressive
+        run = not args.teacherforcing
 
-    #if args.index is None and args.imgname is not None:
-    #    index = args.imgname
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=run,smaller_set=args.smaller_set,eval_full=args.eval_full,ner_do_before=args.ner_do_before)
+            main(args.checkpoint, args.data_set_name, gpu=args.gpu, config=args.config, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=run,smaller_set=args.smaller_set,eval_full=args.eval_full,ner_do_before=args.ner_do_before)
     else:
-        main(args.checkpoint, args.savedir, args.data_set_name, gpu=args.gpu, shuffle=args.shuffle, setBatch=args.batchsize, config=args.config, thresh=args.thresh, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=run,smaller_set=args.smaller_set,eval_full=args.eval_full,ner_do_before=args.ner_do_before)
+        main(args.checkpoint, args.data_set_name, gpu=args.gpu, config=args.config, addToConfig=addtoconfig,test=args.test,verbose=args.verbosity,run=run,smaller_set=args.smaller_set,eval_full=args.eval_full,ner_do_before=args.ner_do_before)
