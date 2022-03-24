@@ -6,7 +6,6 @@ import numpy as np
 from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding, BartLearnedPositionalEmbedding
 from model.rel_pos_im_transformer import QTransformerLayer
 from model.swin_transformer import ConvPatchEmbed, SwinTransformerBlock, PatchMerging, PatchEmbed
-from model.trans_pooling import QPooler
 try:
     from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
     from transformers import BartTokenizer, BartModel
@@ -14,7 +13,6 @@ try:
 except:
     pass
 from model.special_token_embedder import SpecialTokenEmbedder
-from utils.character_tokenizer import CharacterTokenizer
 from collections import defaultdict
 from timm.models.layers import trunc_normal_
 import math, random
@@ -47,16 +45,6 @@ class MmSwin(BaseModel):
         use_auto = config.get('use_auto',[True]*sum(blocks_per_level  ))
         swin_cross_attention = config.get('swin_cross_attention',[True]*sum(blocks_per_level))
         if blocks_per_level is not None:
-            if 'swin_text_downsample_all' in config:
-                swin_text_downsample = [[d,d] if type(d) is bool else d for d in config['swin_text_downsample_all']]
-                swin_text_downsample_dense=True
-                assert (not swin_text_downsample[-1][0] and not swin_text_downsample[-1][1]) and "Shouldn't downsample final. Not used."
-                self.downsample_q = sum(d[1] for d in swin_text_downsample)
-
-            else:
-                swin_text_downsample = config['swin_text_downsample'] if 'swin_text_downsample' in config else [False]*len(blocks_per_level)
-                swin_text_downsample_dense=False
-                self.downsample_q = 0
 
             window_size = config['window_size'] #7
             if type(window_size) is int:
@@ -79,23 +67,11 @@ class MmSwin(BaseModel):
             pre_trained_patch_emb = None
 
 
-        token_type = config.get('token_type','word')
+        self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
+        self.SEP_TOKEN= 2
+        self.CLS_TOKEN= 0
 
-
-        if token_type == 'char':
-            self.tokenizer = CharacterTokenizer()
-            self.SEP_TOKEN=self.tokenizer.SEP_index
-            self.CLS_TOKEN=self.tokenizer.CLS_index
-        elif token_type == 'word':
-            assert init_from_pretrained=='bart'
-            self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
-            self.SEP_TOKEN= 2
-            self.CLS_TOKEN= 0
-            #else:
-            #    self.tokenizer = DistilBertTokenizer.from_pretrained('./cache_huggingface/distilbert-base-uncased')
-            #    self.SEP_TOKEN= 102
-            #    self.CLS_TOKEN= 101
-
+        #Not used, had some problems with NER tokens... never figured it out
         if config.get('form_tokens',False):
             add = ['"answer"',"question","other","header","},{",'"answers":','"content":']
             self.tokenizer.add_tokens(add, special_tokens=True)
@@ -126,12 +102,8 @@ class MmSwin(BaseModel):
 
 
 
-        if init_from_pretrained=='distilbert':
-            init_model = DistilBertModel.from_pretrained('./cache_huggingface/distilbert-base-uncased')
-            init_emb = init_model.embeddings.word_embeddings
-        elif init_from_pretrained=='bart':
-            init_model = BartModel.from_pretrained('./cache_huggingface/BART')
-            init_emb = init_model.shared
+        init_model = BartModel.from_pretrained('./cache_huggingface/BART')
+        init_emb = init_model.shared
 
 
         self.text_embedding = nn.Embedding(len(self.tokenizer), d_model)
@@ -201,10 +173,6 @@ class MmSwin(BaseModel):
             patch_size = (self.image_size[0]/cur_resolution[0],self.image_size[1]/cur_resolution[1])
             for block in range(blocks):
                 last = level<len(blocks_per_level)-1 and block == blocks-1
-                if (swin_text_downsample_dense and swin_text_downsample[len(self.swin_layers)][1]) or (last and swin_text_downsample[level]):
-                    q_pool = QPooler(d_model)
-                else:
-                    q_pool = None
                 do_cross_att = swin_cross_attention[len(self.swin_layers)]
                 use_swin_here = use_swin[len(self.swin_layers)]
                 use_auto_here = use_auto[len(self.swin_layers)]
@@ -226,8 +194,6 @@ class MmSwin(BaseModel):
                     QTransformerLayer(d_model,nhead,dim_ff,dropout=dropout) if use_auto_here else None,
                     (nn.Linear(d_im,d_model,bias=False) if d_model!=d_im else nn.Identity()) if use_auto_here else None,
                     PatchMerging(cur_resolution, dim=d_im, norm_layer=nn.LayerNorm) if last else None,
-                    None,
-                    q_pool
                     ] ) )
 
         if config.get('use_bart_layer_init',False):
@@ -373,13 +339,6 @@ class MmSwin(BaseModel):
         q_padding_mask = (1-q_attention_mask).bool()#.to(device) 
         if self.query_special_token_embedder is not None:
             q_padding_mask = torch.cat((torch.BoolTensor(new_batch_size,1).fill_(True),q_padding_mask),dim=1) #for special query token
-        if self.downsample_q>0:
-            #pad it out
-            missing = q_tokens.size(1)% (2**self.downsample_q)
-            missing = ((2**self.downsample_q)-missing) % (2**self.downsample_q)
-            q_tokens = torch.cat((q_tokens,torch.FloatTensor(new_batch_size,missing,q_tokens.size(2)).fill_(0).to(device)),dim=1)
-            q_padding_mask = torch.cat((q_padding_mask,torch.BoolTensor(new_batch_size,missing).fill_(True)),dim=1)
-            num_q+=missing
         q_padding_mask = q_padding_mask.to(device)
 
         a_padding_mask = (1-a_attention_mask[:,:-1]).bool().to(device) #remove last SEP
@@ -433,7 +392,7 @@ class MmSwin(BaseModel):
         #time_log['setup']+=timeit.default_timer()-start_time
         #start_time = timeit.default_timer()
 
-        for i,(swin_layer, proj_d2i, autoregr_layer, proj_i2d, im_downsample, ocr_downsample, q_downsample) in enumerate(self.swin_layers):
+        for i,(swin_layer, proj_d2i, autoregr_layer, proj_i2d, im_downsample) in enumerate(self.swin_layers):
 
             #could be run in parallel
             if PRINT_ATT:
@@ -602,7 +561,7 @@ class MmSwin(BaseModel):
 
 
                 level=0
-                for li,(swin_layer, proj_d2i, layout_layer, proj_i2d, im_downsample, ocr_downsample, q_downsample) in enumerate(self.swin_layers):
+                for li,(swin_layer, proj_d2i, layout_layer, proj_i2d, im_downsample) in enumerate(self.swin_layers):
 
                     #could be run in parallel
                     num_im = saved_proj_im_tokens[li].size(1)
