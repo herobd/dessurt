@@ -861,7 +861,7 @@ class NAFQA(FormQA):
                     if all(are_right):
                         right+=mid
                         mid=[]
-                    if  random.random()<0.5:
+                    if  random.random()<0.5 and len(left)>0:
                         #left
                         X = max(l[1] for l in left)
                         crop = (0,0,X+pad,shape[0])
