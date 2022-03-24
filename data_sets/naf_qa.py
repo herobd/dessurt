@@ -38,6 +38,9 @@ class NAFQA(FormQA):
         self.min_start_read = 7
         self.cased=True
 
+        self.crop_to_data = self.train
+        self.warp_lines = None
+
         self.extra_np = 0.05
 
         with open('data_sets/long_naf_images.txt') as f:
@@ -774,6 +777,232 @@ class NAFQA(FormQA):
 
         link_dict = self.sortLinkDict(entities,link_dict)
         return entities,entity_link,tables,proses,minored_fields,bbs,link_dict
+
+    #This is going to see if the image is landscape and needs cut in half
+    def getCropAndLines(self,annotations,shape):
+        ratio_threshold=0.9
+        width_threshold=2900
+        force_half_thresh=3200
+        sure_force_half_thresh=3600
+        pad=80
+        if shape[1]>width_threshold and shape[1]/shape[0]>ratio_threshold and random.random()>0.1:
+            mid_x = shape[1]/2
+            #see if we can
+            #we'll group the bbs based on overlap horizontally
+            #if  we can do a nice split using these groups, this image can be split
+
+            groups={}
+        
+            all_bbs = annotations['fieldBBs']+annotations['textBBs']
+            min_x = shape[1]
+            max_x = 0
+            for bb in all_bbs:
+                points = bb['poly_points']
+                x1 = min(p[0] for p in points)
+                x2 = max(p[0] for p in points)
+
+                min_x = min(min_x,x1)
+                max_x = max(max_x,x2)
+
+                added=False
+                overlaps=[]
+                for rang,bbs in groups.items():
+                    if max(x1,rang[0]) < min(x2,rang[1]): #overlap
+                        overlaps.append(rang)
+
+                if len(overlaps)==0:
+                    groups[(x1,x2)]=[bb]
+                elif len(overlaps)==1:
+                    rang = overlaps[0]
+                    bbs = groups[rang]
+                    if x1<rang[0] or x2<rang[1]:
+                        #new range
+                        new_rang = (min(x1,rang[0]),max(x2,rang[1]))
+                        new_bbs = bbs+[bb]
+                        del groups[rang]
+                        groups[new_rang]=new_bbs
+                    else:
+                        bbs.append(bb)
+                else:
+                    #merge groups
+                    new_rang = (min([x1]+[o[0] for o in overlaps]), max([x2]+[o[1] for o in overlaps]))
+                    new_bbs = [bb]
+                    for rang in overlaps:
+                        new_bbs+=groups[rang]
+                        del groups[rang]
+                    groups[new_rang]=new_bbs
+
+            if len(groups)>1:
+
+                ranges = list(groups.keys())
+                ranges.sort(key=lambda a:a[0])
+                
+                left=[]
+                mid=[]
+                right=[]
+                for rang in ranges:
+                    if rang[1]<=mid_x:
+                        left.append(rang)
+                    elif rang[0]>=mid_x:
+                        right.append(rang)
+                    else:
+                        mid.append(rang)
+                
+                are_left=[(m[0]+m[1])/2 < mid_x for m in mid]
+                are_right=[(m[0]+m[1])/2 > mid_x for m in mid]
+                if all(are_left) or all(are_right) or shape[1]>force_half_thresh:
+                    #if all(are_left) or all(are_right):
+                    #    print('>half crop!')
+                    #else:
+                    #    print('>forced half crop')
+                    if all(are_left):
+                        left+=mid
+                        mid=[]
+                    if all(are_right):
+                        right+=mid
+                        mid=[]
+                    if  (random.random()<0.5 and len(left)>0) or len(right)==0:
+                        #left
+                        X = max(l[1] for l in left)
+                        crop = (0,0,X+pad,shape[0])
+                        ranges = left
+                    else:
+                        #right
+                        X = min(t[0] for t in right)
+                        crop = (X-pad,0,shape[1],shape[0])
+                        ranges = right
+                    
+                    middle_bbs=[]
+                    for rang in mid:
+                        middle_bbs+=groups[rang]
+                    groups['mid bbs']=[]
+                    for bb in middle_bbs: #if we couldn't split mid, add the ones that best match
+                        points = bb['poly_points']
+                        x1 = min(p[0] for p in points)
+                        x2 = max(p[0] for p in points)
+                        inside = min(x2,crop[2])-max(x1,crop[0])
+                        ratio = inside/(x2-x1)
+                        if ratio>0.25:
+                            new_points = [[max(crop[0],min(crop[2],x)),y] for x,y in points]
+                            bb['poly_points'] = new_points
+                            groups['mid bbs'].append(bb)
+
+
+
+                    new_field_bbs = []
+                    new_text_bbs = []
+                    new_ids = []
+                    for rang in ranges+['mid bbs']:
+                        for bb in groups[rang]:
+                            bb_id = bb['id']
+                            new_ids.append(bb_id)
+                            if bb_id.startswith('f'):
+                                new_field_bbs.append(bb)
+                            else:
+                                new_text_bbs.append(bb)
+                    
+                    new_pairs = []
+                    for (p1,p2) in annotations['pairs']:
+                        if p1 in new_ids and p2 in new_ids:
+                            new_pairs.append([p1,p2])
+                    new_same_pairs = []
+                    for (p1,p2) in annotations['samePairs']:
+                        if p1 in new_ids and p2 in new_ids:
+                            new_same_pairs.append([p1,p2])
+
+                    annotations['fieldBBs']=new_field_bbs
+                    annotations['textBBs']=new_text_bbs
+                    annotations['pairs']=new_pairs
+                    annotations['samePairs']=new_same_pairs
+                    cropAnnotations(annotations,crop)
+                    return crop, None
+            elif shape[1]>force_half_thresh and (shape[1]>sure_force_half_thresh or random.random()<0.5):
+                #print('>forced split')
+                left = random.random()<0.5
+                right = not left
+                good_bbs=[]
+                other_bbs=[]
+                right_boundary=0 if left else shape[1]
+                left_boundary=shape[1] if right else 0
+                for bb in all_bbs:
+                    points = bb['poly_points']
+                    x1 = min(p[0] for p in points)
+                    x2 = max(p[0] for p in points)
+                    xm = (x1+x2)/2
+                    if ((left and xm<mid_x) or (right and xm>mid_x)) and (x2-x1)<shape[1]/4 and bb['id'] in annotations['transcriptions']:
+                        good_bbs.append(bb)
+                        if left and x2>right_boundary:
+                            right_boundary=x2
+                        elif right and x1<left_boundary:
+                            left_boundary=x1
+                    else:
+                        other_bbs.append(bb)
+                if left_boundary>=right_boundary:
+                    #print('error')
+                    return (0,0,shape[1],shape[0]), None
+
+                crop = (left_boundary,0,right_boundary,shape[0])
+                mid_x = right_boundary if left else left_boundary
+                for bb in other_bbs:
+                    points = bb['poly_points']
+                    x1 = min(p[0] for p in points)
+                    x2 = max(p[0] for p in points)
+                    if (left and x1<mid_x) or (right and x2>mid_x):
+                        inside = min(x2,crop[2])-max(x1,crop[0])
+                        ratio = inside/(x2-x1)
+                        #try:
+                        #    print('{} : {}'.format(annotations['transcriptions'][bb['id']],ratio))
+                        #except KeyError:
+                        #    print('[{}] : {}'.format(bb['id'],ratio))
+                        if ratio>0.33:
+                            new_points = [[max(crop[0],min(crop[2],x)),y] for x,y in points]
+                            bb['poly_points'] = new_points
+                            good_bbs.append(bb)
+
+                new_field_bbs = []
+                new_text_bbs = []
+                new_ids = []
+                for bb in good_bbs:
+                    bb_id = bb['id']
+                    new_ids.append(bb_id)
+                    if bb_id.startswith('f'):
+                        new_field_bbs.append(bb)
+                    else:
+                        new_text_bbs.append(bb)
+                
+                new_pairs = []
+                for (p1,p2) in annotations['pairs']:
+                    if p1 in new_ids and p2 in new_ids:
+                        new_pairs.append([p1,p2])
+                new_same_pairs = []
+                for (p1,p2) in annotations['samePairs']:
+                    if p1 in new_ids and p2 in new_ids:
+                        new_same_pairs.append([p1,p2])
+
+                annotations['fieldBBs']=new_field_bbs
+                annotations['textBBs']=new_text_bbs
+                annotations['pairs']=new_pairs
+                annotations['samePairs']=new_same_pairs
+                cropAnnotations(annotations,crop)
+                return crop, None
+
+                
+            #just crop in
+            #print('>crop in')
+            crop = (max(0,min_x-pad),0,min(shape[1],max_x+pad),shape[0])
+            cropAnnotations(annotations,crop)
+            return crop,None
+
+
+
+
+        return (0,0,shape[1],shape[1]),None
+
+def cropAnnotations(annotations,crop):
+    for bb in annotations['fieldBBs']+annotations['textBBs']:
+        points = bb['poly_points']
+        new_points = [[x-crop[0],y-crop[1]] for x,y in points]
+        bb['poly_points'] = new_points
 
 ##################################
 

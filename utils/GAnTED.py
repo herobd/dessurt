@@ -1,5 +1,5 @@
 from zss import simple_distance, Node
-import editdistance
+#import editdistance
 import itertools
 import math
 import random
@@ -8,7 +8,8 @@ from multiprocessing import Pool
 #GAnTED metric: Greedy-Aligned normalized Tree Edit Distance
 
 def customEditDistance(pred,gt):
-    #code modified from https://stackoverflow.com/a/19928962/1018830
+    #code modified from https://stackoverflow.comdd/a/19928962/1018830
+    #This permits the wildcard character '¿' and wildcard glob '§' that are pressent in the NAF transcription GT
     len_1=len(pred)
 
     len_2=len(gt)
@@ -25,11 +26,11 @@ def customEditDistance(pred,gt):
 
         for j in range(1,len_2+1):
 
-            if pred[i-1]==gt[j-1] or gt[j-1]=='¿' or gt[j-1]=='§':
-                x[i][j] = x[i-1][j-1] 
+            if pred[i-1]==gt[j-1] or gt[j-1]=='¿':
+                x[i][j] = min(x[i-1][j-1], x[i][j-1]+1, x[i-1][j]+1)
 
-            else :
-                x[i][j]= min(x[i][j-1],x[i-1][j],x[i-1][j-1])+1
+            else:
+                x[i][j]= min(x[i][j-1],x[i-1][j],x[i-1][j-1])+(1 if gt[j-1]!='§' else 0)
 
     return x[i][j]
 
@@ -190,7 +191,7 @@ def nEditDistance(a,b):
         b=''
     if len(a)==0 and len(b)==0:
         return 0
-    return editdistance.eval(a,b)/(0.5*(len(a)+len(b)))
+    return customEditDistance(a,b)/(0.5*(len(a)+len(b)))
 def matchNEditDistance(a,b,thresh=0.5):
     if a is None:
         a=''
@@ -198,7 +199,7 @@ def matchNEditDistance(a,b,thresh=0.5):
         b=''
     if len(a)==0 and len(b)==0:
         return 0
-    ned = editdistance.eval(a,b)/(0.5*(len(a)+len(b)))
+    ned = customEditDistance(a,b)/(0.5*(len(a)+len(b)))
     if ned<thresh:
         return ned
     else:
