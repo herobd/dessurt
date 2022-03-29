@@ -1,31 +1,23 @@
 import json
-import timeit
 import torch
-from torch.utils.data import Dataset
-from torch.autograd import Variable
-
 from collections import defaultdict
-from glob import iglob
 import os
 import utils.img_f as img_f
 import numpy as np
-import math, time
-import random, string
+import math
+import random
 
-from utils import grid_distortion
-
-from utils import string_utils, augmentation
-from utils.util import ensure_dir
-from utils.yolo_tools import allIOU
 from .form_qa import FormQA, collate, Entity, Line, Table
 from .gen_daemon import GenDaemon
 
 
-import random, pickle
-PADDING_CONSTANT = -1
-
-
+#put work images into paragraph form (single image)
 def resizeAndJoinImgs(word_imgs,height,space_width,boundary_x):
+    #word_imgs: list of (text,word_img)
+    #height: the height to resive word images to
+    #space_width: how much space between words
+    #boundary_x: when to stop horizontally and wrap to new line
+
     full_text=''
     newline = round(height*0.1+0.9*random.random()*height)
     max_x=0
@@ -65,19 +57,28 @@ def resizeAndJoinImgs(word_imgs,height,space_width,boundary_x):
 
 
 
-
+#This dataset creates synthetic form images on the fly
+#The format is heavily based on the FUNSD dataset
 class SynthFormDataset(FormQA):
     def __init__(self, dirPath, split, config):
         super(SynthFormDataset, self).__init__(dirPath,split,config)
-        font_dir = config['font_dir']
-        self.gen_daemon = GenDaemon(font_dir)
+        font_dir = config['font_dir'] #directory pointing to font dataset (has clean_fonts.csv)
+        self.gen_daemon = GenDaemon(font_dir) #This makes the word images
+
         self.color=False
-        self.image_size = config['image_size'] if 'image_size' in config else None
+
+        self.image_size = config['image_size'] if 'image_size' in config else None #output size
         if type(self.image_size) is int:
             self.image_size = (self.image_size,self.image_size)
+        
+        #range of text heights
         self.min_text_height = config['min_text_height'] if 'min_text_height' in config else 8
         self.max_text_height = config['max_text_height'] if 'max_text_height' in config else 32
+
+        #frequency of placing a table instead of label-value set
         self.table_prob = config['tables'] if 'tables' in config else 0.2
+
+        #lots of other probabilities
         self.match_title_prob = 0.3
         self.match_label_prob = 0.5
         self.blank_value_prob = 0.1
@@ -95,6 +96,7 @@ class SynthFormDataset(FormQA):
         self.max_table_colh_width=80
         self.max_table_rowh_width=200
 
+        #Load results of gpt form generation
         with open(os.path.join(dirPath,'gpt2_form_generation.json')) as f:
             self.documents = json.load(f)
 
@@ -107,7 +109,7 @@ class SynthFormDataset(FormQA):
             
         
         self.images=[]
-        for i in range(config['batch_size']*400): #we just randomly generate instances on the fly
+        for i in range(config['batch_size']*400): #we just randomly generate instances on the fly, but add this to give it instances to sample from (QADataset expects it)
             self.images.append({'id':'{}'.format(i), 'imagePath':None, 'annotationPath':0, 'rescaled':1.0, 'imageName':'0'})
         
         self.random_words = []
@@ -128,6 +130,7 @@ class SynthFormDataset(FormQA):
         entity_link=defaultdict(list)
         tables=[]
         
+        #Main building loop
         debug=0
         while len(all_entities)==0 and debug<200:
             debug+=1
@@ -136,27 +139,21 @@ class SynthFormDataset(FormQA):
             prev_boxes=[(0,0,image_w,0)]
             furthest_right=0
             while len(prev_boxes)>0 and debug<200:
-                #print(prev_boxes)
                 debug+=1
                 #pick starting point
-                #x1,y1,x2,y2 = random.choice(prev_boxes)
                 x1,y1,x2,y2 = prev_boxes.pop(random.randrange(len(prev_boxes)))
                 if image_h-y2<60 and random.random()<0.5:
                     continue 
                 if x1>=furthest_right:
-                    #print('popped furthest right: {}'.format((x1,y1,x2,y2)))
-                    x2 = image_w
-                #else:
-                    #print('popped : {}'.format((x1,y1,x2,y2)))
+                    x2 = image_w #can do to end of image
+
                 if random.random()<self.table_prob:
                     success,box = self.addTable(x1,y2,x2,image,tables,all_entities,entity_link)
-
                 else:
                     success,box = self.addForm(x1,y2,x2,image,all_entities,entity_link)
                 
                 if success:
-                    #print('added: {}'.format(box))
-                    prev_boxes.append(box)
+                    prev_boxes.append(box) #add for the space under the just generated thing
                     if box[2]>furthest_right:
                         furthest_right = box[2]
                         prev_boxes.append((furthest_right,0,image_w,0)) #add non-box, just to the right
@@ -220,22 +217,31 @@ class SynthFormDataset(FormQA):
     
 
     def addTable(self,init_x,init_y,max_x,image,tables,entities,entity_link):
+        #init_x, init_y: the top-left corner of the area availble
+        #max_x: the furthes right it can draw (can always go to bottom of image)
+        #image: the image were making
+        #tables: list of tables to add this new table to
+        #entities: " entities "
+        #entity_link: " links "
         max_y = image.shape[0]
+        
+        #get starting position
         start_x = init_x+(self.block_pad_max if len(entities)>0 else self.block_pad_max//3)
         start_y = init_y+(self.block_pad_max if len(entities)>0 else self.block_pad_max//3)
         title_height = self.max_text_height
         label_height = self.max_text_height
         value_height = self.max_text_height
-        #while repeat if needed
         if start_x>init_x+self.block_pad_min:
             start_x = random.randrange(init_x+2*self.block_pad_min,start_x)
         if start_y>init_y+self.block_pad_min:
             start_y = random.randrange(init_y+2*self.block_pad_min,start_y)
 
         if start_x>=image.shape[1]-16 or start_y>=image.shape[0]-10:
+            #not enough room
             return False,None
 
         if random.random()<0.33:
+            #This table gets a title!
             while len(self.random_words)<2:
                 self.addRandomWords()
             num_words = random.randrange(1,min(len(self.random_words),6))
@@ -243,6 +249,7 @@ class SynthFormDataset(FormQA):
             self.random_words = self.random_words[:-num_words]
             title_words,title_font = self.gen_daemon.generate(title,ret_font=True) 
             if len(title_words)==0:
+                #or maybe not
                 title=None
         else:
             title = None
@@ -282,6 +289,7 @@ class SynthFormDataset(FormQA):
 
         #how wide will the title be?
         if title is not None:
+            #let's lay it out and see
             if max(title_word_ws)>=block_width:
                 return False,None
                 #continue #not going to fit
@@ -337,16 +345,16 @@ class SynthFormDataset(FormQA):
 
         if end_title_y+3*label_height>=max_y:
             return False,None
-            #continue #no room for fields
+            #no room for fields
 
 
 
 
-        #Taken from FUNSD_QA
         num_rows=random.randrange(1,15)
         num_cols=random.randrange(1,10)
 
         if num_rows==1 and num_cols==1:
+            #shouldn't have a table with one cell
             if random.random()<0.5:
                 num_rows=random.randrange(2,15)
             else:
@@ -354,16 +362,17 @@ class SynthFormDataset(FormQA):
 
         mean_height = random.randrange(self.min_text_height+1,self.max_text_height)
 
-        table_entries = self.getTableValues(num_rows*num_cols)#random.choices(self.table_labels,k=num_rows*num_cols)
-        row_header_entries = self.getTableHeaders(num_rows)#random.choices(self.table_labels,k=num_rows)
-        col_header_entries = self.getTableHeaders(num_cols)#random.choices(self.table_labels,k=num_cols)
-        #table_entries = [(img_f.imread(os.path.join(self.header_dir,'{}.png'.format(e[0]))),e[1]) for e in table_entries]
+        table_entries = self.getTableValues(num_rows*num_cols)
+        row_header_entries = self.getTableHeaders(num_rows)
+        col_header_entries = self.getTableHeaders(num_cols)
+
         table_entries_1d = []
         font = None
         debug=0
         for text in table_entries:
             word_imgs,font = self.gen_daemon.generate(text,font=font,ret_font=True)
             while len(word_imgs)==0 and debug<2000:
+                #for some reason, couldn't generate, try try again
                 debug+=1
                 text=self.getTableValues(1)[0]
                 word_imgs,font = self.gen_daemon.generate(text,font=font,ret_font=True)
@@ -389,6 +398,7 @@ class SynthFormDataset(FormQA):
                 word_imgs,font = self.gen_daemon.generate(text,font=font,ret_font=True)
             img,label = resizeAndJoinImgs(word_imgs,label_height,label_space_width,self.max_table_colh_width)
             col_header_entries_1d.append([img,label])
+
         row_headers = row_header_entries_1d
         col_headers = col_header_entries_1d
         table_entries = table_entries_1d
@@ -399,11 +409,10 @@ class SynthFormDataset(FormQA):
 
 
         table_x = random.randrange(init_x,init_x+70)
-        table_y = end_title_y #random.randrange(end_title_y,end_title_y+20)
+        table_y = end_title_y 
 
         padding = random.randrange(0,30)
 
-        #find the height of each row and cut rows that spill off page
         max_height=0
         for c in range(num_cols):
             max_height = max(max_height,col_headers[c][0].shape[0])
@@ -430,7 +439,6 @@ class SynthFormDataset(FormQA):
                 height_row=height_row[:num_rows]
                 break
 
-        #find the width of each rowumn and cut rowumns that spill off page
         max_width=0
         for r in range(num_rows):
             max_width = max(max_width,row_headers[r][0].shape[1])
@@ -485,8 +493,6 @@ class SynthFormDataset(FormQA):
             else:
                 string=row_headers[r][1]
             row_headers_e.append( Entity('answer',[Line(string,box)]) )
-            #if boxes is not None:
-            #    self.addText(row_headers[r][1],x,y,row_headers[r][0].shape[1],row_headers[r][0].shape[0],boxes=boxes,trans=trans)
 
         #put col headers in image
         col_headers_e=[]
@@ -515,12 +521,10 @@ class SynthFormDataset(FormQA):
             else:
                 string=col_headers[c][1]
             col_headers_e.append( Entity('answer',[Line(string,box)]) )
-            #if boxes is not None:
-            #    self.addText(col_headers[c][1],x,y,col_headers[c][0].shape[1],col_headers[c][0].shape[0],boxes=boxes,trans=trans)
 
         table = Table(row_headers_e,col_headers_e)
 
-        #put in entries
+        #put entries into image (and table)
         cur_x = width_row_heading+table_x
         for c in range(num_cols):
             cur_y = height_col_heading+table_y
@@ -540,11 +544,8 @@ class SynthFormDataset(FormQA):
                         diff = image.shape[1]-(x+table_entries[r][c][0].shape[1])
                         table_entries[r][c][0] = table_entries[r][c][0][:,:diff]
                     image[y:y+table_entries[r][c][0].shape[0],x:x+table_entries[r][c][0].shape[1]] = table_entries[r][c][0]
-                    #table_values.append((col_headers[c][1],row_headers[r][1],table_entries[r][c][1],x,y))
                     box = [x,y,x+table_entries[r][c][0].shape[1],y+table_entries[r][c][0].shape[0]]
                     table.cells[r][c]=Entity('answer',[Line(table_entries[r][c][1],box)])
-                    #if boxes is not None:
-                    #    self.addText(table_entries[r][c][1],x,y,table_entries[r][c][0].shape[1],table_entries[r][c][0].shape[0],boxes=boxes,trans=trans)
                 
                 cur_y += height_row[r]
             cur_x += width_col[c]
@@ -646,6 +647,8 @@ class SynthFormDataset(FormQA):
         debug=0
         while debug<100:
             debug+=1
+
+            #get label-value set
             title,pairs = random.choice(self.documents)
 
             #fix bad parsing
@@ -656,10 +659,6 @@ class SynthFormDataset(FormQA):
             if len(new_pairs)>0:
                 pairs=new_pairs
                 break
-        #print('-----')
-        #print(title)
-        #print(pairs)
-        #print('==')
 
         max_y = image.shape[0]
         label_matches_title = random.random()<self.match_title_prob and title is not None
@@ -668,7 +667,7 @@ class SynthFormDataset(FormQA):
         
         label_height = None
 
-        #generate text images
+        #generate title images
         if title is not None:
             if random.random()<0.02 and title[-1]!=':':
                 title+=':'
@@ -681,11 +680,13 @@ class SynthFormDataset(FormQA):
             value_font = label_font
         else:
             value_font = None
+    
+
+        #get cue (and whether to use checkboxes)
         options=['colon','line','line+colon','dotted line','dotted line+colon','box','box+colon','to left','below','none']
-        #options=['colon','line','line+colon','dotted line','dotted line+colon','box','box+colon','to left','none']
-        #options=['below']
         checkboxes = random.random()<self.checkbox_prob
         if checkboxes:
+            #make check image
             cue = random.choice(['colon','box','box+colon','none','to left'])
             blank_value_prob = self.checkbox_blank_value_prob
             checkboxes = random.choice(['paren','bracket']) if 'box' not in cue else 'box'
@@ -709,6 +710,8 @@ class SynthFormDataset(FormQA):
                 cue+=' box'
             elif not checkboxes:
                 cue+=' line'
+
+        #generate label and value images 
         image_pairs = []
         for label,value in pairs:
             label_lower = label.lower()
@@ -727,20 +730,12 @@ class SynthFormDataset(FormQA):
                     value_words = [[(x_str,x_im)]]
                 else:
                     check_im = np.copy(blank_im)
-                    #img_f.imshow('x',check_im)
-                    #img_f.show()
                     x = open_im.shape[1]+random.randrange(0,x_space+1)
-                    #import pdb;pdb.set_trace()
                     check_im[:x_im.shape[0],x:x+x_im.shape[1]] = x_im
                     value_words = [[(x_str,check_im)]]
-                    #img_f.imshow('x',check_im)
-                    #img_f.show()
             elif isinstance(value,str):
                 value_words,value_font = self.gen_daemon.generate(value,font=value_font,ret_font=True)
                 value_words = [value_words]
-                #TEST
-                #value_wordsT,value_font = self.gen_daemon.generate('TEST_LIST',font=value_font,ret_font=True)
-                #value_words.append(value_wordsT)
             else:
                 #list answer
                 list_values=[]
@@ -751,10 +746,13 @@ class SynthFormDataset(FormQA):
 
             if 'to left' in cue or 'below' in cue:
                 if len(value_words)>0:
+                    #we switch the labels and values so that we can resuse the same layout processing
                     image_pairs.append((value_words[0],[label_words])) #switched! only allow one answer for ease of implementation
-                    #print('switched to, {} : {}'.format(*image_pairs[-1]))
                 else:
                     cue = random.choice(options[:-3])
+                    #and go back and change the previous:
+                    image_pairs = [(l_w[0],[v_w]) for v_w,l_w in image_pairs]
+                    image_pairs.append((label_words,value_words))
             else:
                 image_pairs.append((label_words,value_words))
         

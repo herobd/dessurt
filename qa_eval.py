@@ -20,6 +20,8 @@ logging.basicConfig(level=logging.INFO, format='')
 
 ##
 #This script will run evaluation of all of the datasets except FUNSD and NAF, which have their own special scripts
+#
+#It takes the training snapshot (weights) and dataset, and computes the validation (or test) metrics for that dataset
 
 
 
@@ -404,6 +406,7 @@ def main(resume,data_set_name,gpu=None,  config=None, addToConfig=None, test=Fal
         tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
     else:
         print('ERROR, unknown dataset: {}'.format(data_set_name))
+        print('Implemented datasets: DocVQA, RVL, IAMNER, IAMQA (page recognition), HWSQuAD, SROIE, SynthParaQA (evaluate word infilling), SQuAD (my synthetic version), NAFRead (recognition on NAF)')
         exit(1)
     
     print('getting data ready')
@@ -448,8 +451,10 @@ def main(resume,data_set_name,gpu=None,  config=None, addToConfig=None, test=Fal
         for instance in valid_data_loader:
             if verbose:
                 print('batch index: {}/{}'.format(index,len(valid_data_loader)),end='\r')
-            elif data_set_name=='RVL' and index%100==0:
-                print('batch index: {}/{}'.format(index,len(valid_data_loader)))
+            #elif data_set_name=='RVL' and index%1000==0:
+            #    print('batch index: {}/{}'.format(index,len(valid_data_loader)))
+
+            #Run model on data instance
             _,res,out = trainer.run(instance,valid=True,run=run,get=get)
 
             for name,value in res.items():
@@ -477,9 +482,9 @@ def main(resume,data_set_name,gpu=None,  config=None, addToConfig=None, test=Fal
                 gts.append(out['gt'])
                 init_len = len(out['pred'])
                 fixed = derepeat(out['pred'])
-                if verbose:
+                if verbose>1:
                     print('==================')
-                    print('GT: '+gts[-1])
+                    print('GT:   '+gts[-1])
                     print('PRED: '+fixed)
                 if init_len>len(fixed):
                     #query again to try and recover lost text
@@ -491,7 +496,7 @@ def main(resume,data_set_name,gpu=None,  config=None, addToConfig=None, test=Fal
                     _,res,out = trainer.run(instance,valid=True,run=run,get=get)
                     response = derepeat(out['pred'])
                     fixed += response
-                    if verbose:
+                    if verbose>1:
                         print('FINAL PRED: '+fixed)
                 if fixed[-1]=='‡':
                     fixed = fixed[:-1]
@@ -499,6 +504,8 @@ def main(resume,data_set_name,gpu=None,  config=None, addToConfig=None, test=Fal
             
 
             index+=1
+
+    #Print the metrics
     F_measure_prec={}
     F_measure_recall={}
     for name,values in metrics.items():
@@ -532,6 +539,7 @@ def main(resume,data_set_name,gpu=None,  config=None, addToConfig=None, test=Fal
         print('CER: {},  WER: {}'.format(cer,wer))
 
     if len(collected_preds)>0:
+        #For submitting to evaluation server
         with open('DocVQA_OUT.json','w') as f:
             json.dump(collected_preds,f)
         print(' wrote DocVQA_OUT.json')
@@ -539,7 +547,7 @@ def main(resume,data_set_name,gpu=None,  config=None, addToConfig=None, test=Fal
 if __name__ == '__main__':
     logger = logging.getLogger()
 
-    parser = argparse.ArgumentParser(description='PyTorch Evaluator/Displayer')
+    parser = argparse.ArgumentParser(description='Evaluator for Dessurt on non-form datasets')
     parser.add_argument('-c', '--checkpoint', default=None, type=str,
                         help='path to latest checkpoint (required)')
     parser.add_argument('-d', '--data_set_name', default=None, type=str,

@@ -57,8 +57,8 @@ def display(data,write,tokenizer=None):
         #    if x in q:
         #        draw = True
         #        break
-        draw = 'row header' not in a
-        if True:
+        draw = False#'row header' not in a
+        if False:
             cv2.imwrite('synth_form_example_new.png',(img.numpy()*255)[:,:,0].astype(np.uint8))
         if draw :
             #cv2.imshow('line',img.numpy())

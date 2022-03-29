@@ -6,6 +6,8 @@ import numpy as np
 
 #These are all based on the OpenCV functions, to make the conversion to scikit image easier (also should make future changes easier as well)
 
+#I had issues getting opencv to install one time...
+
 def line(img,p1,p2,color,thickness=1,draw='set'):
     y1 = max(0,min(img.shape[0]-1,int(p1[1])))
     y2 = max(0,min(img.shape[0]-1,int(p2[1])))
