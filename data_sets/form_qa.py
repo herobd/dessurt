@@ -424,6 +424,44 @@ class FormQA(QADataset):
                         'full-all-col':0.025,
                         }
                 self.q_types_for_np = ['class-link-all','class-linkdown-all','class-linkup-all','read','cell','row-header','col-header','full-all-col','full-all-row']
+            elif use_json=='readevenmore':
+                self.rel_vs_any_link_prob=0.01
+                self.q_types = {
+                        'full_json': 0.68,
+                        'class-link-all': 0.05,
+                        'class-linkdown-all': 0.05,
+                        'class-linkup-all': 0.05,
+                        'np':0.01,
+                        'read':0.4,
+                        'readline':0.4,
+                        'cell':0.05,
+                        'row-header':0.025,
+                        'col-header':0.025,
+                        'full-all-row':0.025,
+                        'full-all-col':0.025
+                        }
+                self.q_types_no_table = {
+                        'full_json': 0.68,
+                        'class-link-all': 0.05,
+                        'class-linkdown-all': 0.05,
+                        'class-linkup-all': 0.05,
+                        'np':0.01,
+                        'read':0.4,
+                        'readline':0.4
+                        }
+                self.q_types_only_table = {
+                        'full_json': 0.68,
+                        'class-link-all': 0.01,
+                        'np':0.01,
+                        'read':0.1,
+                        'readline':0.1,
+                        'cell':0.05,
+                        'row-header':0.025,
+                        'col-header':0.025,
+                        'full-all-row':0.025,
+                        'full-all-col':0.025,
+                        }
+                self.q_types_for_np = ['class-link-all','class-linkdown-all','class-linkup-all','read','cell','row-header','col-header','full-all-col','full-all-row']
             elif use_json:
                 assert use_json is True
                 self.rel_vs_any_link_prob=0.1

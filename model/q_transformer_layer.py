@@ -5,6 +5,7 @@ from torch.nn import Linear, Dropout, LayerNorm
 from torch import Tensor
 import torch.nn.functional as F
 from torch.nn.modules.transformer import _get_activation_fn
+from .attention import MultiHeadedAttention
 
 class QTransformerLayer(nn.Module):
     r"""Attention for query tokens.
