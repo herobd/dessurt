@@ -14,7 +14,7 @@ from data_sets.gen_daemon import GenDaemon
 
 import utils.img_f as img_f
 
-
+#This class defines an on-the-fly synthetic dataset of documents with Wikipedia articles
 class SynthParaQA(ParaQADataset):
     """
     Class for creating synthetic paragraph type documents
@@ -25,11 +25,11 @@ class SynthParaQA(ParaQADataset):
         super(SynthParaQA, self).__init__(dirPath,split,config,images)
 
         font_dir = dirPath
-        self.simple_vocab = config.get('simple_vocab')
+        self.simple_vocab = config.get('simple_vocab') #for debugging
         if self.simple_vocab:
             self.min_read_start_no_mask=4
             self.min_read_start_with_mask=4
-        self.gen_daemon = GenDaemon(font_dir,simple=self.simple_vocab)
+        self.gen_daemon = GenDaemon(font_dir,simple=self.simple_vocab) #actually generates word images
         self.prev_words = None
 
         self.gt_ocr = config['gt_ocr'] if 'gt_ocr' in config else False
@@ -40,11 +40,12 @@ class SynthParaQA(ParaQADataset):
 
         self.images=[]
         for i in range(config['batch_size']*config.get('num_batches',100)): #we just randomly generate instances on the fly
+            #these are just to match the QADataset format
             self.images.append({'id':'{}'.format(i), 'imagePath':None, 'annotationPath':i, 'rescaled':1.0, 'imageName':'0'})
 
         self.held_instance=None
         self.used_held = 0
-        self.max_used_held = config['prefetch_factor']//2 if 'prefetch_factor' in config else 2
+        self.max_used_held = config['prefetch_factor']//2 if 'prefetch_factor' in config else 2 #how many times to reuse the same image with different questions
 
     def parseAnn(self,seed,s):
         if not self.train:

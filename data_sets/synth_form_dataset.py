@@ -281,7 +281,7 @@ class SynthFormDataset(FormQA):
         value_list_newline_height = value_newline_height + round(value_newline_height*random.random())
         
         if title is not None:
-            title_word_ws = [max(1,round(img.shape[1]*(title_height/img.shape[0]))) for text,img in title_words]
+            title_word_widths = [max(1,round(img.shape[1]*(title_height/img.shape[0]))) for text,img in title_words]
         
 
         block_width = max_x-start_x
@@ -290,7 +290,7 @@ class SynthFormDataset(FormQA):
         #how wide will the title be?
         if title is not None:
             #let's lay it out and see
-            if max(title_word_ws)>=block_width:
+            if max(title_word_widths)>=block_width:
                 return False,None
                 #continue #not going to fit
             max_title_width = block_width
@@ -304,7 +304,7 @@ class SynthFormDataset(FormQA):
             cur_y=start_y
             rightmost_title_x=cur_x
             restart=False
-            for title_w, (title_text,title_img) in zip(title_word_ws,title_words):
+            for title_w, (title_text,title_img) in zip(title_word_widths,title_words):
                 if cur_x+title_w>max_title_x:
                     #newline
                     title_str_lines.append(title_str)
@@ -748,6 +748,7 @@ class SynthFormDataset(FormQA):
                 if len(value_words)>0:
                     #we switch the labels and values so that we can resuse the same layout processing
                     image_pairs.append((value_words[0],[label_words])) #switched! only allow one answer for ease of implementation
+                    #  also, what would a list response look like for these?
                 else:
                     cue = random.choice(options[:-3])
                     #and go back and change the previous:
@@ -764,11 +765,13 @@ class SynthFormDataset(FormQA):
         start_y = min(start_y,max_y-60)
         if start_y<init_y:
             return False,None
-        title_height = self.max_text_height
+        title_height = self.max_text_height #retry will resample using the current height as a max
         label_height = self.max_text_height
         value_height = self.max_text_height
         num_pairs = len(pairs)
-        for retry in range(5):
+
+        for retry in range(5): #allow five attempts, shrinking things each time
+
             if start_x>init_x+self.block_pad_min:
                 start_x = random.randrange(init_x+self.block_pad_min,start_x)
             if start_y>init_y+self.block_pad_min:
@@ -787,7 +790,7 @@ class SynthFormDataset(FormQA):
             title_newline_height = random.randrange(1,title_height) + title_height
 
             if label_matches_title:
-                label_height = title_height
+                label_height = title_height #same font, same size
             else:
                 label_height = random.randrange(self.min_text_height,1+max(self.min_text_height+2,min(label_height,title_height)))
             em_approx = label_height*1.6 #https://en.wikipedia.org/wiki/Em_(typography)
@@ -797,7 +800,7 @@ class SynthFormDataset(FormQA):
             label_newline_height = random.randrange(1,label_height) + label_height
 
             if value_matches_label:
-                value_height = label_height
+                value_height = label_height #save font, same size
             else:
                 value_height = random.randrange(self.min_text_height,1+max(self.min_text_height+2,min(value_height,title_height)))
             em_approx = value_height*1.6 #https://en.wikipedia.org/wiki/Em_(typography)
@@ -807,7 +810,7 @@ class SynthFormDataset(FormQA):
             value_newline_height = random.randrange(1,value_height) + value_height
 
             if 'to left' in cue or 'below' in cue:
-                #switch sizes
+                #switch sizes, as we swapped the labels and values
                 temp=(label_height,label_space_width,label_newline_height)
                 label_height=value_height
                 label_space_width=value_space_width
@@ -818,29 +821,30 @@ class SynthFormDataset(FormQA):
             
             max_word_width = 0
             if title is not None:
-                title_word_ws = [max(1,round(img.shape[1]*(title_height/img.shape[0]))) for text,img in title_words]
-                max_word_width = max(title_word_ws)
+                #get word widths
+                title_word_widths = [max(1,round(img.shape[1]*(title_height/img.shape[0]))) for text,img in title_words]
+                max_word_width = max(title_word_widths)
             
             new_image_pairs = []
             w_pairs = []
-            max_value_word_w=max_label_word_w=0
+            max_value_word_width=max_label_word_width=0
             for label_words,value_words in image_pairs:
                 if 'to left' in cue:
                     if len(value_words)>1:
                         continue
                 if len(label_words)==0:
                     continue
-                label_word_ws = [max(1,round(img.shape[1]*(label_height/img.shape[0]))) for text,img in label_words]
-                max_label_word_w = max(max_label_word_w,*label_word_ws)
-                value_word_ws = []
+                label_word_widths = [max(1,round(img.shape[1]*(label_height/img.shape[0]))) for text,img in label_words]
+                max_label_word_width = max(max_label_word_width,*label_word_widths)
+                value_word_widths = []
                 for value_words_item in value_words:
-                    value_word_ws_item = [max(1,round(img.shape[1]*(value_height/img.shape[0]))) for text,img in value_words_item]
-                    max_word_width = max(max_word_width,*label_word_ws,*value_word_ws_item)
-                    max_value_word_w = max([max_value_word_w,*value_word_ws_item])
-                    value_word_ws.append(value_word_ws_item)
+                    value_word_widths_item = [max(1,round(img.shape[1]*(value_height/img.shape[0]))) for text,img in value_words_item]
+                    max_word_width = max(max_word_width,*label_word_widths,*value_word_widths_item)
+                    max_value_word_width = max([max_value_word_width,*value_word_widths_item])
+                    value_word_widths.append(value_word_widths_item)
 
                 new_image_pairs.append((label_words,value_words))
-                w_pairs.append((label_word_ws,value_word_ws))
+                w_pairs.append((label_word_widths,value_word_widths))
             image_pairs = new_image_pairs
 
             block_width = max_x-start_x
@@ -848,14 +852,14 @@ class SynthFormDataset(FormQA):
                 continue #retry, we need to shrink things
 
 
-            #how wide will the title be?
+            #how tall and wide will the title be?
             if title is not None:
-                if max(title_word_ws)>=block_width:
-                    continue #not going to fit
-                if int(block_width*0.66)<=max(title_word_ws):
+                if max(title_word_widths)>=block_width:
+                    continue #not going to fit, try again with smaller size
+                if int(block_width*0.66)<=max(title_word_widths):
                     max_title_width = block_width
                 else:
-                    max_title_width = random.randrange(max(title_word_ws),int(block_width*0.66))
+                    max_title_width = random.randrange(max(title_word_widths),int(block_width*0.66))
                 max_title_x = start_x+max_title_width
                 #layout the title to see how tall it is
                 title_str=''
@@ -866,7 +870,7 @@ class SynthFormDataset(FormQA):
                 cur_y=start_y
                 rightmost_title_x=cur_x
                 restart=False
-                for title_w, (title_text,title_img) in zip(title_word_ws,title_words):
+                for title_w, (title_text,title_img) in zip(title_word_widths,title_words):
                     if cur_x+title_w>max_title_x:
                         #newline
                         title_str_lines.append(title_str)
@@ -901,19 +905,18 @@ class SynthFormDataset(FormQA):
                 continue #no room for fields
 
 
-            can_do_side_by_side = 2+max_value_word_w+max_label_word_w+self.min_qa_sep < block_width and 'below' not in cue
+            can_do_side_by_side = 2+max_value_word_width+max_label_word_width+self.min_qa_sep < block_width and 'below' not in cue #room horizontally for labels and values in same line
 
             if ('to left' in cue or checkboxes) and not can_do_side_by_side:
-                #cue = 'line'
-                continue
-            side_by_side = can_do_side_by_side and (random.random()<self.side_by_side_prob or cue=='none' or 'to left' in cue or checkboxes)
+                continue #to left requires side by side, try again
+            side_by_side = can_do_side_by_side and (random.random()<self.side_by_side_prob or cue=='none' or 'to left' in cue or checkboxes) #labels and values will be on same line
             if side_by_side:
                 aligned_cols = random.random()<0.5 or cue=='none'
                 if 'to left' in cue:
-                    algined_cols=True
+                    algined_cols=True #labels will always have same x starting position. Values too
                 if aligned_cols:
-                    fixed_value_width = random.randrange(1+max_value_word_w,(block_width)-(max_label_word_w+1+self.min_qa_sep))
-                    fixed_label_width = random.randrange(1+max_label_word_w,(block_width)-(fixed_value_width+self.min_qa_sep))
+                    fixed_value_width = random.randrange(1+max_value_word_width,(block_width)-(max_label_word_width+1+self.min_qa_sep))
+                    fixed_label_width = random.randrange(1+max_label_word_width,(block_width)-(fixed_value_width+self.min_qa_sep))
                     sep = (block_width)-(fixed_value_width+fixed_label_width)
                     max_qa_sep = self.max_qa_sep if start_y<image.shape[0]//2 else self.max_qa_sep//2
                     if sep>self.min_qa_sep:
@@ -921,17 +924,16 @@ class SynthFormDataset(FormQA):
                     all_value_x = start_x+fixed_label_width+sep
                     max_label_x = start_x+fixed_label_width
                 else:
-                    if (block_width)-(max_label_word_w+max_value_word_w)<self.min_qa_sep:
+                    if (block_width)-(max_label_word_width+max_value_word_width)<self.min_qa_sep:
                         continue #restart, too narrow
-                    sep = random.randrange(self.min_qa_sep,min(self.max_qa_sep//2+1,1+(block_width)-(max_label_word_w+max_value_word_w)))
-                    max_label_x = max_x-(max_value_word_w+sep+1)
+                    sep = random.randrange(self.min_qa_sep,min(self.max_qa_sep//2+1,1+(block_width)-(max_label_word_width+max_value_word_width)))
+                    max_label_x = max_x-(max_value_word_width+sep+1)
                     all_value_x=None
             else:
+                #the label will be above the value
                 aligned_cols = False
-                #print('WARNING, non-side-by-side not implmented!!')
-                #side_by_side=True
                 try:
-                    sep=random.randrange(max(label_height,value_height)*3,min(max(label_height,value_height)*10,max_x-max(max_value_word_w,max_label_word_w)))//2
+                    sep=random.randrange(max(label_height,value_height)*3,min(max(label_height,value_height)*10,max_x-max(max_value_word_width,max_label_word_width)))//2
                 except ValueError:
                     sep=max_x #can't do columns
                 max_label_x=max_x-1
@@ -943,8 +945,8 @@ class SynthFormDataset(FormQA):
                 if title_left and random.random()<0.5:
                     #have title left of items
                     cur_x = start_x + random.randrange(0,min(rightmost_title_x+title_height*3,max_x-max_word_width-2))
-            col_x = cur_x
-            col_number = 0
+            col_x = cur_x #where the column starts
+            col_number = 0 #which column are we on
             cur_y = end_title_y
             rightmost_x_so_far = cur_x
             label_max_x = {}
@@ -952,12 +954,12 @@ class SynthFormDataset(FormQA):
             pairs_to_draw = []
             num_pairs_to_draw_in_col =0 
 
+            #This returns whether we have room horizontally to makea new column
             def roomForNewCol(col_x,rightmost_x_so_far):
-                #if side_by_side:
-                room_for_new_col = (aligned_cols and col_x+sep+2*(fixed_label_width+sep+fixed_value_width)<max_x) or (not aligned_cols and col_x+2*sep+rightmost_x_so_far+max_label_word_w+sep+max_value_word_w<max_x)
-                #else:
-                #  room_for_new_col = col_x+2*sep+max(max_label_word_w,max_value_word_w)<max_x
+                room_for_new_col = (aligned_cols and col_x+sep+2*(fixed_label_width+sep+fixed_value_width)<max_x) or (not aligned_cols and col_x+2*sep+rightmost_x_so_far+max_label_word_width+sep+max_value_word_width<max_x)
                 return room_for_new_col
+
+            #Some things for starting a new column
             def shiftCol(col_number,col_x,all_value_x,max_label_x,cur_y,rightmost_x_so_far):
                 if aligned_cols:
                     col_x += fixed_label_width+2*sep+fixed_value_width
@@ -970,39 +972,45 @@ class SynthFormDataset(FormQA):
                 num_pairs_to_draw_in_col=0
                 return col_number+1,col_x, all_value_x, max_label_x,cur_y,num_pairs_to_draw_in_col
 
-            for (label_words,value_words),(label_word_ws_list,value_word_ws_list) in zip(image_pairs,w_pairs):
+            for (label_words,value_words),(label_word_widths_list,value_word_widths_list) in zip(image_pairs,w_pairs):
                 if 'to left' in cue and len(pairs_to_draw)>0:
                     #reset cur_y to correct position as "value" may have finished above "label"
                     #This is comparing the last line of the label lines
                     cur_y = max(cur_y,pairs_to_draw[-1][1][-1][-1][1]+label_height+label_newline_height)
                 
+                #Should we make a new column?
                 if checkboxes:
                     change_new_col = random.random()<self.new_col_chance_checkbox*min(1,num_pairs_to_draw_in_col/3)
                 else:
                     change_new_col = random.random()<self.new_col_chance*min(1,num_pairs_to_draw_in_col/3)
                 if roomForNewCol(col_x,rightmost_x_so_far) and (cur_y+label_height>=max_y or change_new_col):
+                    #we are making a new column
                     col_number,col_x, all_value_x, max_label_x,cur_y,num_pairs_to_draw_in_col=shiftCol(col_number,col_x,all_value_x,max_label_x,cur_y,rightmost_x_so_far)
                 elif cur_y+label_height>=max_y:
-                    break #cannot do pair
+                    break #cannot do pair, not enough room vertically. Stop putting in pairs
 
                 cannot_do_pair = False
                 restart=True
-                debug=0
-                while restart and debug<200: #for restarting as new column
-                    debug+=1
+                catch_inf_loop=0
+                while restart and catch_inf_loop<200: #for restarting as new column
+                    catch_inf_loop+=1
                     cur_x = col_x
                     restart=False
-                    label_str=''
-                    label_str_lines=[]
-                    label_img_pos=[]
-                    label_img_pos_lines=[]
+
+                    #position label words
+                    label_str='' #running words in line
+                    label_str_lines=[] #holds all the line strings
+                    label_img_pos=[] #holds image and it's position for each word in current line
+                    label_img_pos_lines=[] #holds all the lines
                     label_max_x[col_number] = cur_x
-                    for label_w,(label_text,label_img) in zip(label_word_ws_list,label_words):
-                        if cur_x+label_w>max_label_x:
+                    for label_w,(label_text,label_img) in zip(label_word_widths_list,label_words):
+                        if cur_x+label_w>max_label_x: #not enough room horizontally
                             if len(label_img_pos)==0:
+                                #if we haven't added any words, making a newline won't help
                                 cannot_do_pair=True
                                 break
-                            #newline
+                            
+                            #makde a newline
                             label_str_lines.append(label_str)
                             label_str=''
                             label_img_pos_lines.append(label_img_pos)
@@ -1010,24 +1018,27 @@ class SynthFormDataset(FormQA):
                             cur_x = col_x
                             cur_y += label_newline_height
                             if cur_y+label_height>=max_y:
+                                #Not enough room vertically for new line
                                 #do we have room for another column?
                                 if roomForNewCol(col_x,rightmost_x_so_far):
                                     col_number,col_x, all_value_x, max_label_x,cur_y,num_pairs_to_draw_in_col=shiftCol(col_number,col_x,all_value_x,max_label_x,cur_y,rightmost_x_so_far)
                                     restart = True
+                                    #restart on new column
                                     break
                                 else:
-                                    #import pdb;pdb.set_trace()
                                     cannot_do_pair=True
                                     break
                         elif len(label_str)>0:
+                            #normally adding word to the right
                             label_str+=' '#space
                         label_x = cur_x
                         label_y = cur_y
                         
-                        cur_x+=label_w+label_space_width
-                        label_str += label_text
+                        cur_x+=label_w+label_space_width #adjust x position
+                        label_str += label_text #add word text 
                         label_img_pos.append((label_x,label_y,label_img,label_height,label_w))
                         if label_x+label_w>max_x or label_y+label_height>max_y:
+                            #we went off the image
                             cannot_do_pair=True
                             break
 
@@ -1038,9 +1049,11 @@ class SynthFormDataset(FormQA):
                         break
                     
                     if len(label_img_pos)>0:
+                        #add current line
                         label_str_lines.append(label_str)
                         label_img_pos_lines.append(label_img_pos)
 
+                    #get starting position for value
                     if side_by_side:
                         if aligned_cols:
                             value_start_x = all_value_x
@@ -1050,12 +1063,14 @@ class SynthFormDataset(FormQA):
                         lowest_y = max_y-(value_height+1)
                         if 'to left' in cue:
                             label_y = label_img_pos_lines[0][0][1] #first line instead of last
-                            cur_y = label_y#-label_height
+                            cur_y = label_y 
                         else:
+                            #somewhere from level to below label y position
                             cur_y = random.randrange(min(label_y-round(0.15*min(label_height,value_height)),label_y+label_height-value_height)-4,min(max(label_y+value_height,label_y+label_height)+4,lowest_y))
                     else:
-                        value_start_x = col_x + random.randrange(-4,label_height)
+                        value_start_x = col_x + random.randrange(-4,label_height) #roughly beggining of column x
                         if 'below' in cue:
+                            #has more signfificant verticle spacing
                             cur_y = label_y+round(label_height+5+label_height*random.random()*0.5)
                         else:
                             cur_y = label_y+round(label_newline_height+label_newline_height*random.random())
@@ -1063,7 +1078,7 @@ class SynthFormDataset(FormQA):
 
                     max_value_x = max_x
                     value_entities=[]
-                    for value_word_ws_item,value_words_item in zip(value_word_ws_list,value_words):
+                    for value_word_widths_item,value_words_item in zip(value_word_widths_list,value_words):
                         if cur_y+value_height>=max_y:
                             #do we have room for another column?
                             if roomForNewCol(col_x,rightmost_x_so_far):
@@ -1072,14 +1087,13 @@ class SynthFormDataset(FormQA):
                                 break
                             else:
                                 cannot_do_pair=True
-                                #import pdb;pdb.set_trace()
                                 break
                         cur_x = value_start_x
                         value_str=''
                         value_str_lines_item=[]
                         value_img_pos_lines_item=[]
                         value_img_pos = []
-                        for value_w,(value_text,value_img) in zip(value_word_ws_item,value_words_item):
+                        for value_w,(value_text,value_img) in zip(value_word_widths_item,value_words_item):
 
                             
                             if cur_x+value_w>=max_value_x:
@@ -1133,10 +1147,10 @@ class SynthFormDataset(FormQA):
 
                         cur_y += value_list_newline_height
 
+
                     if cannot_do_pair or restart:
                         break
 
-                    
                     #else add the info to be drawn
                     pairs_to_draw.append((label_str_lines,label_img_pos_lines,value_entities,col_number))
                     num_pairs_to_draw_in_col+=1
@@ -1150,8 +1164,6 @@ class SynthFormDataset(FormQA):
                 
             if len(pairs_to_draw)==0:
                 #couldn't add this document
-                #import pdb;pdb.set_trace()
-                x=1
                 continue #retry
 
 
@@ -1159,7 +1171,7 @@ class SynthFormDataset(FormQA):
             #place the header
             actual_block_width = max(rightmost_x_so_far,rightmost_title_x)-start_x
             title_width = rightmost_title_x-start_x
-            wiggle = min(100,actual_block_width-title_width)
+            wiggle = min(100,actual_block_width-title_width) #how much horizontal room we have to place the title in
             if title is not None:
                 if title_left:
                     #left
@@ -1177,7 +1189,7 @@ class SynthFormDataset(FormQA):
                         x,y,img,h,w = title_img_pos[i]
                         title_img_pos[i] = (x+title_x_offset,y,img,h,w)
 
-            #draw and and the entities + links
+            #draw the word images and add the entities + links
             lowest_y=0
             rightmost_x=0
             if title is not None:
@@ -1190,22 +1202,23 @@ class SynthFormDataset(FormQA):
             for label_str_lines,label_img_pos_lines,value_entities,col_number in pairs_to_draw:
                 if 'to left' in cue or 'below' in cue:
                     #switch back!
-                    #assert len(value_entities)==1
                     value_str_lines = label_str_lines
                     value_img_pos_lines = label_img_pos_lines
                     if len(value_entities)==0:
-                        continue #something's wrong and we don't have a label anymore
+                        continue #something's wrong and we don't have a label anymore. Skip this one
                     label_str_lines,label_img_pos_lines = value_entities[0]
                     value_entities[0]=(value_str_lines,value_img_pos_lines)
-                    #print('swapped back to, {} : {}'.format(label_str_lines,value_str_lines))
                 
                 label_entity = self.makeAndDrawEntity(image,'question',label_str_lines,label_img_pos_lines)
                 if isinstance(label_entity,tuple):
+                    #it's blank
                     continue
+
                 label_ei=len(entities)
                 entities.append(label_entity)
                 if title is not None:
                     entity_link[title_ei].append(label_ei)
+
                 lowest_y = max(lowest_y,label_entity.box[-1])
                 rightmost_x = max(rightmost_x,label_entity.box[-2])
                 
@@ -1215,6 +1228,7 @@ class SynthFormDataset(FormQA):
                 for value_str_lines,value_img_pos_lines in value_entities:
                     value_entity = self.makeAndDrawEntity(image,'answer',value_str_lines,value_img_pos_lines,rightmost_value_x[col_number],cue,side_by_side,checkboxes)
                     if isinstance(value_entity,tuple):
+                        #it's blank (returns position information)
                         rightmost_x = max(rightmost_x,value_entity[0])
                         lowest_y = max(lowest_y,value_entity[1])
                     else:
@@ -1267,10 +1281,14 @@ class SynthFormDataset(FormQA):
 
             if rightmost_x<init_x:
                 continue
+
+            #properly finished
             return True,(init_x,init_y,rightmost_x,lowest_y)
+
         return False,None
 
-
+    #Addes the word images to the document image, along with lines, boxes, etc.
+    #Makes the Entity object and returns it
     def makeAndDrawEntity(self,image,cls,str_lines,img_pos_lines,max_line_x=None,cue=None,side_by_side=False,checkboxes=False):
         lines=[]
         if checkboxes:
@@ -1377,6 +1395,7 @@ class SynthFormDataset(FormQA):
                 img_f.line(image,(x1,y),(x2,y),color,line_thickness)
         return Entity(cls,lines) if not blank and len(lines)>0 else (max_x,max_y)
     
+    #selects a formatting and gets random number (or word)
     def getTableValues(self,num):
         ret=[]
         for n in range(num):
@@ -1412,6 +1431,8 @@ class SynthFormDataset(FormQA):
                 ret.append(self.random_words.pop())
         return ret
 
+
+    #build table header from random words
     def getTableHeaders(self,num):
         ret=[]
         for n in range(num):
@@ -1431,14 +1452,16 @@ class SynthFormDataset(FormQA):
                 ret.append(self.random_words.pop())
         return ret
 
+
+    #get random non-stop words from Wikipedia
     def addRandomWords(self):
-        debug=0
-        while (len(self.random_words)==0 or debug==0) and debug<200:
-            debug+=1
+        prevent_inf=0
+        while (len(self.random_words)==0 or prevent_inf==0) and prevent_inf<200:
+            prevent_inf+=1
             words = self.gen_daemon.getTextSample()
             words = [w for w in words if w.lower() not in self.stop_words]
             random.shuffle(words)
             self.random_words+=words
 
-        if debug==200:
+        if prevent_inf==200:
             self.random_words+=['X']
