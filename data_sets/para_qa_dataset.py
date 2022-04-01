@@ -155,7 +155,7 @@ class ParaQADataset(QADataset):
             self.vocab = defaultdict(list)
             for w in f.readlines():
                 w=w.strip()
-                self.vocab[len(w)].append(w)a
+                self.vocab[len(w)].append(w)
 
         mode = 'easy' if ('easy' in config and config['easy']) else 'hard'
         mode = config['mode'] if 'mode' in config else mode
