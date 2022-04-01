@@ -30,12 +30,14 @@ def getMinMaxWidth(words):
             last_x = rx
     space = np.mean(x_diffs) if len(x_diffs)>1 else 10
     return min_w,max_w,space
+
 def makeMLMInstance(ocr):           
     ##Make mlm instances
     words = []
+
+    #get a good block of text
     while len(words)<4 and len(ocr)>1:
         words = []
-        #block = random.choice(ocr)
         block_i = random.randrange(len(ocr))
         block = ocr[block_i]
         ocr = ocr[:block_i]+ocr[block_i+1:] #remove
@@ -47,21 +49,20 @@ def makeMLMInstance(ocr):
                     target_string.append(word['text'])
         target_string = ' '.join(target_string)
     if len(words)<4:
-        return None,None,None,None#self.__getitem__(index)
+        return None,None,None,None
 
-    num_spans=random.randrange(1,max(len(words)//8,2))
+    num_spans=random.randrange(1,max(len(words)//8,2)) #how many mask spans
     to_remove=[]
     for i in range(num_spans):
-        num = np.random.poisson(3)
+        num = np.random.poisson(3)  #number of words in this span
         num = min(num,len(words)-1)
-        #print('DEDEBUGG')
-        #num=0
-        #if num==0:
-        #    print('num is 0')
+
+        #Find a suitable area to mask
         good_spot = False
         for i in range(50 if num>0 else 20):
             loc = random.randrange(0,1+len(words)-num)
             if num==0:
+                #If this is an empty span, it can only be at begging or end of block
                 if (loc==0 and words[0] is not None) or (loc==len(words) and words[-1] is not None):
                     good_spot = True
                     break
@@ -75,8 +76,6 @@ def makeMLMInstance(ocr):
                 if good_spot:
                     break
         
-        #if num==0 and good_spot:
-        #    print('got spot {}'.format(loc))
 
         if good_spot:
             #get the bounding box to mask out of image
@@ -98,7 +97,7 @@ def makeMLMInstance(ocr):
                     bot_y = max(w['box'][3] for w in line) +1
                     to_remove.append((round(left_x),round(top_y),round(right_x),round(bot_y)))
             else:
-                #import pdb; pdb.set_trace()
+                #empty span, add "removed region" to beginning or end of block
                 word = pre_add_none[loc] if loc==0 else pre_add_none[loc-1]
                 if word is not None:
                     word_min_w,word_max_w,space = getMinMaxWidth(pre_add_none)
@@ -118,37 +117,14 @@ def makeMLMInstance(ocr):
                         line['box'] = (round(line_x1),round(line_y1),round(right_x),round(line_y2))
                     to_remove.append((round(left_x),round(top_y),round(right_x),round(bot_y)))
 
-                #if random.random()<0.5:
-                #    loc-=1
-                ##how to we falsify a removed word?
-                ##we'll put a blank box over the space between the words...
-                ## Not the best, but it's something
-                #if loc==-1:
-                #    if pre_add_none[loc+1] is not None:
-                #        word_min_w,word_max_w = getMinMaxWidth(pre_add_none)
-                #        right_x,top_y,_,bot_y = pre_add_none[loc+1][0]['box']
-                #        left_x = max(0,right_x - random.randrange(5+word_min_w,5+word_max_w))
-                #        to_remove.append((left_x,top_y,right_x,bot_y))
-                #elif pre_add_none[loc] is not None:
-                #    _,top_y1,left_x,bot_y1 = pre_add_none[loc][0]['box']
-                #    if len(pre_add_none)>loc+1:
-                #        if  pre_add_none[loc+1] is not None:
-                #            right_x,top_y2,_,bot_y2 = pre_add_none[loc+1][0]['box']
-
-                #            to_remove.append((left_x,min(top_y1,top_y2),right_x,max(bot_y1,bot_y2)))
-                #    else:
-                #        #interesting, this is the end of the line
-                #        word_min_w,word_max_w = getMinMaxWidth(pre_add_none)
-                #        right_x = left_x + random.randrange(5+word_min_w,5+word_max_w)
-                #        to_remove.append((left_x,top_y1,right_x,top_y1))
 
     
     return words,to_remove,target_string,block
 
+
+#This class is the paraent for synthetic Wikipedia and IIT-CDIP data
+#It defines the tasks 
 class ParaQADataset(QADataset):
-    """
-    Class for reading forms dataset and creating starting and ending gt
-    """
 
 
     def __init__(self, dirPath=None, split=None, config=None, images=None):
@@ -157,7 +133,7 @@ class ParaQADataset(QADataset):
         self.do_masks=True
         self.use_highlight = config.get('use_highlight',True)
 
-        self.corruption_p = config['text_corruption'] if 'text_corruption' in config else 0
+        self.corruption_p = config['text_corruption'] if 'text_corruption' in config else 0 #not used
 
         self.extra_np = 0.05
 
@@ -172,37 +148,30 @@ class ParaQADataset(QADataset):
 
 
         self.punc_regex = re.compile('[%s]' % re.escape(string.punctuation))
+
+        #We want a length sorted vocab for subtituting words
         sub_vocab_file = config['sub_vocab_file'] if 'sub_vocab_file' in config else 'data_sets/wordsEn.txt'
         with open(sub_vocab_file) as f:
-            #self.vocab = [w.strip() for w in f.readlines()]
             self.vocab = defaultdict(list)
             for w in f.readlines():
                 w=w.strip()
-                self.vocab[len(w)].append(w)
+                self.vocab[len(w)].append(w)a
+
         mode = 'easy' if ('easy' in config and config['easy']) else 'hard'
         mode = config['mode'] if 'mode' in config else mode
+        #"hard_word" is the mode used in Dessurt's pretraining
         if mode == 'blind':
             self.q_types = {
                     'read_blanked':1,
-                    #'read_replaced':1,
-                    #'read_with_masked':1,
                     'read_line':0.75,
                     'highlight_text':0.1,
-                    #'read_highlighted':1,
-                    #'masked_lm':4.0,
-                    #'put_in_place':1.0,
                     'read_on':0.5,
                     'read_backwards':0.5,
                     'highlight_block':0.1}
             self.q_types_noblock = {
                     'read_blanked':1,
-                    #'read_replaced':1,
-                    #'read_with_masked':1.0,
                     'read_line':0.76,
                     'highlight_text':0.1,
-                    #'read_highlighted':1,
-                    #'masked_lm':4.0,
-                    #'put_in_place':1.0
                     }
         elif mode == 'echo':
             self.q_types = {
@@ -253,7 +222,6 @@ class ParaQADataset(QADataset):
             self.q_types = {
                     'read_blanked':1,
                     'proper_read_replaced':1,
-                    #'read_with_masked':1,
                     'long_mlm':1.0,
                     'read_line':1,
                     'highlight_text':1.0,
@@ -265,7 +233,6 @@ class ParaQADataset(QADataset):
             self.q_types_noblock = {
                     'read_blanked':1,
                     'proper_read_replaced':1,
-                    #'read_with_masked':1.0,
                     'long_mlm':1.0,
                     'read_line':1,
                     'highlight_text':1.0,
@@ -314,145 +281,92 @@ class ParaQADataset(QADataset):
                     }
         elif mode == 'easy_bart':
             self.q_types = {
-                    #'read_blanked':1,
                     'text_infilling_read':1,
                     'proper_read_replaced':1,
                     'read_line':1,
-                    #'highlight_text':1.0,
                     'read_highlighted':1,
                     'masked_lm':1.0,
-                    #'put_in_place':1.0,
                     'read_on':1.0,
-                    #'read_backwards':0.5,
-                    #'highlight_block':1.0
                     }
             self.q_types_noblock = {
                     'text_infilling_read':1,
                     'proper_read_replaced':1,
                     'read_line':1,
-                    #'highlight_text':1.0,
                     'read_highlighted':1,
                     'masked_lm':1.0,
-                    #'put_in_place':1.0
                     }
         elif mode == 'pretrain':
             self.q_types = {
                     'read_blanked':1,
                     'read_replaced':1,
-                    #'read_with_masked':1,
                     'read_line':1,
                     'highlight_text':1.0,
                     'read_highlighted':1,
-                    #'masked_lm':1.0,
-                    #'put_in_place':1.0,
                     'read_on':0.5,
                     'read_backwards':0.5,
-                    #'highlight_block':1.0
                     }
             self.q_types_noblock = {
                     'read_blanked':1,
                     'read_replaced':1,
-                    #'read_with_masked':1.0,
                     'read_line':1,
                     'highlight_text':1.0,
                     'read_highlighted':1,
-                    #'masked_lm':1.0,
-                    #'put_in_place':1.0
                     }
         elif mode == 'pretrain2':
             self.q_types = {
                     'read_blanked':1,
                     'read_replaced':1,
-                    #'read_with_masked':1,
-                    #'read_line':1,
                     'highlight_text':1.0,
                     'read_highlighted':1,
-                    #'masked_lm':1.0,
-                    #'put_in_place':1.0,
                     'read_on':0.5,
                     'read_backwards':0.5,
-                    #'highlight_block':1.0
                     }
             self.q_types_noblock = {
                     'read_blanked':1,
                     'read_replaced':1,
-                    #'read_with_masked':1.0,
-                    #'read_line':1,
                     'highlight_text':1.0,
                     'read_highlighted':1,
-                    #'masked_lm':1.0,
-                    #'put_in_place':1.0
                     }
         elif mode == 'pretrain_word':
             self.q_types = {
                     'read_blanked':1,
                     'proper_read_replaced':1,
-                    #'read_with_masked':1,
-                    #'read_line':1,
                     'highlight_text':1.0,
                     'read_highlighted':1,
-                    #'masked_lm':1.0,
-                    #'put_in_place':1.0,
                     'read_on':1.0,
-                    #'read_backwards':0.5,
-                    #'highlight_block':1.0
                     }
             self.q_types_noblock = {
                     'read_blanked':1,
                     'read_replaced':1,
-                    #'read_with_masked':1.0,
-                    #'read_line':1,
                     'highlight_text':1.0,
                     'read_highlighted':1,
-                    #'masked_lm':1.0,
-                    #'put_in_place':1.0
                     }
         elif mode == 'pretrain_bart':
             self.q_types = {
                     'text_infilling_read':1,
                     'proper_read_replaced':1,
-                    #'read_with_masked':1,
-                    #'read_line':1,
-                    #'highlight_text':1.0,
                     'read_highlighted':1,
-                    #'masked_lm':1.0,
-                    #'put_in_place':1.0,
                     'read_on':1,
-                    #'highlight_block':1.0
                     }
             self.q_types_noblock = {
                     'text_infilling_read':1,
                     'proper_read_replaced':1,
-                    #'read_with_masked':1.0,
-                    #'read_line':1,
                     'highlight_text':1.0,
                     'read_highlighted':1,
-                    #'masked_lm':1.0,
-                    #'put_in_place':1.0
                     }
         elif mode == 'pretrain_nomask':
             self.q_types = {
                     'read_blanked':1,
                     'read_replaced':1,
-                    #'read_with_masked':1,
-                    #'read_line':1,
-                    #'highlight_text':1.0,
                     'read_highlighted':1,
-                    #'masked_lm':1.0,
-                    #'put_in_place':1.0,
                     'read_on':0.5,
                     'read_backwards':0.5,
-                    #'highlight_block':1.0
                     }
             self.q_types_noblock = {
                     'read_blanked':1,
                     'read_replaced':1,
-                    #'read_with_masked':1.0,
-                    #'read_line':1,
                     'highlight_text':1.0,
                     'read_highlighted':1,
-                    #'masked_lm':1.0,
-                    #'put_in_place':1.0
                     }
         elif mode == 'hard':
             self.q_types = {
@@ -480,7 +394,6 @@ class ParaQADataset(QADataset):
             self.q_types = {
                     'read_blanked':0.5,
                     'proper_read_replaced':0.5,
-                    #'read_with_masked':1.0, supersceeded by mlm>
                     'read_line':0.1,
                     'highlight_text': 0.1,
                     'read_highlighted':0.1,
@@ -492,7 +405,6 @@ class ParaQADataset(QADataset):
             self.q_types_noblock = {
                     'read_blanked':0.5,
                     'proper_read_replaced':0.5,
-                    #'read_with_masked':1.0, supersceeded by mlm>
                     'read_line':0.1,
                     'highlight_text': 0.1,
                     'read_highlighted':0.1,
@@ -522,8 +434,6 @@ class ParaQADataset(QADataset):
             raise ValueError('Unknown para qa mode: {}'.format(mode))
 
 
-        #self.num_question_types_all=11 #15
-        #self.num_question_types_noblock=8
         #question types
         #0. Return blanked words (no highlight) and draw where it is "the [blank] chased the cat" > "dog" [kb]
         # . Return blanked words (with highlight) and draw where it is "the [blank] chased the cat" > "dog" [k0]
@@ -557,7 +467,7 @@ class ParaQADataset(QADataset):
 
 
 
-
+    #return the list of question-answer (task-respone) pairs
     def makeQuestions(self,ocr,image_h,image_w,s,use_blocks=True):
         wordmap = makeWordmap(ocr)
         linemap = makeLinemap(ocr)
@@ -569,13 +479,7 @@ class ParaQADataset(QADataset):
             q_types = random.choices(list(self.q_types_noblock.keys()),self.q_types_noblock.values(),k=self.questions*50)
 
         qa=[]
-        #for i in range(self.questions*10): #return extra in case the cropping/rotations clips some words
         for question_type in q_types:
-            #if use_blocks:
-            #    question_type = random.randrange(self.num_question_types_all)
-            #else:
-            #    question_type = random.randrange(self.num_question_types_noblock)
-            #if question_type == 0 or question_type == 1 or question_type == 5:
             if question_type == 'read_blanked' or question_type == 'read_replaced' or question_type == 'read_with_masked' or question_type == 'proper_read_replaced':
 
                 #0. Return blanked words (no highlight) and draw where it is "the [blank] chased the cat" > "dog"
@@ -583,6 +487,8 @@ class ParaQADataset(QADataset):
                 #1. Return replaced word (no highlight) and draw where it is "the industrial chased the cat" > "dog"
                 # . Return replaced word (with highlight) and draw where it is "the industrial chased the cat" > "dog"
                 #5. Read highlighted section filling in masked word
+
+                #"proper" means the response includes all of the input text, not just the replaced word
 
                 read_with_masked = question_type == 'read_with_masked'
                 use_highlight = (random.random()<0.5 and self.use_highlight) or read_with_masked
@@ -709,7 +615,6 @@ class ParaQADataset(QADataset):
                     response = proper_response
                 qa.append([question+prompt,response,[wordmap[i] for i in words_in_prompt+[blank_word_idx]],inmask,outmask,maskmask])
 
-            #elif question_type == 2:
             elif question_type == 'read_line':
                 #2. Read line above (no highlight)and draw where it is. based on position, not just para/block
                 # . Read line above (with highlight) and draw where it is. based on position, not just para/block
@@ -720,11 +625,12 @@ class ParaQADataset(QADataset):
                 # . Read line below (no highlight)and draw where it is. based on  para/block
                 # . Read line below (with highlight) and draw where it is. based on  para/block
                 use_highlight = random.random()<0.5 and self.use_highlight
-                above = random.random()<0.5
-                beyond_block = random.random()<0.5 if use_blocks else True
+                above = random.random()<0.5 #or below
+                beyond_block = random.random()<0.5 if use_blocks else True #whether it should look beyond the block of text or not
 
                 if len(linemap)==0:
-                    continue
+                    continue #no lines
+
                 line_idx = random.randrange(len(linemap))
                 line_map = linemap[line_idx]
                 if above:
@@ -733,8 +639,7 @@ class ParaQADataset(QADataset):
                     else:
                         next_line_idx = line_idx-1
                         next_line_map = linemap[next_line_idx]
-                        if line_map[0] != next_line_map[0]:
-                            #get line above line_idx
+                        if line_map[0] != next_line_map[0]: #if no longer same block
                             next_line_map = getLineAboveBlock(ocr,linemap,line_idx) if beyond_block else None
 
                 else:
@@ -743,8 +648,7 @@ class ParaQADataset(QADataset):
                     else:
                         next_line_idx = line_idx+1
                         next_line_map = linemap[next_line_idx]
-                        if line_map[0:2] != next_line_map[0:2]:
-                            #get line above line_idx
+                        if line_map[0:2] != next_line_map[0:2]: #if no longer same block
                             next_line_map = getLineAboveBlock(ocr,linemap,line_idx,below=True) if beyond_block else None
                 
                 prompt = ocr[line_map[0]]['paragraphs'][line_map[1]]['lines'][line_map[2]]['text']
@@ -755,12 +659,12 @@ class ParaQADataset(QADataset):
                     response= '№'
                     outmask = []
 
-                if len(prompt)>self.max_qa_len_in:
-                    prompt = prompt[:self.max_qa_len_in-2] +'>>'
-                if len(response)>self.max_qa_len_out:
-                    response = response[:self.max_qa_len_out]
-                elif len(response)+1 < self.max_qa_len_out and response!='№':
-                    response = response+self.end_token
+                #if len(prompt)>self.max_qa_len_in:
+                #    prompt = prompt[:self.max_qa_len_in-2] +'>>'
+                #if len(response)>self.max_qa_len_out:
+                #    response = response[:self.max_qa_len_out]
+                #elif len(response)+1 < self.max_qa_len_out and response!='№':
+                response = response+self.end_token
 
 
                 if use_highlight:
@@ -779,7 +683,6 @@ class ParaQADataset(QADataset):
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
 
 
-            #elif question_type == 3 and random.random()<0.5:
             elif question_type == 'highlight_text' and random.random()<0.5:
                 #3a. draw the line this is in 
                 line_idx = random.randrange(len(linemap))
@@ -817,7 +720,6 @@ class ParaQADataset(QADataset):
                 question = '0;~'
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
 
-            #elif question_type == 3 or question_type == 4:
             elif question_type == 'highlight_text' or question_type == 'read_highlighted':
                 #3b. draw where this text is 
                 #4. Read highlighted section
@@ -890,8 +792,7 @@ class ParaQADataset(QADataset):
                         inmask = [line_map+(i,) for i in word_idxs]
                         question = 'w0>'
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
-            #question_type 5 is under the first
-            #elif question_type == 6:
+
             elif question_type == 'masked_lm':
                 #6. guess masked word (HARD!)
                 blank_word_idx = random.randrange(len(wordmap))
@@ -901,7 +802,6 @@ class ParaQADataset(QADataset):
                 question = 'mk>'
                 qa.append([question,response,maskmask,maskmask,None,maskmask])
 
-            #elif question_type == 7 and len(wordmap)>1:
             elif question_type == 'put_in_place' and len(wordmap)>1:
                 #7. given a word a several masked spots, hightlight which masked spot this belongs in
                 num_blanks = random.randrange(2,9)
@@ -940,13 +840,12 @@ class ParaQADataset(QADataset):
                 question = 'mm~'
                 qa.append([question+prompt,response,allmaps,None,it_word_maps,allmaps])
 
-            #elif question_type ==8 or question_type==9:
             elif 'read_on' in question_type or question_type=='read_backwards':
                 #8. Read from prompt (no highlight) including new lines (stops at block end) and draw where you read
                 # . Read from prompt (with highlight) including new lines (stops at block end) and draw where you read
                 #9. Read backwards from prompt (no highlight) including new lines (stops at block end) and draw where you read
                 # . Read backwards from prompt (with highlight) including new lines (stops at block end) and draw where you read
-                forward = 'read_on' in question_type
+                forward = 'read_on' in question_type #only character based models should learn to read backwards (not Dessurt)
                 use_highlight = random.random()<0.5 and self.use_highlight and 'no_highlight' not in question_type
                 if use_highlight:
                     min_read_start = self.min_read_start_with_mask
@@ -983,6 +882,7 @@ class ParaQADataset(QADataset):
                         if not forward:
                             next_text = next_text[::-1]
                         next_line_id = next_word[0:3]
+
                 #length of paragraph
                 para_len = min(self.max_qa_len_in,len(prompt))
                 
@@ -1073,17 +973,13 @@ class ParaQADataset(QADataset):
                 if use_highlight:
                     question = 'r0~' if forward else 'b0~'
                     inmask =  [wordmap[i] for i in words_in_prompt]
-                    #inmask = highlightAll(image_h,image_w,ocr,indexes)
-                    #inmask = allBoxes(ocr,indexes)
                 else:
                     question = 're~' if forward else 'bk~'
                     inmask = []
 
-                #outmask = highlightAll(image_h,image_w,ocr,[wordmap[i] for i in words_in_response])
                 outmask = [wordmap[i] for i in words_in_response]
-                #outmask = allBoxes(ocr,indexes)
 
-                ####FIX for getting the right tokens
+                ####getting the right tokens
                 prompt_tokens = self.tokenizer(prompt,return_tensors="pt")['input_ids']
                 tok_len = prompt_tokens.shape[1] +1#for task token
                 if tok_len>self.max_q_tokens:
@@ -1093,10 +989,8 @@ class ParaQADataset(QADataset):
                 #######
 
                 qa.append([question+prompt,response,inmask+outmask,inmask,outmask,None])
-                #print('para len:{}, goal len:{}, actual len:{}'.format(para_len,goal_prompt_len,len(prompt)))
 
 
-            #elif question_type == 10:
             elif question_type == 'highlight_block':
                 #10. draw the block this is in
                 use_highlight = random.random()<0.5 and self.use_highlight
@@ -1136,8 +1030,6 @@ class ParaQADataset(QADataset):
                 response = ''
                 
                 outmask = [(block_idx,None,None,None)]
-                #for ln,line in enumerate(lines):
-                #    outmask += [(block_idx,0,ln,i) for i in range(len(line['words']))]
                 if use_highlight:
                     inmask=[(block_idx,0,line_idx,i) for i in word_idxs]
                     question = '00~'
@@ -1231,6 +1123,8 @@ class ParaQADataset(QADataset):
                     question = 'infillread0~'
                     inmask = [(block_idx,None,None,None)]
                 qa.append([question+prompt,response,allwords,inmask,None,None])
+
+
             elif question_type == 'read_block' or question_type == 'read_block0':
                 if len(ocr)==1:
                     response = []

@@ -56,10 +56,10 @@ class SynthParaQA(ParaQADataset):
         image_h,image_w = self.image_size
 
         if self.held_instance is not None:
-            image,ocr = self.held_instance
+            image,ocr = self.held_instance #reuse image
             self.used_held+=1
             if self.used_held>=self.max_used_held:
-                self.held_instance=None
+                self.held_instance=None #make a new image next time
         else:
             
             image = np.zeros([image_h,image_w],dtype=np.uint8)
@@ -69,7 +69,7 @@ class SynthParaQA(ParaQADataset):
             while success:
                 #we'll add as many as we can fit (without trying too hard)
                 success = self.addBlock(ocr,image)
-                if success and self.simple_vocab:
+                if success and self.simple_vocab: 
                     break
 
             self.held_instance= (image,ocr)
@@ -78,7 +78,7 @@ class SynthParaQA(ParaQADataset):
 
         qa, qa_bbs = self.makeQuestions(ocr,image_h,image_w,s)
 
-        if self.gt_ocr:
+        if self.gt_ocr: #not used anymore
             recog_strings=[]
             recog_bbs=[]
             for block in ocr:
@@ -103,7 +103,8 @@ class SynthParaQA(ParaQADataset):
             metadata = {}
         return qa_bbs, list(range(qa_bbs.shape[0])), None, {'image':255-image}, metadata, qa
 
-
+    
+    #Add (part of) a Wikipedia article to the image
     def addBlock(self,ocr,image):
         image_h,image_w = image.shape
 
@@ -113,16 +114,17 @@ class SynthParaQA(ParaQADataset):
         else:
             words = []
             while len(words)==0:
-                words = self.gen_daemon.generate()
-        word_height = random.randrange(self.min_text_height,self.max_text_height)
+                words = self.gen_daemon.generate() #get text and word images
+
+        word_height = random.randrange(self.min_text_height,self.max_text_height) #text height
         scale = word_height / words[0][1].shape[0]
 
+        para_width = random.randrange(image_w//5,image_w-10) #how wide will we allow it to be?
         #layout the Paragraph to find it's height
-        para_width = random.randrange(image_w//5,image_w-10)
         em_approx = word_height*1.6 #https://en.wikipedia.org/wiki/Em_(typography)
         min_space = 0.2*em_approx #https://docs.microsoft.com/en-us/typography/develop/character-design-standards/whitespace
         max_space = 0.5*em_approx
-        while True:#para_width<image_w: #we'll be increasing the para_width if the paragraph ends up longer than the page
+        while True: #we'll be increasing the para_width if the paragraph ends up longer than the page
             space_width = round(random.random()*(max_space-min_space) + min_space)
             newline_height = random.randrange(1,word_height) + word_height
             tab_min = round(0.6*em_approx)
@@ -134,10 +136,17 @@ class SynthParaQA(ParaQADataset):
             if random.random()<0.2:
                 start_x=0
                 if random.random()<0.1:
+                    #inverse indent, where firstline is not indented, but later ones are
                     indent=random.randrange(tab_min,tab_max)
+                #else no indent, gets extra verticle space
             else:
+                #normal paragraph indentation
                 start_x=random.randrange(tab_min,tab_max)
+
+            #init text line with first word
             cur_line = [words[0]+(start_x,0)]
+            
+            #position other words
             x=start_x+words[0][1].shape[1]*scale
             y=0
             new_para=False
@@ -165,7 +174,7 @@ class SynthParaQA(ParaQADataset):
                 cur_line.append((text,img,int(x),int(y)))
                 x+=img.shape[1]*scale
 
-                new_para=text[-1]=='¶'
+                new_para=text[-1]=='¶' #special character returned by GenDaemon
 
             if len(cur_line)>0:
                 cur_lines.append(cur_line)
@@ -175,8 +184,8 @@ class SynthParaQA(ParaQADataset):
             para_height = y+word_height
 
             if para_height<image_h:
-                break
-            #else loop again if smaller para_width
+                break #success!
+            #else loop again with bigger para_width
             para_width  = round(para_width*1.2)
 
             #unless we're too wide, then start removing words
@@ -186,27 +195,32 @@ class SynthParaQA(ParaQADataset):
 
         #find somewhere for the paragraph
         search_step_size=15
+
+        #start somewhere random
         start_x = random.randrange(0,image_w-para_width)
         start_y = random.randrange(0,image_h-para_height)
 
         #we'll do this by stepping it in different directions as long as the ink in the area is decreasing
+        # the ink being the sum of the pixel values
         initial_overlap = overlap = image[start_y:start_y+para_height,start_x:start_x+para_width].sum()
         step=0
-        directions=[(0,search_step_size),(search_step_size,0),(0,-search_step_size),(-search_step_size,0)] #just 4-direction
+        directions=[(0,search_step_size),(search_step_size,0),(0,-search_step_size),(-search_step_size,0)] #just 4-direction search
+
         while overlap>0 and step<150 and len(directions)>0:
+            #at each iteration, step all remaining directions once
             step+=1
             to_remove=[]
             for di,(xd,yd) in enumerate(directions):
                 step_y = start_y + step*yd
                 step_x = start_x + step*xd
                 if step_x<0 or step_y<0 or step_x+para_width>=image_w or step_y+para_height>=image_h:
-                    to_remove.append(di)
+                    to_remove.append(di) #no room, this direction won't work
                 else:
                     overlap = image[step_y:step_y+para_height,step_x:step_x+para_width].sum()
                     if overlap==0:
-                        break
+                        break #this works, we're done!
                     elif overlap>= initial_overlap:
-                        to_remove.append(di)
+                        to_remove.append(di) #getting worse, don't do this direction more
             to_remove.reverse()
             for r in to_remove:
                 del directions[r]
@@ -216,6 +230,7 @@ class SynthParaQA(ParaQADataset):
             return False
         else:
             if step>0:
+                #because we used bread, the step variables have the right step
                 start_x = step_x
                 start_y = step_y
 
@@ -224,6 +239,8 @@ class SynthParaQA(ParaQADataset):
                 ocr.append(self.addPara(lines,image,scale,start_x,start_y))
             return True
 
+
+    #resize the word images and put them on the page. Also build data structure the same as Tesseract output
     def addPara(self,lines,image,scale,start_x,start_y):
         para_min_x = 999999
         para_max_x = 0
