@@ -14,42 +14,12 @@ Don't use conda for the following libraries:
 * huggingface datasets
 * timm
 * editdistance
-* zss (for new metric)
+* zss (for GAnTED)
+* einops
 
 Actually it's kind of important to do it in this order:
 
-###set up python env
-python -m venv NAME
-source NAME/bin/activate  #(Note, you'll need to be sure the environment is activated before running a job)
 
-###install with pip, because conda doesn't work well on supercomputer
-pip install torch==1.10.2+cu113 torchvision==0.11.3+cu113 torchaudio==0.10.2+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html
-pip install scikit-image shapely editdistance timm datasets transformers
-cd /zgrouphome/fslg_documents/synthetic_text_gen
-python setup.py install
-
-####Then start all the jobs with a handy script
-cd /zgrouphome/fslg_documents/pairing
-./run_X.sh
-
-###Environment setup
-
-####set up python env
-`python -m venv NAME`
-`source NAME/bin/activate`  (Note, you'll need to be sure the environment is activated before running a job)
-
-####install with pip, because conda doesn't work well on supercomputer
-`pip install torch==1.10.2+cu113 torchvision==0.11.3+cu113 torchaudio==0.10.2+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html`
-`pip install scikit-image shapely editdistance timm datasets transformers`
-`cd /zgrouphome/fslg_documents/synthetic_text_gen`
-`python setup.py install`
-
-####Then start all the jobs with a handy script
-`cd /zgrouphome/fslg_documents/pairing`
-`./run_X.sh`
-
-
-##other things you don't need to see
 
 
 
@@ -57,7 +27,7 @@ If doing FUDGE stuff:
 `pytorch-geometric`: https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html
 
 not all of these used anymore
-`pip install gensim bpemb editdistance timm knockknock datasets einops`
+`pip install gensim bpemb`
 
 
 for cvxpy (optimization, not used now), you must have python 3.7 or later:
@@ -72,18 +42,9 @@ clone github: https://github.com/cvxgrp/cvxpy
 
 
 
-### Setting up dataset 
-`../data/forms/`
-
-### Pretraining detector network
-`python train.py -c cf_detector.json`
-
-### Training pairing network
-`python train.py -c cf_pairing.json`
-
 ### Evaluating
 
-#### Standard experiments
+#### FUDGE
 
 If you want to run on GPU, add `-g #`, where `#` is the GPU number.
 
@@ -99,59 +60,6 @@ Pairing, no optimization: `python eval.py -c saved/pairing/checkpoint-iteration1
 
 Pairing, with optimization: `python eval.py -c saved/pairing/checkpoint-iteration125000.pth -n 0 -T -a optimize=true`
 
-#### Perfect information experiments
-
-Pairing, GT detections: `python eval.py -c saved/pairing/checkpoint-iteration125000.pth -n 0 -T -a useDetect=gt`
-
-Pairing, optimized with GT num neighnors:  `python eval.py -c saved/pairing/checkpoint-iteration125000.pth -n 0 -T -a optimize=gt`
-
-### Training baseline models
-
-#### Detector using regular convs
-`python train.py -c cf_baseline_detector.json`
-
-Note: This will take a while before it begins training on your first run as it caches smaller sizes of the dataset.
-
-#### Classifier using non-visual features
-
-Make training data for no visual feature pairing: 
-1. `mkdir out`
-2. `python eval.py -c saved/detector/checkpoint-iteration150000.pth -g 0 -n 10000 -a save_json=out/detection_data,data_loader=batch_size=1,data_loader=num_workers=0,data_loader=rescale_range=0.52,data_loader=crop_params=,validation=rescale_range=0.52,validation=crop_params=,data_loader=cache_resized_images=0`
-
-Train no visual feature pairing: `python train.py -c cf_no_vis_pairing.json`
-
-### Evaluating baseline models
-
-Detection with regular convs, full set: `python eval.py -c saved/baseline_detector/checkpoint-iteration150000.pth -n 0 -T`
-
-Detection with regular convs, pairing set: `python eval.py -c saved/baseline_detector/checkpoint-iteration150000.pth -n 0 -T -a data_loader=special_dataset=simple`
-
-
-Distance based pairing: `python eval.py -f cf_test_no_vis_pairing.json -n 0 -T -a rule=closest`
-
-Scoring functions pairing: `python eval.py -f cf_test_no_vis_pairing.json -n 0 -T -a rule=icdar`
-
-No visual features pairing: `python eval.py -f cf_test_no_vis_pairing.json -n 0 -T`
-
-No visual features pairing, with optimization: `python eval.py -f cf_test_no_vis_pairing.json -n 0 -T -a optimize=true`
-
-#### Perfect information experiments
-
-For GT detections:
-
-`python eval.py -f cf_test_no_vis_pairing.json -n 0 -T -a rule=closest,useDetect=gt`
-
-`python eval.py -f cf_test_no_vis_pairing.json -n 0 -T -a rule=icdar,useDetect=gt`
-
-`python eval.py -f cf_test_no_vis_pairing.json -n 0 -T -a useDetect=gt`
-
-For optimization with GT num neighbors:
-
-`python eval.py -f cf_test_no_vis_pairing.json -n 0 -T -a rule=closest,optimize=gt`
-
-`python eval.py -f cf_test_no_vis_pairing.json -n 0 -T -a rule=icdar,optimize=gt`
-
-`python eval.py -f cf_test_no_vis_pairing.json -n 0 -T -a optimize=gt`
 
 
 ## Usage
@@ -167,7 +75,7 @@ A training session can be resumed with: `python train.py -r CHECKPOINT.pth`
 If you want to override the config file on a resume, just use the `-c` flag and be sure it has `"override": true`
 
 
-### eval.py
+### new_eval.py
 
 This script runs a trained model (from a snapshot) through the dataset and prints its scores. It is also used to save images with the predictions on them.
 
@@ -194,6 +102,15 @@ Evaluatring pairing:
 * `-a draw_thresh=[float]`: Seperate threshold for which relationships get saved in images.
 * `-a confThresh=[float]`: Threshold used for detections.
 * `-a pretty=[true,light,clean]`: Different ways of displaying the results.
+
+### qa_eval.py
+
+For evaluating Dessurt on datasets other than FUNSD and NAF.
+It takes many of the same arguments as new_eval.py, but also requires the (different) '-d' argument specifying the dataset (so you can easily evaluate a model on dataset it wasn't trained on). However, this has no drawing capabilities (hence the '-d' is different).
+
+Usage: `python qa_eval.py -c CHECKPOINT.pth -d DATASETNAME -g GPU#  -T (do test set) -a THINGSTOADD
+
+### 
 
 ## File Structure
   ```

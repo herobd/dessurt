@@ -5,7 +5,7 @@ import numpy as np
 import re
 
 ###
-#These features were crafted for the FUNSD (tobacco) dataset5
+#These features were hand crafted for the FUNSD (tobacco) dataset by Brian Davis
 ###
 
 def read_list(filepaths):

@@ -26,6 +26,10 @@ try:
         webhook_url = f.read().strip()
 except:
     webhook_url = None
+    def slack_sender(webhook_url=None, channel=None):
+        def decorator(func):
+            return func
+        return decorator
 
 
 
@@ -58,17 +62,15 @@ def notify_main(rank,config, resume,world_size=None):
 
 def main(rank,config, resume,world_size=None):
     train_logger = Logger()
-    if rank is not None: #multiprocessing
-        #print('Process {} can see these GPUs:'.format(rank,os.environ['CUDA_VISIBLE_DEVICES']))
+    if rank is not None:
+        #Data parallel training
         if 'distributed' in config:
             if config['super_computer']:
                 init_file_path='file:///fslhome/brianld/job_comm/{}'.format(config['name'])
             else:
                 init_file_path='file:///home/davis/job_comm/{}'.format(config['name'])
-            print('env NCCL_SOCKET_IFNAME: {}'.format(os.environ['NCCL_SOCKET_IFNAME']))
-            logger.info('{} calling dist.init_process_group() <<<<'.format(rank))
             os.environ['CUDA_VISIBLE_DEVICES']='0'
-            os.environ['NCCL_ASYNC_ERROR_HANDLING']='1'
+            #os.environ['NCCL_ASYNC_ERROR_HANDLING']='1'
             dist.init_process_group(
                             "nccl",
                             init_method=init_file_path,
@@ -76,14 +78,14 @@ def main(rank,config, resume,world_size=None):
                             world_size=world_size,
                             timeout=datetime.timedelta(0, 5600))
                             #timeout=datetime.timedelta(0, 22000))
-            logger.info('{} finished dist.init_process_group() <<<<'.format(rank))
 
         else:
             dist.init_process_group("gloo", rank=rank, world_size=world_size)
     if config['super_computer']:
         config['super_computer'] = '{}_{}'.format(config['name'],rank)
 
-    #np.random.seed(1234) I don't have a way of restarting the DataLoader at the same place, so this makes it totaly random
+    model = eval(config['arch'])(config['model'])
+
     if config.get('PRINT_MODEL',False):
         model = eval(config['arch'])(config['model'])
         model.summary()
@@ -91,9 +93,7 @@ def main(rank,config, resume,world_size=None):
 
     split = config['split'] if 'split' in config else 'train'
     data_loader, valid_data_loader = getDataLoader(config,split,rank,world_size)
-    #valid_data_loader = data_loader.split_validation()
 
-    model = eval(config['arch'])(config['model'])
 
     if type(config['loss'])==dict:
         loss={}#[eval(l) for l in config['loss']]
@@ -155,7 +155,7 @@ if __name__ == '__main__':
     parser.add_argument('-S', '--supercomputer', default=False, action='store_const', const=True,
                         help='This is on the supercomputer')
     parser.add_argument('-P', '--printmodel', default=False, action='store_const', const=True,
-                        help='Print model')
+                        help='Print model (don\'t train)')
 
     args = parser.parse_args()
 
@@ -165,15 +165,19 @@ if __name__ == '__main__':
     if args.config is not None:
         with open(args.config) as f:
             config = json.load(f)
+
     if  args.resume is None and  args.soft_resume is not None:
         if not os.path.exists(args.soft_resume):
             print('WARNING: resume path ({}) was not found, starting from scratch'.format(args.soft_resume))
         else:
             args.resume = args.soft_resume
+
+
     if args.resume is not None and (config is None or 'override' not in config or not config['override']):
         if args.config is not None:
             logger.warning('Warning: --config overridden by --resume')
         config = torch.load(args.resume,map_location=torch.device('cpu'))['config']
+
     elif args.config is not None and args.resume is None:
         path = os.path.join(config['trainer']['save_dir'], config['name'])
         if os.path.exists(path):
@@ -210,7 +214,6 @@ if __name__ == '__main__':
             del config['model']['pre_trained'] #we don't need to load the pre-trained weights if we already 
 
     if args.rank is not None:
-        print('Awesome, I have rank {}'.format(args.rank))
         config['distributed']=True
         with torch.cuda.device(config['gpu']):
             main(args.rank,config, args.resume, args.worldsize)

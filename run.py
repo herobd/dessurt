@@ -270,9 +270,9 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do
                 in_img = torch.cat((rm_img,mask.to(img.device)),dim=1)
                 
                 if do_saliency:
-                    answer,pred_mask = s_model.saliency(in_img,ocr,[[question]])
+                    answer,pred_mask = s_model.saliency(in_img,[[question]])
                 else:
-                    answer,pred_mask = model(in_img,ocr,[[question]],RUN=run)
+                    answer,pred_mask = model(in_img,[[question]],RUN=run)
                     #pred_a, target_a, answer, pred_mask = model(in_img,ocr,[[question]],[['number']])
                 print('Answer: {}      max mask={}'.format(answer,pred_mask.max()))
                 #show_mask = torch.cat((pred_mask,pred_mask>0.5).float()

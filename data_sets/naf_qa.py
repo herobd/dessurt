@@ -15,18 +15,18 @@ from utils.read_order import getVertReadPosition,getHorzReadPosition,putInReadOr
 from utils import img_f
 
 
-SKIP=['174']#['193','194','197','200']
+SKIP=['174']#bad for some reason I can't remember
 
 class NAFQA(FormQA):
     """
-    Class for reading forms dataset and preping for FormQA format
+    Class for reading NAF dataset and preping for FormQA format
     """
 
 
     def __init__(self, dirPath=None, split=None, config=None, images=None):
         super(NAFQA, self).__init__(dirPath,split,config,images)
         
-        cant_do = ['cell','row-header', 'col-header','full-all-row', 'full-all-col','all-row', 'all-col']
+        cant_do = ['cell','row-header', 'col-header','full-all-row', 'full-all-col','all-row', 'all-col'] #becuase the transcriptions of the table cells isn't done, no tasks involving cells should be used
         for cant in cant_do:
             if cant in self.q_types:
                 del self.q_types[cant]
@@ -44,13 +44,15 @@ class NAFQA(FormQA):
         self.extra_np = 0.05
 
         with open('data_sets/long_naf_images.txt') as f:
+            #These are images where the resulting JSON is long (can't be predicted in single output)
+            #We'll do these twice as often to compinsate
             do_twice = f.read().split('\n')
 
         if images is not None:
             self.images=images
         else:
             if 'overfit' in config and config['overfit']:
-                split_file = 'overfit_split.json'
+                split_file = 'overfit_split.json' #tiny split for debugging purposes
             else:
                 split_file = 'train_valid_test_split.json'
             with open(os.path.join(dirPath,split_file)) as f:
@@ -68,6 +70,8 @@ class NAFQA(FormQA):
             self.images=[]
             group_names = list(groups_to_use.keys())
             group_names.sort()
+
+            #Go through each group and get its images
             
             for groupName in group_names:
                 imageNames=groups_to_use[groupName]
@@ -76,8 +80,6 @@ class NAFQA(FormQA):
                     print('Skipped group {}'.format(groupName))
                     continue
                 for imageName in imageNames:
-                    ###DEBUG(')
-                    #imageName = '004713434_00277.jpg'
 
                     org_path = os.path.join(dirPath,'groups',groupName,imageName)
                     if self.cache_resized:
@@ -85,7 +87,7 @@ class NAFQA(FormQA):
                     else:
                         path = org_path
                     jsonPath = org_path[:org_path.rfind('.')]+'.json'
-                    if os.path.exists(jsonPath):
+                    if os.path.exists(jsonPath): #not all images have annotations
                         rescale=1.0
                         if self.cache_resized:
                             rescale = self.rescale_range[1]
@@ -101,8 +103,11 @@ class NAFQA(FormQA):
                                 img_f.imwrite(path,resized)
                         if self.train:
                             name = imageName[:imageName.rfind('.')]
+
+                            #add image
                             self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':name})
                             if name in do_twice:
+                                #easy way to do twice as frequently
                                 self.images.append({'id':imageName+'2', 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':name})
 
                         else:
@@ -113,7 +118,6 @@ class NAFQA(FormQA):
                                 annotations = json.load(f)
                             all_entities,entity_link,tables,proses,minored_fields,bbs,link_dict = self.getEntitiesAndSuch(annotations,rescale)
                             qa = self.makeQuestions(self.rescale_range[1],all_entities,entity_link,tables,all_entities,link_dict,proses=proses,minored_fields=minored_fields)
-                            #import pdb;pdb.set_trace()
                             for _qa in qa:
                                 _qa['bb_ids']=None
                                 self.images.append({'id':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'imageName':imageName[:imageName.rfind('.')], 'qa':[_qa]})
@@ -130,12 +134,6 @@ class NAFQA(FormQA):
             qa = None #This is pre-computed
 
         ocr=None
-        #ocr = [self.corrupt(text) for text in ocr]
-        for bb in bbs:
-            if len(bb)==4:
-                print(bb[3]-bb[1])
-            else:
-                print(math.sqrt(((bb[2]-bb[4])**2) + ((bb[3]-bb[5])**2)))
         return bbs, list(range(bbs.shape[0])), ocr, {}, {}, qa
 
 
@@ -145,6 +143,7 @@ class NAFQA(FormQA):
             return [v*s for v in box]
         return (s*box).tolist()
 
+    #Converts NAF types to FUNSD classes
     def typeToClass(self,typ):
         if 'Circle' in typ:
             cls = 'circle'
@@ -160,31 +159,31 @@ class NAFQA(FormQA):
             assert False
         return cls
 
-
+    #Processes the NAF annotations, grouping the lines into entities and getting the tables
     def getEntitiesAndSuch(self,annotations,image_scale):
         fixAnnotations(None,annotations) #fixes somethings
 
-        all_bbs = annotations['byId']#annotations['fieldBBs']+annotations['textBBs']
-        #all_bbs = {bb['id']:bb for bb in all_bbs}
+        all_bbs = annotations['byId']
         for bb in all_bbs.values():
             bb['poly_points'] = np.array(bb['poly_points'])
         all_pairs = annotations['pairs']#+annotations['samePairs']
         transcriptions = annotations['transcriptions']
         
-        #group paragraphs / multiline
-        #I think this is whenever they have the same type
-        #also para
+        #group lines into entities
+        #This is whenever a pair have the same type or are a fill-in-the-blank prose (para)
         groups = defaultdict(list)
         group_num=0
         id_to_group = defaultdict(lambda: None)
         same_row = []
         same_col = []
-        all_pairs = sortReadOrder([(pair,all_bbs[pair[0]]['poly_points']) for pair in all_pairs])
+        all_pairs = sortReadOrder([(pair,all_bbs[pair[0]]['poly_points']) for pair in all_pairs]) #so we can assume read order
         for id1,id2 in all_pairs:
             if all_bbs[id1]['type']==all_bbs[id2]['type'] or ('P' in all_bbs[id1]['type'] and 'P' in all_bbs[id2]['type']):
                 if 'Row' in all_bbs[id1]['type'] and 'Row' in all_bbs[id2]['type']:
+                    #a single row annotated with two rectangles due to page warping
                     same_row.append((id1,id2))
                 elif 'Col' in all_bbs[id1]['type'] and 'Col' in all_bbs[id2]['type']:
+                    #single column
                     same_col.append((id1,id2))
                 else:
                     assert 'Row' not in all_bbs[id1]['type'] and 'Row' not in all_bbs[id2]['type']
@@ -208,7 +207,7 @@ class NAFQA(FormQA):
                     group1 = id_to_group[id1]
                     group2 = id_to_group[id2]
                     if group1 is None and group2 is None:
-                        groups[group_num] = [id1,id2]#putInReadOrder(id1,all_bbs[id1]['poly_points'],id2,all_bbs[id2]['poly_points'])
+                        groups[group_num] = [id1,id2]
                         id_to_group[id1]=group_num
                         id_to_group[id2]=group_num
                         group_num+=1
@@ -225,13 +224,10 @@ class NAFQA(FormQA):
                         for idx in groups[group2]:
                             id_to_group[idx] = group1
                         #append in read order
-                        #ordered_combine_groups = sortReadOrder([(bb_id,all_bbs[bb_id]['poly_points']) for bb_id in groups[group2]+groups[group1]])
-                        #groups[group1]=ordered_combine_groups
                         groups[group1]+=groups[group2]
                         del groups[group2]
                     #else nothing needed
 
-        #put all unsed bbs in their own groups
         used_ids = set()
         e_groups = []
         entities = []
@@ -243,8 +239,9 @@ class NAFQA(FormQA):
         entity_link = defaultdict(list) #(head,tails)
         has_link=set()
 
-
+        #Create the entities
         for group in groups.values():
+            #sort the text lines
             group = sortReadOrder([(bb_id,all_bbs[bb_id]['poly_points']) for bb_id in group])
             if all(all_bbs[group[0]]['type'] == all_bbs[bb_id]['type'] for bb_id in group[1:]):
                 #assert 'Row' not in all_bbs[id1]['type'] and 'Row' not in all_bbs[id2]['type']
@@ -258,7 +255,6 @@ class NAFQA(FormQA):
                     elif all_bbs[bb_id]['isBlank']=='blank':
                         continue
                     elif bb_id not in transcriptions:
-                        #print('No transcription for {}'.format(all_bbs[bb_id]))
                         continue
                     elif transcriptions[bb_id]=='':
                         continue
@@ -269,14 +265,16 @@ class NAFQA(FormQA):
                     entities.append(Entity(cls,lines))
                     e_groups.append(group)
             else:
-                #should be para
                 assert all('P' in all_bbs[bb_id]['type'] for bb_id in group)
+                #A fill-in-the-blank prose
                 p_entities = []
                 p_group = []
                 lines = []
                 prev_type = all_bbs[group[0]]['type']
                 prev_id = None
                 cls = 'question' if 'text' in prev_type else 'answer'
+
+                #go through text lines, mering text from adjacent lines with the same class
                 for bb_id in group:
                     if all_bbs[bb_id]['isBlank']=='blank':
                         transcriptions[bb_id]=self.blank_token
@@ -304,6 +302,7 @@ class NAFQA(FormQA):
                         p_group = [bb_id]
                         prev_type = all_bbs[bb_id]['type']
                         cls = 'question' if 'text' in prev_type else 'answer'
+
                 if len(lines)>0:
                     p_entities.append(Entity(cls,lines))
                     if prev_id is not None:
@@ -322,17 +321,11 @@ class NAFQA(FormQA):
         
             used_ids.update(group)
 
+        #put all unsed bbs in their own groups (except table elements)
         unused_ids = set(all_bbs.keys())-used_ids
         for bb_id in unused_ids:
             bb= all_bbs[bb_id]
             if 'Row' not in bb['type'] and 'Col' not in bb['type']:
-                #if transcriptions[bb_id]=='':
-                #    assert bb['isBlank']=='blank'
-                    #for id1,id2 in all_pairs:
-                    #    if id1==bb_id:
-                    #        annotations['isBlankQuestion'].append(id2)
-                    #    elif id2==bb_id:
-                    #        annotations['isBlankQuestion'].append(id1)
                 if bb['isBlank']!='blank' and bb_id in transcriptions and transcriptions[bb_id]!='':
                     cls = self.typeToClass(bb['type'])
 
@@ -340,7 +333,7 @@ class NAFQA(FormQA):
                     entities.append(Entity(cls,[Line(transcriptions[bb_id],bb['poly_points'])]))
                     e_groups.append([bb_id])
 
-
+        #build tables
         found_tables=[]
         for bb in all_bbs.values():
             if 'Row' in bb['type'] or 'Col' in bb['type']:
@@ -403,6 +396,7 @@ class NAFQA(FormQA):
                             dont.append(rid2)
                         break
             
+            #find things linked to the table (row and column headers)
             for bb in lines:
                 links=[]
                 if bb['id'] in dont:
@@ -416,8 +410,11 @@ class NAFQA(FormQA):
 
                 if 'Row' in bb['type']:
                     pos = getVertReadPosition(bb['poly_points'])
+
+                    #generally, there is just one header
                     if len(links)>1:
                         if  len(links)==2:
+                            #some special cases when there's 2
                             posR = getHorzReadPosition(bb['poly_points'])
                             pos0 = getHorzReadPosition(all_bbs[links[0]]['poly_points'])
                             pos1 = getHorzReadPosition(all_bbs[links[1]]['poly_points'])
@@ -433,6 +430,7 @@ class NAFQA(FormQA):
                             else:
                                 assert False
                         else:
+                            #if there's more, just take the one closest to the row
                             links = [l for l in links if 'Number' not in all_bbs[l]['type']]
                             if len(links)>0:
                                 min_dist=999999
@@ -475,8 +473,6 @@ class NAFQA(FormQA):
                     has_link.add(e_id)
                     table_headers.add(e_id)
                     row_headers.append(entities[e_id])
-                #else: #often no row headers, so it's just an error
-                    #row_headers.append(None)
             col_headers=[]
             for pos,line,header_id in cols:
                 if header_id is not None and header_id in bb_to_e:
@@ -490,24 +486,17 @@ class NAFQA(FormQA):
             if all(r is None for r in row_headers):
                 row_headers=[] #becuse we don't have transcription
             table = Table(row_headers,col_headers)
-            table.cells=[] #we didn't transcribe tables, WHOOPS
+            table.cells=[] #we didn't transcribe table cells, WHOOPS
 
             tables.append(table)
 
-            #for ri,row in enumerate(rows):
-            #    row_bb = row[1]
-            #    for ci,col in enumerate(cols):
-            #        col_bb = col[1]
 
         
         minor_groups = [] #to keep track of minor labels. We'll make special objects for handeling them
         all_minor = set() #so we can go back include same-same links in minor field
-        
+ 
+        #get the links between entities
         for id1,id2 in all_pairs:
-            #if id1 not in bb_to_e or id2 not in bb_to_e:
-            #    continue
-            #if 't40' in (id1, id2):
-            #    import pdb;pdb.set_trace()
 
             #We'll initially keep links with blanks so minor groups get processed correctly.
             # We'll remove then later
@@ -528,16 +517,6 @@ class NAFQA(FormQA):
                 continue
 
             if 'Row' not in type1 and 'Col' not in type2 and 'Row' not in type2 and 'Col' not in type2 and ('P' not in type1 or 'P' not in type2) and type1!=type2:
-                #if 'P' in type1 and id1 in bb_to_prose:
-                #    if type2 == 'comment' or type2==:
-                #        continue
-                #    print('Para linked to something else...')
-                #    import pdb; pdb.set_trace()
-                #elif 'P' in type2 and id2 in bb_to_prose:
-                #    if type1 == 'comment':
-                #        continue
-                #    print('Para linked to something else...')
-                #    import pdb; pdb.set_trace()
                 try:
                     if bb1 is not None:
                         e_id1 = bb_to_e[id1]
@@ -553,8 +532,6 @@ class NAFQA(FormQA):
                         e2_cls=self.typeToClass(type2)
                 except KeyError:
                     continue
-                #if isinstance(e_id1,int) and isinstance(e_id2,int) and ('Deputy Collector of Customs.'== entities[e_id1].text or 'Deputy Collector of Customs.'==entities[e_id2].text):
-                #    import pdb; pdb.set_trace()
                 if 'question'==e1_cls and ('answer'==e2_cls or 'circle'==e2_cls):
                     entity_link[e_id1].append( e_id2)
                     has_link.add(e_id1)
@@ -562,15 +539,16 @@ class NAFQA(FormQA):
                     entity_link[e_id2].append( e_id1)
                     has_link.add(e_id2)
                 elif 'Minor' in type1 and e_id1 in table_headers:
+                    #link to super header
                     entity_link[e_id2].append( e_id1)
                     has_link.add(e_id2)
                 elif 'Minor' in type2 and e_id2 in table_headers:
+                    #link to super header
                     entity_link[e_id1].append( e_id2)
                     has_link.add(e_id1)
-                #else:
-                #    print(f'WARNING unhandled class pairing (skipping): {e1_cls}:{type1}<->{e2_cls}:{type2}')
 
                 if ('Minor' in type1 or 'Minor' in type2) and e_id1 not in table_headers and e_id2 not in table_headers:
+                    #special handling for groups with minor labels
                     mg1=mg2=None
                     all_minor.update((e_id1,e_id2))
                     for mi,group in enumerate(minor_groups):
@@ -580,7 +558,8 @@ class NAFQA(FormQA):
                             mg2 = mi
                         if mg1 is not None and mg2 is not None:
                             break
-                        
+
+                    #adding to minor group or merging
                     if mg1 is None and mg2 is None:
                         minor_groups.append([e_id1,e_id2])
                     elif mg1 is None:
@@ -596,8 +575,6 @@ class NAFQA(FormQA):
 
         additional_links = defaultdict(list) #for minor fields
         for id1,id2 in all_pairs:
-            #if 't40' in (id1, id2):
-            #    import pdb;pdb.set_trace()
             id1 = bb_to_e[id1] if id1 in bb_to_e else id1
             id2 = bb_to_e[id2] if id2 in bb_to_e else id2
             if id1!=id2 and id1 in all_minor and id2 in all_minor:
@@ -608,7 +585,7 @@ class NAFQA(FormQA):
         for up,downs in entity_link.items():
             for d in downs:
                 link_ups[d].append(up)
-        #import pdb;pdb.set_trace()
+
         new_minor_groups=[]
         for group in minor_groups:
             #find all other attached things
@@ -620,22 +597,12 @@ class NAFQA(FormQA):
             if len(new_group.intersection(table_headers))==0:
                 new_minor_groups.append(new_group)
         
-        ###
-        #def ppp():
-        #    for i,group in enumerate(new_minor_groups):
-        #        g=', '.join((entities[ii].text if isinstance(ii,int) else '') for ii in group)
-        #        print(f'{i}: {g}')
-        #    print(len(new_minor_groups))
-        #ppp()
 
         #merge minor groups
         while True:
             new_gi=0
             start_len = len(new_minor_groups)
             while new_gi<len(new_minor_groups):
-                #g=', '.join((entities[ii].text if isinstance(ii,int) else '') for ii in new_minor_groups[new_gi])
-                #print(f'on {new_gi}: {g}')
-                #import pdb;pdb.set_trace()
                 to_combine=[]
                 for i in range(new_gi+1,len(new_minor_groups)):
                     for mine in new_minor_groups[new_gi]:
@@ -646,7 +613,6 @@ class NAFQA(FormQA):
                     new_minor_groups[new_gi].update(new_minor_groups[i])
                     del new_minor_groups[i]
                 new_gi+=1
-                #ppp()
                 
 
             if len(new_minor_groups) == start_len:
@@ -654,11 +620,12 @@ class NAFQA(FormQA):
 
 
 
-        #now create objects
+        #now create minor group objects
         minored_fields=[]
         for new_group in new_minor_groups:
 
             #we expect one question(text) multiple answers and multiple minor
+            #sort em out!
             question = None
             answers = []
             minors = []
@@ -680,8 +647,9 @@ class NAFQA(FormQA):
                             question = entities[e_id]
                         else:
                             question = sortReadOrder([(question,question.lines[0].box),(entities[e_id],entities[e_id].lines[0].box)])[0]
-
+            
             if len(minors)>len(answers) and len(answers)>0:
+                #
                 for bb_id in blank_answers:
                     bb = all_bbs[bb_id]
                     e_id = len(entities)
@@ -693,18 +661,12 @@ class NAFQA(FormQA):
                 answers = sortReadOrder([(ans,ans.lines[0].box) for ans in answers])
                 minors = sortReadOrder([(minor,minor.lines[0].box) for minor in minors])
                 minored_fields.append(MinoredField(question,answers,minors))
+            #otherwise treat these as normal entities
         
 
-        #update has_link with questions with blank answers
-        #for bb_id in annotations['isBlankQuestion']:
-        #    try:
-        #        e_id = bb_to_e[bb_id]
-        #        has_link.add(e_id)
-        #    except KeyError:
-        #        pass
 
 
-        #now, relying on has_link we assign "questions" with no answer to the proper class of other
+        #now, relying on has_link we assign "questions" with no answer to the proper class of other (as all texts that are questions should be linked to a blank field)
         no_link = set(range(len(entities)))-has_link
         for e_id in no_link:
             entity = entities[e_id]
@@ -723,7 +685,6 @@ class NAFQA(FormQA):
                         link_ups[d].append(up)
         entity_link = new_entity_link
 
-        #return entities,entity_link,tables,proses
         #run through all entites to build bbs, assign bbid, and find ambiguity
         boxes = []
         text_line_counts = defaultdict(list)
@@ -755,6 +716,7 @@ class NAFQA(FormQA):
                         link_dict[e2].append(e1)
             elif link_dict[e1] is None or len(link_dict[e1])==0:
                 del link_dict[e1]
+
         #Add all the link for tables
         for table in tables:
             for r,r_header in enumerate(table.row_headers):
@@ -771,19 +733,14 @@ class NAFQA(FormQA):
                             link_dict[c_index].append(v_index)
                             link_dict[v_index].append(r_index)
                             link_dict[v_index].append(c_index)
-        #actually prose will already have links in entity_link
-        #for prose in proses:
-        #    prev_idx = all_entities.index(prose.entities[0])
-        #    for entity in prose.entities[1:]:
-        #        this_idx = all_entities.index(entity)
-        #        link_dict[prev_idx] = this_idx
-        #        link_dict[this_idx] = prev_idx
-                
 
         link_dict = self.sortLinkDict(entities,link_dict)
         return entities,entity_link,tables,proses,minored_fields,bbs,link_dict
 
     #This is going to see if the image is landscape and needs cut in half
+    #It only will cut large images
+    #It attempts to not split text lines, but will if it has to
+    #Also 10% of the time it doesn't split, so the model sees full low-res images sometimes
     def getCropAndLines(self,annotations,shape):
         ratio_threshold=0.9
         width_threshold=2900
@@ -793,9 +750,9 @@ class NAFQA(FormQA):
         if shape[1]>width_threshold and shape[1]/shape[0]>ratio_threshold and random.random()>0.1:
             mid_x = shape[1]/2
             #see if we can
-            #we'll group the bbs based on overlap horizontally
-            #if  we can do a nice split using these groups, this image can be split
 
+            #we'll group the bbs based on overlap horizontally
+            #If there is a clear split on these groups, we're in the clear
             groups={}
         
             all_bbs = annotations['fieldBBs']+annotations['textBBs']
@@ -809,6 +766,7 @@ class NAFQA(FormQA):
                 min_x = min(min_x,x1)
                 max_x = max(max_x,x2)
 
+                #check all previously existing groups for horizontal overlap
                 added=False
                 overlaps=[]
                 for rang,bbs in groups.items():
@@ -816,8 +774,10 @@ class NAFQA(FormQA):
                         overlaps.append(rang)
 
                 if len(overlaps)==0:
+                    #None? make a new group
                     groups[(x1,x2)]=[bb]
                 elif len(overlaps)==1:
+                    #one, add me, and extend the range appropriately
                     rang = overlaps[0]
                     bbs = groups[rang]
                     if x1<rang[0] or x2<rang[1]:
@@ -837,11 +797,12 @@ class NAFQA(FormQA):
                         del groups[rang]
                     groups[new_rang]=new_bbs
 
-            if len(groups)>1:
+            if len(groups)>1: #something to work with
 
                 ranges = list(groups.keys())
                 ranges.sort(key=lambda a:a[0])
                 
+                #sort into definitely left, def right, and things in the middle
                 left=[]
                 mid=[]
                 right=[]
@@ -853,13 +814,13 @@ class NAFQA(FormQA):
                     else:
                         mid.append(rang)
                 
+                #For those in the middle, are they primarily on one side or the other
                 are_left=[(m[0]+m[1])/2 < mid_x for m in mid]
                 are_right=[(m[0]+m[1])/2 > mid_x for m in mid]
                 if all(are_left) or all(are_right) or shape[1]>force_half_thresh:
-                    #if all(are_left) or all(are_right):
-                    #    print('>half crop!')
-                    #else:
-                    #    print('>forced half crop')
+                    #sometimes forcing the split because the image is too big
+
+                    #if they are, we'll include/disclude them in the split as a whole
                     if all(are_left):
                         left+=mid
                         mid=[]
@@ -887,8 +848,8 @@ class NAFQA(FormQA):
                         x2 = max(p[0] for p in points)
                         inside = min(x2,crop[2])-max(x1,crop[0])
                         ratio = inside/(x2-x1)
-                        if ratio>0.25:
-                            new_points = [[max(crop[0],min(crop[2],x)),y] for x,y in points]
+                        if ratio>0.25: #sort of here
+                            new_points = [[max(crop[0],min(crop[2],x)),y] for x,y in points] #cropped bb
                             bb['poly_points'] = new_points
                             groups['mid bbs'].append(bb)
 
@@ -897,6 +858,7 @@ class NAFQA(FormQA):
                     new_field_bbs = []
                     new_text_bbs = []
                     new_ids = []
+                    #add the cut leftovers
                     for rang in ranges+['mid bbs']:
                         for bb in groups[rang]:
                             bb_id = bb['id']
@@ -906,6 +868,7 @@ class NAFQA(FormQA):
                             else:
                                 new_text_bbs.append(bb)
                     
+                    #rebuild links with remaining bbs
                     new_pairs = []
                     for (p1,p2) in annotations['pairs']:
                         if p1 in new_ids and p2 in new_ids:
@@ -922,9 +885,11 @@ class NAFQA(FormQA):
                     cropAnnotations(annotations,crop)
                     return crop, None
             elif shape[1]>force_half_thresh and (shape[1]>sure_force_half_thresh or random.random()<0.5):
-                #print('>forced split')
+                #sometimes just split, sometimes just not, unless it's really big
                 left = random.random()<0.5
                 right = not left
+
+                #see which fall on our side based on midpoint (and not being super long)
                 good_bbs=[]
                 other_bbs=[]
                 right_boundary=0 if left else shape[1]
@@ -946,8 +911,11 @@ class NAFQA(FormQA):
                     #print('error')
                     return (0,0,shape[1],shape[0]), None
 
+                #define crop based on these "good" bbs
                 crop = (left_boundary,0,right_boundary,shape[0])
                 mid_x = right_boundary if left else left_boundary
+
+                #everything else gets cut (if atleast 1/3 of it in on this side)
                 for bb in other_bbs:
                     points = bb['poly_points']
                     x1 = min(p[0] for p in points)
@@ -964,6 +932,7 @@ class NAFQA(FormQA):
                             bb['poly_points'] = new_points
                             good_bbs.append(bb)
 
+                #redo bbs
                 new_field_bbs = []
                 new_text_bbs = []
                 new_ids = []
@@ -974,7 +943,7 @@ class NAFQA(FormQA):
                         new_field_bbs.append(bb)
                     else:
                         new_text_bbs.append(bb)
-                
+                #redo linking
                 new_pairs = []
                 for (p1,p2) in annotations['pairs']:
                     if p1 in new_ids and p2 in new_ids:
@@ -992,17 +961,17 @@ class NAFQA(FormQA):
                 return crop, None
 
                 
-            #just crop in
-            #print('>crop in')
+            #just crop in to the bbs
             crop = (max(0,min_x-pad),0,min(shape[1],max_x+pad),shape[0])
             cropAnnotations(annotations,crop)
             return crop,None
 
 
 
-
+        #no crop
         return (0,0,shape[1],shape[1]),None
 
+#adjust all points based on crop
 def cropAnnotations(annotations,crop):
     for bb in annotations['fieldBBs']+annotations['textBBs']:
         points = bb['poly_points']

@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding, BartLearnedPositionalEmbedding
-from model.rel_pos_im_transformer import QTransformerLayer
+from model.q_transformer_layer import QTransformerLayer
 from model.swin_transformer import ConvPatchEmbed, SwinTransformerBlock, PatchMerging, PatchEmbed
 from model.trans_pooling import QPooler
 try:
@@ -19,7 +19,6 @@ from collections import defaultdict
 from timm.models.layers import trunc_normal_
 import math, random
 from utils.util import calcXYWH
-from testtest import PRINT_ATT,ATT_TEXT,attDisplay,NUMS
 
 import timeit
 
@@ -30,22 +29,22 @@ CHECK_ONLY_EVERY=15
 class MmSwin(BaseModel):
     def __init__(self,config):
         super(MmSwin, self).__init__(config)
-        self.image_size = config['image_size'] #start at 512?
-        dropout = 0 if 'no_dropout' in config and  config['no_dropout'] else 0.1
-        self.conv_patch_emb = config.get('conv_patch_emb',True)
-        lighter_conv_patch_emb = config['lighter_conv_patch_emb'] if 'lighter_conv_patch_emb' in config else False
-        init_from_pretrained = config.get('init_from_pretrained',True)
+        self.image_size = config['image_size'] #input must be this size
+        dropout = 0 if config.get('no_dropout',False) else 0.1
+        self.conv_patch_emb = config.get('conv_patch_emb',True) #set to False to use original Swin embedding
+        lighter_conv_patch_emb = config['lighter_conv_patch_emb'] if 'lighter_conv_patch_emb' in config else False #shallower network
+        init_from_pretrained = config.get('init_from_pretrained',True) #the text emebeddings
         use_special_question_tokens = config.get('use_special_question_tokens',True)
-        self.use_set_length = config.get('use_set_length',True)
-        self.max_q_tokens = config.get('max_q_tokens',32)
-        self.max_a_tokens = config.get('max_a_tokens',512)
+        self.use_set_length = config.get('use_set_length',True) #Fixed length input and output
+        self.max_q_tokens = config.get('max_q_tokens',20) #fixed length query tokens
+        self.max_a_tokens = config.get('max_a_tokens',800) #fixed length response (answer) tokens
 
-        mask_output = config.get('do_mask_output',True)
+        mask_output = config.get('do_mask_output',True) #Turn off to remove CNN mask prediction at the end
 
-        blocks_per_level = config['blocks_per_level'] #[2,2,6,2] -> in:512,emb:64 then 64,32,16,8
-        use_swin = config.get('use_swin',[True]*sum(blocks_per_level  ))
-        use_auto = config.get('use_auto',[True]*sum(blocks_per_level  ))
-        swin_cross_attention = config.get('swin_cross_attention',[True]*sum(blocks_per_level))
+        blocks_per_level = config['blocks_per_level'] #Level here relates to the Swin pooling (pooling makes new level)
+        use_swin = config.get('use_swin',[True]*sum(blocks_per_level  )) #boolean array (for each layer), if false, the previous layer's visual features are used instead of making new ones
+        use_auto = config.get('use_auto',[True]*sum(blocks_per_level  )) #boolean array, if false, the previsou layer's textual features are used instead of making new ones
+        swin_cross_attention = config.get('swin_cross_attention',[True]*sum(blocks_per_level)) #boolean array, it false the Swin layers don't cross attend to textural tokens
         if blocks_per_level is not None:
             if 'swin_text_downsample_all' in config:
                 swin_text_downsample = [[d,d] if type(d) is bool else d for d in config['swin_text_downsample_all']]
@@ -58,14 +57,14 @@ class MmSwin(BaseModel):
                 swin_text_downsample_dense=False
                 self.downsample_q = 0
 
-            window_size = config['window_size'] #7
+            window_size = config['window_size'] #Swin window size
             if type(window_size) is int:
                 window_size = [window_size]*len(blocks_per_level)
-            d_model = config['decode_dim']
-            dim_ff = config['dim_ff']
-            nhead = config['decode_num_heads']
-            swin_nhead = config['swin_nheads'] #[3,6,12,24] | [2,6,12,12] probably don't need as much later
-            im_embed_dim = config['im_embed_dim'] #96 -> 96,192,384,768 | 64->64,128,256,512
+            d_model = config['decode_dim'] #width (num feats) of the textual tokens
+            dim_ff = config['dim_ff'] #features in fully connected layer of textual transformer layers
+            nhead = config['decode_num_heads'] #number of heads in for textual tokens attention
+            swin_nhead = config['swin_nheads'] #number of heads for Swin, per level
+            im_embed_dim = config['im_embed_dim'] #num features of initial visual tokens
 
         if isinstance(self.image_size,int):
             self.image_size = (self.image_size,self.image_size)
@@ -136,9 +135,11 @@ class MmSwin(BaseModel):
 
         self.text_embedding = nn.Embedding(len(self.tokenizer), d_model)
         if init_from_pretrained:
+            #copy weights over, allowing for different sized weights
             self.text_embedding.weight.data[:init_emb.weight.size(0),:d_model] = init_emb.weight.data[:,:d_model]
 
         if use_special_question_tokens:
+            #I didn't know how to add tokens to the tokenizer, so I created my own little module to process the text and produce the task token
             self.query_special_token_embedder = SpecialTokenEmbedder(d_model)
             self.query_special_start_token_embedder = SpecialTokenEmbedder(d_model)
         else:
@@ -162,13 +163,13 @@ class MmSwin(BaseModel):
                     embed_dim=im_embed_dim,
                     norm_layer=nn.LayerNorm,
                     lighter=lighter_conv_patch_emb,
-                    in_chans=2) #now includes the mask channel
+                    in_chans=2) #includes the hightlight/mask channel
         else:
             self.patch_embed =  PatchEmbed(
                     img_size=self.image_size, 
                     embed_dim=im_embed_dim,
                     norm_layer=nn.LayerNorm,
-                    in_chans=2) #now includes the mask channel
+                    in_chans=2) #includes the highlight/mask channel
         if pre_trained_patch_emb is not None:
             checkpoint = torch.load(pre_trained_patch_emb, map_location=lambda storage, location: storage)
             pe_state_dict=self.patch_embed.state_dict()
@@ -178,6 +179,7 @@ class MmSwin(BaseModel):
 
             self.patch_embed.load_state_dict(pe_state_dict)
 
+        #Swin setup
         num_patches = self.patch_embed.num_patches
         self.patches_resolution = self.patch_embed.patches_resolution
         self.patch_scale_x = 1/self.patch_embed.patch_size[1]
@@ -231,13 +233,14 @@ class MmSwin(BaseModel):
                     ] ) )
 
         if config.get('use_bart_layer_init',False):
-            self.bartLayerInit(init_model)
+            self.bartLayerInit(init_model) #initialize the textual transformer layers with weigths from BART
 
         
 
 
         self.final_resolution = cur_resolution
         if mask_output:
+            #Mask predicting CNN
             upsample_net = [nn.ConvTranspose2d(d_im,d_im//2,4,2,1),
                             nn.InstanceNorm2d(d_im//2),
                             nn.Dropout2d(p=0.125,inplace=True),
@@ -275,9 +278,11 @@ class MmSwin(BaseModel):
 
         self.answer_decode = nn.Linear(d_model,len(self.tokenizer),bias=False)
         self.answer_decode.weight = self.text_embedding.weight #Tie weights
-        self.answer_softmax = nn.LogSoftmax(dim=-1) #except
+        self.answer_softmax = nn.LogSoftmax(dim=-1)
 
         
+        #experimented with distillation based on DistilBERT, but had to adapt feature sizes
+        #Didn't work well
         if 'distillation_dim' in config:
             distillation_dim = config['distillation_dim']
             if distillation_dim!=d_model:
@@ -287,16 +292,18 @@ class MmSwin(BaseModel):
         else:
             self.ditillation_adapter = nn.Identity()
 
-        #t#self.opt_history=defaultdict(list)#t#
-
 
 
 
     #we're building this for fixed images size
-    def forward(self,image,ocrRes,questions,answers=None,useCurvedBBs=False,RUN=False,get_tokens=False,distill=False,get_logits=False):
-
-        time_log=defaultdict(int)
-        #start_time = timeit.default_timer()
+    def forward(self,image,questions,answers=None,RUN=False,get_tokens=False,distill=False,get_logits=False):
+        #image: B C H W
+        #questions: List of B lists of strings (allows multiple questions per image, we don't use this as they query-highlight-mask would have to be the same for each question)
+        #answers: List of B lists of strings (can be None if RUN is True)
+        #RUN: True means true auto_regressive prediction is made. False uses teacher-forcing. Must have batch size of 1 if True
+        #get_tokens: Return initial input tokens (was used for saliencey things)
+        #distill: Return logits and hidden state 
+        #get_logits: Return logits
 
 
         device = image.device
@@ -321,11 +328,14 @@ class MmSwin(BaseModel):
         if not RUN:
             answers=[a for ba in answers for a in ba]
         else:
-            answers=['']*new_batch_size
+            answers=['']*new_batch_size #no teacher forcing
 
-        #run question+answer through decoder
+        #run question+answer through embedding
+
         if self.query_special_token_embedder is not None:
+            #get the special task tokens
             _, query_special_tokens = self.query_special_token_embedder(questions)
+            #This removes the task string from the questions
             questions, query_special_start_tokens = self.query_special_start_token_embedder(questions)
 
         if self.use_set_length:
@@ -334,10 +344,11 @@ class MmSwin(BaseModel):
             q_input_ids = q_t['input_ids'][:,:self.max_q_tokens-1]
             q_attention_mask = q_t['attention_mask'][:,:self.max_q_tokens-1]
             if not RUN:
-                a_t = self.tokenizer(answers,return_tensors="pt",padding='max_length',max_length=self.max_a_tokens+1,truncation=True)
+                a_t = self.tokenizer(answers,return_tensors="pt",padding='max_length',max_length=self.max_a_tokens+1,truncation=True) #+1 becuase end/SEP is removed
                 a_input_ids = a_t['input_ids'][:,:self.max_a_tokens+1]
                 a_attention_mask = a_t['attention_mask'][:,:self.max_a_tokens+1]
             else:
+                #just get the start (CLS) token essentially
                 a_t = self.tokenizer(answers,return_tensors="pt",padding=True)
                 a_input_ids = a_t['input_ids']
                 a_attention_mask = a_t['attention_mask']
@@ -357,18 +368,14 @@ class MmSwin(BaseModel):
         a_tokens = qa_tokens[:,num_q:] 
 
         if self.query_special_token_embedder is not None:
+            #query has task token appended
             q_tokens = torch.cat((query_special_tokens[:,None,:],q_tokens),dim=1)
+            #answer has task token added
             a_tokens[:,0]+=query_special_start_tokens
             num_q+=1
-        #DDD
-        #a_tokens=torch.autograd.Variable(a_tokens,requires_grad=True)
-        #self.start_token=a_tokens
-        #self.start_token.retain_grad()
 
-
-        #the model input ends up being [CLS] Question  [SEP] Answer
-        #                             { q tokens     }{ a tokens   }
-
+    
+        #Now we set of the masks needed
 
         q_padding_mask = (1-q_attention_mask).bool()#.to(device) 
         if self.query_special_token_embedder is not None:
@@ -387,12 +394,12 @@ class MmSwin(BaseModel):
 
         
 
-        num_all = num_im+num_q+num_a
+        num_all = num_im+num_q+num_a #total number of tokens
 
-
+        #The full attention mask. Parts of it are used 
         all_att_mask = torch.BoolTensor(1,num_all,num_all).fill_(1) #1/0
-        all_att_mask[:,-num_a:,-num_a:] = torch.tril(all_att_mask[:,-num_a:,-num_a:])
-        all_att_mask[:,:-num_a,-num_a:] = 0 #nothing else attends to a
+        all_att_mask[:,-num_a:,-num_a:] = torch.tril(all_att_mask[:,-num_a:,-num_a:]) #autoregressive attention mask
+        all_att_mask[:,:-num_a,-num_a:] = 0 #nothing else attends to response/answer tokens
         all_att_mask = all_att_mask.to(device)
 
         if self.q_pos_1d_enc is not None:
@@ -406,9 +413,6 @@ class MmSwin(BaseModel):
             q_tokens = qa_tokens[:,:num_q] 
             a_tokens = qa_tokens[:,num_q:] 
 
-
-        #Run the Swin and accompanying layers
-        level=0
         qa_padding_mask = torch.cat( (q_padding_mask,a_padding_mask), dim=1)
         #convert to 0/-inf as that's what the Swin code expects
         q_padding_mask_inf = torch.FloatTensor(*q_padding_mask.size()).fill_(0).to(device)
@@ -416,6 +420,9 @@ class MmSwin(BaseModel):
 
         im_padding_mask = torch.BoolTensor(1,1).fill_(0).expand(new_batch_size,num_im).to(device)
         all_padding_mask = torch.cat( (im_padding_mask,q_padding_mask,a_padding_mask),dim=1)
+
+        #Run the Swin and accompanying layers
+        level=0
 
         if RUN:
             #store results at each layer to reuse
@@ -430,22 +437,21 @@ class MmSwin(BaseModel):
             init_im_tokens = im_tokens
             init_a_tokens = a_tokens.requires_grad_()
 
-        #time_log['setup']+=timeit.default_timer()-start_time
-        #start_time = timeit.default_timer()
 
         for i,(swin_layer, proj_d2i, autoregr_layer, proj_i2d, im_downsample, ocr_downsample, q_downsample) in enumerate(self.swin_layers):
 
-            #could be run in parallel
-            if PRINT_ATT:
-                NUMS.append((num_q,num_a))
+            #swin and autoregr_layer could be run in parallel
             
             if swin_layer is not None:
+                #visual token update
                 if proj_d2i is not None:
                     im_tokens = swin_layer(im_tokens,proj_d2i(q_tokens),
                             docq_padding_mask=q_padding_mask_inf) 
                 else:
+                    #no cross attention for visual tokens
                     im_tokens = swin_layer(im_tokens)
                 if autoregr_layer is not None:
+                    #update visual tokens cross-attended to by textual tokens
                     proj_im_tokens = proj_i2d(im_tokens)
                 #else:
                 #   reuse last proj_im_tokens
@@ -457,6 +463,7 @@ class MmSwin(BaseModel):
                     saved_q_padding_mask.append(q_padding_mask)
                     saved_a_tokens.append(a_tokens)
                 
+                #textual token update
                 qa_tokens = autoregr_layer(
                         qa_tokens,
                         torch.cat((proj_im_tokens,qa_tokens),dim=1),
@@ -474,7 +481,7 @@ class MmSwin(BaseModel):
 
             q_tokens = qa_tokens[:,:num_q]
             a_tokens = qa_tokens[:,num_q:]
-            #num_q_old=num_q
+
             if q_downsample is not None:
                 did_downsample=True
                 q_tokens,q_padding_mask = q_downsample(q_tokens,q_padding_mask)
@@ -482,37 +489,34 @@ class MmSwin(BaseModel):
                 qa_tokens = torch.cat( (q_tokens,a_tokens),dim=1)
 
             if did_downsample:
+                #get correct chaqpe masks
                 num_all = num_im+num_q+num_a
                 all_att_mask = all_att_mask[:,-(num_im+num_q+num_a):,-(num_im+num_q+num_a):] #this is uniform except at the end (a), so we can just take the bottom slice of it
                 all_padding_mask = torch.cat( (im_padding_mask,q_padding_mask,a_padding_mask), dim=1)
 
-        #time_log['swin layers']+=timeit.default_timer()-start_time
-        #start_time = timeit.default_timer()
 
         response = a_tokens
 
         ##############
-        #Visual output
+        #Mask output prediction
         if self.upsample_net is not None:
             H,W = self.final_resolution
-            #reshape and permute to convert to image
+            #reshape and permute visual tokens to convert to image
             im_feats = im_tokens.view(new_batch_size,H,W,im_tokens.size(2)).permute(0,3,1,2)
             out_mask = self.upsample_net(im_feats)
         else:
             out_mask = None
 
-        #time_log['vis output']+=timeit.default_timer()-start_time
-        #start_time = timeit.default_timer()
                     
         if RUN: #assuming batchsize of 1
             #Forward inference (answer not known)
             assert new_batch_size==1 #just to make stopping easier
-            assert num_a==1 #just checking...
+            assert num_a==1 #no cheating
             zero = torch.BoolTensor(1,1).fill_(0).to(device) #for creating masks from
             one = torch.BoolTensor(1,1).fill_(1).to(device)
             max_pred_len=self.max_pred_len
 
-            #response = all_tokens[:,-(num_a):]
+            #get the first predicted token
             response_decoded = self.answer_decode(response)
             response_decoded = F.softmax(response_decoded,dim=-1)#self.answer_softmax(response_decoded)
             self.preventSpecial(response_decoded)
@@ -524,6 +528,7 @@ class MmSwin(BaseModel):
                 num_beams = int(RUN[4:])
             else:
                 beam_search = False
+
             if beam_search:
                 num_tokens = response_decoded.size(2)
                 indexes_b = torch.arange(num_beams).repeat_interleave(num_tokens).to(device)
@@ -535,27 +540,6 @@ class MmSwin(BaseModel):
                     saved_q_tokens[li] = saved_q_tokens[li].expand(num_beams,-1,-1)
                     saved_proj_im_tokens[li] = saved_proj_im_tokens[li].expand(num_beams,-1,-1)
 
-                #cur_scores = []
-                #response_decoded_cpu = response_decoded.cpu()
-                #for ti in range(response_decoded_cpu.size(2)):
-                #    cur_scores.append((response_decoded_cpu[0,0,ti].item(),ti))
-                #cur_scores.sort(key=lambda a:a[0],reverse=True)
-
-                #if cur_scores[0][1] == self.SEP_TOKEN:
-                #    best_finish_score = cur_scores[0][0]
-                #    best_done_tokens = [self.SEP_TOKEN]
-                #else:
-                #    best_finish_score = 999999999
-
-                #beam_scores=[]
-                #beam_sum_scores=[]
-                #output_tokens=[]
-                #response_discrete_token = torch.LongTensor(num_beams,1)
-                #for bi,(score,ti) in enumerate(cur_scores[:num_beams]):
-                #    beam_scores.append([score])
-                #    beam_sum_scores.append(score)
-                #    output_tokens.append([ti])
-                #    response_discrete_token[bi,0]=ti
                 cur_scores,indices = torch.sort(response_decoded[0,0],descending=True)
                 cur_scores = cur_scores[:num_beams]
                 indices = indices[:num_beams]
@@ -563,10 +547,7 @@ class MmSwin(BaseModel):
                 beam_scores = torch.FloatTensor(num_beams,max_pred_len).zero_().to(device)
                 beam_scores[:,0]=cur_scores
                 response_discrete_token = old_tis[:,None]
-                #output_tokens=[]
-                #for new_bi,index in enumerate(indices):
-                #    ti = indexes_t_cpu[index].item()
-                #    output_tokens.append([ti])
+
                 output_tokens = torch.LongTensor(num_beams,max_pred_len).fill_(1).to(device)
                 output_tokens[:,0] = indices
 
@@ -574,23 +555,20 @@ class MmSwin(BaseModel):
                     best_finish_score = cur_scores[0]
                     best_done_tokens = [self.SEP_TOKEN]
                 else:
-                    #best_finish_score = -1
                     best_finish_score = torch.FloatTensor([-1])[0].to(device)
                     best_done_tokens=None
-                time_log['beam iter']=[]
 
             else:
                 response_discrete_token = response_decoded.argmax(dim=2)
                 output_tokens = [response_discrete_token[0,0].item()]
-            #print('first token: {}'.format(output_tokens[0]))
 
             offset = 1
 
-            #time_log['beam setup']+=timeit.default_timer()-start_time
 
-
+            #Continiously predict the next character until end/SEP token is predicted
+            # or stop and maximum length
             while (beam_search or output_tokens[-1] != self.SEP_TOKEN) and offset<max_pred_len:
-                start_time_iter=timeit.default_timer()
+                #embed last predicted token
                 ans = self.text_embedding(response_discrete_token)
                 if self.a_pos_1d_enc is None:
                     ans += self.pos_enc_adapter(self.pos_1d_enc(ans.size(),past_key_values_length=num_q+offset))
@@ -598,7 +576,6 @@ class MmSwin(BaseModel):
                     ans = self.a_pos_1d_enc(ans,offset=offset)
                 num_a += 1
 
-                #time_log['beam pos enc']+=timeit.default_timer()-start_time
 
 
                 level=0
@@ -608,37 +585,34 @@ class MmSwin(BaseModel):
                     num_im = saved_proj_im_tokens[li].size(1)
                     num_q = saved_q_tokens[li].size(1)
 
-                    proj_im_tokens = saved_proj_im_tokens[li]
-                    im_padding_mask = zero.expand(new_batch_size,num_im)#holder_im_padding_mask[:,:num_im]
+                    proj_im_tokens = saved_proj_im_tokens[li] #saved visual tokens for layer
+                    im_padding_mask = zero.expand(new_batch_size,num_im)
 
-                    q_tokens = saved_q_tokens[li]
+                    q_tokens = saved_q_tokens[li] #saved query tokens for layer
                     q_padding_mask = saved_q_padding_mask[li]
 
-                    a_tokens = saved_a_tokens[li] = torch.cat((saved_a_tokens[li],ans),dim=1)
+                    a_tokens = saved_a_tokens[li] = torch.cat((saved_a_tokens[li],ans),dim=1) #append last predicted response token to saved previous response tokens
                     a_padding_mask = zero.expand(new_batch_size,num_a)#holder_a_padding_mask[:,:num_a]
 
                     all_padding_mask = torch.cat( (im_padding_mask,q_padding_mask,a_padding_mask), dim=1)
                     all_att_mask = one.expand(new_batch_size,1,num_im+num_q+num_a)
 
-
+                    #predict next token
                     ans = layout_layer(
-                            a_tokens[:,-1:], #only last token
-                            torch.cat((proj_im_tokens,q_tokens,a_tokens),dim=1),
-                            all_att_mask,#all_att_mask[:,-(num_q+num_a):,:],
+                            a_tokens[:,-1:], #only predict from last token
+                            torch.cat((proj_im_tokens,q_tokens,a_tokens),dim=1), #but attend to all tokens
+                            all_att_mask,
                             all_padding_mask)
                     if im_downsample is not None:
                         level+=1
-                #Done Swin (RUN)
-                #time_log['beam layers']+=timeit.default_timer()-start_time
-                #start_time=timeit.default_timer()
-
+                #
+                
+                #get next predicted token
                 response_decoded = self.answer_decode(ans)
                 response_decoded = F.softmax(response_decoded,dim=-1)#self.answer_softmax(response_decoded)
                 self.preventSpecial(response_decoded)
                 if get_tokens:
                     response_decoded_all = torch.cat((response_decoded_all,response_decoded),dim=1)
-                #time_log['beam first decode']+=timeit.default_timer()-start_time
-                start_time=timeit.default_timer()
 
                 if beam_search:
 
@@ -646,7 +620,6 @@ class MmSwin(BaseModel):
                     response_decoded =response_decoded[:,0]
                         
                     ###W#New beam #######
-                    start_time=timeit.default_timer()
 
                     cur_scores = response_decoded+cur_scores[:,None]
                     cur_scores = cur_scores.view(-1)
@@ -655,51 +628,19 @@ class MmSwin(BaseModel):
                     cur_scores = cur_scores[:num_beams]
                     indices = indices[:num_beams]
 
-                    ##bubble sort 
-                    #cur_scores_a = []
-                    #indices = []
-                    #for i in range(num_beams):
-                    #    top,index = cur_scores.max(dim=0)
-                    #    cur_scores_a.append(top[None])
-                    #    indices.append(index[None])
-                    #    #cur_scores[index]=-999
-                    #    cur_scores = torch.cat((cur_scores[:index],cur_scores[index+1:]))
-                    #cur_scores = torch.cat(cur_scores_a)
-                    #indices = torch.cat(indices)
-
-                    time_log['beam sort']+=timeit.default_timer()-start_time
-                    start_time=timeit.default_timer()
-
-                    start_time2=timeit.default_timer()
                     ordered_bis = indexes_b[indices]
                     ordered_tis = indexes_t[indices]
-                    time_log['   prep indices']+=timeit.default_timer()-start_time2
-                    start_time2=timeit.default_timer()
                     for li in range(len(saved_a_tokens)):
                         saved_a_tokens[li]=saved_a_tokens[li][ordered_bis]
-                    time_log['   prep update saved']+=timeit.default_timer()-start_time2
-                    start_time2=timeit.default_timer()
                     
                     beam_scores=beam_scores[ordered_bis]
                     beam_scores[:,offset]=response_decoded[ordered_bis,ordered_tis]
-                    time_log['   prep update scores']+=timeit.default_timer()-start_time2
-                    start_time2=timeit.default_timer()
 
                     response_discrete_token[:,0] = ordered_tis
-                    time_log['   prep update discrete']+=timeit.default_timer()-start_time2
-                    start_time2=timeit.default_timer()
-                    #new_output_tokens=[]
-                    #for new_bi,index in enumerate(indices):
-                    #    bi = indexes_b_cpu[index].item()
-                    #    ti = indexes_t_cpu[index].item()
-                    #    new_output_tokens.append(output_tokens[bi]+[ti])
                     output_tokens = output_tokens[ordered_bis]
                     output_tokens[:,offset]=ordered_tis
-                    time_log['   prep update outpu tokens']+=timeit.default_timer()-start_time2
 
 
-                    time_log['beam prep next']+=timeit.default_timer()-start_time
-                    start_time=timeit.default_timer()
 
                     if offset%CHECK_ONLY_EVERY==CHECK_ONLY_EVERY-1 and (output_tokens[:TOP_K]==self.SEP_TOKEN).any():
                         for k in range(TOP_K):
@@ -708,92 +649,8 @@ class MmSwin(BaseModel):
                                 #best_beam_score = beam_scores[k].sum()/(beam_scores[k]!=0).sum()
                                 break
                         break
-                    time_log['beam check']+=timeit.default_timer()-start_time
 
 
-                    #############
-                    ##OLD
-
-                    ##First check if we have any good terminating sequences
-
-                    #end_token_score = response_decoded[:,self.SEP_TOKEN]
-                    ##start_time2=timeit.default_timer()
-                    #finish_scores = torch.cat((beam_scores,end_token_score[:,None]),dim=1)
-                    ##time_log['   beam finish cat']+=timeit.default_timer()-start_time2
-                    ##start_time2=timeit.default_timer()
-                    #finish_score = finish_scores.sum(dim=1)/(finish_scores!=0).sum(dim=1)
-                    ##time_log['   beam finish sum']+=timeit.default_timer()-start_time2
-                    ##start_time2=timeit.default_timer()
-                    #top_finish_score, top_finish_bi = finish_score.max(dim=0)
-                    ##time_log['   beam finish max']+=timeit.default_timer()-start_time2
-                    ##start_time2=timeit.default_timer()
-
-                    #if top_finish_score>best_finish_score:
-                    #    best_finish_score = top_finish_score
-                    #    best_done_tokens = output_tokens[top_finish_bi]+[self.SEP_TOKEN]
-                    ##time_log['   beam finish update']+=timeit.default_timer()-start_time2
-
-                    ##has_best = top_finish_score>best_finish_score
-                    ##time_log['   beam comp']+=timeit.default_timer()-start_time2
-                    ##start_time2=timeit.default_timer()
-                    ##has_best = has_best.cpu()
-                    ##time_log['   beam bool cpu']+=timeit.default_timer()-start_time2
-                    ##if has_best:
-                    ##    start_time2=timeit.default_timer()
-                    ##    best_finish_score = top_finish_score
-                    ##    time_log['   beam assign']+=timeit.default_timer()-start_time2
-                    ##    start_time2=timeit.default_timer()
-                    ##    best_done_tokens = output_tokens[top_finish_bi]+[self.SEP_TOKEN]
-                    ##    time_log['   beam cat']+=timeit.default_timer()-start_time2
-
-
-
-
-                    ##start_time2=timeit.default_timer()
-                    #response_decoded[:,self.SEP_TOKEN]=response_decoded.min() #we shouldn't follow paths after end token
-                    ##time_log['    beam clear']+=timeit.default_timer()-start_time2
-                    #time_log['beam finish check']+=timeit.default_timer()-start_time
-                    #start_time=timeit.default_timer()
-
-                    #cur_scores = response_decoded+cur_scores[:,None]
-                    #cur_scores = cur_scores.view(-1)
-                    #cur_scores,indices = torch.sort(cur_scores,descending=True)
-
-                    #time_log['beam sort']+=timeit.default_timer()-start_time
-                    #start_time=timeit.default_timer()
-
-                    #cur_scores = cur_scores[:num_beams]
-                    #indices = indices[:num_beams]
-                    #old_bis = indexes_b[indices]
-                    #old_tis = indexes_t[indices]
-                    #for li in range(len(saved_a_tokens)):
-                    #    saved_a_tokens[li]=saved_a_tokens[li][old_bis]
-                    #beam_scores=beam_scores[old_bis]
-                    #beam_scores[:,offset]=response_decoded[old_bis,old_tis]
-                    #response_discrete_token[:,0] = old_tis
-                    #new_output_tokens=[]
-                    #for new_bi,index in enumerate(indices):
-                    #    bi = indexes_b_cpu[index].item()
-                    #    ti = indexes_t_cpu[index].item()
-                    #    new_output_tokens.append(output_tokens[bi]+[ti])
-
-                    #output_tokens = new_output_tokens
-                    #best_beam_score = beam_scores[0].sum()/(beam_scores[0]!=0).sum()
-
-                    #time_log['beam prep next']+=timeit.default_timer()-start_time
-                    #start_time=timeit.default_timer()
-
-                    ####
-
-
-                    ##final_str = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(best_done_tokens,skip_special_tokens=True))
-                    ##print('best finish {} : {}'.format(best_finish_score,final_str))
-                    ##final_str = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(output_tokens[0],skip_special_tokens=True))
-                    ##print('best beam {} : {}'.format(best_beam_score,final_str))
-
-                    ##print(f'finish vs best = {best_finish_score-best_beam_score} (positive means finish is best)')
-                    #if best_finish_score-best_beam_score > BEAM_END_THRESH and offset>5:
-                    #    break
 
                 else:
                     response_discrete_token = response_decoded.argmax(dim=2)
@@ -801,53 +658,34 @@ class MmSwin(BaseModel):
                 
 
                     output_tokens.append(response_discrete_token[0,0].item())
-                #print('next token: {}'.format(output_tokens[-1]))
                 offset += 1
                 
-                if beam_search:
-                    time_log['beam iter'].append(timeit.default_timer()-start_time_iter)
 
-                #print('time {}'.format(timeit.default_timer()-time))
 
             if beam_search:
-                #if best_beam_score > best_finish_score:
-                #    output_tokens = output_tokens[0]
-                #else:
-                #    output_tokens = best_done_tokens
                 output_tokens = output_tokens[0].cpu()
                 stop_spots = (output_tokens==self.SEP_TOKEN).nonzero(as_tuple=True)[0]
                 if len(stop_spots)>0:
                     output_tokens[stop_spots[0]+1:] = 1 #clear predictions after stop
 
-
             
+            #get the whole prediction string
             final_str = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(output_tokens,skip_special_tokens=True))
-            #print('FINISHED, FINAL PRED = '+final_str)
-            #print('Mean iter time = {}'.format(np.mean(time_log['beam iter'])))
-            #for name,time in time_log.items():
-            #    if name=='beam iter':
-            #        continue
-            #    print(f'{name}: {time}')
             
-            if PRINT_ATT:
-                attDisplay(image[0],full_ocr_string,'|'+questions[0],'|'+final_str[0]+'^',final_str)
 
             if get_tokens:
                 return response_decoded_all, None, final_str, out_mask, init_im_tokens, init_a_tokens
             else:
                 return final_str, out_mask #torch.sigmoid(out_mask)
-            ############
+            ############END RUN
 
 
 
 
-
+        #Decode prediction
         response_logits = self.answer_decode(response)
         response_decoded = self.answer_softmax(response_logits)
 
-        #t#time = timeit.default_timer()-ticA#t#
-        #t#self.opt_history['transformers'].append(time)#t#
-        #t#tic=timeit.default_timer()#t#
 
         response_greedy_tokens = response_decoded.argmax(dim=2)
         target_decoded = a_input_ids[:,1:]# This has the SEP tokens (and padding), but not CLS (start) token
@@ -871,17 +709,9 @@ class MmSwin(BaseModel):
             batch_string_response.append(string_response[cur_pos:cur_pos+r])
             cur_pos+=r
 
-        #t#timeA = timeit.default_timer()-ticA#t#
-        #t#time = timeit.default_timer()-tic#t#
-        #t#self.opt_history['decode'].append(time)#t#
-        #t#self.opt_history['full forward'].append(timeA)#t#
-        #t#self.print_opt_times()#t#
-        #import pdb;pdb.set_trace()
-        if PRINT_ATT:
-            attDisplay(image[0],'|'+questions[0],'|'+answers[0]+'^',batch_string_response[0])
 
 
-
+        #return appropriate things
         if distill:
             return response_decoded, target_decoded.to(device), batch_string_response, response_logits, self.ditillation_adapter(response), ~a_padding_mask
         elif get_logits:
@@ -889,13 +719,8 @@ class MmSwin(BaseModel):
         else:
             return response_decoded, target_decoded.to(device), batch_string_response, out_mask
 
-    #t#def print_opt_times(self):#t#
-        #t#for name,times in self.opt_history.items():#t#
-            #t#print('time {}({}): {}'.format(name,len(times),np.mean(times)))#t#
-            #t#if len(times)>300: #t#
-                #t#times.pop(0)   #t#
-                #t#if len(times)>600:#t#
-                    #t#times.pop(0)#t#
+
+    #Initialize textual token transformer layers with BART weights
     def bartLayerInit(self,bart_model):
         #gather decoder layers
         layers=[]
@@ -930,6 +755,9 @@ class MmSwin(BaseModel):
             layer.norm2.weight.data = init_layer.final_layer_norm.weight.data
             layer.norm2.bias.data = init_layer.final_layer_norm.bias.data
 
+    #The NAF transcriptions have characters used when the transcriber couldn't read
+    #Dessurt sees this in training, but shouldn't predict them
+    #So this suppresses those predictions
     def preventSpecial(self, response_decoded):
         response_decoded[:,:,47847]=0 #prevent prediction of '§'
-        response_decoded[:,:,4056]=0 #prevent prediction of '¿' (and potentially other special characters
+        response_decoded[:,:,4056]=0 #prevent prediction of '¿' (and potentially other special characters) and it is a two-token character
