@@ -309,7 +309,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Evaluate the output of Dessurt on FUNSD and NAF')
     parser.add_argument('-p', '--predictions', default=None, type=str,
-                        help='path to latest checkpoint (default: None)')
+                        help='path to json predictions')
     parser.add_argument('-d', '--data_set_name', default=None, type=str,
                         help='name of dataset to eval')
     parser.add_argument('-T', '--test', default=False, action='store_const', const=True,

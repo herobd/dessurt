@@ -397,8 +397,10 @@ def fixLoadJSON(pred):
                                     pred=pred[:char-1]+pred[char:]
 
                                 else:
+                                    pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'added a comma blindly (this could be bad)')
+                                    pred=pred[:char]+', '+pred[char:]
 
-                                    assert False
+                                    #assert False
 
                     elif pred[char]=='{' and (pred[char-1]=='}' or pred[char-2]=='}'):
                         #forgot a comma

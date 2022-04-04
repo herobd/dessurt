@@ -131,6 +131,11 @@ class NAFQA(FormQA):
 
         ocr=None
         #ocr = [self.corrupt(text) for text in ocr]
+        for bb in bbs:
+            if len(bb)==4:
+                print(bb[3]-bb[1])
+            else:
+                print(math.sqrt(((bb[2]-bb[4])**2) + ((bb[3]-bb[5])**2)))
         return bbs, list(range(bbs.shape[0])), ocr, {}, {}, qa
 
 
