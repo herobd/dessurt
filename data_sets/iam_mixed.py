@@ -18,7 +18,7 @@ from utils import grid_distortion
 
 class IAMMixed(ParaQADataset):
     """
-    Presents IAM data as list of words in random order, sampling from 4 IAM documents
+    Presents IAM data as two lists of words in random order, sampling from three IAM documents per synthetic document
     """
 
 
@@ -131,6 +131,8 @@ class IAMMixed(ParaQADataset):
             maxY+=4
             minX-=4
             maxX+=4
+
+            #select text height
             if self.train:
                 text_height = random.randrange(self.min_text_height,self.max_text_height+1)
             else:
@@ -138,8 +140,10 @@ class IAMMixed(ParaQADataset):
 
             w_img = images[image_id][minY:maxY,minX:maxX]
             if w_img.shape[0]==0:
-                continue #skip
+                continue #skip. something is wrong
+
             if text_height != w_img.shape[0]:
+                #reize word image
                 n_width = round(w_img.shape[1]*text_height/w_img.shape[0])
                 w_img = img_f.resize(w_img,(text_height,n_width))
 
@@ -166,9 +170,11 @@ class IAMMixed(ParaQADataset):
                 continue #can't draw this word
             
             if self.train:
-                std = (random.random()*1.5) + 1.5
+                #Warp augmentation
+                std = (random.random()*1.5) + 1.5 #warp differen words to a different degree
                 w_img = grid_distortion.warp_image(w_img, w_mesh_std=std, h_mesh_std=std)
 
+            #put word image into synthetic document
             image[cur_y:cur_y+w_img.shape[0],x:x+w_img.shape[1]] = w_img
             
             lines.append({'text':text,
@@ -182,7 +188,7 @@ class IAMMixed(ParaQADataset):
 
             cur_y += text_height + y_spacing
 
-        #this is wrong, but works for how read_block parese the ocr
+        #this ocr is wrong, but works for how read_block parses the ocr to have it read the two lists
         ocr=[{
                 'box':[para_min_x,para_min_y,para_max_x,para_max_y],
                 'paragraphs': [{

@@ -15,7 +15,7 @@ import utils.img_f as img_f
 
 class RVLCDIPClass(QADataset):
     """
-    Document classification
+    Document classification on RVL-CDIP dataset
     """
 
 
@@ -60,7 +60,7 @@ class RVLCDIPClass(QADataset):
 
 
         if split=='val':
-            #too long for training, shorten. 1/5?
+            #takes too long to go through whole val set during training, shorten. 1/5?
             self.images = self.images[::5]
 
 
