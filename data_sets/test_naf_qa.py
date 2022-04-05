@@ -43,7 +43,7 @@ def display(data):
                 a=a[:-1]
                 a = json.loads(a)
                 a = json.dumps(a,ensure_ascii=False,indent=3)+'‡'
-            #print(q+' : '+a)
+            print(q+' : '+a)
 
         #widths.append(img.size(1))
         draw = False
@@ -83,7 +83,7 @@ def display(data):
     #print('batch complete')
     #if 'json~' in q:
     #    print(data['imgName'][b])
-    return q[4]
+    #return q[4]
 
 
 if __name__ == "__main__":
@@ -111,7 +111,7 @@ if __name__ == "__main__":
             },
         'questions':1,
         'max_qa_len': 9999000,
-        "use_json": 'only'
+        "use_json": 'readmore'
 
 })
 
@@ -128,8 +128,8 @@ if __name__ == "__main__":
     try:
         while True:
             #print('?')
-            typ=display(dataLoaderIter.next())
-            typs[typ]+=1
+            display(dataLoaderIter.next())
+            #typs[typ]+=1
     except StopIteration:
         #print('done')
         pass

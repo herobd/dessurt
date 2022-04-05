@@ -57,8 +57,8 @@ def display(data,write,tokenizer=None):
         #    if x in q:
         #        draw = True
         #        break
-        draw = 'row header' not in a
-        if True:
+        draw = False#'row header' not in a
+        if False:
             cv2.imwrite('synth_form_example_new.png',(img.numpy()*255)[:,:,0].astype(np.uint8))
         if draw :
             #cv2.imshow('line',img.numpy())
@@ -162,7 +162,11 @@ if __name__ == "__main__":
     dataLoader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True, num_workers=0, collate_fn=synth_form_dataset.collate)
     dataLoaderIter = iter(dataLoader)
 
-    #tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
+    #if os.path.exists('./cache_huggingface/BART'):
+    #    model_id = './cache_huggingface/BART'
+    #else:
+    #    model_id = 'facebook/bart-base'
+    #tokenizer = BartTokenizer.from_pretrained(model_id)
     #add = ['"answer"',"question","other","header","},{",'"answers":','"content":']
     #tokenizer.add_tokens(add, special_tokens=True)
     tokenizer=None

@@ -270,21 +270,37 @@ class FormQA(QADataset):
         self.wiki_dataset = getWikiDataset()
         self.punc_regex = re.compile('[%s]' % re.escape(string.punctuation))
         self.do_masks=True
-        self.words = config.get('words',False)
+        self.words = config.get('words',True)
         use_json = config.get('use_json',False)
         self.shorten_text_in_json = config.get('shorten_json',False)
         self.max_json_words=5
 
         self.max_q_tokens = config.get('max_q_tokens',20)
         self.max_a_tokens = config.get('max_a_tokens',800)
-        if use_json:
-            self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
+
+        if os.path.exists('./cache_huggingface/BART'):
+            model_id = './cache_huggingface/BART'
+        else:
+            model_id = 'facebook/bart-base'
+        self.tokenizer = BartTokenizer.from_pretrained(model_id)
 
         #self.corruption_p = config['text_corruption'] if 'text_corruption' in config else 0.15
         #self.do_words = config['do_words']
         #self.char_qs = config['char_qs'] if 'char_qs' in config else False
         if self.train:
-            if use_json=='only':
+            if use_json=='test':
+                self.rel_vs_any_link_prob=0.001
+                self.q_types = {
+                        'read': 3,
+                        }
+                self.q_types_no_table = {
+                        'read': 3,
+                        }
+                self.q_types_only_table = {
+                        'read': 2,
+                        }
+                self.q_types_for_np = ['class-link-all','class-linkdown-all','class-linkup-all','read','cell','row-header','col-header','full-all-col','full-all-row', 'full-list-row-headers','full-list-col-headers']
+            elif use_json=='only':
                 self.rel_vs_any_link_prob=0.001
                 self.q_types = {
                         'full_json': 3,
@@ -368,6 +384,82 @@ class FormQA(QADataset):
                         'class-link-all': 0.01,
                         'np':0.01,
                         'read':0.01,
+                        'cell':0.05,
+                        'row-header':0.025,
+                        'col-header':0.025,
+                        'full-all-row':0.025,
+                        'full-all-col':0.025,
+                        }
+                self.q_types_for_np = ['class-link-all','class-linkdown-all','class-linkup-all','read','cell','row-header','col-header','full-all-col','full-all-row']
+            elif use_json=='readmore':
+                self.rel_vs_any_link_prob=0.01
+                self.q_types = {
+                        'full_json': 0.68,
+                        'class-link-all': 0.05,
+                        'class-linkdown-all': 0.05,
+                        'class-linkup-all': 0.05,
+                        'np':0.01,
+                        'read':0.1,
+                        'readline':0.1,
+                        'cell':0.05,
+                        'row-header':0.025,
+                        'col-header':0.025,
+                        'full-all-row':0.025,
+                        'full-all-col':0.025
+                        }
+                self.q_types_no_table = {
+                        'full_json': 0.68,
+                        'class-link-all': 0.05,
+                        'class-linkdown-all': 0.05,
+                        'class-linkup-all': 0.05,
+                        'np':0.01,
+                        'read':0.1,
+                        'readline':0.1
+                        }
+                self.q_types_only_table = {
+                        'full_json': 0.68,
+                        'class-link-all': 0.01,
+                        'np':0.01,
+                        'read':0.1,
+                        'readline':0.1,
+                        'cell':0.05,
+                        'row-header':0.025,
+                        'col-header':0.025,
+                        'full-all-row':0.025,
+                        'full-all-col':0.025,
+                        }
+                self.q_types_for_np = ['class-link-all','class-linkdown-all','class-linkup-all','read','cell','row-header','col-header','full-all-col','full-all-row']
+            elif use_json=='readevenmore':
+                self.rel_vs_any_link_prob=0.01
+                self.q_types = {
+                        'full_json': 0.68,
+                        'class-link-all': 0.05,
+                        'class-linkdown-all': 0.05,
+                        'class-linkup-all': 0.05,
+                        'np':0.01,
+                        'read':0.4,
+                        'readline':0.4,
+                        'cell':0.05,
+                        'row-header':0.025,
+                        'col-header':0.025,
+                        'full-all-row':0.025,
+                        'full-all-col':0.025
+                        }
+                self.q_types_no_table = {
+                        'full_json': 0.68,
+                        'class-link-all': 0.05,
+                        'class-linkdown-all': 0.05,
+                        'class-linkup-all': 0.05,
+                        'np':0.01,
+                        'read':0.4,
+                        'readline':0.4
+                        }
+                self.q_types_only_table = {
+                        'full_json': 0.68,
+                        'class-link-all': 0.01,
+                        'np':0.01,
+                        'read':0.1,
+                        'readline':0.1,
                         'cell':0.05,
                         'row-header':0.025,
                         'col-header':0.025,
@@ -589,8 +681,10 @@ class FormQA(QADataset):
                     r = max(tok_len-(self.max_q_tokens+self.max_a_tokens),0)
                 elif tok_len>self.max_q_tokens+self.max_a_tokens and random.random()<0.1:
                     r = random.randrange(tok_len-(self.max_q_tokens+self.max_a_tokens))
-                else:
+                elif tok_len-self.max_q_tokens-2>0:
                     r = random.randrange(tok_len-self.max_q_tokens-2)
+                else:
+                    r = 0
                 q_json_tokens = json_tokens[0,r:r+self.max_q_tokens]
                 json_tokens = json_tokens[0,r+self.max_q_tokens:]
 
@@ -1082,7 +1176,7 @@ class FormQA(QADataset):
                 else:
                     entity = instance
                     text = entity.text
-                if len(text)<3:
+                if len(text.split())<2: #force multiple words
                     continue
 
                 if (self.train and random.random()<0.5) or switch or self.words:
@@ -1142,19 +1236,44 @@ class FormQA(QADataset):
                 ambiguous = all([entity.lines[li].ambiguous for li in query_line_ids])
 
 
-                if random.random()<0.4 and not ambiguous and len(query)>6 and self.train:
+                if random.random()<0.7 and not ambiguous and len(query)>6 and self.train:
                     question='fi~' if forward else 'pr~' #for "finish" or "previous"
                     inmask=[]
-                elif random.random()<0.5 and self.train:
+                #elif random.random()<0.5 and self.train:
+                else:
                     question='f0~' if forward else 'p0~'
                     #This uses the mask of the whol entity, as that is what other things will produce
                     inmask = [self.convertBB(s,line.box) for line in entity.lines]
-                else:
-                    question='f1~' if forward else 'p1~'
-                    #This uses the mask of only the query lines
-                    inmask = [self.convertBB(s,entity.lines[li].box) for li in query_line_ids]
+                #else:
+                #    question='f1~' if forward else 'p1~'
+                #    #This uses the mask of only the query lines
+                #    inmask = [self.convertBB(s,entity.lines[li].box) for li in query_line_ids]
 
+                ####FIX for getting the right tokens
+                query_tokens = self.tokenizer(query,return_tensors="pt")['input_ids']
+                tok_len = query_tokens.shape[1] +1#for task token
+                if tok_len>self.max_q_tokens:
+                    over = tok_len-self.max_q_tokens
+                    query_tokens = query_tokens[0,:-(over+1)] #+1 becuase trimming the end (SEP) token doesn't count
+                    query = self.tokenizer.convert_tokens_to_string(self.tokenizer.convert_ids_to_tokens(query_tokens,skip_special_tokens=True))
+                #######
                 self.qaAdd(q_a_pairs,question+query,response,ids,inmask,outmask)
+            elif q_type=='readline':
+                if self.train:
+                    if len(entities)>0:
+                        entity = random.choice(entities)
+                    else:
+                        continue
+                else:
+                    entity = instance
+
+                line = random.choice(entity.lines)
+                text = line.text
+
+                ids = [line.bbid]
+                inmask = [self.convertBB(s,line.box)]
+
+                self.qaAdd(q_a_pairs,'w0>',text,ids,inmask)
 
 
             elif q_type=='cell':

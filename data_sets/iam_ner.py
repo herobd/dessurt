@@ -30,9 +30,9 @@ class IAMNER(QADataset):
         split_by = config.get('data_split','rwth')
         self.cache_resized = False
         self.warp_lines = None
-        self.full = config.get('full',False)
-        self.class_first = config.get('class_first',False)
-        self.short_class = config.get('short_class',False)
+        self.full = config.get('full',True)
+        self.class_first = config.get('class_first',False) #do class first half of the time
+        self.short_class = config.get('short_class',False) #if not using special tokens, this is a good idea
         if self.full:
             assert self.cased
         self.eval_full = config.get('eval_full',True)
@@ -78,17 +78,15 @@ class IAMNER(QADataset):
                     self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':xml_path, 'rescaled':rescale })
                 else:
                     qas,bbs = self.makeQuestions(xml_path,rescale)
-                    for qa in qas:#[::20]:
+                    for qa in qas:
                         qa['bb_ids']=None
                         self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':xml_path, 'rescaled':rescale,'qa':[qa]})
 
-        #print('all classes')
-        #print(all_classes)
 
 
 
-
-    def getCropAndLines(self,xmlfile):
+    #Find crop to handwriting area and return text line boxes
+    def getCropAndLines(self,xmlfile,shape):
         W_lines,lines, writer,image_h,image_w = getWordAndLineBoundaries(xmlfile)
         #W_lines is list of lists
         # inner list has ([minY,maxY,minX,maxX],text,id) id=gt for NER
@@ -140,6 +138,7 @@ class IAMNER(QADataset):
             if self.eval_class_before and not self.train:
                 class_after=False
             if (self.eval_full and not self.train) or (self.train and random.random()<0.5):
+                #Full document 
                 q='ner_full>' if class_after else 'ner_full_c1>'
                 corrupt_a=[]
                 a=[]
@@ -161,7 +160,7 @@ class IAMNER(QADataset):
                         #«»       
                         if class_after:
                             if self.short_class:
-                                cls = '['+cls+']'
+                                cls = '['+cls+']' #when doing class after and before, the bracketing is different
                             else:
                                 cls = '[NE:'+cls+']'
                             a.append(word[1]+cls)
@@ -192,7 +191,7 @@ class IAMNER(QADataset):
                 else:
                     self.qaAdd(qas,q,a,None,bbs)
             else:
-                #line
+                #Single line
 
                 for words in W_lines:
                     q='ner_line>' if class_after else 'ner_line_c1>'
@@ -217,15 +216,24 @@ class IAMNER(QADataset):
                         maxY = max(maxY,bY)
                         
                         if class_after:
-                            a.append(word[1]+'[NE:'+cls+']')
+                            if self.short_class:
+                                class_str = '['+cls+']'
+                            else:
+                                class_str = '[NE:'+cls+']'
+                            a.append(word[1]+class_str)
                             if self.use_noise and self.train:
-                                corrupt_a.append(self.corrupt(word[1])+'[NE:'+cls+']')
+                                corrupt_a.append(self.corrupt(word[1])+class_str)
                         else:
-                            a.append('{NE:'+cls+'}'+word[1])
+                            if self.short_class:
+                                class_str = '{'+cls+'}'
+                            else:
+                                class_str = '{NE:'+cls+'}'
+                            a.append(class_str+word[1])
                             if self.use_noise and self.train:
-                                corrupt_a.append('{NE:'+cls+'}'+self.corrupt(word[1]))
+                                corrupt_a.append(class_str+self.corrupt(word[1]))
 
                     if self.train and all_O and random.random()<0.5:
+                        #This has only "Other" (no) class words
                         continue #skip this so we see more instances of Named Entities
 
                     lX=minX
@@ -243,6 +251,7 @@ class IAMNER(QADataset):
                         self.qaAdd(qas,q,a,[len(bbs)],[bb])
                     bbs.append(bb)
         else:
+            #This does it by word, which is quite inefficient. We don't use this
             for words in W_lines:
                 for word in words:
                     cls = self.word_id_to_cls[word[2]]
@@ -265,7 +274,7 @@ class IAMNER(QADataset):
                     bbs.append(bb)
 
             if self.train:
-                #balance by class
+                #balance by class 
                 classes = list(qa_by_class.keys())
                 random.shuffle(classes)
                 for qa_cls in qa_by_class.values():
@@ -291,6 +300,10 @@ class IAMNER(QADataset):
         return bbs, list(range(bbs.shape[0])), None, {}, {}, qas
 
 
+    #Sometimes return a word with a relatively close editdistance
+    #We do this by taking a set of 25000 random words and returning the one with lowest editdistance
+    #This also tries to match the captialization stype of the input word.
+    #Don't corrupt punctuation
     def corrupt(self,word):
         if random.random() < self.use_noise and word!=',' and word!='.' and word!=';' and word!='?' and word!='!' and word!='"' and word!=':' and word!='(' and word!=')':
             first_cap = not word.islower()
@@ -300,7 +313,6 @@ class IAMNER(QADataset):
             best_ed=99999999
             best_sub=None
             start_i=random.randrange(len(self.random_words))
-            #start_t = timeit.default_timer()
             for i in range(25000):
                 sub = self.random_words[(i+start_i)%len(self.random_words)]
                 ed = editdistance.eval(word,sub)
@@ -311,7 +323,6 @@ class IAMNER(QADataset):
                     elif ed<best_ed:
                         best_ed = ed
                         best_sub = sub
-            #print('time: {}'.format(timeit.default_timer()-start_t))
             if all_cap:
                 best_sub = best_sub.upper()
             elif first_cap and len(best_sub)>0:
@@ -322,6 +333,8 @@ class IAMNER(QADataset):
         else:
             return word
 
+    #We substitute words when corrupting and don't want to backprop on their error, but the tokenization of the corrupted text doesn't correspond directly to the token representation of the GT text.
+    #This function returns the mask for all changed tokens (from the the tokenization of having all the correct words)
     def getChangeMask(self,gt,changed):
 		#we'll compute the insertions and deletions in the Levenstein distance betweem the target and input
 		#From there we'll imply which tokens in the target are the same
@@ -372,9 +385,6 @@ class IAMNER(QADataset):
                 
                 dynamic_prog[ii][ti] = possible_paths[0]
         score,loss_mask = dynamic_prog[-1][-1]
-        #for mask,(ii,ti) in zip(loss_mask,path):
-        #    print('{}:{}, {}:{}, {}'.format(ii,gt_ids[0,ii].item(),ti,noise_ids[0,ti].item(),mask))
-        #assert all(m!='bad' for m in loss_mask)
         assert len(loss_mask) == noise_ids.shape[1]
         loss_mask = torch.BoolTensor(loss_mask)[None,:] #tensor and add batch dim
         return loss_mask

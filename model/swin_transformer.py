@@ -1,9 +1,8 @@
- 
+# Modified by Brian Davis
 # --------------------------------------------------------
 # Swin Transformer
-# Copyright (c) 2021 Microsoft
-# Licensed under The MIT License [see LICENSE for details]
 # Written by Ze Liu
+# https://github.com/microsoft/Swin-Transformer/blob/main/models/swin_transformer.py
 # --------------------------------------------------------
 
 import torch
@@ -12,7 +11,6 @@ import torch.utils.checkpoint as checkpoint
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from .net_builder import getGroupSize
 from utils import img_f
-from testtest import PRINT_ATT,ATT_VIS,ATT_VIS_TEXT
 
 
 class Mlp(nn.Module):
@@ -75,6 +73,7 @@ class WindowAttention(nn.Module):
         qk_scale (float | None, optional): Override default qk scale of head_dim ** -0.5 if set
         attn_drop (float, optional): Dropout ratio of attention weight. Default: 0.0
         proj_drop (float, optional): Dropout ratio of output. Default: 0.0
+        sees_docq: Whether this layer cross attends to query tokens
     """
 
     def __init__(self, dim, window_size, num_heads, qkv_bias=True, qk_scale=None, attn_drop=0., proj_drop=0., sees_docq=False):
@@ -105,7 +104,7 @@ class WindowAttention(nn.Module):
 
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         if sees_docq:
-            self.docq_kv = nn.Linear(dim, dim * 2, bias=qkv_bias) #only attends to 
+            self.docq_kv = nn.Linear(dim, dim * 2, bias=qkv_bias) #projects to keys and values (no query)
         else:
             self.docq_kv = None
         self.attn_drop = nn.Dropout(attn_drop)
@@ -119,6 +118,7 @@ class WindowAttention(nn.Module):
         """
         Args:
             x: input features with shape of (num_windows*B, N, C)
+            docq: query tokens
             mask: (0/-inf) mask with shape of (num_windows, Wh*Ww, Wh*Ww) or None
             key_padding_mask: (0/-inf) mask with shape (num_windows*B, N+Ndocq) or None
         """
@@ -145,8 +145,9 @@ class WindowAttention(nn.Module):
         relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
         if self.docq_kv is not None:
             #The relative_position_bias is only shaped for the visual part of attn. We'll just append zeros to padd it to the new size of attn
+            #Perhaps this should have been a learned-constant... oh well
             all_N = N+Nd
-            new_bias = torch.zeros(self.num_heads,N,all_N).to(relative_position_bias.device) #NOT EFFICIENT
+            new_bias = torch.zeros(self.num_heads,N,all_N).to(relative_position_bias.device) #not efficeint
             new_bias[:,:N,:N] = relative_position_bias
             relative_position_bias = new_bias
         else:
@@ -157,7 +158,7 @@ class WindowAttention(nn.Module):
         if mask is not None:
             nW = mask.shape[0]
             if self.docq_kv is not None:
-                new_mask = torch.zeros(nW,N,all_N).to(mask.device) #NOT EFFICIENT
+                new_mask = torch.zeros(nW,N,all_N).to(mask.device) #not efficient
                 new_mask[:,:N,:N] = mask
                 mask = new_mask
             attn = attn.view(B_ // nW, nW, self.num_heads, N, all_N) + mask.unsqueeze(1).unsqueeze(0)
@@ -168,8 +169,6 @@ class WindowAttention(nn.Module):
 
 
         attn = self.softmax(attn)
-        if PRINT_ATT:
-            att = attn.sum(dim=1)/4 #sum along heads
 
         attn = self.attn_drop(attn)
 
@@ -177,8 +176,6 @@ class WindowAttention(nn.Module):
         x = self.proj(x)
         x = self.proj_drop(x)
 
-        if PRINT_ATT:
-            return x, att
         return  x
 
     def extra_repr(self) -> str:
@@ -303,29 +300,7 @@ class SwinTransformerBlock(nn.Module):
         else:
             key_padding_mask = None
 
-        if PRINT_ATT:
-            attn_windows, w_attn = self.attn(x_windows, docq=docq, mask=self.attn_mask, key_padding_mask=key_padding_mask)  # nW*B, window_size*window_size, C
-            from_attn = w_attn.sum(1)/w_attn.size(1)
-            img_attn = from_attn[:,:w_attn.size(1)]
-            text_attn = from_attn[:,w_attn.size(1):]
-
-            img_attn = img_attn.view(-1, self.window_size, self.window_size)
-            shifted_a = window_reverse(img_attn, self.window_size, H, W)  # B H' W' C
-
-            # reverse cyclic shift
-            if self.shift_size > 0:
-                a = torch.roll(shifted_a, shifts=(self.shift_size, self.shift_size), dims=(1, 2))
-            else:
-                a = shifted_a
-            #img_name = 'att/swin_{}x{}.png'.format(a.size(1),a.size(2))
-            #img_f.imwrite(img_name,a[0].cpu().numpy())
-            ATT_VIS.append(a[0,:,:,0].detach().cpu())
-
-            text_att = text_attn.sum(dim=0)/nW
-            ATT_VIS_TEXT.append(text_att)
-            #import pdb;pdb.set_trace()
-        else:
-            attn_windows = self.attn(x_windows, docq=docq, mask=self.attn_mask, key_padding_mask=key_padding_mask)  # nW*B, window_size*window_size, C
+        attn_windows = self.attn(x_windows, docq=docq, mask=self.attn_mask, key_padding_mask=key_padding_mask)  # nW*B, window_size*window_size, C
 
         # merge windows
         attn_windows = attn_windows.view(-1, self.window_size, self.window_size, C)
@@ -349,6 +324,7 @@ class SwinTransformerBlock(nn.Module):
                f"window_size={self.window_size}, shift_size={self.shift_size}, mlp_ratio={self.mlp_ratio}"
 
     def flops(self):
+        print('This probably isnt accurate anymore....')
         flops = 0
         H, W = self.input_resolution
         # norm1
@@ -486,7 +462,7 @@ class BasicLayer(nn.Module):
 
 
 class PatchEmbed(nn.Module):
-    r""" Image to Patch Embedding
+    r""" Image to Patch Embedding (original Swin)
     Args:
         img_size (int): Image size.  Default: 224.
         patch_size (int): Patch token size. Default: 4.
@@ -533,6 +509,7 @@ class PatchEmbed(nn.Module):
 
 class ConvPatchEmbed(nn.Module):
     r""" Image to Patch Embedding, but with more convolutions
+         Used by Dessurt
     Args:
         img_size (int): Image size.  Default: 224.
         patch_size (int): Patch token size. Default: 4.

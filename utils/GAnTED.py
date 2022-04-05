@@ -1,5 +1,4 @@
 from zss import simple_distance, Node
-import editdistance
 import itertools
 import math
 import random
@@ -8,7 +7,9 @@ from multiprocessing import Pool
 #GAnTED metric: Greedy-Aligned normalized Tree Edit Distance
 
 def customEditDistance(pred,gt):
-    #code modified from https://stackoverflow.com/a/19928962/1018830
+    #This permits the wildcard character '¿' and wildcard glob '§' that are pressent in the NAF transcription GT
+
+    #code modified from https://stackoverflow.comdd/a/19928962/1018830
     len_1=len(pred)
 
     len_2=len(gt)
@@ -25,35 +26,18 @@ def customEditDistance(pred,gt):
 
         for j in range(1,len_2+1):
 
-            if pred[i-1]==gt[j-1] or gt[j-1]=='¿' or gt[j-1]=='§':
-                x[i][j] = x[i-1][j-1] 
+            if pred[i-1]==gt[j-1] or gt[j-1]=='¿':
+                x[i][j] = min(x[i-1][j-1], x[i][j-1]+1, x[i-1][j]+1)
 
-            else :
-                x[i][j]= min(x[i][j-1],x[i-1][j],x[i-1][j-1])+1
+            else:
+                x[i][j]= min(x[i][j-1],x[i-1][j],x[i-1][j-1])+(1 if gt[j-1]!='§' else 0)
 
     return x[i][j]
 
-def nestedPermute(getScore,level):
-    best_score = 999999
-    best_perm = None
-    print(math.factorial(len(level[0].children)))
-    for children in itertools.permutations(level[0].children):
-        level[0].children = children
-        if len(level)>1:
-            score = nestedPermute(getScore,level[1:])
-        else:
-            score = getScore()
-
-        if score < best_score:
-            best_score = score
-            best_perm = children
-
-    level[0].children = best_perm
-    return best_score
-
+#Thread function
+#Compute nTED when child is moved to move_to
 def scoreOfLocation(data):
     without,move_to,node_i,node_ni,child,pred,gt,match_thresh = data
-    #init = simple_distance(pred,gt,label_dist=lambda a,b:matchNEditDistance(a,b,match_thresh))
     level = [pred]
     i=0
     while len(level)>0 and i<node_i:
@@ -72,7 +56,7 @@ def scoreOfLocation(data):
 def GAnTED(pred,gt,match_thresh=1,num_processes=1):
     getScore = lambda :simple_distance(pred,gt,label_dist=lambda a,b:matchNEditDistance(a,b,match_thresh))
     best_score = getScore()
-    #print('original score: {}'.format(best_score/simple_distance(gt, Node(''),  label_dist=nEditDistance)))
+
     if num_processes>1:
         pool = Pool(processes=num_processes)
         chunk = 3
@@ -82,9 +66,8 @@ def GAnTED(pred,gt,match_thresh=1,num_processes=1):
     level = [pred]
     i=0
     while len(level)>0:
-        print('level {} has {}'.format(i,len(level)))
+        #print('level {} has {}'.format(i,len(level)))
 
-        #score=nestedPermute(getScore,level)
 
         next_level=[]
         for ni,node in enumerate(level):
@@ -92,11 +75,10 @@ def GAnTED(pred,gt,match_thresh=1,num_processes=1):
             
             original_children=node.children
 
-            #for align_pass in range(num_align_passes):
             did=[]
             child_i=0
             while child_i<len(original_children):
-                print('child {}/{}'.format(child_i,len(original_children)))
+                #print('child {}/{}'.format(child_i,len(original_children)))
                 #permutation_range = range(len(original_children)
                 #TEST tight
 
@@ -139,49 +121,10 @@ def GAnTED(pred,gt,match_thresh=1,num_processes=1):
 
         level = next_level
         i+=1
-    #assert getScore() == best_score
+
     return best_score/simple_distance(gt, Node(''),  label_dist=nEditDistance)
         
 
-def greedyAlign(A,B):
-    scores=[]
-    for a_pos,a_child in enumerate(A.children):
-        for b_pos,b_child in enumerate(B.children):
-            #print('Greedy {}/{}, {}/{}'.format(a_pos,len(A.children),b_pos,len(B.children)))
-            score = nTED(a_child,b_child)
-            scores.append((a_pos,b_pos,score))
-    
-    scores.sort(key=lambda a:a[-1])
-
-    new_a_children=[None]*max(len(A.children),len(B.children))
-    
-    unused_a = set(range(len(A.children)))
-    used_b =set()
-    for a_pos,b_pos,score in scores:
-        if a_pos in unused_a and b_pos not in used_b:
-            if len(A.children)>1 or len(B.children)>1:
-                print('Aligned________')
-                printTree(A.children[a_pos])
-                print('to===============')
-                printTree(B.children[b_pos])
-            new_a_children[b_pos]=A.children[a_pos]
-            unused_a.remove(a_pos)
-            used_b.add(b_pos)
-
-    import pdb;pdb.set_trace()
-
-    #new_a_children has blank placeholders for the B spots that didn't have a match (B had mode children)
-    for a_child,b_child in zip(new_a_children,B.children):
-        if a_child is not None:
-            greedyAlign(a_child,b_child) #recursice. This will get expensive
-
-
-    new_a_children = [child for child in new_a_children if child is not None]
-
-    unused = [A.children[ai] for ai in unused_a]
-    new_a_children += unused
-
-    A.children = new_a_children
 
 def nEditDistance(a,b):
     if a is None:
@@ -190,7 +133,9 @@ def nEditDistance(a,b):
         b=''
     if len(a)==0 and len(b)==0:
         return 0
-    return editdistance.eval(a,b)/(0.5*(len(a)+len(b)))
+    return customEditDistance(a,b)/(0.5*(len(a)+len(b)))
+
+#This has a threshold like ANLS
 def matchNEditDistance(a,b,thresh=0.5):
     if a is None:
         a=''
@@ -198,7 +143,7 @@ def matchNEditDistance(a,b,thresh=0.5):
         b=''
     if len(a)==0 and len(b)==0:
         return 0
-    ned = editdistance.eval(a,b)/(0.5*(len(a)+len(b)))
+    ned = customEditDistance(a,b)/(0.5*(len(a)+len(b)))
     if ned<thresh:
         return ned
     else:
@@ -207,26 +152,20 @@ def matchNEditDistance(a,b,thresh=0.5):
 def nTED(pred,gt):
     empty_tree = Node("") #not sure if there's a better way to define this
     return simple_distance(gt,pred,label_dist=nEditDistance)/simple_distance(gt, empty_tree,label_dist=nEditDistance)
-    #return simple_distance(gt,pred)/simple_distance(gt, empty_tree)
 
-def badGAnTED(pred,gt):
-    #printTree(gt)
-    #print('================')
-    #printTree(pred)
-    greedyAlign(pred,gt)
-    return nTED(pred,gt)
 
 def printTree(node,depth=0):
     print((' '*depth)+node.label)
     for c in node.children:
         printTree(c,depth+1)
 
+#For testing with random orders
 def shuffleTree(node):
     random.shuffle(node.children)
     for c in node.children:
         shuffleTree(c)
 
-
+#Make representing abigious tables easier in tree
 class TableNode(Node):
     def __init__(self,row_headers,col_headers,cells,title=None):
         super().__init__(title if title is not None else "")
@@ -239,8 +178,8 @@ class TableNode(Node):
         self.children = self.row_major.children
 
     def refresh(self):
-        row_major = Node("") #should have class?
-        col_major = Node("") #should have class?
+        row_major = Node("") 
+        col_major = Node("") 
 
         #assumes no double nesting of row/col headers
         r=0
@@ -276,7 +215,6 @@ class TableNode(Node):
         for header in self.col_headers:
             if isinstance(header,str):
                 col = Node(header)
-                #for cell in self.cells[r]:
                 if self.cells is not None:
                     for row in self.cells:
                         col.addkid(Node(row[c]))
@@ -291,7 +229,6 @@ class TableNode(Node):
                 minor_col = Node(super_header)
                 for sub_header in sub_headers:
                     sub_col = Node(sub_header)
-                    #for cell in self.cells[r]:
                     if self.cells is not None:
                         for row in self.cells:
                             col.addkid(Node(row[c]))

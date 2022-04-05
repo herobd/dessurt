@@ -20,7 +20,8 @@ import utils.img_f as img_f
 
 class RecordQA(QADataset):
     """
-    Class for reading forms dataset and creating starting and ending gt
+    Parent class for processing tabular records.
+    Only used by CensusQA
     """
 
 
@@ -46,12 +47,6 @@ class RecordQA(QADataset):
         self.punc_regex = re.compile('[%s]' % re.escape(string.punctuation))
 
     def makeQuestions(self,s,entries,households=None):
-        """
-        Generates N questions from given docuemnt information:
-         - entities: a list of Entity objects
-         - entity_link: a list of (entity_id, entity_id) tuples where its (header,question)/(question,answer)
-         - tables: a list of Table objects
-         """
 
         all_ids=set()
         for entry in entries:
@@ -252,12 +247,6 @@ class RecordQA(QADataset):
 
 
 
-            #return text[start:start+length]
-            #words = re.split(r'[\\ ]',text)
-            #start = random.randrange(len(words))
-            #end=start
-            #ret = 
-            #while True:
         else:
             ret = text
             start = 0
