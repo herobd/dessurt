@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
-from .net_builder import getGroupSize
+from utils.util import getGroupSize
 from utils import img_f
 
 

@@ -234,3 +234,19 @@ def getGroupSize2(channels,goalSize=None):
             bestDist=abs(f-goalSize)
             bestGroup=f
     return int(bestGroup)
+
+def getGroupSize(channels,goalSize=None):
+    if goalSize is None:
+        if channels>=32:
+            goalSize=8
+        else:
+            goalSize=4
+    if channels%goalSize==0:
+        return goalSize
+    factors=primeFactors(channels)
+    bestDist=9999
+    for f in factors:
+        if abs(f-goalSize)<=bestDist: #favor larger
+            bestDist=abs(f-goalSize)
+            bestGroup=f
+    return int(bestGroup)

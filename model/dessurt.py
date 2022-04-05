@@ -6,12 +6,7 @@ import numpy as np
 from model.pos_encode import PositionalEncoding, UniformRealEmbedding,PositiveRealEmbedding, ReturnPositionalEncoding, BartLearnedPositionalEmbedding
 from model.q_transformer_layer import QTransformerLayer
 from model.swin_transformer import ConvPatchEmbed, SwinTransformerBlock, PatchMerging, PatchEmbed
-try:
-    from transformers import DistilBertTokenizer, DistilBertModel, DistilBertConfig
-    from transformers import BartTokenizer, BartModel
-    from transformers import LayoutLMTokenizer, LayoutLMModel
-except:
-    pass
+from transformers import BartTokenizer, BartModel
 from model.special_token_embedder import SpecialTokenEmbedder
 from collections import defaultdict
 from timm.models.layers import trunc_normal_
@@ -20,13 +15,15 @@ from utils.util import calcXYWH
 
 import timeit
 
+#Beam search hyperparameters
 BEAM_END_THRESH=0.05
 TOP_K = 5
 CHECK_ONLY_EVERY=15
 
-class MmSwin(BaseModel):
+#This is Dessurt
+class Dessurt(BaseModel):
     def __init__(self,config):
-        super(MmSwin, self).__init__(config)
+        super(Dessurt, self).__init__(config)
         self.image_size = config['image_size'] #input must be this size
         dropout = 0 if config.get('no_dropout',False) else 0.1
         self.conv_patch_emb = config.get('conv_patch_emb',True) #set to False to use original Swin embedding
