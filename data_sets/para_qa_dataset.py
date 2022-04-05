@@ -146,7 +146,12 @@ class ParaQADataset(QADataset):
 
         self.max_q_tokens = config.get('max_q_tokens',20)
         self.max_a_tokens = config.get('max_a_tokens',800)
-        self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART') #needed fpr correct read-on
+
+        if os.path.exists('./cache_huggingface/BART'):
+            model_id = './cache_huggingface/BART'
+        else:
+            model_id = 'facebook/bart-base'
+        self.tokenizer = BartTokenizer.from_pretrained(model_id) #needed for correct read-on
 
 
         self.punc_regex = re.compile('[%s]' % re.escape(string.punctuation))

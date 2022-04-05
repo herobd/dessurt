@@ -64,19 +64,24 @@ class Donut(BaseModel):
 
         token_type = config.get('token_type','word')
 
+        if os.path.exists('./cache_huggingface/BART'):
+            model_id = './cache_huggingface/BART'
+        else:
+            model_id = 'facebook/bart-base'
+
         if token_type == 'char':
             self.tokenizer = CharacterTokenizer()
             self.SEP_TOKEN=self.tokenizer.SEP_index
             self.CLS_TOKEN=self.tokenizer.CLS_index
         elif token_type == 'word':
             if init_from_pretrained=='bart':
-                self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
+                self.tokenizer = BartTokenizer.from_pretrained(model_id)
                 self.SEP_TOKEN= 2
                 self.CLS_TOKEN= 0
-            else:
-                self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-                self.SEP_TOKEN= 102
-                self.CLS_TOKEN= 101
+            #else:
+            #    self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+            #    self.SEP_TOKEN= 102
+            #    self.CLS_TOKEN= 101
         elif token_type == 'bp':
             self.tokenizer = BytePairTokenizer()
             self.SEP_TOKEN=self.tokenizer.SEP_index
@@ -84,10 +89,11 @@ class Donut(BaseModel):
 
 
         if init_from_pretrained=='distilbert':
-            init_model = DistilBertModel.from_pretrained('distilbert-base-uncased')
-            init_emb = init_model.embeddings.word_embeddings
+            assert False
+            #init_model = DistilBertModel.from_pretrained('distilbert-base-uncased')
+            #init_emb = init_model.embeddings.word_embeddings
         elif init_from_pretrained=='bart':
-            init_model = BartModel.from_pretrained('./cache_huggingface/BART')
+            init_model = BartModel.from_pretrained(model_id)
             init_emb = init_model.shared
         else:
             init_model = None

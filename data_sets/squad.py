@@ -18,6 +18,9 @@ import utils.img_f as img_f
 class SQuAD(QADataset):
     """
     Class for rendering SQuAD to images
+    This is not HW-SQuAD, but my own varient. 
+    It just renders the context text like is done for Synthetic Wikipedia (SynthParaQA)
+    I was going to pretrain on this for DocVQA, but found it wasn't needed.
     """
 
 
@@ -38,9 +41,12 @@ class SQuAD(QADataset):
         if self.train:
             json_path = os.path.join(dirPath,'train-v2.0.json')
         else:
+            #I don't have the test set implemented as I was just pre-training
             json_path = os.path.join(dirPath,'dev-v2.0.json')
         with open(json_path) as f:
             data = json.load(f)['data']
+
+        assert split!='test'
         
         
 

@@ -18,7 +18,7 @@ from transformers import BartTokenizer
 
 logging.basicConfig(level=logging.INFO, format='')
 
-##
+############
 #This script will run evaluation of all of the datasets except FUNSD and NAF, which have their own special scripts
 #
 #It takes the training snapshot (weights) and dataset, and computes the validation (or test) metrics for that dataset
@@ -138,8 +138,7 @@ def main(resume,data_set_name,gpu=None,  config=None, addToConfig=None, test=Fal
             if (add[-2]=='useDetections' or add[-2]=='useDetect') and value!='gt':
                 addDATASET=True
 
-        
-    #config['data_loader']['batch_size']=math.ceil(config['data_loader']['batch_size']/2)
+    #Set up the dataset   
     image_h,image_w = config['model']['image_size']
     if data_set_name is None:
         data_set_name = config['data_loader']['data_set_name']
@@ -416,13 +415,6 @@ def main(resume,data_set_name,gpu=None,  config=None, addToConfig=None, test=Fal
         valid_data_loader = data_loader
 
 
-    #if checkpoint is not None:
-    #    if 'state_dict' in checkpoint:
-    #        model = eval(config['arch'])(config['model'])
-    #        model.load_state_dict(checkpoint['state_dict'])
-    #    else:
-    #        model = checkpoint['model']
-    #else:
     model = eval(config['arch'])(config['model'])
     model.eval()
     if verbose==2:
@@ -451,8 +443,6 @@ def main(resume,data_set_name,gpu=None,  config=None, addToConfig=None, test=Fal
         for instance in valid_data_loader:
             if verbose:
                 print('batch index: {}/{}'.format(index,len(valid_data_loader)),end='\r')
-            #elif data_set_name=='RVL' and index%1000==0:
-            #    print('batch index: {}/{}'.format(index,len(valid_data_loader)))
 
             #Run model on data instance
             _,res,out = trainer.run(instance,valid=True,run=run,get=get)
@@ -477,8 +467,6 @@ def main(resume,data_set_name,gpu=None,  config=None, addToConfig=None, test=Fal
                 with open('sroie_results{}/{}.txt'.format(run if type(run) is str else '',name),'w') as f:
                     json.dump(data,f)
             elif data_set_name=='IAMQA':
-                #CER: 0.2710194841164712,  WER: 0.40655598126862497 with second call
-                #CER: 0.27773897545820186,  WER: 0.4087 without
                 gts.append(out['gt'])
                 init_len = len(out['pred'])
                 fixed = derepeat(out['pred'])

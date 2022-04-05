@@ -16,7 +16,7 @@ import utils.img_f as img_f
 
 class CensusQA(RecordQA):
     """
-    For 1930 census from FamilySearch
+    For 1930 census data provided by FamilySearch
     """
 
 
@@ -84,10 +84,6 @@ class CensusQA(RecordQA):
             else:
                 splitFile = 'train_valid_test_split.json'
             with open(os.path.join(dirPath,splitFile)) as f:
-                #if split=='valid' or split=='validation':
-                #    trainTest='train'
-                #else:
-                #    trainTest=split
                 readFile = json.loads(f.read())
                 if split in readFile:
                     instances = readFile[split]
@@ -105,26 +101,6 @@ class CensusQA(RecordQA):
             if not self.train:
                 imagesAndAnn = imagesAndAnn[::2]
             for imageName,imagePath,jsonPath in imagesAndAnn:
-                #if os.path.exists(jsonPath):
-                #    org_path = imagePath
-                #    if self.cache_resized:
-                #        path = os.path.join(self.cache_path,imageName+'.png')
-                #    else:
-                #        path = org_path
-
-                #    rescale=1.0
-                #    if self.cache_resized:
-                #        rescale = self.rescale_range[1]
-                #        if not os.path.exists(path):
-                #            org_img = img_f.imread(org_path)
-                #            if org_img is None:
-                #                print('WARNING, could not read {}'.format(org_img))
-                #                continue
-                #            resized = img_f.resize(org_img,(0,0),
-                #                    fx=self.rescale_range[1], 
-                #                    fy=self.rescale_range[1], 
-                #                    )
-                #            img_f.imwrite(path,resized)
                 path=imagePath
                 rescale=1
                 if self.train:
@@ -133,25 +109,18 @@ class CensusQA(RecordQA):
                     with open(jsonPath) as f:
                         data = json.load(f)
                     _,_,_,_,_,qa = self.parseAnn(data,rescale)
-                    #qa = self.makeQuestions(rescale,entries))
                     for _qa in qa:
                         _qa['bb_ids']=None
                         self.images.append({'id':imageName, 'imageName':imageName, 'imagePath':path, 'annotationPath':jsonPath, 'rescaled':rescale, 'qa':[_qa]})
 
 
-                #else:
-                #    print('{} does not exist'.format(jsonPath))
-                #    print('No json found for {}'.format(imagePath))
-                #    #exit(1)
 
 
     def parseAnn(self,data,s):
         if isinstance(data,dict):
-            #print('recognition here!')
             recognition = data['recognition'] if self.use_recognition else None
             data = data['indexed']
         else:
-            #print('no recog')
             recognition = None
 
         data = data[:self.max_records]
@@ -161,19 +130,6 @@ class CensusQA(RecordQA):
             data = data[::10]
             #This allows us to cover more variety in handwriting than just making the validation set smaller
 
-        #entries =[
-        #        {
-        #            'line no.': entry['LINE_NBR'],
-        #            'household': entry['HOUSEHOLD_ID'],
-        #            'name': entry['PR_NAME'],
-        #            'previous': entry['PR_PREV_RESIDENCE_PLACE'] if 'PR_PREV_RESIDENCE_PLACE' in entry else None,
-        #            'race': entry['PR_RACE_OR_COLOR'],
-        #            'relationship': entry['PR_RELATIONSHIP_TO_HEAD'],
-        #            'sex': entry['PR_SEX_CODE'],
-        #            'given name': entry['PR_NAME_GN'],
-        #            'age': entry['PR_AGE'],
-        #            'birthplace': entry['PR_BIRTH_PLACE']
-        #            } for entry in data]
         entries = [ {key:entry[self.name_to_id[key]] if self.name_to_id[key] in entry else None for key in self.all_fields} for entry in data]
         qa = self.makeQuestions(s,entries)
         
@@ -190,7 +146,6 @@ class CensusQA(RecordQA):
                 blX,blY = r['bl']
                 #rescale
                 tlX,tlY,trX,trY,brX,brY,blX,blY = [s*v for v in [tlX,tlY,trX,trY,brX,brY,blX,blY]]
-                #lX,lY, rX,rY,width,height,rot = calcXYWH(tlX,tlY,trX,trY,brX,brY,blX,blY)
                 lX = (tlX+blX)/2
                 lY = (tlY+blY)/2
                 rX = (trX+brX)/2

@@ -9,29 +9,14 @@ import numpy as np
 from utils import img_f
 import argparse
 
-def threadFunction(self,nums):
-    #check all locks can be opened
-    bad_locks=[]
-    for i in nums:
-        try:
-            with self.locks[i]:
-                pass
-        except FileLockException:
-            bad_locks.append(i)
 
-    #delete bad locks and re-generate these first
-    for i in bad_locks:
-        os.system('rm {}'.format(os.path.join(self.dir_paths[i],'*'))) #clear it out INCLUDING THE LOCK
-        self.generate(i)
-    #start iterating inifinitely
-    while True:
-        did =0
-        for i in nums:
-            did += self.generateSave(i)
-        if did/len(nums) < 0.2: #if we refreshed less than 20% of the data
-            time.sleep(60*30) #wait 30 minutes before contining
-        #print('{} finished gen pass'.format(nums))
 
+
+#This class is used to generate the text (using synthetic_text_gen)
+#It originally was going to be a daemon, constantly running in the background making new word images for the datasets to read in, but I realized the generation was fast enough that having the datasets multithreaded would probably be good enough.
+#I only used in as an object to be called. The daemon functionality is not fully implemented (and none of my datasets have the interface to use the daemon data)
+
+#Default arguments for non-daemon functionality
 class GenDaemon:
     def __init__(self,font_dir,out_dir=None,num_held=0,simple=False,no_wiki=False,clear_fonts=False):
         self.gen = SyntheticWord(font_dir,clear=clear_fonts)
@@ -87,13 +72,16 @@ class GenDaemon:
 
         return did
 
+    #With default arguments, samples a wikipedia article and generates the word images
+    #Can also provide the text, which will be split along spaces and those word images generated.
+    #It returns a list of (text,image) pairs
+    #Can also return font for reuse (generate multiple things with same font)
     def generate(self,text=None,font=None,ret_font=False,used=None):
         if text is None:
             words = self.getTextSample()
         else:
             words = text.split(' ')
-        #text = re.sub(r'\s+',' ',text) #replace all whitespace with space
-        #words = text.split(' ')
+
         if font is None:
             font,font_name,fontN,fontN_name = self.gen.getFont()
             if used is not None:
@@ -142,84 +130,9 @@ class GenDaemon:
             assert text is None
             return self.generate()
 
-    def generateLabelValuePairs(self,number):
-        pairs=[]
-        while len(pairs)<number:
-            paras = getWikiArticle(True,self.wiki_dataset)
 
-            lengths = [(i,len(p)) for i,p in enumerate(paras)]
-            lengths.sort(key=lambda a:a[1])
-
-            used=set()
-        
-            for p_i,length in lengths:
-                if p_i in used or p_i+1 in used:
-                    #print('already used')
-                    break
-                if p_i<len(paras)-1:
-                    label = paras[p_i]
-                    if label.count(' ')>6:
-                        #print('rejected label: '+label)
-                        continue
-                    value = paras[p_i+1]
-                    if len(value)==0 or len(label)==0:
-                        continue
-
-                    used.add(p_i)
-                    used.add(p_i+1)
-
-                    font,font_name,fontN,fontN_name = self.gen.getFont()
-                    if random.random()<0.5: #sometimes use same font
-                        fontv=font
-                        fontNv=fontN
-                    else:
-                        fontv,fontv_name,fontNv,fontNv_name = self.gen.getFont()
-
-
-                    if label[-1] != ':' and label[-1] != '=' and label[-1] != '>':
-                        if random.random()<0.1:
-                            label+=':'
-                        elif random.random()<0.01:
-                            if random.random()<0.5:
-                                label+='='
-                            else:
-                                label+='>'
-
-                    #get just first line of value
-                    value = value.split('\n')[0]
-                    value=re.sub(r'\s+',r' ',value)
-
-                    pairs.append((label,font,fontN,value,fontv,fontNv))
-                    if len(pairs)>=number:
-                        break
-                    #print(label)
-                    #print('----')
-                    #print(value)
-                    #print('---=================')
-
-        out_pairs = []
-        for label,font,fontN,value,fontv,fontNv in pairs:
-            out_label = []
-            for word in label.split(' '):
-                img,word = self.genImageForWord(word,font,fontN)
-                if img is not None:
-                    out_label.append((word,255-img))
-
-            out_value = []
-            for word in value.split(' '):
-                img,word = self.genImageForWord(word,fontv,fontNv)
-                if img is not None:
-                    out_value.append((word,255-img))
-
-            if len(out_label)>0 and len(out_value)>0:
-                out_pairs.append((out_label,out_value))
-
-        if len(out_pairs)>0:
-            return out_pairs
-        else:
-            return self.generateLabelValuePairs(number)
-
-
+    #used by generate()
+    #Sometimes generation fails due to weird font/character combination, this will try to regenerate a word image.
     def genImageForWord(self,word,font,fontN,font_name=None,fontN_name=None):
         if re.search(r'\d',word):
             _font = fontN
@@ -240,12 +153,9 @@ class GenDaemon:
                 img,word_new = self.gen.getRenderedText(font2,word)
 
             if img is None:
-                #print('no image for word: {}'.format(word))
                 return None,None
         
         img = (img*255).astype(np.uint8)
-        #if _font_name is not None:
-        #    print('generated "{}" with [{}]'.format(word_new,_font_name))
         return img,word_new
 
     def getBrackets(self,font,paren):
@@ -253,6 +163,7 @@ class GenDaemon:
         o,c = self.gen.getBrackets(font,paren)
         return 255*o,255*c
 
+    #get a wikipedia article split into words
     def getTextSample(self):
         if self.simple:
             words = []
@@ -284,16 +195,9 @@ class GenDaemon:
         para=re.sub(r' +',r' ',para)
         para=re.sub(r' ?\n ?',r'\n ',para)
 
-        #text = re.sub('r\s+',' ',text) #normalize whitespace
         para = para.strip()
-        #print('++++++\n'+para+'\n++++++++++')
         words = para.split(' ') #this includes newlines!
 
-        #if len(words)<=num_words:
-        #    return words
-        #else:
-        #    start_w = random.randrange(len(words)-num_words)
-        #    return words[start_w:start_w+num_words]
         #Don't know why empty words happens, but remove them
         words = [w for w in words if len(w)>0]
         return words
@@ -315,6 +219,30 @@ class GenDaemon:
         nums = range(start_n,self.num_held)
         threadFunction(self,nums)
 
+#Thread job when running as daemon
+def threadFunction(self,nums):
+    #check all locks can be opened
+    bad_locks=[]
+    for i in nums:
+        try:
+            with self.locks[i]:
+                pass
+        except FileLockException:
+            bad_locks.append(i)
+
+    #delete bad locks and re-generate these first
+    for i in bad_locks:
+        os.system('rm {}'.format(os.path.join(self.dir_paths[i],'*'))) #clear it out INCLUDING THE LOCK
+        self.generate(i)
+    #start iterating inifinitely
+    while True:
+        did =0
+        for i in nums:
+            did += self.generateSave(i)
+        if did/len(nums) < 0.2: #if we refreshed less than 20% of the data
+            time.sleep(60*30) #wait 30 minutes before contining
+
+#Run as daemon
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='run GenDaemon to continuously generate word images from wikipedia (en) text')
     parser.add_argument('-f', '--font_dir', type=str, help='directory containing fonts')
@@ -327,3 +255,5 @@ if __name__ == '__main__':
 
     daemon = GenDaemon(args.font_dir,args.out_dir,args.num_held)
     daemon.run(args.num_threads)
+
+

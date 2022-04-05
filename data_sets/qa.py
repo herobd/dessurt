@@ -60,6 +60,7 @@ def getMask(shape,boxes):
 
 #Parent class of almost all datasets used by Dessurt
 #It defines the augmentation and prepares the data (masks and such)
+#Dessurt works with a query input and respose, or Question and Answer
 class QADataset(torch.utils.data.Dataset):
 
 
