@@ -11,7 +11,6 @@ from model.special_token_embedder import SpecialTokenEmbedder
 from collections import defaultdict
 from timm.models.layers import trunc_normal_
 import math, random
-from utils.util import calcXYWH
 
 import timeit
 

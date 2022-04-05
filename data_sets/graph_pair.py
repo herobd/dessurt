@@ -1,9 +1,6 @@
 import torch.utils.data
 import numpy as np
 import json
-#from skimage import io
-#from skimage import draw
-#import skimage.transform as sktransform
 import os
 import math, random
 from utils.crop_transform import CropBoxTransform

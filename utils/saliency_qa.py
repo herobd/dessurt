@@ -26,25 +26,17 @@ from utils import img_f
 from utils.gpu import get_gpu_memory_map
 
 from evaluators.draw_graph import getCorners
-from utils.bb_merging import TextLine
 from collections import defaultdict
 import json
 
 def getBounds(bbs):
-    if type(bbs[0]) is TextLine:
-        bounds=[]
-        for bb in bbs:
-            bounds.append(bb.boundingRect())
-        bounds = np.array(bounds)
-        return bounds[:,0].min(), bounds[:,2].max(), bounds[:,1].min(), bounds[:,3].max()
-    else:
-        xs=[]
-        ys=[]
-        for bb in bbs:
-            x,y = zip(*getCorners(bb))
-            xs+=x
-            ys+=y
-        return min(xs), max(xs), min(ys), max(ys)
+    xs=[]
+    ys=[]
+    for bb in bbs:
+        x,y = zip(*getCorners(bb))
+        xs+=x
+        ys+=y
+    return min(xs), max(xs), min(ys), max(ys)
 def _postProcessGrad(input, eps=1e-6):
     # Absolute value
     input = abs(input)
