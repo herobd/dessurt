@@ -104,7 +104,7 @@ cf['trainer']['monitor']='val_E_ANLS'
 
 #set drop in LR
 cf['trainer']["use_learning_schedule"]= "multi_rise then ramp_to_lower"
-cf['trainer']["lr_down_start"]= 200000
+cf['trainer']["lr_down_start"]= 300000
 cf['trainer']["ramp_down_steps"]= 10000
 cf['trainer']["lr_mul"]= 0.1
 
