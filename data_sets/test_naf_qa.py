@@ -43,7 +43,7 @@ def display(data):
                 a=a[:-1]
                 a = json.loads(a)
                 a = json.dumps(a,ensure_ascii=False,indent=3)+'‡'
-            print(q+' : '+a)
+            #print(q+' : '+a)
 
         #widths.append(img.size(1))
         draw = False

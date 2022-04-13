@@ -125,7 +125,7 @@ class IAMNER(QADataset):
         #W_lines is list of lists
         # inner list has ([minY,maxY,minX,maxX],text,id) id=gt for NER
         if self.current_crop is None:
-            self.getCropAndLines(xmlfile)
+            self.getCropAndLines(xmlfile,(image_h,image_w))
         crop_x,crop_y = self.current_crop
         self.current_crop = None
         qa_by_class = defaultdict(list)

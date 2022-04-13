@@ -23,6 +23,8 @@ import numpy as np
 def parseDict(obj):
     if isinstance(obj, str):
         return [Node(obj)],[]
+    elif isinstance(obj,int) or isinstance(obj,float):
+        return [Node(str(obj))],[]
     elif isinstance(obj, list):
         to_ret=[]
         all_tables=[]

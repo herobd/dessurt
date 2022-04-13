@@ -27,7 +27,8 @@ from .iam_mixed import IAMMixed
 from .synth_hw_qa import SynthHWQA
 from .test_qa import TestQA
 
-
+#This handles balancing multiple datasets in training.
+#All the dataset definitions are given to this and it creates all the datasets
 
 class MultipleDataset(Dataset):
     def __init__(self, dirPath, split, config):
@@ -51,12 +52,10 @@ class MultipleDataset(Dataset):
         for f in frequencies[1:]:
             self.d_ranges.append(f+self.d_ranges[-1])
 
-        #if self.train:
         self.lens = [len(d) for d in self.data_sets]
-        #else:
-        #    self.lens = [min(len(d) for d in self.data_sets)]*len(self.datasets)
 
         if self.train:
+            #We track which instances haven;t been used to have closer to sampling-without-replacment
             self.orders=[]
             for dataset in self.data_sets:
                 dataset_len = len(dataset)
@@ -74,21 +73,19 @@ class MultipleDataset(Dataset):
             return sum(self.lens)
 
     def __getitem__(self, idx):
-        #import pdb;pdb.set_trace()
         if self.train:
             choice = random.random()
             dataset_i=0
             while choice>self.d_ranges[dataset_i]:
                 dataset_i+=1
 
-            
-
 
             if len(self.orders[dataset_i])==0:
+                #Reset this dataset
                 dataset_len = len(self.data_sets[dataset_i])
                 self.orders[dataset_i]=random.sample(range(dataset_len),k=dataset_len)
+
             index = self.orders[dataset_i].pop()
-            #index = random.randrange(0,self.lens[dataset_i])
             ret = self.data_sets[dataset_i][index]
             if ret is None:
                 return self.__getitem__(idx)
