@@ -976,7 +976,7 @@ def parseDict(header,entities,links):
 
 
 
-def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,test=False,draw=False,max_qa_len=None,quiet=False,BROS=False,ENTITY_MATCH_THRESH=0.6,LINK_MATCH_THRESH=0.6,DEBUG=False,beam_search=False,write=False):
+def main(resume,config,addToConfig,gpu=False,do_pad=False,test=False,draw=False,max_qa_len=None,quiet=False,BROS=False,ENTITY_MATCH_THRESH=0.6,LINK_MATCH_THRESH=0.6,DEBUG=False,beam_search=False,write=False):
     TRUER=True #False makes this do pair-first alignment, which is kind of cheating
     np.random.seed(1234)
     torch.manual_seed(1234)
@@ -1718,8 +1718,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='run QA model on image(s)')
     parser.add_argument('-c', '--checkpoint', default=None, type=str,
                         help='path to latest checkpoint (default: None)')
-    parser.add_argument('-i', '--image',default=None, type=str,
-            help='path to image (default: prompt)')
     parser.add_argument('-g', '--gpu', default=None, type=int,
                         help='gpu number (default: cpu only)')
     parser.add_argument('-p', '--pad', default=None, type=str,
@@ -1764,6 +1762,6 @@ if __name__ == '__main__':
         exit()
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw, quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH,DEBUG=args.DEBUG,beam_search=args.beam_search,write=args.write)
+            main(args.checkpoint,args.config,addtoconfig,True,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw, quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH,DEBUG=args.DEBUG,beam_search=args.beam_search,write=args.write)
     else:
-        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw,quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH,DEBUG=args.DEBUG,beam_search=args.beam_search,write=args.write)
+        main(args.checkpoint,args.config, addtoconfig,do_pad=args.pad,test=args.test,max_qa_len=args.max_qa_len, draw=args.draw,quiet=args.quiet,BROS=args.BROS,ENTITY_MATCH_THRESH=args.ENTITY_MATCH_THRESH,LINK_MATCH_THRESH=args.LINK_MATCH_THRESH,DEBUG=args.DEBUG,beam_search=args.beam_search,write=args.write)

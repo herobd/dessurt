@@ -24,10 +24,10 @@ except:
     pass
 
 
-def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do_saliency=False,overwrite_char_prob=False):
+def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do_saliency=False):
     np.random.seed(1234)
     torch.manual_seed(1234)
-    no_mask_qs = ['fli:','fna:','re~','l~','v~', 'mm~','mk>','natrual_q~','json>','json~']
+    no_mask_qs = ['fli:','fna:','re~','l~','v~', 'mm~','mk>','natrual_q~','json>','json~','linkdown-text~', 'read_block>']
     remove_qs = ['rm>','mlm>','mm~','mk>']
     if resume is not None:
         checkpoint = torch.load(resume, map_location=lambda storage, location: storage)
@@ -146,7 +146,6 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do
 
 
     model.eval()
-    model.overwrite_char_prob=overwrite_char_prob
     if gpu:
         model = model.cuda()
 
@@ -316,8 +315,6 @@ if __name__ == '__main__':
                         help='Arbitrary key-value pairs to add to config of the form "k1=v1,k2=v2,...kn=vn".  You can nest keys with k1=k2=k3=v')
     parser.add_argument('-S', '--saliency', default=False, action='store_const', const=True,
                         help='Run to get saliency map')
-    parser.add_argument('-n', '--no_prob', default=False, action='store_const', const=True,
-                        help='Run to get saliency map')
 
     args = parser.parse_args()
 
@@ -334,6 +331,6 @@ if __name__ == '__main__':
         exit()
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,scale=args.scale,do_saliency=args.saliency,overwrite_char_prob=args.no_prob)
+            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,scale=args.scale,do_saliency=args.saliency)
     else:
-        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,scale=args.scale,do_saliency=args.saliency,overwrite_char_prob=args.no_prob)
+        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,scale=args.scale,do_saliency=args.saliency,

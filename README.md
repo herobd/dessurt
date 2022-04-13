@@ -1,65 +1,20 @@
-# Brian's PhD code
+# Dessurt: *D*ocument *e*nd-to-end *s*elf-*s*upervised *u*nderstanding and *r*ecognition *t*ransformer
 
-This is the code I've developed over the course of my PhD. It is very messy and I'd personally recommend looking at the repositories for my papers. However, this respositry does have unpublished methods.
+This is the code for End-to-end Document Recognition and Understanding with Dessurt (https://arxiv.org/abs/2203.16618).
 
-This code is free to use for non-commericial purposes. Contact me if commericialization is desired.
+"We introduce Dessurt, a relatively simple document understanding transformer capable of being fine-tuned on a greater variety of document tasks than prior methods. It receives a document image and task string as input and generates arbitrary text autoregressively as output. Because Dessurt is an end-to-end architecture that performs text recognition in addition to the document understanding, it does not require an external recognition model as prior methods do, making it easier to fine-tune to new visual domains. We show that this model is effective at 9 different dataset-task combinations."
 
 ## Requirements
 * Python 3.x 
-* PyTorch 1.0+ (Do 1.8.2 with CUDA 11.1 for supercomputer), before scikit-image
+* PyTorch 1.0+ 
 * scikit-image
 * shapely
-Don't use conda for the following libraries:
-* huggingface transformers
-* huggingface datasets
+* (huggingface) transformers
+* (huggingface) datasets
 * timm
 * editdistance
-* zss (for GAnTED)
 * einops
-
-Actually it's kind of important to do it in this order:
-
-
-
-
-
-If doing FUDGE stuff:
-`pytorch-geometric`: https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html
-
-not all of these used anymore
-`pip install gensim bpemb`
-
-
-for cvxpy (optimization, not used now), you must have python 3.7 or later:
-pip install cvxpy
-
-or
-
-clone github: https://github.com/cvxgrp/cvxpy
-
-`python setup.py install` in the cvxpy repo
-
-
-
-
-### Evaluating
-
-#### FUDGE
-
-If you want to run on GPU, add `-g #`, where `#` is the GPU number.
-
-Remove the `-T` flag to run on the validation set.
-
-
-Detection, full set: `python eval.py -c saved/detector/checkpoint-iteration150000.pth -n 0 -T`
-
-Detection, pairing set: `python eval.py -c saved/detector/checkpoint-iteration150000.pth -n 0 -T -a data_loader=special_dataset=simple`
-
-Pairing, no optimization: `python eval.py -c saved/pairing/checkpoint-iteration125000.pth -n 0 -T`
-`
-
-Pairing, with optimization: `python eval.py -c saved/pairing/checkpoint-iteration125000.pth -n 0 -T -a optimize=true`
-
+* zss (for GAnTED)
 
 
 ## Usage
@@ -72,45 +27,41 @@ The usage is: `python train.py -c CONFIG.json`  (see below for example config fi
 
 A training session can be resumed with: `python train.py -r CHECKPOINT.pth`
 
-If you want to override the config file on a resume, just use the `-c` flag and be sure it has `"override": true`
+If you want to override the config file on a resume, just use the `-c` flag as well and be sure the config has `"override": true`
 
 
-### new_eval.py
-
-This script runs a trained model (from a snapshot) through the dataset and prints its scores. It is also used to save images with the predictions on them.
-
-Usage:  `python eval.py -c CHECKPOINT.pth -f OVERRIDE_CONFIG.pth -g (gpu number) -n (number of images to save) -d (directory to save images) -T
-
-The only flags required is `-c` or `-f`.
-
-If `-T` is ommited it will run on the validation set instead of the test set.
-
-There is an additional `-a` flag which allows overwriting of specific values of the config file using this format `key1=nestedkey=value,key2=value`. It also allows setting these special options (which are part of config):
-
-Evaluating detector:
-* `-a pretty=true`: Makes printed pictured cleaner (less details)
-* `-a save_json=path/to/dir`: Save the detection results as jsons matching the dataset format.
-* `-a THRESH=[float]`: Modify the threshold for displaying and precision/recall calculations. Default is 0.92
-
-Evaluatring pairing:
-* `-a useDetect=[gt,path]`:  Whether to use GT detections (`gt`) or can be directory with jsons with saved detections.
-* `-a rule=[closest,icdar]`: Use a rule (nearest or scoring functions) to do pairing (instead of model).
-* `-a optimize=[true,gt]`: Use optimization. If `gt` specified it will use the GT number of neighbors.
-* `-a penalty=[float]`: The variable *c* in Equation 1. Default is 0.25
-* `-a THRESH=[float]`: Modify the thresh for calculating prec/recall for relationships. Also is *T* in Equation 1. Default is 0.7
-* `-a sweep_threshold=true`: Run metrics using a range of thresholds
-* `-a draw_thresh=[float]`: Seperate threshold for which relationships get saved in images.
-* `-a confThresh=[float]`: Threshold used for detections.
-* `-a pretty=[true,light,clean]`: Different ways of displaying the results.
 
 ### qa_eval.py
 
 For evaluating Dessurt on datasets other than FUNSD and NAF.
 It takes many of the same arguments as new_eval.py, but also requires the (different) '-d' argument specifying the dataset (so you can easily evaluate a model on dataset it wasn't trained on). However, this has no drawing capabilities (hence the '-d' is different).
 
-Usage: `python qa_eval.py -c CHECKPOINT.pth -d DATASETNAME -g GPU#  -T (do test set) -a THINGSTOADD
+Usage: `python qa_eval.py -c CHECKPOINT.pth -d DATASETNAME [-g GPU#]  [-T (do test set)] [-a THINGSTOADD]
 
-### 
+### funsd_eval_json.python and naf_eval_json.py
+
+For evaluating Dessurt on FUNSD and NAF respectively. The have the same arguments.
+
+Usage: `python funsd_eval_json.py -c CHECKPOINT.pth [-g GPU#] [-w out.json (write output jsons)] [-E 0.6 (entity string match threshold)] [-L 0.6 (linking string match threshold)] [-b # (beam search with # beams)]
+
+### run.py
+
+This allows an interactive running of Dessurt.
+
+Usage: `python run.py -c CHECKPOINT.pth [-i image/path(default ask for path)] [-g gpu#] [-a add=or,change=things=in,config=v] [-S (get saliency map)]`
+
+It will prompt you for the image path (if not provided) and for the queries. Here are some helpful task tokens (start of query). Tokens always end with "~" or ">":
+* Read On: `re~text to start from`
+* Read Highlighted: `w0>`
+* Read page: `read_block>`, you can also use `read_block0>` if you want to provide the highlight
+* Text Infilling: `mlm>`
+* Word Infilling: `mk>`
+* Natural language question: `natural_q~question text`
+* Parse to JSON: `json>`
+* Parse to JSON, starting from: `json~JSON": "to start from"}`
+* Link down/up (just replace "down" with "up"):  `linkdown-both~text of element` or `linkdown-box~` or `linkdown-text~text of element`
+
+
 
 ## File Structure
   ```
