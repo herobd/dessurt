@@ -277,7 +277,12 @@ class FormQA(QADataset):
 
         self.max_q_tokens = config.get('max_q_tokens',20)
         self.max_a_tokens = config.get('max_a_tokens',800)
-        self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
+
+        if os.path.exists('./cache_huggingface/BART'):
+            model_id = './cache_huggingface/BART'
+        else:
+            model_id = 'facebook/bart-base'
+        self.tokenizer = BartTokenizer.from_pretrained(model_id)
 
         #self.corruption_p = config['text_corruption'] if 'text_corruption' in config else 0.15
         #self.do_words = config['do_words']

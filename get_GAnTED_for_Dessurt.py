@@ -15,6 +15,11 @@ from utils.GAnTED import FormNode as Node
 import numpy as np
 
 
+#This script calculates nTED and GAnTED on the output of Dessurt on FUNSD and NAF
+#For NAF, this can take a few hours
+
+
+#Take a JSON object and parse it into a node for the tree (recursive, so all belore nodes are obtained as well)
 def parseDict(obj):
     if isinstance(obj, str):
         return [Node(obj)],[]
@@ -26,6 +31,7 @@ def parseDict(obj):
             to_ret+=ret
             all_tables+=tab
         return to_ret,all_tables
+
     my_children=[]
     is_table=False
     row_headers = None
@@ -153,6 +159,7 @@ def parseDict(obj):
 
     return to_ret,all_tables
 
+#Try different permutations of row/col major ordering at this level (and all lower levels recursively)
 def getScore(scorer,pred,gt,tables):
     if len(tables) == 0:
         return [scorer(pred,gt)]
@@ -162,6 +169,7 @@ def getScore(scorer,pred,gt,tables):
     tables[0].set_row_major(False)
     ret += getScore(scorer,pred,gt,tables[1:])
     return ret
+
 
 def main(predictions,data_set_name,test=False,match_thresh=1,twice=False,shuffle=False,parallel=1):
 
@@ -211,7 +219,7 @@ def main(predictions,data_set_name,test=False,match_thresh=1,twice=False,shuffle
         predictions = json.load(f)
     
 
-
+    #Becuase this takes so long, keep a log file so it can be resumed
     try:
         with open(progress_file) as f:
             already_done = json.load(f)
@@ -233,7 +241,8 @@ def main(predictions,data_set_name,test=False,match_thresh=1,twice=False,shuffle
             assert ans[-1]=='‡'
             gt = json.loads(ans[:-1])
             pred = predictions[instance['imgName'][0]]
-
+            
+            #Build GT tree
             tree_gt = Node('')
             gt_tables = []
             for ele in gt:
@@ -242,6 +251,7 @@ def main(predictions,data_set_name,test=False,match_thresh=1,twice=False,shuffle
                     tree_gt.addkid(node)
                 gt_tables+=tables
 
+            #Build predicted tree
             tree_pred = Node('')
             pred_tables = []
             for ele in pred:
@@ -264,7 +274,6 @@ def main(predictions,data_set_name,test=False,match_thresh=1,twice=False,shuffle
                     second_score = GAnTED(tree_pred,tree_gt,num_processes=parallel)
             else:
                 assert len(all_tables)<10 #need new method if too many tables
-
                 tab_scores=getScore(nTED,tree_pred,tree_gt,all_tables)
                 vanilla_score=min(tab_scores)
 
@@ -275,6 +284,7 @@ def main(predictions,data_set_name,test=False,match_thresh=1,twice=False,shuffle
                     tab_scores=getScore(lambda a,b:GAnTED(a,b,match_thresh,num_processes=parallel),tree_pred,tree_gt,all_tables)
                     second_score=min(tab_scores)
 
+            #Update log
             if twice:
                 already_done[instance['imgName'][0]] =(score,vanilla_score,second_score)
             else:
@@ -307,9 +317,9 @@ def main(predictions,data_set_name,test=False,match_thresh=1,twice=False,shuffle
 if __name__ == '__main__':
     logger = logging.getLogger()
 
-    parser = argparse.ArgumentParser(description='Evaluate the output of Dessurt on FUNSD and NAF')
+    parser = argparse.ArgumentParser(description='Evaluate the output of Dessurt on FUNSD and NAF with nTED related metrics')
     parser.add_argument('-p', '--predictions', default=None, type=str,
-                        help='path to latest checkpoint (default: None)')
+                        help='path to json output from funsd/naf_eval.py (using "-w" option)')
     parser.add_argument('-d', '--data_set_name', default=None, type=str,
                         help='name of dataset to eval')
     parser.add_argument('-T', '--test', default=False, action='store_const', const=True,
@@ -319,7 +329,7 @@ if __name__ == '__main__':
     parser.add_argument('-2', '--twice', default=False, action='store_const', const=True,
                         help='Run alignment twice')
     parser.add_argument('-s', '--shuffle', default=False, action='store_const', const=True,
-                        help='Run alignment twice')
+                        help='Shuffle the order of the kids for each node')
     parser.add_argument('-P', '--parallel', default=1, type=int,
                         help='number of processes')
 

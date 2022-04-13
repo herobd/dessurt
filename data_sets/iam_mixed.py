@@ -18,7 +18,7 @@ from utils import grid_distortion
 
 class IAMMixed(ParaQADataset):
     """
-    Presents IAM data as list or words in random order, sampling from N documents
+    Presents IAM data as two lists of words in random order, sampling from three IAM documents per synthetic document
     """
 
 
@@ -66,7 +66,6 @@ class IAMMixed(ParaQADataset):
                     image_path2 = os.path.join(dirPath,'forms',name2+'.png')
                     xml_path3 = os.path.join(dirPath,'xmls',name3+'.xml')
                     image_path3 = os.path.join(dirPath,'forms',name3+'.png')
-                    #if self.train:
                     self.images.append({ 'imageName':name1+name2+name3, 'imagePath':None, 'annotationPath':[(image_path1,xml_path1),(image_path2,xml_path2),(image_path3,xml_path3)], })
             else:
                 for name1 in doc_set:
@@ -92,8 +91,6 @@ class IAMMixed(ParaQADataset):
         images=[]
         for image_path,xmlfile in xmlfiles:
             W_lines,lines, writer,image_h,image_w = getWordAndLineBoundaries(xmlfile)
-            #W_lines is list of lists
-            # inner list has ([minY,maxY,minX,maxX],text,id) id=gt for NER
             for line in W_lines:
                 for coords,text,identifier in line:
                     if text not in self.punctuation:
@@ -128,10 +125,14 @@ class IAMMixed(ParaQADataset):
         max_w = 0
         lines=[]
         for (minY,maxY,minX,maxX),text,image_id in all_words:
+
+            #pad out since IAM cropping is really tight
             minY-=4
             maxY+=4
             minX-=4
             maxX+=4
+
+            #select text height
             if self.train:
                 text_height = random.randrange(self.min_text_height,self.max_text_height+1)
             else:
@@ -139,8 +140,10 @@ class IAMMixed(ParaQADataset):
 
             w_img = images[image_id][minY:maxY,minX:maxX]
             if w_img.shape[0]==0:
-                continue #skip
+                continue #skip. something is wrong
+
             if text_height != w_img.shape[0]:
+                #reize word image
                 n_width = round(w_img.shape[1]*text_height/w_img.shape[0])
                 w_img = img_f.resize(w_img,(text_height,n_width))
 
@@ -167,9 +170,11 @@ class IAMMixed(ParaQADataset):
                 continue #can't draw this word
             
             if self.train:
-                std = (random.random()*1.5) + 1.5
+                #Warp augmentation
+                std = (random.random()*1.5) + 1.5 #warp differen words to a different degree
                 w_img = grid_distortion.warp_image(w_img, w_mesh_std=std, h_mesh_std=std)
 
+            #put word image into synthetic document
             image[cur_y:cur_y+w_img.shape[0],x:x+w_img.shape[1]] = w_img
             
             lines.append({'text':text,
@@ -183,7 +188,7 @@ class IAMMixed(ParaQADataset):
 
             cur_y += text_height + y_spacing
 
-        #this is wrong, but works for how read_block parese the ocr
+        #this ocr is wrong, but works for how read_block parses the ocr to have it read the two lists
         ocr=[{
                 'box':[para_min_x,para_min_y,para_max_x,para_max_y],
                 'paragraphs': [{
@@ -198,10 +203,3 @@ class IAMMixed(ParaQADataset):
 
         return np.array([]), [], None, {'image':image}, {}, qa
 
-    def doLineWarp(self,img,bbs):
-        pad=5
-        std = (random.random()*1.5) + 1.5
-        for x1,y1,x2,y2 in bbs:
-            sub_img = img[y1-pad:y2+pad,x1-pad:x2+pad]
-            sub_img = grid_distortion.warp_image(sub_img, w_mesh_std=std, h_mesh_std=std) 
-            img[y1-pad:y2+pad,x1-pad:x2+pad] = sub_img

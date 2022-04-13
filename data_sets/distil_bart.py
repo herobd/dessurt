@@ -30,29 +30,34 @@ def collate(batch):
             "bart_last_hidden": torch.cat([b['bart_last_hidden'] for b in batch],dim=0) if 'bart_last_hidden' in batch[0] and batch[0]['bart_last_hidden'] is not None else None,
             "distill_loss_mask": torch.cat([b['distill_loss_mask'] for b in batch],dim=0) if 'distill_loss_mask' in batch[0] and batch[0]['distill_loss_mask'] is not None else None,
             }
-
+#This used to perform distillation. It generates the images and pre-comutes the BART logits on the text
 class DistilBartDataset(torch.utils.data.Dataset):
-    """
-    Class for creating synthetic paragraph type documents
-    """
 
 
     def __init__(self, dirPath=None, split=None, config=None, images=None):
         super(DistilBartDataset, self).__init__()
 
         if split=='train':
-            no_distill = config.get('no_distill',False)
-            self.loss_mask = config.get('loss_mask',True)
+            no_distill = config.get('no_distill',False) #was used to test just Text Infilling Task, ended up moving it as a task in ParaQADataset
+            self.loss_mask = config.get('loss_mask',True) #only compute the loss on the masked tokens, rather than all
+            
+            if os.path.exists('./cache_huggingface/bart-large'):
+                model_id = './cache_huggingface/bart-large'
+            else:
+                model_id = 'facebook/bart-large'
+
             if not no_distill or self.loss_mask:
-                self.tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/bart-large')
+                self.tokenizer = BartTokenizer.from_pretrained(model_id)
                 self.blank_token = 50264
             if not no_distill:
-                self.model = BartForConditionalGeneration.from_pretrained('./cache_huggingface/bart-large')
+                self.model = BartForConditionalGeneration.from_pretrained(model_id)
                 self.model.eval()
             else:
                 self.model = None
-        self.max_auto_tokens = config['max_auto_tokens']
 
+        self.max_auto_tokens = config['max_auto_tokens'] #max BART is allowed to do
+
+        #maybe should have turned these off...
         self.augment_shade = config.get('augment_shade',True)
         self.rotate_std_dev = (math.pi/180) * config.get('rotate_std_dev',1)
         self.scale_std_dev = config.get('scale_std_dev',0.05)
@@ -80,10 +85,8 @@ class DistilBartDataset(torch.utils.data.Dataset):
     def __getitem__(self,index):
         return self.getitem(index)
     def getitem(self,index,recur=0):
-        #if recur>1:
-        #    self.logger.info('Repeating if distill dataset {}'.format(recur))
         if recur>15:
-            return None
+            return None #checking to be sure an infinite loop wasn't happening
 
         image_h,image_w = self.image_size
 
@@ -122,7 +125,6 @@ class DistilBartDataset(torch.utils.data.Dataset):
                     bart_input_string.append('<mask>')
             bart_input_string = ' '.join(bart_input_string)
 
-            #print('Start BART '+bart_input_string[:20])
             input_ids = self.tokenizer([bart_input_string], return_tensors='pt')['input_ids']
             gt_input_ids = self.tokenizer([target_string], return_tensors='pt')['input_ids']
             gt_input_ids = gt_input_ids[:,:self.max_auto_tokens]
@@ -130,6 +132,7 @@ class DistilBartDataset(torch.utils.data.Dataset):
         if self.model is not None:
             with torch.no_grad():
                 try:
+                    #seems fine to do this on CPU
                     bart_out = self.model(input_ids, labels=gt_input_ids,output_hidden_states=True)
                 except IndexError as e:
                     print(e)
@@ -140,7 +143,6 @@ class DistilBartDataset(torch.utils.data.Dataset):
                     return self.getitem(index,recur+1)
             logits = bart_out.logits
             last_hidden = bart_out.decoder_hidden_states[-1]
-            #print('End BART '+bart_input_string)
         else:
             logits = None
             last_hidden = None
@@ -194,23 +196,12 @@ class DistilBartDataset(torch.utils.data.Dataset):
                     
                     dynamic_prog[ii][ti] = possible_paths[0]
             score,loss_mask = dynamic_prog[-1][-1]
-            #for mask,(ii,ti) in zip(loss_mask,path):
-            #    print('{}:{}, {}:{}, {}'.format(ii,input_ids[0,ii].item(),ti,gt_input_ids[0,ti].item(),mask))
-            #assert all(m!='bad' for m in loss_mask)
+
             assert len(loss_mask) == gt_input_ids.shape[1]
             loss_mask = torch.BoolTensor(loss_mask)[None,:] #tensor and add batch dim
 
             if not loss_mask.any():
                 loss_mask = None
-            #    #get a new batch
-            #    image=None
-            #    dynamic_prog=None
-            #    gt_input_ids=None
-            #    input_ids=None
-            #    loss_mask=None
-            #    words=None
-            #    ocr=None
-            #    return self.getitem(index,recur+1)
 
 
 
@@ -252,7 +243,6 @@ class DistilBartDataset(torch.utils.data.Dataset):
         center = np.array([ [1,0,-image.shape[1]/2],
                             [0,1,-image.shape[0]/2],
                             [0,0,1] ])
-        #center = np.array([[1,0,-image.shape[1]/2],[0,1,-image.shape[0]/2]])
         uncenter = np.array([   [1,0,image.shape[1]/2],
                                 [0,1,image.shape[0]/2],
                                 [0,0,1] ])
@@ -262,6 +252,8 @@ class DistilBartDataset(torch.utils.data.Dataset):
         M = uncenter.dot(M)
         M=M[:2] #opencv didn't want 3x3
         image = img_f.warpAffine(image,M,(image.shape[0],image.shape[1]))
+
+
 
         img = image.transpose([2,0,1])[None,...] #from [row,col,color] to [batch,color,row,  col]
         img = img.astype(np.float32)
@@ -292,7 +284,7 @@ class DistilBartDataset(torch.utils.data.Dataset):
 
 
 
-
+    #This is largely copied from SynthParaQA
     def addBlock(self,ocr,image):
         image_h,image_w = image.shape
 
@@ -313,7 +305,7 @@ class DistilBartDataset(torch.utils.data.Dataset):
         em_approx = word_height*1.6 #https://en.wikipedia.org/wiki/Em_(typography)
         min_space = 0.2*em_approx #https://docs.microsoft.com/en-us/typography/develop/character-design-standards/whitespace
         max_space = 0.5*em_approx
-        while True:#para_width<image_w: #we'll be increasing the para_width if the paragraph ends up longer than the page
+        while True:
             space_width = round(random.random()*(max_space-min_space) + min_space)
             newline_height = random.randrange(1,word_height) + word_height
             tab_min = round(0.6*em_approx)

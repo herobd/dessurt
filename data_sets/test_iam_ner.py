@@ -9,6 +9,7 @@ import torch
 import utils.img_f as cv2
 from collections import defaultdict
 from transformers import BartTokenizer
+import os
 
 widths=[]
 
@@ -126,7 +127,11 @@ if __name__ == "__main__":
     print('dataset size: {}'.format(len(dataLoader)))
     dataLoaderIter = iter(dataLoader)
 
-    tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
+    if os.path.exists('./cache_huggingface/BART'):
+        model_id = './cache_huggingface/BART'
+    else:
+        model_id = 'facebook/bart-base'
+    tokenizer = BartTokenizer.from_pretrained(model_id)
 
         #if start==0:
         #display(data[0])

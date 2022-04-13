@@ -16,7 +16,7 @@ import utils.img_f as img_f
 
 class DocVQA(QADataset):
     """
-    Class for reading forms dataset and creating starting and ending gt
+    Document Visual Question Answering
     """
 
 
@@ -35,11 +35,10 @@ class DocVQA(QADataset):
         self.images=[]
         for instance in data:
             image_path = os.path.join(dirPath,split,instance['image'])
-            #answer = random.choice(instance['answers'])
             qa = (instance['question'],instance.get('answers'))
             self.images.append({'id':instance['questionId'], 'imageName':instance['image'], 'imagePath':image_path, 'annotationPath':qa, 'rescaled':1 })
 
-        if config.get('half',False):
+        if config.get('half',False): #if we want to make validating faster
             self.images = self.images[::2]
 
 
@@ -51,9 +50,9 @@ class DocVQA(QADataset):
         qa=[]
         self.qaAdd(qa,
             'natural_q~'+question,
-            random.choice(answers) if answers is not None else None
+            random.choice(answers) if answers is not None else None #We use a random answer for each (though I think they recommed just taking the first)
             )
         
-        form_metadata={'all_answers':[answers]}
+        form_metadata={'all_answers':[answers]} #be sure all answers are there for ANLS computation
         return np.zeros(0), [], None, {}, form_metadata, qa
 

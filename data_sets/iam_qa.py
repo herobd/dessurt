@@ -1,9 +1,6 @@
 import torch.utils.data
 import numpy as np
 import json
-#from skimage import io
-#from skimage import draw
-#import skimage.transform as sktransform
 import os
 import math, random, string, re
 from collections import defaultdict, OrderedDict
@@ -17,7 +14,9 @@ import utils.img_f as img_f
 
 class IAMQA(ParaQADataset):
     """
-    Class for reading forms dataset and creating starting and ending gt
+    Class for training on IAM dataset.
+    This doesn't define a specific set of tasks, rather the mode in ParaQADataset will.
+    For training IAM full page/paragraph recognition use "mode": "IAM_para"
     """
 
 
@@ -35,12 +34,12 @@ class IAMQA(ParaQADataset):
         if images is not None:
             self.images=images
         if split_by in ['standard','Coquenet']:
-            #data_sets/iam_Coquenet_splits.json
             split_file = './data_sets/iam_{}_splits.json'.format(split_by)
             with open(split_file) as f:
                 splits = json.load(f)
             doc_set = splits[split]
         else:
+            #split of IAM NER
             split_file = os.path.join(dirPath,'ne_annotations','iam',split_by,'iam_{}_{}_6_all.txt'.format(split,split_by))
             doc_set = set()
             with open(split_file) as f:
@@ -55,20 +54,12 @@ class IAMQA(ParaQADataset):
         for name in doc_set:
             xml_path = os.path.join(dirPath,'xmls',name+'.xml')
             image_path = os.path.join(dirPath,'forms',name+'.png')
-            #if self.train:
             self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':xml_path, 'rescaled':rescale })
-            #else:
-            #    _,_,_,_,_,qa = self.parseAnn(xml_path,rescale)
-            #    #qa = self.makeQuestions(rescale,entries))
-            #    import pdb;pdb.set_trace()
-            #    for _qa in qa:
-            #        _qa['bb_ids']=None
-            #        self.images.append({'id':name, 'imageName':name, 'imagePath':image_path, 'annotationPath':xml_path, 'rescaled':rescale, 'qa':[_qa]})
 
 
 
 
-
+    #This gets the crop for the handwriting regiong (else the model can cheat and read the text prompt at the top of the page)
     def getCropAndLines(self,xmlfile,shape):
         W_lines,lines, writer,image_h,image_w = getWordAndLineBoundaries(xmlfile)
         #W_lines is list of lists
@@ -98,6 +89,7 @@ class IAMQA(ParaQADataset):
         for line in lines:
             line_bbs.append([line[0][2]-crop_x,line[0][0]-crop_y,line[0][3]-crop_x,line[0]  [1]-crop_y])
         return crop, line_bbs
+
 
     def parseAnn(self,xmlfile,s):
         W_lines,lines, writer,image_h,image_w = getWordAndLineBoundaries(xmlfile)
@@ -133,7 +125,6 @@ class IAMQA(ParaQADataset):
 
 
         use_blocks = False
-        #print('block_score: {} {}'.format(block_score,'good!' if use_blocks else 'bad'))
         qa, qa_bbs = self.makeQuestions(ocr,image_h,image_w,s,use_blocks)
 
 
@@ -141,7 +132,7 @@ class IAMQA(ParaQADataset):
 
     def doLineWarp(self,img,bbs):
         pad=5
-        std = (random.random()*1.5) + 1.5
+        std = (random.random()*1.5) + 1.5 #warp document more or less randomly (a std has a disticntive "look")
         for x1,y1,x2,y2 in bbs:
             sub_img = img[y1-pad:y2+pad,x1-pad:x2+pad]
             sub_img = grid_distortion.warp_image(sub_img, w_mesh_std=std, h_mesh_std=std) 
