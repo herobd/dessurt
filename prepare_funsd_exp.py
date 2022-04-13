@@ -96,12 +96,12 @@ cf['trainer']['iterations']=34099
 cf['trainer']['val_step']=1000
 cf['trainer']['save_step']=2000
 cf['trainer']["save_step_minor"]= 1024 
-        "monitor": "val_E_json_CE",
-        "monitor_mode": "min",
+cf['trainer']["monitor"]= "val_E_json_CE"
+cf['trainer']["monitor_mode"]= "min"
 
 #set drop in LR
 cf['trainer']["use_learning_schedule"]= "multi_rise then ramp_to_lower"
-cf['trainer']["lr_down_start"]= 7500
+cf['trainer']["lr_down_start"]= 8000
 cf['trainer']["ramp_down_steps"]= 500
 cf['trainer']["lr_mul"]= 0.1
 if user=='brianld':

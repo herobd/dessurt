@@ -59,6 +59,7 @@ new_dataset= {
         "data_dir": "../data/IAM",
         "cased": True,
         "full": True,
+        "short_class": True,
         "batch_size": 1,
         "num_workers": 6,
         "shuffle": True,

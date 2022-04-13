@@ -63,6 +63,7 @@ new_dataset= {
         "cased": True,
         "full": True,
         "class_first": True,
+        "short_class": True,
         "use_noise": 0.09,
         "batch_size": 1,
         "num_workers": 6,
