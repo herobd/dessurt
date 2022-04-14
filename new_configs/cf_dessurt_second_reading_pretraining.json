@@ -1,0 +1,118 @@
+{
+    "name": "dessurt_second_reading_pretraining",
+    "cuda": true,
+    "gpu": 0,
+    "save_mode": "state_dict",
+    "override": true,
+    "data_loader": {
+        "data_set_name": "SynthParaQA",
+	"mode": "easy_word",
+        "cased": true,
+        "data_dir": "../data/fonts",
+        "batch_size": 1,
+        "num_workers": 5,
+        "rescale_range": [0.9,1.1],
+        "augment_shade": 1,
+        "crop_params": {
+                "crop_size":[1152,768],
+                "pad":0,
+                "rot_degree_std_dev": 1
+            },
+	"questions": 1,
+        "max_qa_len_in": 640,
+        "max_qa_len_out": 999999,
+        "image_size": [1148,764],
+	"prefetch_factor": 2,
+        "shuffle": true
+    },
+    "validation": {
+        "shuffle": false
+    },
+    "lr_scheduler_type": "none",
+    "optimizer_type": "AdamW",
+    "optimizer": {
+        "lr": 0.0001,
+        "weight_decay": 0.01
+    },
+    "loss": {
+        "answer": "label_smoothing",
+	"mask": "focalLoss"
+    },
+    "loss_weights": {
+        "answer": 1,
+	"mask": 1
+    },
+    "loss_params": {
+        "xanswer": {},
+        "answer": {
+            "smoothing": 0.1,
+            "padding_idx": 1
+        }
+    },
+    "metrics": [],
+    "trainer": {
+        "class": "QATrainer",
+        "iterations": 1000000,
+        "accum_grad_steps": 6,
+        "save_dir": "saved/",
+        "val_step": 999999999999999,
+        "save_step": 100000,
+        "save_step_minor": 200,
+        "log_step": 100,
+        "print_pred_every": 100,
+        "verbosity": 1,
+        "monitor": "loss",
+        "monitor_mode": "none",
+        "retry_count": 0,
+
+        "do_ocr": "no",
+
+        "use_learning_schedule": "multi_rise",
+        "warmup_steps": [
+            1000
+        ]
+    },
+    "arch": "Dessurt",
+    "model": {
+        "image_size": [
+            1152,768
+        ],
+        "window_size": 12,
+        "decode_dim": 768,
+        "dim_ff": 3072,
+        "decode_num_heads": 8,
+        "blocks_per_level": [
+            4,
+            6
+        ],
+        "swin_nheads": [
+            4,
+            8
+        ],
+        "use_swin":[
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false
+        ],
+        "swin_cross_attention":[
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false
+        ],
+        "im_embed_dim": 128
+    }
+}

@@ -29,7 +29,6 @@ class Dessurt(BaseModel):
         self.conv_patch_emb = config.get('conv_patch_emb',True) #set to False to use original Swin embedding
         lighter_conv_patch_emb = config['lighter_conv_patch_emb'] if 'lighter_conv_patch_emb' in config else False #shallower network
         init_from_pretrained = config.get('init_from_pretrained',True) #the text emebeddings
-        use_special_question_tokens = config.get('use_special_question_tokens',True)
         self.use_set_length = config.get('use_set_length',True) #Fixed length input and output
         self.max_q_tokens = config.get('max_q_tokens',20) #fixed length query tokens
         self.max_a_tokens = config.get('max_a_tokens',800) #fixed length response (answer) tokens
@@ -112,7 +111,7 @@ class Dessurt(BaseModel):
             self.text_embedding.weight.data[:init_emb.weight.size(0),:d_model] = init_emb.weight.data[:,:d_model]
 
         if use_special_question_tokens:
-            #I didn't know how to add tokens to the tokenizer, so I created my own little module to process the text and produce the task token
+            #I didn't know how to add tokens to the tokenizer (at the time), so I created my own little module to process the text and produce the task token
             self.query_special_token_embedder = SpecialTokenEmbedder(d_model)
             self.query_special_start_token_embedder = SpecialTokenEmbedder(d_model)
         else:
@@ -120,7 +119,7 @@ class Dessurt(BaseModel):
             self.query_special_start_token_embedder = None
 
 
-        if init_from_pretrained=='bart':
+        if init_from_pretrained:
             self.pos_1d_enc = BartLearnedPositionalEmbedding(1026,d_model)
             self.pos_1d_enc.weight.data = init_model.decoder.embed_positions.weight.data
             self.q_pos_1d_enc = self.a_pos_1d_enc = None
