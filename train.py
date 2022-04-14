@@ -35,7 +35,6 @@ except:
 
 
 logging.basicConfig(level=logging.INFO, format='')
-logging.getLogger('shapely.geos').setLevel(logging.ERROR)
 
 def set_procname(newname):
         from ctypes import cdll, byref, create_string_buffer

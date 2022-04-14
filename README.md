@@ -8,13 +8,14 @@ This is the code for End-to-end Document Recognition and Understanding with Dess
 * Python 3.x 
 * PyTorch 1.0+ 
 * scikit-image
-* shapely
+
+I find it helpful to not use conda for these:
 * (huggingface) transformers
 * (huggingface) datasets
 * timm
 * editdistance
 * einops
-* zss (for GAnTED)
+* zss (only needed for GAnTED evaluation)
 
 
 ## Usage
