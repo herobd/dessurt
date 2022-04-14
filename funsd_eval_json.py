@@ -102,7 +102,7 @@ def findUnmatched(s):
 
 def getFormData(model,img,tokenizer,quiet=False,beam_search=False):
     question='json>'
-    answer,out_mask = model(img,None,[[question]],RUN=True if not beam_search else f'beam{beam_search}')
+    answer,out_mask = model(img,[[question]],RUN=True if not beam_search else f'beam{beam_search}')
     if not quiet:
         print('PRED:: '+answer)
     num_calls=1
@@ -142,8 +142,7 @@ def getFormData(model,img,tokenizer,quiet=False,beam_search=False):
 
 
         question = 'json~'+prompt
-        answer,out_mask = model(img,None,[[question]],RUN=True)
-        answer,out_mask = model(img,None,[[question]],RUN=True if not beam_search else f'beam{beam_search}')
+        answer,out_mask = model(img,[[question]],RUN=True if not beam_search else f'beam{beam_search}')
         total_char_pred += len(answer)
         if not quiet:
             print('CONT:: '+answer)
@@ -207,7 +206,10 @@ def fixLoadJSON(pred):
         while pred_data is None:
             if len(pred)>start_len+1020 or counter==0:
                 #assert False
-                import pdb;pdb.set_trace()
+                #import pdb;pdb.set_trace()
+                pred_edits.append('TRUNCATE')
+                pred = pred[:char]
+                
             pred = pred.replace(',,',',')
             pred = pred.replace('{{','{')
             try:
@@ -397,8 +399,10 @@ def fixLoadJSON(pred):
                                     pred=pred[:char-1]+pred[char:]
 
                                 else:
+                                    pred_edits.append('{}<{}>{} '.format(pred[char-10:char],pred[char:char+1],pred[char+1:char+10])+'added a comma blindly (this could be bad)')
+                                    pred=pred[:char]+', '+pred[char:]
 
-                                    assert False
+                                    #assert False
 
                     elif pred[char]=='{' and (pred[char-1]=='}' or pred[char-2]=='}'):
                         #forgot a comma
