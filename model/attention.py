@@ -5,7 +5,6 @@ import torch.nn.functional as F
 from torch import nn
 from .pos_encode import RealEmbedding
 
-from testtest import PRINT_ATT, ATT_TEXT
 from collections import defaultdict
 
 

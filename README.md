@@ -17,6 +17,8 @@ I find it helpful to not use conda for these:
 * einops
 * zss (only needed for GAnTED evaluation)
 
+Also my own module https://github.com/herobd/synthetic_text_gen
+
 
 ## Usage
 

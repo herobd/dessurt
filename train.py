@@ -8,7 +8,6 @@ import argparse
 import torch
 from model import *
 from model.loss import *
-from model.metric import *
 from data_loader import getDataLoader
 from trainer import *
 from logger import Logger
