@@ -5,7 +5,6 @@ from base import BaseTrainer
 import timeit
 from utils import util
 from collections import defaultdict
-import matplotlib.pyplot as plt
 import random, os, math
 import editdistance
 from utils import img_f
@@ -15,12 +14,6 @@ try:
 except:
     pass
 
-from model.oversegment_loss import build_oversegmented_targets_multiscale
-from model.overseg_box_detector import build_box_predictions
-try:
-    from model.optimize import optimizeRelationships, optimizeRelationshipsSoft
-except:
-    pass
 
 import torch.autograd.profiler as profile
 

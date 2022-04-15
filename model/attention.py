@@ -18,12 +18,9 @@ def attention(query, key, value, mask=None, key_padding_mask=None, dropout=None,
 
 
     d_k = query.size(-1)
-    #bsz, num_heads, src_len,d_k = key.size()
     scores = torch.matmul(query, key.transpose(-2, -1)) \
              / math.sqrt(d_k)
-    #scores.fill_(0.1)
-    ###
-    #scores.size() = (batch heads queries keys)
+
     if att_bias is not None:
         scores+=att_bias
     if mask is not None:
@@ -32,82 +29,21 @@ def attention(query, key, value, mask=None, key_padding_mask=None, dropout=None,
         else:
             scores = scores.masked_fill(mask == 0, -1e9)
     if key_padding_mask is not None:
-        #import pdb;pdb.set_trace()
-        #tgt_len = query.size(2)
-        #scores = scores.view(bsz, num_heads, tgt_len, src_len
         scores = scores.masked_fill(
             key_padding_mask.unsqueeze(1).unsqueeze(2),
             float("-inf"),
         )
-        #scores = scores.view(bsz * num_heads, tgt_len, src_len)
 
-    #scores.fill_(-1e9)
-    #for h in range(scores.size(1)):
-    #    scores[0,h,:,-scores.size(2):].fill_diagonal_(1)
-
-    #if len(RA_SEND)==4:
-    #    import pdb;pdb.set_trace()
 
     p_attn = F.softmax(scores, dim = -1)
 
 
-    #assert( (p_attn[:,:,:-2,-1]==0).all() )
 
 
     if mask is not None and fixed:
         p_attn = p_attn.masked_fill(mask == 0, 0) #this is needed in casa node has no neigbors
         #will create a zero vector in those cases, instead of an average of all nodes
-    if PRINT_ATT:
-        ATT_TEXT.append( (p_attn[0].sum(dim=0)/4).cpu().detach() )
-
-    ##DEBUG
-    #aa='============= {}\n'.format(p_attn.size())
-    #for i in range(p_attn.size(2)):
-    #    aa+='|'
-    #    for j in range(max(0,p_attn.size(3)-80),p_attn.size(3)):
-    #        if p_attn[0,0,i,j]>0:
-    #            aa+='a'
-    #        else:
-    #            aa+=' '
-    #    aa+='|\n'
-    #aa+='===================  end'
-    #print(aa)
-
-    if DEBUG:
-        ##Draw the attention (as ASCII)
-        siz = int(p_attn.size(-1)**0.5)
-        def printDocAtt(a,h):
-            rshp = p_attn[a,h,:,:siz**2].view(-1,siz,siz)
-            att = rshp.max(dim=0)[0]
-            minv = att.min()
-            maxv = att.max()
-            thresh1=minv + (maxv-minv)*0.25
-            thresh2=minv + (maxv-minv)*0.5
-            thresh3=minv + (maxv-minv)*0.75
-            s=''
-            for y in range(siz):
-                for x in range(siz):
-                    v = att[y,x]
-                    if v>thresh3:
-                        pos=rshp[:,y,x].argmax()
-                        s+='{}'.format(pos.item())
-                    elif v>thresh2:
-                        s+='+'
-                    elif v>thresh1:
-                        s+='.'
-                    else:
-                        s+=' '
-                s+='\n'
-            print('attention {} h{}'.format(a,h))
-            print('a'*siz)
-            print(s)
-            print('a'*siz)
-        printDocAtt(0,0)
-        printDocAtt(0,1)
-        printDocAtt(0,2)
-        printDocAtt(0,3)
-    #import pdb;pdb.set_trace()
-
+    
     if dropout is not None:
         p_attn = dropout(p_attn)
     

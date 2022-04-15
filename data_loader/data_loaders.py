@@ -2,8 +2,8 @@ import torch
 import torch.utils.data
 import numpy as np
 from data_sets import multiple_dataset
-from data_sets import synth_qa_dataset
 from data_sets import synth_form_dataset
+from data_sets import synth_para_qa
 from data_sets import squad
 from data_sets import hw_squad
 from data_sets import docvqa

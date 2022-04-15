@@ -110,13 +110,9 @@ class Dessurt(BaseModel):
             #copy weights over, allowing for different sized weights
             self.text_embedding.weight.data[:init_emb.weight.size(0),:d_model] = init_emb.weight.data[:,:d_model]
 
-        if use_special_question_tokens:
-            #I didn't know how to add tokens to the tokenizer (at the time), so I created my own little module to process the text and produce the task token
-            self.query_special_token_embedder = SpecialTokenEmbedder(d_model)
-            self.query_special_start_token_embedder = SpecialTokenEmbedder(d_model)
-        else:
-            self.query_special_token_embedder = None
-            self.query_special_start_token_embedder = None
+        #I didn't know how to add tokens to the tokenizer (at the time), so I created my own little module to process the text and produce the task token
+        self.query_special_token_embedder = SpecialTokenEmbedder(d_model)
+        self.query_special_start_token_embedder = SpecialTokenEmbedder(d_model)
 
 
         if init_from_pretrained:
@@ -441,11 +437,6 @@ class Dessurt(BaseModel):
             q_tokens = qa_tokens[:,:num_q]
             a_tokens = qa_tokens[:,num_q:]
 
-            if q_downsample is not None:
-                did_downsample=True
-                q_tokens,q_padding_mask = q_downsample(q_tokens,q_padding_mask)
-                num_q = q_tokens.size(1)
-                qa_tokens = torch.cat( (q_tokens,a_tokens),dim=1)
 
             if did_downsample:
                 #get correct chaqpe masks
