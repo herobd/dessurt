@@ -32,6 +32,10 @@ A training session can be resumed with: `python train.py -r CHECKPOINT.pth`
 
 If you want to override the config file on a resume, just use the `-c` flag as well and be sure the config has `"override": true`
 
+The `configs` directory has configs for doing the pretraining and finetuning of Dessurt.
+When finetuning, I reset the pre-trained checkpoint using this: `python change_checkpoint_reset_for_training.py -c initial/checkpoint.pth -o output/directory(or_checkpoint.pth)`
+This resets the iteration count and optimizer and automatically names the output "checkpoint-latest.pth" so you can start training from it with the `-r` flag.
+
 
 
 ### qa_eval.py
