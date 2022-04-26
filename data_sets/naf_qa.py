@@ -133,8 +133,7 @@ class NAFQA(FormQA):
         else:
             qa = None #This is pre-computed
 
-        ocr=None
-        return bbs, list(range(bbs.shape[0])), ocr, {}, {}, qa
+        return bbs, list(range(bbs.shape[0])), None, None, qa
 
 
     def convertBB(self,s,box):

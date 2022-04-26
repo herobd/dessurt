@@ -29,19 +29,15 @@ def collate(batch):
 
     return {
             'img': torch.cat([b['img'] for b in batch],dim=0),
-            'bb_gt': [b.get('bb_gt') for b in batch], 
             'imgName': [b.get('imgName') for b in batch],
             'id': [b.get('id') for b in batch],
             'scale': [b.get('scale') for b in batch],
             'cropPoint': [b.get('cropPoint') for b in batch],
-            'transcription': [b.get('transcription') for b in batch],
-            'metadata': [b.get('metadata') for b in batch],
-            'form_metadata': [b.get('form_metadata') for b in batch],
             'questions': [b.get('questions') for b in batch],
             'answers': [b.get('answers') for b in batch],
+            'metadata': [b.get('metadata') for b in batch],
             'mask_label': mask_labels,
             'mask_labels_batch_mask': mask_labels_batch_mask,
-            'pre-recognition': [b.get('pre-recognition') for b in batch],
             "bart_logits": torch.cat([b['bart_logits'] for b in batch],dim=0) if 'bart_logits' in batch[0] else None,
             "bart_last_hidden": torch.cat([b['bart_last_hidden'] for b in batch],dim=0) if 'bart_last_hidden' in batch[0] else None,
             "distill_loss_mask": torch.cat([b['distill_loss_mask'] for b in batch],dim=0) if 'distill_loss_mask' in batch[0] and batch[0]['distill_loss_mask'] is not None else None,
@@ -152,7 +148,7 @@ class QADataset(torch.utils.data.Dataset):
         return self.getitem(index)
     def getitem(self,index,scaleP=None,cropPoint=None):
         imagePath = self.images[index]['imagePath']
-        imageName = self.images[index]['imageName']
+        imageName = self.images[index].get('imageName',imagePath)
 
         annotationPath = self.images[index]['annotationPath']
         #This was originally just the json, but as different datasets have different data, it can be something else
@@ -261,7 +257,11 @@ class QADataset(torch.utils.data.Dataset):
         
 
         #Parse annotation file
-        bbs,ids,trans, metadata, form_metadata, questions_and_answers = self.parseAnn(annotations,s)
+        bbs,ids, gen_img, metadata, questions_and_answers = self.parseAnn(annotations,s)
+        if bbs is None:
+            assert ids is None
+            bbs = np.zeros(0)
+            ids = []
 
         if self.crop_to_q:
             #crop the image to focus on the text line related to the question
@@ -308,8 +308,7 @@ class QADataset(torch.utils.data.Dataset):
 
 
         if np_img is None:
-            np_img=metadata['image'] #generated image
-            del metadata['image']
+            np_img=gen_img #generated image
 
         if partial_rescale!=1:
             np_img = img_f.resize(np_img,(0,0),
@@ -345,23 +344,11 @@ class QADataset(torch.utils.data.Dataset):
                     mask_ids+=  ['in{}_{}'.format(i,ii) for ii in range(len(inmask_bbs))] + \
                                 ['blank{}_{}'.format(i,ii) for ii in range(len(blank_bbs))]
 
-            if 'pre-recognition_bbs' in form_metadata:
-                mask_bbs+= form_metadata['pre-recognition_bbs']
-                mask_ids+=  ['recog{}'.format(ii) for ii in range(len(form_metadata['pre-recognition_bbs']))]
-                del form_metadata['pre-recognition_bbs']
             mask_bbs = np.array(mask_bbs)
 
         #Do crop
         if self.transform is not None:
-            if 'word_boxes' in form_metadata:
-                raise NotImplementedError('have not added mask_bbs')
-                word_bbs = form_metadata['word_boxes']
-                dif_f = bbs.shape[2]-word_bbs.shape[1]
-                blank = np.zeros([word_bbs.shape[0],dif_f])
-                prep_word_bbs = np.concatenate([word_bbs,blank],axis=1)[None,...]
-                crop_bbs = np.concatenate([bbs,prep_word_bbs],axis=1)
-                crop_ids=ids+['word{}'.format(i) for i in range(word_bbs.shape[0])]
-            elif self.do_masks and len(mask_bbs.shape)==2:
+            if self.do_masks and len(mask_bbs.shape)==2:
                 if (bbs is not None and bbs.shape[0]>0) and mask_bbs.shape[0]>0:
                     crop_bbs = np.concatenate([bbs,mask_bbs])
                 elif mask_bbs.shape[0]>0:
@@ -390,23 +377,7 @@ class QADataset(torch.utils.data.Dataset):
                 new_q_outboxes=None
             new_q_blankboxes=defaultdict(list)
             new_recog_boxes={}
-            if 'word_boxes' in form_metadata:
-                saw_word=False
-                word_index=-1
-                for i,ii in enumerate(out['bb_auxs']):
-                    if not saw_word:
-                        if type(ii) is str and 'word' in ii:
-                            saw_word=True
-                            word_index=i
-                    else:
-                        assert 'word' in ii
-                bbs = out['bb_gt'][0,:word_index]
-                ids= out['bb_auxs'][:word_index]
-                form_metadata['word_boxes'] = out['bb_gt'][0,word_index:,:8]
-                word_ids=out['bb_auxs'][word_index:]
-                form_metadata['word_trans'] = [form_metadata['word_trans'][int(id[4:])] for id in word_ids]
-                del form_metadata['word_boxes']
-            elif self.do_masks:
+            if self.do_masks:
                 orig_idx=0
                 for ii,(bb_id,bb) in enumerate(zip(out['bb_auxs'],out['bb_gt'][0])):
                     if type(bb_id) is int:
@@ -518,41 +489,21 @@ class QADataset(torch.utils.data.Dataset):
         else:
             bbs = torch.FloatTensor(1,0,5+8+1)
 
-        #if we're using GT transcription (or just pre-computed transcription
-        #Not used by Dessurt
-        if trans is not None:
-            transcription = [trans[id] for id in ids]
-        else:
-            transcription = None
-        if 'pre-recognition' in form_metadata:
-            #format similar to output of EasyOCR
-            pre_recog=[]
-            for i,bb in new_recog_boxes.items():
-                string = form_metadata['pre-recognition'][i]
-                char_prob = [self.char_to_ocr[char] for char in string if char in self.char_to_ocr]
-                pre_recog.append( (bb[0:8].reshape(4,2),(string,char_prob),None) )
-            del form_metadata['pre-recognition']
-        else:
-            pre_recog = None
 
 
         
 
         return {
                 "img": img,
-                "bb_gt": bbs,
                 "imgName": imageName,
                 "id": self.images[index].get('id'),
                 "scale": s,
                 "cropPoint": cropPoint,
-                "transcription": transcription,
-                "metadata": [metadata[id] for id in ids if id in metadata],
-                "form_metadata": form_metadata,
                 "questions": questions,
                 "answers": answers,
                 "noise_token_mask": noise_token_mask,
                 "mask_label": mask_label,
-                "pre-recognition": pre_recog
+                "metadata": metadata
                 }
 
 

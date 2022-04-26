@@ -76,5 +76,5 @@ class HWSQuAD(QADataset):
             )
         
         form_metadata={'all_answers':[instance['answers']]}
-        return np.zeros(0), [], None, {}, form_metadata, qa
+        return None, None, None, None, qa
 

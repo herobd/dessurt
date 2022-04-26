@@ -62,5 +62,5 @@ class SROIE(QADataset):
         qa=[]
         self.qaAdd(qa,question,answer)
 
-        return np.zeros(0), [], None, {}, {}, qa
+        return None,None,None,None, qa
 

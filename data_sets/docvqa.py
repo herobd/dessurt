@@ -54,5 +54,5 @@ class DocVQA(QADataset):
             )
         
         form_metadata={'all_answers':[answers]} #be sure all answers are there for ANLS computation
-        return np.zeros(0), [], None, {}, form_metadata, qa
+        return None,None,None,None,qa
 

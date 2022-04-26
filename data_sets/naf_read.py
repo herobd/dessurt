@@ -139,18 +139,8 @@ class NAFRead(QADataset):
 
 
     def parseAnn(self,annotations,s):
-
-        #all_entities,entity_link,tables,proses,minored_fields,bbs,link_dict = self.getEntitiesndSuch(annotations,s)
-
-
-        #if self.train:
-        #    qa = self.makeQuestions(annotations,s)
-        #else:
         qa = None #This is pre-computed
-
-        ocr=None
-        #ocr = [self.corrupt(text) for text in ocr]
-        return np.zeros(0), [], ocr, {}, {}, qa
+        return None,None,None,None qa
 
     def makeQuestions(self,annotations,scale):
         fixAnnotations(None,annotations)

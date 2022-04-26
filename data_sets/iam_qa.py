@@ -128,7 +128,7 @@ class IAMQA(ParaQADataset):
         qa, qa_bbs = self.makeQuestions(ocr,image_h,image_w,s,use_blocks)
 
 
-        return qa_bbs, list(range(qa_bbs.shape[0])), None, {}, {}, qa
+        return qa_bbs, list(range(qa_bbs.shape[0])), None, None, qa
 
     def doLineWarp(self,img,bbs):
         pad=5

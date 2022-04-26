@@ -164,7 +164,7 @@ class CDIPCloudQA(ParaQADataset):
             self.updateStatus(self.using,calls=self.calls)
 
 
-        return qa_bbs, list(range(qa_bbs.shape[0])), None, {}, {}, qa
+        return qa_bbs, list(range(qa_bbs.shape[0])), None, None, qa
 
     #switches to other downloaded chunk (if one is downloaded)
     # and starts downloading new replacement

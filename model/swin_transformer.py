@@ -511,11 +511,11 @@ class ConvPatchEmbed(nn.Module):
     r""" Image to Patch Embedding, but with more convolutions
          Used by Dessurt
     Args:
-        img_size (int): Image size.  Default: 224.
-        patch_size (int): Patch token size. Default: 4.
-        in_chans (int): Number of input image channels. Default: 3.
-        embed_dim (int): Number of linear projection output channels. Default: 96.
-        norm_layer (nn.Module, optional): Normalization layer. Default: None
+        img_size (int): Image size. 
+        patch_size (int): Patch token size.
+        in_chans (int): Number of input image channels.
+        embed_dim (int): Number of linear projection output channels. 
+        norm_layer (nn.Module, optional): Normalization layer
     """
 
     def __init__(self, img_size, patch_size=8, in_chans=1, embed_dim=256, norm_layer=None,cnn_model_small=True,lighter=False):
@@ -575,8 +575,6 @@ class ConvPatchEmbed(nn.Module):
         cnn.add_module('pooling{0}'.format(2), nn.MaxPool2d(2,2))  # 256x4
         convRelu(4, norm)
         convRelu(5,norm)                                           # 512x4
-        #cnn.add_module('pooling{0}'.format(3),
-        #               nn.MaxPool2d((2, 1), (2, 1)))  # 512x2x4
         convRelu(6, norm)                                     #512x1x1 even 32x32 to 4x4, that's a 8 reduction
 
         self.cnn = cnn

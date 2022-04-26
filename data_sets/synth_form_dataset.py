@@ -212,7 +212,7 @@ class SynthFormDataset(FormQA):
 
         qa = self.makeQuestions(s,all_entities,entity_link,tables,all_entities,link_dict)
 
-        return bbs, list(range(bbs.shape[0])), None, {'image':255-image}, {}, qa
+        return bbs, list(range(bbs.shape[0])), 255-image, None, qa
 
     
 

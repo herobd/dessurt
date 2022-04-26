@@ -88,7 +88,7 @@ class SQuAD(QADataset):
                 )
         metadata={'all_answers':[instance['answers']]}
 
-        return np.zeros(0), [], None, {'image':255-image}, metadata, qa
+        return None None, 255-image, metadata, qa
 
 
     def addBlock(self,text,image):

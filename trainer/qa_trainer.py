@@ -338,24 +338,9 @@ class QATrainer(BaseTrainer):
 
         image = self._to_tensor(instance['img'])
         device = image.device
-        ocrBoxes = instance['bb_gt']
         questions = instance['questions']
         answers = instance['answers']
         noise_token_mask = instance['noise_token_mask']
-        if self.debug:
-
-            print('=========')
-            print(questions)
-            print(' - - - -')
-            print(answers)
-            print('Q Lengths '+' '.join([str(len(a[0])) for a in questions])+' .....................')
-            print('A Lengths '+' '.join([str(len(a[0])) for a in answers])+' .....................')
-            #print('GT  : '+answer)
-            #print('pred: '+pred)
-            img = (128*(1+image[0])).cpu()
-            img = torch.cat((img,img[0:1]),dim=0).permute(1,2,0).numpy()
-            img_f.imshow('',img.astype(np.uint8))
-            img_f.show()
 
         gt_mask = instance['mask_label']
         if gt_mask is not None:
@@ -364,68 +349,6 @@ class QATrainer(BaseTrainer):
 
         distill= 'bart_logits' in instance and instance['bart_logits'] is not None
 
-        #OCR possibilities
-        #-All correct
-        #-partail corrupt, partail missing
-        #-all missing (none)
-        
-        if self.do_ocr:
-            if self.do_ocr == 'no' or (self.do_ocr=='random' and random.random()<0.5):
-                ocr_res=[[]]*image.size(0)
-            elif self.do_ocr == 'json' or self.do_ocr == 'gt':
-                ocr_res = instance['pre-recognition']
-                #print('O Lengths '+' '.join([str(len(a[0])) for a in ocr_res])+' .....................')
-                #print()
-                
-            else:
-                try:
-                    ocr_res=[]
-                    normal_img = (128*(image[:,0]+1)).cpu().numpy().astype(np.uint8)
-                    for img in normal_img:
-                        ocr_res.append( self.ocr_reader.readtext(img,decoder='greedy+softmax') )
-                    #m=max([len(c) for c in ocr_res])+max([len(q[0]) for q in questions])
-                    #self.DEBUG_max_ocr_len = max(self.DEBUG_max_ocr_len,m)
-                    #print('len OCR: {}, len qeu: {}, sum: {},  max: {}'.format([len(c) for c in ocr_res],[len(q[0]) for q in questions],m,self.DEBUG_max_ocr_len))
-
-                except Exception as e:
-                    print("EasyOCR error:")
-                    print(e)
-                    if 'CUDNN' in str(e):
-                        print('resetting cuda memory')
-                        image=image.cpu()
-                        self.model = self.model.cpu()
-                        if gt_mask is not None:
-                            gt_mask=gt_mask.cpu()
-                        torch.cuda.empty_cache()
-                        image = image.to(device)
-                        self.model = self.model.to(device)
-                        if gt_mask is not None:
-                            gt_mask=gt_mask.to(device)
-
-                    ocr_res=[[]]*image.size(0)
-        else:
-            if self.ocr_word_bbs:
-                gtTrans = [form_metadata['word_trans'] for form_metadata in instance['form_metadata']]
-            else:
-                
-                gtTrans = instance['transcription']
-            #t##t#tic=timeit.default_timer()#t##t#
-            if self.ocr_word_bbs: #useOnlyGTSpace and self.use_word_bbs_gt:
-                word_boxes = torch.stack([form_metadata['word_boxes'] for form_metadata in instance['form_metadata']],dim=0)
-                word_boxes = word_boxes.to(device) #I can change this as it isn't used later
-                ocrBoxes=word_boxes
-
-            if ocrBoxes is not None:
-                
-                #ocrBoxes[:,:,5:]=0 #zero out other information to ensure results aren't contaminated
-                ocr = gtTrans
-            else:
-                ocr = None
-            ocr_res = (ocrBoxes,ocr)
-
-        #import pdb;pdb.set_trace()
-        if ocr_res is not None and max(len(ocr_b) if ocr_b is not None else -1 for ocr_b in ocr_res)>0 and self.randomly_blank_image>random.random():
-            image = None
 
         if run:
             string_a,pred_mask = self.model(image,questions,RUN=run)
@@ -437,19 +360,10 @@ class QATrainer(BaseTrainer):
         else:
             pred_a, target_a, string_a, pred_mask = self.model(image,questions,answers)
 
-        #print(answers)
-
-        #pred_a[:,0].sum().backward()
-        #print(self.model.start_token.grad)
-        #pred_a.sum().backward()
-        #print(self.model.image.grad)
-        #import pdb;pdb.set_trace()
 
 
         if forward_only:
             return
-        #t##t#self.opt_history['run model'].append(timeit.default_timer()-tic)#t#
-        #t##t#tic=timeit.default_timer()#t##t#
         losses=defaultdict(lambda:0)
         log=defaultdict(list)
         
@@ -473,7 +387,6 @@ class QATrainer(BaseTrainer):
                 assert noise_token_mask is None
                 losses['unlikelihoodLoss'] = self.loss['unlikelihood'](pred_logits,pred_a,target_a,**self.loss_params['unlikelihood'])
 
-            #losses['answerLoss'] = pred_a.sum()
             if 'mask' in self.loss and gt_mask is not None and pred_mask is not None: #we allow gt_mask to be none to not supervise
                 mask_labels_batch_mask = instance['mask_labels_batch_mask'].to(device)
                 losses['maskLoss'] = self.loss['mask'](pred_mask*mask_labels_batch_mask[:,None,None,None],gt_mask)
@@ -569,7 +482,7 @@ class QATrainer(BaseTrainer):
                 iou = (intersection/union).cpu()
             else:
                 iou = None
-            for b,(b_answers,b_pred,b_questions,b_metadata) in enumerate(zip(answers,string_a,questions,instance['form_metadata'])):
+            for b,(b_answers,b_pred,b_questions,b_metadata) in enumerate(zip(answers,string_a,questions,instance['metadata'])):
                 assert len(b_questions)==1
                 #print('pred '+b_pred[0])
                 #print('true '+b_answers[0])

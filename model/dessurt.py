@@ -27,7 +27,7 @@ class Dessurt(BaseModel):
         self.image_size = config['image_size'] #input must be this size
         dropout = 0 if config.get('no_dropout',False) else 0.1
         self.conv_patch_emb = config.get('conv_patch_emb',True) #set to False to use original Swin embedding
-        lighter_conv_patch_emb = config['lighter_conv_patch_emb'] if 'lighter_conv_patch_emb' in config else False #shallower network
+        lighter_conv_patch_emb = config['lighter_conv_patch_emb'] if 'lighter_conv_patch_emb' in config else False #shallower network for visual embedding
         init_from_pretrained = config.get('init_from_pretrained',True) #the text emebeddings
         self.use_set_length = config.get('use_set_length',True) #Fixed length input and output
         self.max_q_tokens = config.get('max_q_tokens',20) #fixed length query tokens

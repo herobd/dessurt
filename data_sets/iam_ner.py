@@ -297,7 +297,7 @@ class IAMNER(QADataset):
     def parseAnn(self,xmlfile,s):
         qas,bbs = self.makeQuestions(xmlfile,s)
         bbs = np.array(bbs)
-        return bbs, list(range(bbs.shape[0])), None, {}, {}, qas
+        return bbs, list(range(bbs.shape[0])), None, None, qas
 
 
     #Sometimes return a word with a relatively close editdistance

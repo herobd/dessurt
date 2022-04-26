@@ -70,5 +70,5 @@ class RVLCDIPClass(QADataset):
         class_str = self.str_lookup[class_index]
         qas=[]
         self.qaAdd(qas,'classify>',class_str)
-        return np.array([]), [], None, {}, {}, qas
+        return None,None,None,None, qas
 

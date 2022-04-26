@@ -201,5 +201,5 @@ class IAMMixed(ParaQADataset):
         for pair in qa:
             pair['bb_ids']=None
 
-        return np.array([]), [], None, {'image':image}, {}, qa
+        return None, None, image, None, qa
 

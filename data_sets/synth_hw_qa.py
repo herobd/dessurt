@@ -139,5 +139,4 @@ class SynthHWQA(ParaQADataset):
         qa, qa_bbs = self.makeQuestions(ocr,image_h,image_w,s)
         for pair in qa:
             pair['bb_ids']=None
-        metadata={}
-        return np.array([]), [], None, {'image':image}, metadata, qa
+        return None,None, image, None, qa
