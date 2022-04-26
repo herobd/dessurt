@@ -140,7 +140,7 @@ class NAFRead(QADataset):
 
     def parseAnn(self,annotations,s):
         qa = None #This is pre-computed
-        return None,None,None,None qa
+        return None,None,None,None, qa
 
     def makeQuestions(self,annotations,scale):
         fixAnnotations(None,annotations)

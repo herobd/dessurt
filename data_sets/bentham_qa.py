@@ -67,5 +67,5 @@ class BenthamQA(QADataset):
             )
         
         form_metadata={'all_answers':[[answer]]}
-        return np.zeros(0), [], None, {}, form_metadata, qa
+        return None,None,None form_metadata, qa
 

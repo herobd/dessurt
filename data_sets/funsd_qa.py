@@ -190,9 +190,7 @@ class FUNSDQA(FormQA):
         else:
             qa = None #This is pre-computed
 
-        ocr=None
-        #ocr = [self.corrupt(text) for text in ocr]
-        return bbs, list(range(bbs.shape[0])), ocr, {}, {}, qa
+        return bbs, list(range(bbs.shape[0])), None,None,qa
 
 
     def convertBB(self,s,box):
