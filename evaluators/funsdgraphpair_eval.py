@@ -235,16 +235,16 @@ def FUNSDGraphPair_eval(config,instance, trainer, metrics, outDir=None, startInd
     pred_entities=[]
     for group in finalPredGroups:
         clsVotes = defaultdict(int)
-        lines
+        lines=[]
         for lineID in group:
             maxIndex =np.argmax(finalOutputBoxes[lineID,6:6+numClasses])
             cls = classes[maxIndex]
-            clsVotes.append(cls)
+            clsVotes[cls]+=1
             tl,tr,br,bl=getCorners(finalOutputBoxes[lineID,1:6])
 
             lines.append({
                 'corners':[tl,tr,br,bl],
-                'gt_text': finalBBTrans[line_id]
+                'gt_text': finalBBTrans[lineID]
                 })
 
         best_cls=None

@@ -61,7 +61,7 @@ new_id=int(sys.argv[2])
 
 broken = name.split('_')
 old_id = broken[-1]
-new_name='iamX+'+('_'.join(broken[:-2]))+'_PTfrom{}i800k_{}'.format(old_id,new_id)
+new_name='iamX+'+('_'.join(broken[:-2]))+'_PTfrom{}i3m_{}'.format(old_id,new_id)
 
 old_cf = 'configs/cf_{}.json'.format(name)
 new_cf = 'configs/cf_{}.json'.format(new_name)

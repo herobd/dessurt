@@ -2,7 +2,8 @@ import json
 import os
 import sys
 from change_checkpoint_reset_for_training import readRemoveWrite
-from make_run import create
+#from make_run import create
+from make_run_multi import create
 
 
 if len(sys.argv)==1:
@@ -12,7 +13,10 @@ if len(sys.argv)==1:
 pretrained_path=sys.argv[1]
 #itera=int(sys.argv[2])
 new_id=int(sys.argv[2])
-new_dir_loc=sys.argv[3]
+if len(sys.argv)>3:
+    new_dir_loc=sys.argv[3]
+else:
+    new_dir_loc='saved/'
 if len(sys.argv)>4:
     user = sys.argv[4]
 else:
@@ -95,16 +99,16 @@ cf['validation']=new_val
 cf['model']['max_a_tokens'] = 50
 
 #set validation
-cf['trainer']['iterations']=340000
+cf['trainer']['iterations']=421056
 cf['trainer']['val_step']=10000
-cf['trainer']['save_step']=200000
+cf['trainer']['save_step']=20000000000
 cf['trainer']["save_step_minor"]= 1024 
 cf['trainer']['monitor_mode']='max'
 cf['trainer']['monitor']='val_E_ANLS'
 
 #set drop in LR
 cf['trainer']["use_learning_schedule"]= "multi_rise then ramp_to_lower"
-cf['trainer']["lr_down_start"]= 300000
+cf['trainer']["lr_down_start"]= 350000
 cf['trainer']["ramp_down_steps"]= 10000
 cf['trainer']["lr_mul"]= 0.1
 

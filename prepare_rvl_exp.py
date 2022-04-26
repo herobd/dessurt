@@ -2,7 +2,8 @@ import json
 import os
 import sys
 from change_checkpoint_reset_for_training import readRemoveWrite
-from make_run import create
+#from make_run import create
+from make_run_multi import create
 
 
 if len(sys.argv)==1:
@@ -95,8 +96,8 @@ cf['validation']=new_val
 cf['model']['max_a_tokens'] = 8 #doesn't need to predict more than 1
 
 #set validation
-cf['trainer']['iterations']=340099
-cf['trainer']['val_step']=20000
+cf['trainer']['iterations']=2501099
+cf['trainer']['val_step']=25000
 cf['trainer']['save_step']=5000000000
 cf['trainer']["save_step_minor"]= 1024 
 cf['trainer']['monitor_mode']='max'
@@ -104,7 +105,7 @@ cf['trainer']['monitor']='val_E_class_acc'
 
 #set drop in LR
 cf['trainer']["use_learning_schedule"]= "multi_rise then ramp_to_lower"
-cf['trainer']["lr_down_start"]= 175000
+cf['trainer']["lr_down_start"]= 2000000
 cf['trainer']["ramp_down_steps"]= 10000
 cf['trainer']["lr_mul"]= 0.1
 

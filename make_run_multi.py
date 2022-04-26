@@ -67,7 +67,6 @@ done
 
 """
 
-import sys
 import os
 N=6
 def create(job_name):
@@ -83,6 +82,9 @@ def create(job_name):
         f.write(script)
         print('created: runs/run_{}.pbs'.format(job_name))
 
-for job_name in sys.argv[1:]:
-    create(job_name)
+if __name__=="__main__":
+    import sys
+
+    for job_name in sys.argv[1:]:
+        create(job_name)
 

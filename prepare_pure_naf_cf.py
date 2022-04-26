@@ -2,7 +2,8 @@ import json
 import sys
 import os
 from change_checkpoint_reset_for_training import readRemoveWrite
-from make_run import create
+#from make_run import create
+from make_run_multi import create
 
 
 if len(sys.argv)==1:
@@ -67,7 +68,7 @@ new_dataset= {
               },
           "questions":1,
           "max_qa_len": 9999000,
-          "use_json": True
+          "use_json": "readevenmore"
             }
 new_val =  {
         "shuffle": False,
@@ -86,8 +87,8 @@ cf['data_loader']=new_dataset
 
 cf['validation']=new_val
 
-cf['trainer']['iterations']=150000
-cf['trainer']['val_step']=5000
+cf['trainer']['iterations']=300000
+cf['trainer']['val_step']=10000
 cf['trainer']['save_step']=20000000000
 cf['trainer']["save_step_minor"]= 1024 
 cf['trainer']['monitor_mode']='min'
@@ -96,8 +97,8 @@ cf['trainer']['monitor']='val_E_json_CE'
 
 #set drop in LR
 cf['trainer']["use_learning_schedule"]= "multi_rise then ramp_to_lower"
-cf['trainer']["lr_down_start"]= 60000
-cf['trainer']["ramp_down_steps"]= 5000
+cf['trainer']["lr_down_start"]= 250000
+cf['trainer']["ramp_down_steps"]= 10000
 cf['trainer']["lr_mul"]= 0.1
 
 

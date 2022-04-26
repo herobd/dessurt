@@ -3,7 +3,8 @@ import os
 import sys
 from change_checkpoint_reset_for_training import readRemoveWrite
 try:
-    from make_run import create
+    #from make_run import create
+    from make_run_multi import create
 except:
     pass
 
@@ -97,16 +98,16 @@ cf['validation']=new_val
 cf['model']['max_a_tokens'] = 50
 
 #set validation
-cf['trainer']['iterations']=340000
-cf['trainer']['val_step']=10000
-cf['trainer']['save_step']=200000
+cf['trainer']['iterations']=1201000
+cf['trainer']['val_step']=20000
+cf['trainer']['save_step']=20000000000
 cf['trainer']["save_step_minor"]= 1024 
 cf['trainer']['monitor_mode']='max'
 cf['trainer']['monitor']='val_E_ANLS'
 
 #set drop in LR
 cf['trainer']["use_learning_schedule"]= "multi_rise then ramp_to_lower"
-cf['trainer']["lr_down_start"]= 200000
+cf['trainer']["lr_down_start"]= 800000
 cf['trainer']["ramp_down_steps"]= 10000
 cf['trainer']["lr_mul"]= 0.1
 
