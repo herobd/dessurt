@@ -52,9 +52,9 @@
         "weight_decay": 0.01
     },
     "loss": {
-        "#answer": "padded_seq_cross_entropy",
+        
         "answer": "label_smoothing",
-        "#mask": "sigmoid_BCE_mask_loss",
+        
         "mask": "focalLoss"
     },
     "loss_weights": {
@@ -64,7 +64,7 @@
         "distillation": 2.5
     },
     "loss_params": {
-        "xanswer": {},
+        
         "answer": {
             "smoothing": 0.1,
             "padding_idx": 1
@@ -75,8 +75,8 @@
         "class": "QATrainer",
         "iterations": 421056,
         "accum_grad_steps": 64,
-        "#swa": true,
-        "#swa_start": 200000,
+        
+        
         "save_dir": "saved/",
         "val_step": 10000,
         "save_step": 20000000000,
@@ -88,7 +88,7 @@
         "monitor_mode": "max",
         "retry_count": 0,
         "do_ocr": "no",
-        "#use_learning_schedule": "multi_rise then ramp_to_swa",
+        
         "use_learning_schedule": "multi_rise then ramp_to_lower",
         "warmup_steps": [
             1000
@@ -97,19 +97,19 @@
         "ramp_down_steps": 10000,
         "lr_mul": 0.1
     },
-    "arch": "MmSwin",
+    "arch": "Dessurt",
     "model": {
         "image_size": [
             1152,
             768
         ],
-        "use_set_length": true,
-        "init_from_pretrained": "bart",
-        "use_special_question_tokens": true,
-        "max_q_tokens": 20,
-        "#max_a_tokens": 3400,
-        "max_a_tokens": 50,
-        "no_dropout": false,
+        
+        
+        
+        
+        
+        
+        
         "window_size": 12,
         "decode_dim": 768,
         "dim_ff": 3072,

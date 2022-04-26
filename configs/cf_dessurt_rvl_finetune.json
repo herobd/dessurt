@@ -1,25 +1,20 @@
 {
-    "name": "iamNER18c1noise_mmswin_bart_PTfrom275ilatest_296",
+    "name": "dessurt_rvl_finetune",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
-        "data_set_name": "IAMNER",
-        "data_dir": "../data/IAM",
-        "cased": true,
-        "full": true,
-        "class_first": true,
-        "short_class": true,
-        "use_noise": 0.09,
-        "task": 18,
-        "batch_size": 1,
-        "num_workers": 6,
+        "data_set_name": "RVLCDIPClass",
+        "data_dir": "../data/rvl-cdip",
         "shuffle": true,
+        "prefetch_factor": 2,
         "persistent_workers": true,
+        "batch_size": 2,
+        "num_workers": 6,
         "rescale_range": [
-            0.8,
-            1
+            0.9,
+            1.1
         ],
         "rescale_to_crop_size_first": true,
         "crop_params": {
@@ -30,15 +25,17 @@
             "pad": 0,
             "rot_degree_std_dev": 1
         },
-        "questions": 1
+        "questions": 1,
+        "cased": true
     },
     "validation": {
         "shuffle": false,
-        "batch_size": 3,
+        "batch_size": 5,
         "rescale_range": [
-            0.9,
-            0.9
+            1,
+            1
         ],
+        "rescale_to_crop_size_first": true,
         "crop_params": {
             "crop_size": [
                 1152,
@@ -55,9 +52,9 @@
         "weight_decay": 0.01
     },
     "loss": {
-        "#answer": "padded_seq_cross_entropy",
+        
         "answer": "label_smoothing",
-        "#mask": "sigmoid_BCE_mask_loss",
+        
         "mask": "focalLoss"
     },
     "loss_weights": {
@@ -67,7 +64,7 @@
         "distillation": 2.5
     },
     "loss_params": {
-        "xanswer": {},
+        
         "answer": {
             "smoothing": 0.1,
             "padding_idx": 1
@@ -76,43 +73,43 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 400099,
+        "iterations": 2501099,
         "accum_grad_steps": 64,
-        "#swa": true,
-        "#swa_start": 200000,
+        
+        
         "save_dir": "saved/",
-        "val_step": 10000,
-        "save_step": 14000000000,
+        "val_step": 25000,
+        "save_step": 5000000000,
         "save_step_minor": 1024,
         "log_step": 1024,
         "print_pred_every": 1024,
         "verbosity": 1,
-        "monitor": "val_F_Measure_MACRO",
+        "monitor": "val_E_class_acc",
         "monitor_mode": "max",
         "retry_count": 0,
         "do_ocr": "no",
-        "#use_learning_schedule": "multi_rise then ramp_to_swa",
+        
         "use_learning_schedule": "multi_rise then ramp_to_lower",
         "warmup_steps": [
             1000
         ],
-        "lr_down_start": 300000,
+        "lr_down_start": 2000000,
         "ramp_down_steps": 10000,
         "lr_mul": 0.1
     },
-    "arch": "MmSwin",
+    "arch": "Dessurt",
     "model": {
         "image_size": [
             1152,
             768
         ],
-        "use_set_length": true,
-        "init_from_pretrained": "bart",
-        "use_special_question_tokens": true,
-        "max_q_tokens": 20,
-        "#max_a_tokens": 3400,
-        "max_a_tokens": 740,
-        "no_dropout": false,
+        
+        
+        
+        
+        
+        "max_a_tokens": 8,
+        
         "window_size": 12,
         "decode_dim": 768,
         "dim_ff": 3072,

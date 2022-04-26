@@ -152,7 +152,6 @@
         "distillation": 2.5
     },
     "loss_params": {
-        "xanswer": {},
         "answer": {
             "smoothing": 0.1,
             "padding_idx": 1

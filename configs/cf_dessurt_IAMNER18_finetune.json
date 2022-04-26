@@ -1,24 +1,27 @@
 {
-    "name": "funsd_mmswin_bart_PTfrom275ilatest_294",
+    "name": "dessurt_IAMNER18_finetune",
     "cuda": true,
     "gpu": 0,
     "save_mode": "state_dict",
     "override": true,
     "data_loader": {
-        "data_set_name": "FUNSDQA",
-        "data_dir": "../data/FUNSD",
+        "data_set_name": "IAMNER",
+        "data_dir": "../data/IAM",
         "cased": true,
-        "words": true,
-        "use_json": "streamlined",
-        "shuffle": true,
-        "prefetch_factor": 5,
-        "persistent_workers": true,
+        "full": true,
+        "class_first": true,
+        "short_class": true,
+        "use_noise": 0.09,
+        "task": 18,
         "batch_size": 1,
-        "num_workers": 4,
+        "num_workers": 6,
+        "shuffle": true,
+        "persistent_workers": true,
         "rescale_range": [
             0.8,
-            1.2
+            1
         ],
+        "rescale_to_crop_size_first": true,
         "crop_params": {
             "crop_size": [
                 1152,
@@ -27,18 +30,14 @@
             "pad": 0,
             "rot_degree_std_dev": 1
         },
-        "questions": 1,
-        "max_qa_len_in": 640,
-        "max_qa_len_out": 99999999999,
-        "split_to_lines": true,
-        "do_words": false,
-        "color": false
+        "questions": 1
     },
     "validation": {
+        "shuffle": false,
         "batch_size": 3,
         "rescale_range": [
-            1,
-            1
+            0.9,
+            0.9
         ],
         "crop_params": {
             "crop_size": [
@@ -47,8 +46,7 @@
             ],
             "pad": 0,
             "random": false
-        },
-        "shuffle": false
+        }
     },
     "lr_scheduler_type": "none",
     "optimizer_type": "AdamW",
@@ -57,9 +55,9 @@
         "weight_decay": 0.01
     },
     "loss": {
-        "#answer": "padded_seq_cross_entropy",
+        
         "answer": "label_smoothing",
-        "#mask": "sigmoid_BCE_mask_loss",
+        
         "mask": "focalLoss"
     },
     "loss_weights": {
@@ -69,7 +67,7 @@
         "distillation": 2.5
     },
     "loss_params": {
-        "xanswer": {},
+        
         "answer": {
             "smoothing": 0.1,
             "padding_idx": 1
@@ -78,43 +76,43 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 42009,
+        "iterations": 400099,
         "accum_grad_steps": 64,
-        "#swa": true,
-        "#swa_start": 200000,
+        
+        
         "save_dir": "saved/",
-        "val_step": 1000,
-        "save_step": 200000000,
-        "save_step_minor": 1000,
+        "val_step": 10000,
+        "save_step": 14000000000,
+        "save_step_minor": 1024,
         "log_step": 1024,
         "print_pred_every": 1024,
         "verbosity": 1,
-        "monitor": "val_E_json_CE",
-        "monitor_mode": "min",
+        "monitor": "val_F_Measure_MACRO",
+        "monitor_mode": "max",
         "retry_count": 0,
         "do_ocr": "no",
-        "#use_learning_schedule": "multi_rise then ramp_to_swa",
+        
         "use_learning_schedule": "multi_rise then ramp_to_lower",
         "warmup_steps": [
             1000
         ],
-        "lr_down_start": 30000,
-        "ramp_down_steps": 1000,
+        "lr_down_start": 300000,
+        "ramp_down_steps": 10000,
         "lr_mul": 0.1
     },
-    "arch": "MmSwin",
+    "arch": "Dessurt",
     "model": {
         "image_size": [
             1152,
             768
         ],
-        "use_set_length": true,
-        "init_from_pretrained": "bart",
-        "use_special_question_tokens": true,
-        "max_q_tokens": 20,
-        "#max_a_tokens": 3400,
-        "max_a_tokens": 800,
-        "no_dropout": false,
+        
+        
+        
+        
+        
+        "max_a_tokens": 740,
+        
         "window_size": 12,
         "decode_dim": 768,
         "dim_ff": 3072,
