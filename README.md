@@ -68,7 +68,20 @@ It will prompt you for the image path (if not provided) and for the queries. Her
 * Parse to JSON, starting from: `json~JSON": "to start from"}`
 * Link down/up (just replace "down" with "up"):  `linkdown-both~text of element` or `linkdown-box~` or `linkdown-text~text of element`
 
+## I want to fine-tune Dessurt on my own data
 
+First you need to define a dataset object. You can see mine in the `data_sets` directory. Most are children of the QADatset (`qa.py`) and that is probably going to be the easiest route for you.
+
+Your child class will need to populate `self.images` as an array or dicts with
+* `'imagePath'`: the path to the image, can also be None and the image is returned in metadatafrom `self.parseAnn`
+* `'imageName'`: Optional, defaults to path
+* `'annotationPath`: If this is a path to a json, the json will be read and passed to `self.parseAnn`, otherwise whatever this is is passed to `self.parseAnn`
+
+Your child class will also need to implement the `parseAnn` function, which takes as input the "annotation" and returns: 
+* bounding boxes for form elements, can be None
+* IDs for the bounding boxes, can be None
+* generated image, if there is one, else None
+* the Query-Answer pairs
 
 ## File Structure
   ```
