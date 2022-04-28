@@ -9,10 +9,6 @@ import random, os, math
 import editdistance
 from utils import img_f
 
-try:
-    import easyocr
-except:
-    pass
 
 
 import torch.autograd.profiler as profile
@@ -82,12 +78,6 @@ class QATrainer(BaseTrainer):
 
         self.print_pred_every = config['trainer']['print_pred_every'] if  'print_pred_every' in config['trainer'] else 200
         
-        #t#self.opt_history = defaultdict(list)#t#
-        self.do_ocr = config['trainer']['do_ocr'] if 'do_ocr' in config['trainer'] else False
-        if self.do_ocr and self.do_ocr!='no' and self.do_ocr!='json':
-            self.ocr_reader = easyocr.Reader(['en'],gpu=config['cuda'])
-
-        self.randomly_blank_image  =config['trainer'].get('randomly_blank_image',0)
 
 
         self.distillation_temperature = config['trainer'].get('distillation_temperature',2.0)
@@ -743,19 +733,6 @@ class QATrainer(BaseTrainer):
         if self.print_pred_every>0 and self.iteration%self.print_pred_every==0:
             self.logger.info('iteration {}'.format(self.iteration))
             for b,(b_question,b_answer,b_pred) in enumerate(zip(questions,answers,string_a)):
-                if self.do_ocr:
-                    if ocr_res[b] is not None:
-                        all_ocr=[]
-                        self.logger.info('{} OCR: '.format(b))
-                        for res in ocr_res[b]:
-                            #self.logger.info(res[1][0])
-                            all_ocr.append(res[1][0])
-                        self.logger.info(' || '.join(all_ocr))
-                    else:
-                        self.logger.info('{} OCR: None'.format(b))
-
-                #elif ocr is not None and not self.model_ref.blank_ocr:
-                #    self.logger.info('{} OCR: {}'.format(b,ocr[b]))
                 for question,answer,pred in zip(b_question,b_answer,b_pred):
                     self.logger.info('{} [Q]:{}\t[A]:{}\t[P]:{}'.format(b,question,answer,pred))
 

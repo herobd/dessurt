@@ -62,6 +62,8 @@ def readRemoveWrite(in_path,out_path,arrange_layers=None,remove_layers=None,rena
         if not new_file.endswith('checkpoint-latest.pth'):
             print('WARNING: out file is not "checkpoint-latest.pth"!!')
     else:
+        if not os.path.exists(new_file):
+            os.mkdir(new_file)
         new_file = os.path.join(new_file,'checkpoint-latest.pth')
     torch.save(saved,new_file)
     print('SAVED '+new_file)

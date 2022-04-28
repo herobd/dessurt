@@ -33,7 +33,8 @@ A training session can be resumed with: `python train.py -r CHECKPOINT.pth`
 If you want to override the config file on a resume, just use the `-c` flag as well and be sure the config has `"override": true`
 
 The `configs` directory has configs for doing the pretraining and finetuning of Dessurt.
-When finetuning, I reset the pre-trained checkpoint using this: `python change_checkpoint_reset_for_training.py -c initial/checkpoint.pth -o output/directory(or_checkpoint.pth)`
+
+When finetuning, I reset the pre-trained checkpoint using this: `python change_checkpoint_reset_for_training.py -c pretrained/checkpoint.pth -o output/directory(or_checkpoint.pth)`
 This resets the iteration count and optimizer and automatically names the output "checkpoint-latest.pth" so you can start training from it with the `-r` flag.
 
 
@@ -136,7 +137,10 @@ Your child class will also need to implement the `parseAnn` function, which take
   ```
 
 ### Config file format
-Config files are in `.json` format. Example:
+Config files are in `.json` format. 
+Note that I force the naming convention to be "cf_NAME.json", where NAME is the name in the json. This was to catch various naming errors I often made.
+
+Example:
   ```
 {
     "name": "pairing",                      # Checkpoints will be saved in saved/name/checkpoint-...pth

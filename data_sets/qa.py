@@ -62,7 +62,7 @@ class QADataset(torch.utils.data.Dataset):
 
     def __init__(self, dirPath=None, split=None, config=None, images=None):
         self.train = split=='train'
-        self.questions = config['questions']
+        self.questions = config.get('questions',1)
         self.max_qa_len_in = config['max_qa_len_in'] if 'max_qa_len_in' in config else None
         self.max_qa_len_out = config['max_qa_len_out'] if 'max_qa_len_out' in config else None
         if self.max_qa_len_in is None and self.max_qa_len_out is None and 'max_qa_len' in config:
@@ -154,9 +154,7 @@ class QADataset(torch.utils.data.Dataset):
         #This was originally just the json, but as different datasets have different data, it can be something else
         
         rescaled = self.images[index].get('rescaled',1)
-        if type(annotationPath) is int:
-            annotations = annotationPath
-        elif isinstance(annotationPath,str) and  annotationPath.endswith('.json'):
+        if isinstance(annotationPath,str) and  annotationPath.endswith('.json'):
             try: 
                 with open(annotationPath) as annFile:
                     annotations = json.loads(annFile.read())

@@ -20,6 +20,7 @@ from data_sets import census_qa
 from data_sets import distil_bart
 from data_sets import forms_graph_pair
 from data_sets import funsd_graph_pair
+from data_sets import my_dataset
 from base import BaseDataLoader
 
 
@@ -93,6 +94,8 @@ def getDataLoader(config,split,rank=None,world_size=None):
             return withCollate(census_qa.CensusQA,census_qa.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         elif data_set_name=='DistilBartDataset':
             return withCollate(distil_bart.DistilBartDataset,distil_bart.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+        elif data_set_name=='MyDataset':
+            return withCollate(my_dataset.MyDataset,my_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         else:
             print('Error, dataloader has no set for {}'.format(data_set_name))
             exit()
