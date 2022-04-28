@@ -37,7 +37,7 @@ The `configs` directory has configs for doing the pretraining and finetuning of 
 When finetuning, I reset the pre-trained checkpoint using this: `python change_checkpoint_reset_for_training.py -c pretrained/checkpoint.pth -o output/directory(or_checkpoint.pth)`
 This resets the iteration count and optimizer and automatically names the output "checkpoint-latest.pth" so you can start training from it with the `-r` flag.
 
-
+If you resume training from a snapshot with different shaped weight tensors (or extra or missing weight tensors) the base_trainer will cut and paste weights to make things work (with random initialization for new weights). This is particularly useful in defining new tokens (no problem) or resizing the input image (if it's smaller you may not even need to fine-tune).
 
 ### qa_eval.py
 
@@ -46,11 +46,6 @@ It takes many of the same arguments as new_eval.py, but also requires the (diffe
 
 Usage: `python qa_eval.py -c CHECKPOINT.pth -d DATASETNAME [-g GPU#]  [-T (do test set)] [-a THINGSTOADD]
 
-### funsd_eval_json.python and naf_eval_json.py
-
-For evaluating Dessurt on FUNSD and NAF respectively. The have the same arguments.
-
-Usage: `python funsd_eval_json.py -c CHECKPOINT.pth [-g GPU#] [-w out.json (write output jsons)] [-E 0.6 (entity string match threshold)] [-L 0.6 (linking string match threshold)] [-b # (beam search with # beams)]
 
 ### run.py
 
@@ -58,7 +53,7 @@ This allows an interactive running of Dessurt.
 
 Usage: `python run.py -c CHECKPOINT.pth [-i image/path(default ask for path)] [-g gpu#] [-a add=or,change=things=in,config=v] [-S (get saliency map)]`
 
-It will prompt you for the image path (if not provided) and for the queries. Here are some helpful task tokens (start of query). Tokens always end with "~" or ">":
+It will prompt you for the image path (if not provided) and for the queries. You'll have to draw in highlights and masks when prompted. Here are some helpful task tokens (start of query). Tokens always end with "~" or ">":
 * Read On: `re~text to start from`
 * Read Highlighted: `w0>`
 * Read page: `read_block>`, you can also use `read_block0>` if you want to provide the highlight
@@ -71,7 +66,38 @@ It will prompt you for the image path (if not provided) and for the queries. Her
 
 ## I want to fine-tune Dessurt on my own data
 
-First you need to define a dataset object. You can see mine in the `data_sets` directory. Most are children of the QADatset (`qa.py`) and that is probably going to be the easiest route for you.
+You have two options. If you can define your dataset as images with a set of queries and text answers, you can use the MyDataset class. If you need something fancier, you can define your own dataset class.
+
+### MyDataset
+
+MyDataset expects `data_dir` to be a directory with a "train", "valid", and possibly "test" subdirectory.
+Each of these is to have the images (potentially nested in subdirectories). Then there either needs to be a json for each image ('this/image.png' and 'this/image.json') or a single 'qa.json'
+
+'this/image.json' has the list of Q-A pairs:
+```
+[
+    {"question": "TOK~context text",
+     "answer": "text response"},
+    ...
+]
+```
+"TOK~" is the special token string. See the Task Tokens section. 
+Answers can also be a list of strings, such as how DocVQA has multiple right answers.
+
+If you use the 'qa.json' format, it has a map from each image path to that image's list of Q-A pairs
+```
+{"imagefile.png":      [ {"question": "TOK~context text",
+                           "answer": "response text"},
+                          {"question": "TOK2>",
+                           "answer": "other response text"},
+                           ...
+                       ],
+ ...
+}
+
+### Defining your own dataset class
+
+First you need to define a dataset object. You can see mine in the `data_sets` directory. Most are children of the QADataset (`qa.py`) and that is probably going to be the easiest route for you.
 
 Your child class will need to populate `self.images` as an array or dicts with
 * `'imagePath'`: the path to the image, can also be None and the image is returned in metadatafrom `self.parseAnn`
@@ -82,7 +108,198 @@ Your child class will also need to implement the `parseAnn` function, which take
 * bounding boxes for form elements, can be None
 * IDs for the bounding boxes, can be None
 * generated image, if there is one, else None
+* metadata (particularly if there are multiple right answers like DocVQA), can be None
 * the Query-Answer pairs
+
+To make getting the Query-Answer pairs ready, use the self.qaAdd function. It can take the lists of box coordinates (either for highlighting or masking) and QADataset will handle everyting for these.
+
+## Task Tokens
+
+Task tokens are always at the begining of the query string and end with either "~" or ">".
+They are defined in `model/special_token_embedder.py`. If you need to add some of your own, just add them at the **end** of the "tokens" list, and that's all you need to do.
+
+If you are doing the same thing as a pre-training task, it would be helpful to reuse the same task token.
+
+Here's what the currect tokens that are used in pre-training do:
+* 'kb~'
+* 'k0~'
+* 'su~'
+* 's0~'
+* 'up~'
+* 'u0~'
+* 'dn~'
+* 'd0~'
+* '^^~'
+* '^0~'
+* 'vv~'
+* 'v0~'
+* '0;~'
+* '0w~'
+* 'w0>'
+* ';0>'
+* 'rm>'
+* 'mk>'
+* 'mm~'
+* 're~'
+* 'r0~'
+* 'b0~'
+* 'bk~'
+* '00~'
+* '0p~'
+                  #form qa
+* 'al~'
+* 'z0~'
+* 'z0>'
+* 'zs~'
+* 'zs>'
+* 'zm~'
+* 'zm>'
+* 
+                  'g0~'
+* 'g0>'
+* 'gs~'
+* 'gs>'
+* 'gm~'
+* 'gm>'
+* 
+                  'c$~'
+* 'cs~'
+* 
+                  'l0~'
+* 'l0>'
+* 
+                  'l~'
+* 'l>'
+* 
+                  'v0~'
+* 'v0>'
+* 
+                  'v~'
+* 'v>'
+* 
+                  'h0~'
+* 'h0>'
+* 
+                  'hd~'
+* 'hd>'
+* 
+                  'u1~'
+* 'u1>'
+* 
+                  'uh~'
+* 'uh>'
+* 
+                  'q0~'
+* 'q0>'
+* 
+                  'qu~'
+* 'qu>'
+* 
+                  'fi~'
+* 't~'
+* 'ri~'
+* 'ci~'
+* '$r~'
+* '$c~'
+* 'ar~'
+* 'ac~'
+* 'rh~'
+* 'ch~'
+* 'rh>'
+* 'ch>'
+* 'zs~'  
+* 'gs~'
+* 
+                  'f0~'
+* 'pr~'
+* 'p0~'
+* 'f1~'
+* 'p1~'
+* 't0~'
+* 'r*~'
+* 'c*~'
+* '#r~'
+* '#c~'
+* '%r~'
+* '%c~'
+* '%r>  '
+* '%c>'
+* 'ar>'
+* 'ac>'
+* 'r@~'
+* 'c@~'
+* 'r&~'
+* 'c&~'
+* 'r&>'
+* 'c&>'
+* '0t~'
+* 't#>'
+* 
+                  #added (para)
+                  'infillread~'
+* 'infillread0~'
+* 'proper_su~'
+* 'proper_s0~'
+* 
+                  #distillation (masked language model)
+                  'mlm>'
+* 
+                  #added (para
+*  for IAM)
+                  'read_block>'
+*  'read_block0>'
+* 
+                  #question answering
+                  'natural_q~'
+* 
+                  #NER
+                  'ne>'
+* 'ne~'
+* 'ner_line>'
+* 'ner_text~'
+* 'ner_full>'
+* 
+                  #Forms
+                  'json>'
+* 'link-both~'
+* 'link-box~'
+* 'link-text~'
+* 
+                  'linkdown-both~'
+* 'linkdown-box~'
+* 'linkdown-text~'
+* 
+                  'linkup-both~'
+* 'linkup-box~'
+* 'linkup-text~'
+* 
+                  'json~'
+* 
+                  'list_row_headers~'
+* 'list_column_headers~'
+* 
+                  'full_row~'
+* 'full_col~'
+* 
+                  'full_row0~'
+* 'full_col0~'
+* 
+                  #RVL CDIP
+                  'classify>'
+* 
+                  #census (parital)
+                  'all-name~'
+* 'all-given name~'
+* 'all-age~'
+* 'record~'
+* 
+                  #new NER
+                  'ner_full_c1>'
+* 'ner_line_c1>'
+* 
+                  #SROIE
+                  'sroie>'
+*  
 
 ## File Structure
   ```
@@ -145,143 +362,133 @@ Example:
 {
     "name": "pairing",                      # Checkpoints will be saved in saved/name/checkpoint-...pth
     "cuda": true,                           # Whether to use GPU
-    "gpu": 0,                               # GPU number. Only single GPU supported.
-    "save_mode": "state_dict",              # Whether to save/load just state_dict, or whole object in checkpoint
-    "override": true,                       # Override a checkpoints config
-    "super_computer":false,                 # Whether to mute training info printed
+    "gpu": 0,                               # GPU number. (use -g to override with train.py)
+    "save_mode": "state_dict",              # Whether to save/load just state_dict, or whole object in checkpoint (recommended to use state_dict)
+    "override": true,                       # Override a checkpoints config (generally what you want to happen)
+    "super_computer":false,                 # Whether to mute training info printed, also changes behavoir or CDIPCloudDataset
+
     "data_loader": {
-        "data_set_name": "FormsGraphPair",  # Class of dataset
-        "special_dataset": "simple",        # Use partial dataset. "simple" is the set used for pairing in the paper
-        "data_dir": "../data/NAF_dataset",  # Directory of dataset
-        "batch_size": 1,
+        "data_set_name": "DocVQA",  # Class of dataset (many datasets will have their own special parameters, the ones here are general for anything inheriting from QADatset)
+        "data_dir": "../data/DocVQA",  # Directory of dataset
+        "batch_size": 1,                    
         "shuffle": true,
-        "num_workers": 1,
-        "crop_to_page":false,
-        "color":false,
-        "rescale_range": [0.4,0.65],        # Form images are randomly resized in this range
+        "num_workers": 4,
+	"rescale_to_crop_size_first": true, # Resize image to fit in crop_size before applying random rescale with rescale_range. Generally what you want unless you change the model size to fit the data
+        "rescale_range": [0.9,1.1],         # images are randomly resized in this range (scale augmentation)
         "crop_params": {
-            "crop_size":[652,1608],         # Crop size for training instance
-	    "pad":0
-        },
-        "no_blanks": true,                  # Removed fields that are blank
-        "swap_circle":true,                 # Treat text that should be circled/crossed-out as pre-printed text
-        "no_graphics":true,                 # Images not considered elements
-        "cache_resized_images": true,       # Cache images at maximum size of rescale_range to make reading them faster
-        "rotation": false,                  # Bounding boxes are converted to axis-aligned rectangles
-        "only_opposite_pairs": true         # Only label-value pairs
+            "crop_size":[1152,768],         # Crop size (needs to match model image size)
+	    "pad":0,
+            "rot_degree_std_dev": 1 	    # Rotation augmentation
+        }
 
 
     },
-    "validation": {                         # Enherits all values from data_loader, specified values are changed
+    "validation": {                         # Enherits/copies all values from data_loader, specified values are changed
         "shuffle": false,
-        "rescale_range": [0.52,0.52],
-        "crop_params": null,
-        "batch_size": 1
+        "batch_size": 3                     # Generally can use larger batch size in validation
+        "rescale_range": [1,1],             # No scale augmentation
+        "crop_params": {
+            "crop_size":[1152,768],         # Crop size (needs to match model image size)
+	    "pad":0,
+	    "random": false                 # Ensure non-stochastic placement
+        }
     },
 
     
     "lr_scheduler_type": "none",
  
-    "optimizer_type": "Adam",
+    "optimizer_type": "AdamW",
     "optimizer": {                          # Any parameters of the optimizer object go here
-        "lr": 0.001,
-        "weight_decay": 0
+        "lr": 0.0001,
+        "weight_decay": 0.01
     },
-    "loss": {                               # Name of functions (in loss.py) for various components
-        "box": "YoloLoss",                  # Detection loss
-        "edge": "sigmoid_BCE_loss",         # Pairing loss
-        "nn": "MSE",                        # Num neighbor loss
-        "class": "sigmoid_BCE_loss"         # Class of detections loss
+    "loss": {                               # Losses are in model/loss.py
+        
+        "answer": "label_smoothing",        # Loss on text output
+        "mask": "focalLoss"                 # Loss on pixel mask output
     },
-    "loss_weights": {                       # Respective weighting of losses (multiplier)
-        "box": 1.0,
-        "edge": 0.5,
-        "nn": 0.25,
-        "class": 0.25
+    "loss_weights": {
+        "answer": 1,
+        "mask": 1
     },
-    "loss_params": 
-        {
-            "box": {"ignore_thresh": 0.5,
-                    "bad_conf_weight": 20.0,
-                    "multiclass":true}
-        },
+    "loss_params": {                        # Parameters used my loss functions
+        "answer": {
+            "smoothing": 0.1,
+            "padding_idx": 1
+        }
+    },
     "metrics": [],
     "trainer": {
-        "class": "GraphPairTrainer",        # Training class name 
-        "iterations": 125000,               # Stop iteration
-        "save_dir": "saved/",               # save directory
-        "val_step": 5000,                   # Run validation set every X iterations
-        "save_step": 25000,                 # Save distinct checkpoint every X iterations
-        "save_step_minor": 250,             # Save 'latest' checkpoint (overwrites) every X iterations
-        "log_step": 250,                    # Print training metrics every X iterations
+        "class": "QATrainer",
+        "iterations": 421056,               # Number of iterations, not weight update steps
+        "accum_grad_steps": 64,             # How many iterations to accumulate the gradient before weight update
+        
+        
+        "save_dir": "saved/",               # saves in save_dir/name
+        "val_step": 10000,                  # Validate every X iterations. Set arbitrary high to turn off validation
+        "save_step": 2000000,               # Every X iterations save "checkpoint-iterationY.pth"
+        "save_step_minor": 1024,            # Every X iterations save "checkpoint-latest.pth"
+        "log_step": 1024,                   # Averages metrics over this many iterations
+        "print_pred_every": 1024,           # Prints the Queries, GT answers, and predicted answers
         "verbosity": 1,
-        "monitor": "loss",
-        "monitor_mode": "none",
-        "warmup_steps": 1000,               # Defines length of ramp up from 0 learning rate
-        "conf_thresh_init": 0.5,            
-        "conf_thresh_change_iters": 0,      # Allows slowly lowering of detection conf thresh from higher value
-        "retry_count":1,
-
-        "unfreeze_detector": 2000,          # Iteration to unfreeze detector network
-        "partial_from_gt": 0,               # Iteration to start using detection predictions
-        "stop_from_gt": 20000,              # When to maximize predicted detection use
-        "max_use_pred": 0.5,                # Maximum predicted detection use
-        "use_all_bb_pred_for_rel_loss": true,
-
-        "use_learning_schedule": true,
-        "adapt_lr": false
+        "monitor": "val_E_ANLS",            # Save "model_best.pth" whenever this metric improves
+        "monitor_mode": "max",              # Whether bigger or smaller is better for metric
+        "retry_count": 0,
+        
+        "use_learning_schedule": "multi_rise then ramp_to_lower", # use "multi_rise" is not LR drop is needed (ramps the LR from 0 over warmup_steps iterations)
+        "warmup_steps": [
+            1000
+        ],
+        "lr_down_start": 350000,            # when LR drop happes for ramp_to_lower
+        "ramp_down_steps": 10000,           # How many iterations to lower LR
+        "lr_mul": 0.1                       # How much to lower LR
     },
-    "arch": "PairingGraph",                 # Class name of model
+    "arch": "Dessurt",
     "model": {
-        "detector_checkpoint": "saved/detector/checkpoint-iteration150000.pth",
-        "conf_thresh": 0.5,
-        "start_frozen": true,
-	"use_rel_shape_feats": "corner",
-        "use_detect_layer_feats": 16,       # Assumes this is from final level of detection network
-        "use_2nd_detect_layer_feats": 0,    # Specify conv after pool
-        "use_2nd_detect_scale_feats": 2,    # Scale (from pools)
-        "use_2nd_detect_feats_size": 64,
-        "use_fixed_masks": true,
-        "no_grad_feats": true,
-
-        "expand_rel_context": 150,          # How much to pad around relationship candidates before passing to conv layers
-        "featurizer_start_h": 32,           # Size ROIPooling resizes relationship crops to
-        "featurizer_start_w": 32,
-        "featurizer_conv": ["sep128","M","sep128","sep128","M","sep256","sep256","M",238], # Network for featurizing relationship, see below for syntax
-        "featurizer_fc": null,
-
-        "pred_nn": true,                    # Predict a new num neighbors for detections
-        "pred_class": false,                # Predict a new class for detections
-        "expand_bb_context": 150,           # How much to pad around detections
-        "featurizer_bb_start_h": 32,        # Size ROIPooling resizes detection crops to
-        "featurizer_bb_start_w": 32,
-        "bb_featurizer_conv": ["sep64","M","sep64","sep64","M","sep128","sep128","M",250], # Network for featurizing detections
-
-        "graph_config": {
-            "arch": "BinaryPairReal",
-            "in_channels": 256,
-            "layers": ["FC256","FC256"],    # Relationship classifier
-            "rel_out": 1,                   # one output, probability of true relationship
-            "layers_bb": ["FC256"]          # Detection predictor
-            "bb_out": 1,                    # one output, num neighbors
-        }
+        "image_size": [
+            1152,768                        # Input image size
+        ],
+        "window_size": 12,                  # Swin window size. Swin implementation requires (image size / 8)%window_size==0  (8 is from 4x downsample from CNN and 2x downsample from Swin downsample)
+        "decode_dim": 768,                  # Text tokens hidden size
+        "dim_ff": 3072,                     # reverse bottleneck on text tokens
+        "decode_num_heads": 8,              # num heads on text tokens
+        "blocks_per_level": [               # how many layers before and after Swin downsample
+            4,
+            6
+        ],
+        "use_swin": [                       # Whether visual tokens are updated at each layer
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false
+        ],
+        "swin_cross_attention": [           # Whether visual tokens cross attend to query
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false
+        ],
+        "swin_nheads": [                    # Number of heads for Swin attention before and after Swin downsample
+            4,
+            8
+        ],
+        "im_embed_dim": 128 		    # Initial image token size (doubled at Swin downsample)
     }
 }
   ```
 
-Config network layer syntax:
-
-* `[int]`: Regular 3x3 convolution with specified output channels, normalization (if any), and ReLU
-* `"ReLU"`
-* `"drop[float]"`/`"dropout[float]"`: Dropout, if no float amount is 0.5
-* `"M"`": Maxpool (2x2)
-* `"R[int]"`: Residual block with specified output channels, two 3x3 convs with correct ReLU+norm ordering (expects non-acticated input)
-* `"k[int]-[int]"`: conv, norm, relu. First int specifies kernel size, second specifier output channels.
-* `"d[int]-[int]"`: dilated conv, norm, relu. First int specifies dilation, second specifier output channels.
-* `"[h/v]d[int]-[int]"`: horizontal or vertical dilated conv, norm, relu (horizontal is 1x3 and vertical is 3x1 kernel). First int specifies dilation, second specifier output channels. 
-* `"sep[int]"`: Two conv,norm,relu blocks, the first is depthwise seperated, the second is (1x1). The int is the out channels
-* `"cc[str]-k[int],d[int],[hd/vd]-[int]"`: CoordConv, str is type, k int is kernel size (default 3), d is dilation size (default 1), hd makes it horizontal (kernel is height 1), vd makes it vertical, final int is out channels 
-* `"FC[int]"`: Fully-connected layer with given output channels
 
 
 The checkpoints will be saved in `save_dir/name`.
@@ -289,7 +496,7 @@ The checkpoints will be saved in `save_dir/name`.
 The config file is saved in the same folder. (as a reference only, the config is loaded from the checkpoint)
 
 **Note**: checkpoints contain:
-  ```python
+  ```pythonvim
   {
     'arch': arch,
     'epoch': epoch,
@@ -298,6 +505,8 @@ The config file is saved in the same folder. (as a reference only, the config is
     'optimizer': self.optimizer.state_dict(),
     'monitor_best': self.monitor_best,
     'config': self.config
+    #and optionally
+    'swa_state_dict': self.swa_model.state_dict()
   }
   ```
 
