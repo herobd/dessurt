@@ -1,0 +1,42 @@
+{
+"0.jpeg": [
+    {"question": "natural_q~What is this a picture of?",
+        "answer": "A stalking cat in some grass"}
+],
+"1.jpeg": [
+    {"question": "natural_q~What is this a picture of?",
+        "answer": "A cat in an egyptain costume."}
+],
+"2.jpeg": [
+    {"question": "natural_q~What is this a picture of?",
+        "answer": "A cat biting clothing."}
+],
+"3.jpeg": [
+    {"question": "natural_q~What is this a picture of?",
+        "answer": "A bored cat."}
+],
+"4.jpeg": [
+    {"question": "natural_q~What is this a picture of?",
+        "answer": "A cat in sunglasses."}
+],
+"5.jpeg": [
+    {"question": "natural_q~What is this a picture of?",
+        "answer": "A cat in a shark costume."}
+],
+"6.jpeg": [
+    {"question": "natural_q~What is this a picture of?",
+        "answer": "An angry cat."}
+],
+"7.jpeg": [
+    {"question": "natural_q~What is this a picture of?",
+        "answer": "A pouncing cat."}
+],
+"8.jpeg": [
+    {"question": "natural_q~What is this a picture of?",
+        "answer": "A cat being petted."}
+],
+"9.jpeg": [
+    {"question": "natural_q~What is this a picture of?",
+        "answer": "It's on fire!"}
+]
+}

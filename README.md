@@ -70,6 +70,8 @@ You have two options. If you can define your dataset as images with a set of que
 
 ### MyDataset
 
+See `configs/cf_test_cats_each_finetune.json` and `configs/cf_test_cats_qa_finetune.json` and their respective data in `example_data` for an example of how to use MyDataset.
+
 MyDataset expects `data_dir` to be a directory with a "train", "valid", and possibly "test" subdirectory.
 Each of these is to have the images (potentially nested in subdirectories). Then there either needs to be a json for each image ('this/image.png' and 'this/image.json') or a single 'qa.json'
 

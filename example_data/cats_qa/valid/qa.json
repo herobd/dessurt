@@ -1,0 +1,18 @@
+{
+"0.jpeg": [
+    {"question": "natural_q~What is this a picture of?",
+        "answer": "A not-impressed cat"}
+],
+"1.jpeg": [
+    {"question": "natural_q~What is this a picture of?",
+        "answer": "A cat with rainbow"}
+],
+"2.jpeg": [
+    {"question": "natural_q~What is this a picture of?",
+        "answer": "A cat with big eyes."}
+],
+"3.jpeg": [
+    {"question": "natural_q~What is this a picture of?",
+        "answer": "A black cat"}
+]
+}
