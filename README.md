@@ -122,186 +122,140 @@ They are defined in `model/special_token_embedder.py`. If you need to add some o
 
 If you are doing the same thing as a pre-training task, it would be helpful to reuse the same task token.
 
-Here's what the currect tokens that are used in pre-training do:
-* 'kb~'
-* 'k0~'
-* 'su~'
-* 's0~'
-* 'up~'
-* 'u0~'
-* 'dn~'
-* 'd0~'
-* '^^~'
-* '^0~'
-* 'vv~'
-* 'v0~'
-* '0;~'
-* '0w~'
-* 'w0>'
-* ';0>'
-* 'rm>'
-* 'mk>'
-* 'mm~'
-* 're~'
-* 'r0~'
-* 'b0~'
-* 'bk~'
-* '00~'
-* '0p~'
+Here's what the currect tokens that are used in pre-training are for ( "not used" tokens are defined as tasks in the code, but weren't used in final training):
+* 'kb~': Given a text snippet with a blanked word in it () return the correct word
+* 'k0~': Same as above but, also gets text highlighted
+* 'su~': Given a text snippet, but with a word randomly replaced, return the correct word
+* 's0~': Same as above, but also gets text highlighted
+* 'up~': Given some text, read the text line above it, possibly going beyond the paragraph
+* 'u0~': Same as above, but input text is also highlighted
+* 'dn~': Given some text read the text line below it, possible going beyond the paragraph
+* 'd0~': Same as above, but input text is also highlighted
+* '^^~': Given some text, read the text line above it, or return '№' this is the top of a paragraph 
+* '^0~': Same as above, but input text is also highlighted
+* 'vv~': Given some text, read the text line below it, or return '№' this is the bottom of a paragraph
+* 'v0~': Same as above, but input text is also highlighted
+* '0;~': Given some text, output highlight the entire text line it is contained it
+* '0w~': Given some text, output highlight the text
+* 'w0>': Given a highlight, read where it's highlighted
+* ';0>': Given a highlight, read the entire textline the highlight is part of
+* 'rm>': Given a highlighted paragraph with one word masked, read the paragraph filling in the word (less efficient than Text Infilling)
+* 'mk>': Given a masked word, predict it
+* 'mm~': Given a word (text) and several masked words, highlight the area the text-word belongs
+* 're~': Given some text, read on from where that text ends
+* 'r0~': Same as above, but input text is also highlighted
+* 'b0~': For backwards reading, don't use this
+* 'bk~': For backwards reading, don't use this
+* '0p~': Given some text, highlight the paragraph this is in
+* '00~': Same as above, but input text is also highlighted
                   #form qa
-* 'al~'
-* 'z0~'
-* 'z0>'
-* 'zs~'
-* 'zs>'
-* 'zm~'
-* 'zm>'
-* 
-                  'g0~'
-* 'g0>'
-* 'gs~'
-* 'gs>'
-* 'gm~'
-* 'gm>'
-* 
-                  'c$~'
-* 'cs~'
-* 
-                  'l0~'
-* 'l0>'
-* 
-                  'l~'
-* 'l>'
-* 
-                  'v0~'
-* 'v0>'
-* 
-                  'v~'
-* 'v>'
-* 
-                  'h0~'
-* 'h0>'
-* 
-                  'hd~'
-* 'hd>'
-* 
-                  'u1~'
-* 'u1>'
-* 
-                  'uh~'
-* 'uh>'
-* 
-                  'q0~'
-* 'q0>'
-* 
-                  'qu~'
-* 'qu>'
-* 
-                  'fi~'
-* 't~'
-* 'ri~'
-* 'ci~'
-* '$r~'
-* '$c~'
-* 'ar~'
-* 'ac~'
-* 'rh~'
-* 'ch~'
-* 'rh>'
-* 'ch>'
-* 'zs~'  
-* 'gs~'
-* 
-                  'f0~'
-* 'pr~'
-* 'p0~'
-* 'f1~'
-* 'p1~'
-* 't0~'
-* 'r*~'
-* 'c*~'
-* '#r~'
-* '#c~'
-* '%r~'
-* '%c~'
-* '%r>  '
-* '%c>'
-* 'ar>'
-* 'ac>'
-* 'r@~'
-* 'c@~'
-* 'r&~'
-* 'c&~'
-* 'r&>'
-* 'c&>'
-* '0t~'
-* 't#>'
-* 
-                  #added (para)
-                  'infillread~'
-* 'infillread0~'
-* 'proper_su~'
-* 'proper_s0~'
-* 
-                  #distillation (masked language model)
-                  'mlm>'
-* 
-                  #added (para
-*  for IAM)
-                  'read_block>'
-*  'read_block0>'
-* 
-                  #question answering
-                  'natural_q~'
-* 
-                  #NER
-                  'ne>'
-* 'ne~'
-* 'ner_line>'
-* 'ner_text~'
-* 'ner_full>'
-* 
-                  #Forms
-                  'json>'
-* 'link-both~'
-* 'link-box~'
-* 'link-text~'
-* 
-                  'linkdown-both~'
-* 'linkdown-box~'
-* 'linkdown-text~'
-* 
-                  'linkup-both~'
-* 'linkup-box~'
-* 'linkup-text~'
-* 
-                  'json~'
-* 
-                  'list_row_headers~'
-* 'list_column_headers~'
-* 
-                  'full_row~'
-* 'full_col~'
-* 
-                  'full_row0~'
-* 'full_col0~'
-* 
-                  #RVL CDIP
-                  'classify>'
-* 
-                  #census (parital)
-                  'all-name~'
-* 'all-given name~'
-* 'all-age~'
-* 'record~'
-* 
-                  #new NER
-                  'ner_full_c1>'
-* 'ner_line_c1>'
-* 
-                  #SROIE
-                  'sroie>'
-*  
+* 'al~': Not used. Given a class (text), output how many entities of that class their are and highlight them
+* 'z0~': Not used.
+* 'z0>': Not used.
+* 'zs~': Not used.
+* 'zs>': Not used.
+* 'zm~': Not used.
+* 'zm>': Not used.
+* 'g0~': Not used.
+* 'g0>': Not used.
+* 'gs~': Not used.
+* 'gs>': Not used.
+* 'gm~': Not used.
+* 'gm>': Not used.
+* 'c$~': Not used.
+* 'cs~': Not used.
+* 'l0~': Not used.
+* 'l0>': Not used.
+* 'l~': Not used.
+* 'l>': Not used.
+* 'v0~': Not used.
+* 'v0>': Not used.
+* 'v~': Not used.
+* 'v>': Not used.
+* 'h0~': Not used.
+* 'h0>': Not used.
+* 'hd~': Not used.
+* 'hd>': Not used.
+* 'u1~': Not used.
+* 'u1>': Not used.
+* 'uh~': Not used.
+* 'uh>': Not used.
+* 'fi~': Given text, read on from it to the end of the entitiy
+* 't~{}~~{}':  Given a row and column header text (in the {} spots, either order), read the cell
+* 'ri~': Given a cell text, return its row header
+* 'ci~': Given a cell text, return its column header
+* '$r~': Not used.
+* '$c~': Not used.
+* 'ar~': Not used.
+* 'ac~': Not used.
+* 'rh~': Not used.
+* 'ch~': Not used.
+* 'rh>': Not used.
+* 'ch>': Not used.
+* 'zs~': Not used.
+* 'gs~': Not used.
+* 'f0~': Same as 'fi~', but input text is highlighted
+* 'pr~': Not used.
+* 'p0~': Not used.
+* 'f1~': Not used.
+* 'p1~': Not used.
+* 't0~': Same as 't~', but headers as highlighted
+* 'r*~': Same as 'ri~', but cell is highlighted
+* 'c*~': Same as 'ci~', but cell is highlighted
+* '#r~': Not used.
+* '#c~': Not used.
+* '%r~': Not used.
+* '%c~': Not used.
+* '%r>': Not used.
+* '%c>': Not used.
+* 'ar>': Not used.
+* 'ac>': Not used.
+* 'r@~': Not used.
+* 'c@~': Not used.
+* 'r&~': Not used.
+* 'c&~': Not used.
+* 'r&>': Not used.
+* 'c&>': Not used.
+* '0t~': Given a table number, highlight that table
+* 't#>': Return the number of tables in the document
+* 'infillread~': not used
+* 'infillread0~': not used
+* 'proper_su~': The 'su~' task, but the entire text is repeated, instead of just the substitured word
+* 'proper_s0~': Same as above, but input text is also highlighted
+* 'mlm>': Text Infilling. Given a highlighted paragraph with blanked areas, read the paragraph, filling in the blanks
+* 'read_block>': Read the text (used with handwriting)
+* 'read_block0>': Same as above, but text to be read is highlighted
+* 'natural_q~': Answer the natural language question
+* 'ne>': Not used. Expects single word hightlihgted, predicts class then reads word
+* 'ne~': Not used. Expects single word highlighted and given text of word, predict class of word
+* 'ner_line>': Do NER (read word then predict class) on a single hightlighted line
+* 'ner_text~': not used
+* 'ner_full>': Do NER on the full document (read word, then predict class). Expects all text lines hightlighted
+* 'json>': Parse the form into JSON
+* 'link-both~': Given the highlight of an entity and some of its text, return its class followed by the list of entities (their text) it is linked to
+* 'link-box~': Same as above, but only given highlight, not text
+* 'link-text~': Same as above, but only given text, not hightlight
+* 'linkdown-both~': Same as 'link-both~', but only return entities linked downwards in the heirarchy (a question will have its answers linked, but not its parent headers)
+* 'linkdown-box~': "
+* 'linkdown-text~': "
+* 'linkup-both~': Same as 'link-both~', but only return entities linked upwards in the heirararchy
+* 'linkup-box~': "
+* 'linkup-text~': "
+* 'json~': Given a snippet of JSON, parse the remainder of the form into JSON
+* 'list_row_headers~': Given a table number (text), return a list of its row headers ("|" seperated)
+* 'list_column_headers~': Same as above, but for column headers
+* 'full_row~': Given a row header, list each cell in that row
+* 'full_col~': Same as above for column
+* 'full_row0~': Same as 'full_row~', but header is also highlighted
+* 'full_col0~': "
+* 'classify>': Predict class (as text)
+* 'all-name~': Read all names in census record
+* 'all-given name~': Read all first names in census record
+* 'all-age~': Read all ages in census record
+* 'record~': Read all (annotated) information in census record
+* 'ner_full_c1>': NER over full document, but predict the class first, then read the word
+* 'ner_line_c1>': NER on line, but predict class first, then read the word
+* 'sroie>': Extract SROIE key information
 
 ## File Structure
   ```
