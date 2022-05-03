@@ -1,4 +1,4 @@
-# Dessurt: *D*ocument *e*nd-to-end *s*elf-*s*upervised *u*nderstanding and *r*ecognition *t*ransformer
+# Dessurt: **D**ocument **e**nd-to-end **s**elf-**s**upervised **u**nderstanding and **r**ecognition **t**ransformer
 
 This is the code for End-to-end Document Recognition and Understanding with Dessurt (https://arxiv.org/abs/2203.16618).
 
@@ -96,6 +96,7 @@ If you use the 'qa.json' format, it has a map from each image path to that image
                        ],
  ...
 }
+```
 
 ### Defining your own dataset class
 
@@ -118,7 +119,7 @@ To make getting the Query-Answer pairs ready, use the self.qaAdd function. It ca
 ## Task Tokens
 
 Task tokens are always at the begining of the query string and end with either "~" or ">".
-They are defined in `model/special_token_embedder.py`. If you need to add some of your own, just add them at the **end** of the "tokens" list, and that's all you need to do.
+They are defined in `model/special_token_embedder.py`. If you need to add some of your own, just add them at the **end** of the "tokens" list, and that's all you need to do (I guess you can also replace a "not used" token as well).
 
 If you are doing the same thing as a pre-training task, it would be helpful to reuse the same task token.
 
