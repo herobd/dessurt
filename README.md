@@ -17,7 +17,7 @@ I find it helpful to not use conda for these:
 * einops
 * zss (only needed for GAnTED evaluation)
 
-Also my own module https://github.com/herobd/synthetic_text_gen
+Also my own module https://github.com/herobd/synthetic_text_gen needs installed for text generation
 
 
 ## Usage
@@ -200,9 +200,9 @@ Here's what the currect tokens that are used in pre-training are for ( "not used
 * 'p0~': Not used.
 * 'f1~': Not used.
 * 'p1~': Not used.
-* 't0~': Same as 't~', but headers as highlighted
-* 'r*~': Same as 'ri~', but cell is highlighted
-* 'c*~': Same as 'ci~', but cell is highlighted
+* 't0~': Same as 't', but headers as highlighted
+* 'r*~': Same as 'ri', but cell is highlighted
+* 'c*~': Same as 'ci', but cell is highlighted
 * '#r~': Not used.
 * '#c~': Not used.
 * '%r~': Not used.
@@ -263,51 +263,99 @@ Here's what the currect tokens that are used in pre-training are for ( "not used
   
   │
   ├── train.py - Training script
-  ├── eval.py - Evaluation and display script
+  ├── qa_eval.py - Evaluation script
+  ├── run.py - Interactive run script
+  ├── funsd_eval_json.py - Evaluation for FUNSD
+  ├── naf_eval_json.py - Evaluation for NAF
+  ├── get_GAnTED_for_Dessurt.py - Compute GAnTED given json output from one of the above two scripts
+  ├── graph.py - Display graphs of logged stats given a snapshot
+  ├── check_checkpoint.py - Print iterations for snapshot
+  ├── change_checkpoint_reset_for_training.py - Reset iterations and optimizer for snapshot
+  ├── change_checkpoint_cf.py - change the config of a snapshot
+  ├── change_checkpoint_rewrite.py - Rearrange state_dict
+  ├── gpt_forms.py - Use GPT2 to generate label-value pair groups
   │
   ├── base/ - abstract base classes
   │   ├── base_data_loader.py - abstract base class for data loaders
   │   ├── base_model.py - abstract base class for models
   │   └── base_trainer.py - abstract base class for trainers
   │
+  ├── configs/ - where the config jsons are
+  │
   ├── data_loader/ - 
   │   └── data_loaders.py - This provides access to all the dataset objects
   │
-  ├── datasets/ - default datasets folder
-  │   ├── box_detect.py - base class for detection
-  │   ├── forms_box_detect.py - detection for NAF dataset
-  │   ├── forms_feature_pair.py - dataset for training non-visual classifier
-  │   ├── graph_pair.py - base class for pairing
-  │   ├── forms_graph_pair.py - pairing for NAD dataset
-  │   └── test*.py - scripts to test the datasets and display the images for visual inspection
+  ├── data_sets/ - default datasets folder
+  │   ├── bentham_qa.py - For Bentham question answering dataset
+  │   ├── cdip_cloud_qa.py - IIT-CDIP dataset with handling of downloading/unpacking of parts of the dataset
+  │   ├── cdip_download_urls.csv - Where IIT-CDIP is stored (if I don't find a hosting solution these may be bad)
+  │   ├── census_qa.py - Used for pre-training on FamilySearch's census indexes
+  │   ├── distil_bart.py - Dataset which handles setting everything up for distillation
+  │   ├── docvqa.py - DocVQA dataset
+  │   ├── form_qa.py - Parent dataset for FUNSD, NAF, and synthetic forms
+  │   ├── funsd_qa.py - FUNSD (query-response)
+  │   ├── gen_daemon.py - Handles text rendering
+  │   ├── hw_squad.py - HW-SQuAD
+  │   ├── iam_Coquenet_splits.json - Has the IAM splits used for page recognition
+  │   ├── iam_mixed.py - Mixes 3 IAM pages' word images into two lists. Used for IAM pre-training in NER experiments
+  │   ├── iam_ner.py - IAM NER
+  │   ├── iam_qa.py - IAM page recognition
+  │   ├── iam_standard_splits.json
+  │   ├── iam_Coquenet_splits.json - IAM splits used by "End-to-end Handwritten Paragraph Text Recognition Using a Vertical Attention Network" which we compare against for handwriting recognition
+  │   ├── long_naf_images.txt - Note of images in the NAF training set with long JSON parse (more than 800 characters)
+  │   ├── multiple_dataset.py - Allows training to sample from collection of datasets
+  │   ├── my_dataset.py - Allows code-less definition of custom query-response dataset
+  │   ├── NAF_extract_lines.py - will extract all text/handwriting lines from NAF dataset (to compile a dataset for standard line recognition model)
+  │   ├── naf_qa.py - NAF dataset (query-response)
+  │   ├── naf_read.py - Recognition only on NAF dataset. Special resizing to be sure things are ledgible
+  │   ├── para_qa_dataset.py - Parent dataset for IAM, IIT-CDIP, and synthetic Paragraphs (rendered Wikipedia)
+  │   ├── qa.py - Parent class for all query-response datasets (everything used by Dessurt except distillation dataset)
+  │   ├── record_qa.py - Parent class for Census dataset.
+  │   ├── rvl_cdip_class.py - Classification on RVL-CDIP dataset (query-response)
+  │   ├── squad.py - Font rendered SQuAD
+  │   ├── sroie.py - SROIE key inforamtion retrieval dataset
+  │   ├── synth_form_dataset.py - Synthetic forms dataset. Renders and arranges forms
+  │   ├── synth_hw_qa.py - Synthetic handwriting dataset. Loads pre-sythesized handwriting lines
+  │   ├── synth_para_qa.py - Synthetic Wikipedia dataset. Renders articles with fonts
+  │   ├── wiki_text.py - For loading Wikipedia data (singleton as multiple datset use it)
+  │   ├── wordsEn.txt - List of English words used by para_qa_dataset.py
+  │   │
+  │   ├── graph_pair.py - base class for FUDGE pairing
+  │   ├── forms_graph_pair.py - pairing for NAF dataset
+  │   ├── funsd_graph_pair.py - pairing for FUNSD dataset
+  │   │
+  │   └── test_*.py - scripts to test the datasets and display the images for visual inspection
   │
   ├── logger/ - for training process logging
   │   └── logger.py
   │
   ├── model/ - models, losses, and metrics
-  │   ├── binary_pair_real.py - Provides classifying network for pairing and final prediction network for detection. Also can have secondary using non-visual features only classifier
-  │   ├── coordconv.py - Implements a few variations of CoordConv. I didn't get better results using it.
-  │   ├── csrc/ - Contains Facebook's implementation for ROIAlign from https://github.com/facebookresearch/maskrcnn-benchmark
-  │   ├── roi_align.py - End point for ROIAlign code
-  │   ├── loss.py - Imports all loss functions
-  │   ├── net_builder.py - Defines basic layers and interpets config syntax into networks.
-  │   ├── optimize.py - pairing descision optimization code
-  │   ├── pairing_graph.py - pairing network class
-  │   ├── simpleNN.py - defines non-convolutional network
-  │   ├── yolo_box_detector.py - detector network class
-  │   └── yolo_loss.py - loss used by detector
+  │   ├── attention.py - Defines attention functions
+  │   ├── dessurt.py - The Dessurt model
+  │   ├── loss.py - All losses defined here
+  │   ├── pos_encode.py - poisiton encoding functions
+  │   ├── special_token_embedder.py - Defines task tokens
+  │   ├── swin_transformer.py - Code of Swin Transformer modified for Dessurt
+  │   └── unlikelihood_loss.py - Not used as it didn't improve results
   │
   ├── saved/ - default checkpoints folder
   │
   ├── trainer/ - trainers
-  │   ├── box_detect_trainer.py - detector training code
-  │   ├── feature_pair_trainer.py - non-visual pairing training code
-  │   ├── graph_pair_trainer.py - pairing training code
-  │   └── trainer.py
+  │   └── qa_trainer.py - Actual training code. Handles loops and computation of metrics
   │
   └── utils/
-      ├── util.py
-      └── ...
+      ├── augmentation.py - brightness augmentation
+      ├── crop_transform.py - Cropping and rotation augmentation. Also tracks movement and clipping of bounding boxes
+      ├── filelock.py - Used by CDIPCloud
+      ├── forms_annotations.py - Helper functions for parsing and preparing NAF dataset
+      ├── funsd_annotations.py - Helper functions for parsing and preparing FUNSD dataset
+      ├── GAnTED.py - Defines GAnTED metric
+      ├── grid_distortion.py - Curtis's warp grid augmentation from "Data augmentation for recognition of handwritten words and lines using a CNN-LSTM network"
+      ├── img_f.py - image helper functions. Wraps scikit-image behind OpenCV interface
+      ├── parseIAM.py - Helper functions for parsing IAM XMLs
+      ├── read_order.py - Determine the read order of text lines (estimate)
+      ├── saliency_qa.py - Will produce saliency map for input image and tokens
+      └── util.py - misc functions
   ```
 
 ### Config file format

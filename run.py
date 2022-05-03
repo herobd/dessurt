@@ -4,12 +4,10 @@ import logging
 import argparse
 import torch
 from model import *
-from model.metric import *
 from model.loss import *
 from logger import Logger
 from trainer import *
 from data_loader import getDataLoader
-from evaluators import *
 import math
 from collections import defaultdict
 import pickle
@@ -18,10 +16,6 @@ import warnings
 from utils.saliency_qa import InputGradModel
 from utils import img_f
 from skimage import future
-try:
-    import easyocr
-except:
-    pass
 
 
 def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do_saliency=False):
@@ -52,9 +46,6 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do
         config['cuda']=True
         config['gpu']=gpu
 
-    do_ocr=config['trainer']['do_ocr'] if 'do_ocr' in config['trainer'] else False
-    if do_ocr and do_ocr!='no':
-        ocr_reader = easyocr.Reader(['en'],gpu=config['cuda'])
     addDATASET=False
     if addToConfig is not None:
         for add in addToConfig:
@@ -205,13 +196,6 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do
                     p_img = img[(-diff_y)//2:-((-diff_y)//2 + (-diff_y)%2),(-diff_x)//2:-((-diff_x)//2 + (-diff_x)%2)]
                 img=p_img
 
-            if do_ocr=='no':
-                ocr_res=[]
-            elif do_ocr:
-                ocr_res = ocr_reader.readtext(img.astype(np.uint8),decoder='greedy+softmax')
-                print('OCR:')
-                for res in ocr_res:
-                    print(res[1][0])
             if len(img.shape)==2:
                 img=img[...,None] #add color channel
             np_img=img
@@ -230,12 +214,6 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do
                     question=question[4:]
                 else:
                     run=True
-                if do_ocr:
-                    ocr = [ocr_res]
-                else:
-                    ocrBoxes=[[]]
-                    ocr=[[]]
-                    ocr=(ocrBoxes,ocr)
 
                 needs_input_mask=True
                 for q in no_mask_qs:
@@ -272,7 +250,7 @@ def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do
                     answer,pred_mask = s_model.saliency(in_img,[[question]])
                 else:
                     answer,pred_mask = model(in_img,[[question]],RUN=run)
-                    #pred_a, target_a, answer, pred_mask = model(in_img,ocr,[[question]],[['number']])
+                    #pred_a, target_a, answer, pred_mask = model(in_img,[[question]],[['number']])
                 print('Answer: {}      max mask={}'.format(answer,pred_mask.max()))
                 #show_mask = torch.cat((pred_mask,pred_mask>0.5).float()
                 draw_img = 0.5*(1-img)
@@ -333,4 +311,4 @@ if __name__ == '__main__':
         with torch.cuda.device(args.gpu):
             main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,scale=args.scale,do_saliency=args.saliency)
     else:
-        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,scale=args.scale,do_saliency=args.saliency,
+        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,scale=args.scale,do_saliency=args.saliency)

@@ -23,11 +23,25 @@ from math import isclose
 
 import numpy as np
 from utils import img_f
-from utils.gpu import get_gpu_memory_map
 
-from evaluators.draw_graph import getCorners
 from collections import defaultdict
 import json
+
+def getCorners(xyrhw):
+    xc=xyrhw[0].item()
+    yc=xyrhw[1].item()
+    rot=xyrhw[2].item()
+    h=xyrhw[3].item()
+    w=xyrhw[4].item()
+    h = min(30000,h)
+    w = min(30000,w)
+    #tr = ( int(w*math.cos(rot)-h*math.sin(rot) + xc),  int(w*math.sin(rot)+h*math.cos(rot) + yc) )
+    #tl = ( int(-w*math.cos(rot)-h*math.sin(rot) + xc), int(-w*math.sin(rot)+h*math.cos(rot) + yc) )
+    #br = ( int(w*math.cos(rot)+h*math.sin(rot) + xc),  int(w*math.sin(rot)-h*math.cos(rot) + yc) )
+    #bl = ( int(-w*math.cos(rot)+h*math.sin(rot) + xc), int(-w*math.sin(rot)-h*math.cos(rot) + yc) )
+    #return tr,tl,br,bl
+    tl,tr,br,bl= calcCorners(xc,yc,rot,h,w)
+    return [int(x) for x in tl],[int(x) for x in tr],[int(x) for x in br],[int(x) for x in bl]
 
 def getBounds(bbs):
     xs=[]
