@@ -18,7 +18,7 @@ from utils import img_f
 from skimage import future
 
 
-def main(resume,config,img_path,addToConfig,gpu=False,do_pad=False,scale=None,do_saliency=False):
+def main(resume,config,img_path,addToConfig=None,gpu=False,do_pad=None,scale=None,do_saliency=False):
     np.random.seed(1234)
     torch.manual_seed(1234)
     no_mask_qs = ['fli:','fna:','re~','l~','v~', 'mm~','mk>','natrual_q~','json>','json~','linkdown-text~', 'read_block>']
