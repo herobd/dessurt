@@ -7,7 +7,6 @@ from model import *
 from model.loss import *
 from logger import Logger
 from trainer import *
-from data_loader import getDataLoader
 import math
 from collections import defaultdict
 import pickle
@@ -18,10 +17,10 @@ from utils import img_f
 from skimage import future
 
 
-def main(resume,config,img_path,addToConfig=None,gpu=False,do_pad=None,scale=None,do_saliency=False):
+def main(resume,config,img_path,addToConfig=None,gpu=False,do_pad=None,scale=None,do_saliency=False,default_task_token=None,dont_output_mask=False):
     np.random.seed(1234)
     torch.manual_seed(1234)
-    no_mask_qs = ['fli:','fna:','re~','l~','v~', 'mm~','mk>','natrual_q~','json>','json~','linkdown-text~', 'read_block>']
+    no_mask_qs = ['fli:','fna:','re~','l~','v~', 'mm~','mk>','natural_q~','json>','json~','linkdown-text~', 'read_block>']
     remove_qs = ['rm>','mlm>','mm~','mk>']
     if resume is not None:
         checkpoint = torch.load(resume, map_location=lambda storage, location: storage)
@@ -153,6 +152,10 @@ def main(resume,config,img_path,addToConfig=None,gpu=False,do_pad=None,scale=Non
         if type(do_pad) is int:
             do_pad = (do_pad,do_pad)
 
+    if default_task_token is not None:
+        print('Using default task token: {}'.format(default_task_token))
+        print(' (if another token is entered with the query, the default is overridden)')
+
     with torch.no_grad():
         if img_path is None:
             loop=True
@@ -207,13 +210,16 @@ def main(resume,config,img_path,addToConfig=None,gpu=False,do_pad=None,scale=Non
             if gpu:
                 img = img.cuda()
 
-            question = input('Question: ')
+            question = input('Query: ')
             while question!='q':
                 if question.startswith('[nr]'):
                     run=False
                     question=question[4:]
                 else:
                     run=True
+
+                if default_task_token is not None and '~' not in question and '>' is not in question:
+                    question = default_task_token+question
 
                 needs_input_mask=True
                 for q in no_mask_qs:
@@ -251,22 +257,24 @@ def main(resume,config,img_path,addToConfig=None,gpu=False,do_pad=None,scale=Non
                 else:
                     answer,pred_mask = model(in_img,[[question]],RUN=run)
                     #pred_a, target_a, answer, pred_mask = model(in_img,[[question]],[['number']])
-                print('Answer: {}      max mask={}'.format(answer,pred_mask.max()))
+                #print('Answer: {}      max mask={}'.format(answer,pred_mask.max()))
+                print('Answer: {}'.format(answer))
                 #show_mask = torch.cat((pred_mask,pred_mask>0.5).float()
-                draw_img = 0.5*(1-img)
-                threshed = torch.where(pred_mask>0.5,1-draw_img,draw_img)
-                #high_score = 2*(pred_mask-0.5)/pred_mask.max()
-                #import pdb;pdb.set_trace()
-                #high = pred_mask/pred_mask.max()
-                #high = torch.where(pred_mask>0.5,high_score,draw_img)
-                show_im = torch.cat((draw_img,draw_img*(1-pred_mask),threshed),dim=1)
-                #show_im = torch.cat((1-high,draw_img-pred_mask,threshed),dim=1)
-                #show_im = torch.cat((high,draw_img,draw_img),dim=1)
-                show_im = (show_im[0]*255).cpu().permute(1,2,0).numpy().astype(np.uint8)
-                img_f.imshow('x',show_im)
-                img_f.show()
+                if not dont_output_mask:
+                    draw_img = 0.5*(1-img)
+                    threshed = torch.where(pred_mask>0.5,1-draw_img,draw_img)
+                    #high_score = 2*(pred_mask-0.5)/pred_mask.max()
+                    #import pdb;pdb.set_trace()
+                    #high = pred_mask/pred_mask.max()
+                    #high = torch.where(pred_mask>0.5,high_score,draw_img)
+                    show_im = torch.cat((draw_img,draw_img*(1-pred_mask),threshed),dim=1)
+                    #show_im = torch.cat((1-high,draw_img-pred_mask,threshed),dim=1)
+                    #show_im = torch.cat((high,draw_img,draw_img),dim=1)
+                    show_im = (show_im[0]*255).cpu().permute(1,2,0).numpy().astype(np.uint8)
+                    img_f.imshow('x',show_im)
+                    img_f.show()
 
-                question = input('Question ("q" to stop): ')
+                question = input('Query ("q" to stop): ')
             if loop:
                 img_path = input('Image path ("q" to stop): ')
             else:
@@ -293,6 +301,10 @@ if __name__ == '__main__':
                         help='Arbitrary key-value pairs to add to config of the form "k1=v1,k2=v2,...kn=vn".  You can nest keys with k1=k2=k3=v')
     parser.add_argument('-S', '--saliency', default=False, action='store_const', const=True,
                         help='Run to get saliency map')
+    parser.add_argument('-D', '--dont_output_mask', default=False, action='store_const', const=True,
+                        help='Don\'t show output mask')
+    parser.add_argument('-t', '--task_token', default=None, type=str,
+                        help='set a default task token that gets apppended if no other task token is in query')
 
     args = parser.parse_args()
 
@@ -309,6 +321,6 @@ if __name__ == '__main__':
         exit()
     if args.gpu is not None:
         with torch.cuda.device(args.gpu):
-            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,scale=args.scale,do_saliency=args.saliency)
+            main(args.checkpoint,args.config,args.image,addtoconfig,True,do_pad=args.pad,scale=args.scale,do_saliency=args.saliency,default_task_token=args.task_token,dont_output_mask=args.dont_output_mask)
     else:
-        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,scale=args.scale,do_saliency=args.saliency)
+        main(args.checkpoint,args.config, args.image,addtoconfig,do_pad=args.pad,scale=args.scale,do_saliency=args.saliency,default_task_token=args.task_token,dont_output_mask=args.dont_output_mask)
