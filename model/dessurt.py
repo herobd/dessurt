@@ -102,9 +102,9 @@ class Dessurt(BaseModel):
         
 
 
-
-        init_model = BartModel.from_pretrained(model_id)
-        init_emb = init_model.shared
+        if init_from_pretrained:
+            init_model = BartModel.from_pretrained(model_id)
+            init_emb = init_model.shared
 
 
         self.text_embedding = nn.Embedding(len(self.tokenizer), d_model)
@@ -117,14 +117,12 @@ class Dessurt(BaseModel):
         self.query_special_start_token_embedder = SpecialTokenEmbedder(d_model)
 
 
+        self.pos_1d_enc = BartLearnedPositionalEmbedding(1026,d_model)
         if init_from_pretrained:
-            self.pos_1d_enc = BartLearnedPositionalEmbedding(1026,d_model)
+            import pdb;pdb.set_trace()
             self.pos_1d_enc.weight.data = init_model.decoder.embed_positions.weight.data
-            self.q_pos_1d_enc = self.a_pos_1d_enc = None
-            self.pos_enc_adapter = nn.Identity() if d_model == 768 else nn.Linear(768,d_model,bias=False)
-        else:
-            self.q_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000)
-            self.a_pos_1d_enc = PositionalEncoding(d_model,dropout=dropout,max_len=1000,offset_start=1000)
+        self.q_pos_1d_enc = self.a_pos_1d_enc = None
+        self.pos_enc_adapter = nn.Identity() if d_model == 768 else nn.Linear(768,d_model,bias=False)
 
 
         if self.conv_patch_emb:

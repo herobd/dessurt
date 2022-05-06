@@ -89,6 +89,7 @@ def main(resume,config,img_path,addToConfig=None,gpu=False,do_pad=None,scale=Non
             new_state_dict = {
                     (key[7:] if key.startswith('module.') else key):value for key,value in state_dict.items()
                     }
+        config['model']['init_from_pretrained']=False #don't need to load in weights that will be overrwritten
         model = eval(config['arch'])(config['model'])
 
         #ugh
@@ -218,7 +219,7 @@ def main(resume,config,img_path,addToConfig=None,gpu=False,do_pad=None,scale=Non
                 else:
                     run=True
 
-                if default_task_token is not None and '~' not in question and '>' is not in question:
+                if default_task_token is not None and '~' not in question and '>' not in question:
                     question = default_task_token+question
 
                 needs_input_mask=True
