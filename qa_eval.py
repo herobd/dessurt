@@ -3,10 +3,9 @@ import json
 import logging
 import argparse
 import torch
+import numpy as np
 from model import *
-from model.metric import *
 from data_loader import getDataLoader
-from evaluators import *
 import math
 from collections import defaultdict
 import random
@@ -380,6 +379,7 @@ def main(resume,data_set_name,gpu=None,  config=None, addToConfig=None, test=Fal
                     "batch_size": config['data_loader']['batch_size']*(3 if 'full' in config['data_loader'] else 2) if not run else 1,
                     "cased": config['data_loader'].get('cased',True),
                     "mode": "IAM_para",
+                    "data_split": config['data_loader']['data_split'] if 'data_split' in config['data_loader'] else "Coquenet",
                     "rescale_to_crop_size_first": True,
                     "rescale_range": [
                         1.0,
@@ -402,7 +402,11 @@ def main(resume,data_set_name,gpu=None,  config=None, addToConfig=None, test=Fal
                 "validation":{}
                 }
         get=['pred','gt']
-        tokenizer = BartTokenizer.from_pretrained('./cache_huggingface/BART')
+        if os.path.exists('./cache_huggingface/BART'):
+            model_id = './cache_huggingface/BART'
+        else:
+            model_id = 'facebook/bart-base'
+        tokenizer = BartTokenizer.from_pretrained(model_id)
     else:
         print('ERROR, unknown dataset: {}'.format(data_set_name))
         print('Implemented datasets: DocVQA, RVL, IAMNER, IAMQA (page recognition), HWSQuAD, SROIE, SynthParaQA (evaluate word infilling), SQuAD (my synthetic version), NAFRead (recognition on NAF)')
@@ -414,7 +418,8 @@ def main(resume,data_set_name,gpu=None,  config=None, addToConfig=None, test=Fal
     if test:
         valid_data_loader = data_loader
 
-
+    if resume is not None:
+        config['model']['init_from_pretrained']=False #don't need to load in weights that will be overrwritten
     model = eval(config['arch'])(config['model'])
     model.eval()
     if verbose==2:
