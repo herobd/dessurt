@@ -4,20 +4,32 @@ This is the code for End-to-end Document Recognition and Understanding with Dess
 
 "We introduce Dessurt, a relatively simple document understanding transformer capable of being fine-tuned on a greater variety of document tasks than prior methods. It receives a document image and task string as input and generates arbitrary text autoregressively as output. Because Dessurt is an end-to-end architecture that performs text recognition in addition to the document understanding, it does not require an external recognition model as prior methods do, making it easier to fine-tune to new visual domains. We show that this model is effective at 9 different dataset-task combinations."
 
+## Data
+The current config files expect all datasets to be in a `data` directory which is in the same directory the project directory is.
+
+###Pre-training data
+* Synthetic handwriting: https://zenodo.org/record/6536366#.Ynvci3XMKV4
+* Wikipedia is from 🤗 `datasets` (https://huggingface.co/datasets/wikipedia)
+* Fonts. I can't distrubte these, but the script to download can be found here: https://github.com/herobd/synthetic_text_gen
+* IIT-CDIP
+  * Images: https://data.nist.gov/od/id/mds2-2531
+  * Annotations: https://zenodo.org/record/6540454#.Yn0x73XMKV4
+* GPT2 generated label-value pairs: (or you can generate more with `gpt_forms.py`)
+
 ## Requirements
-* Python 3.x 
-* PyTorch 1.0+ 
+* Python 3 
+* PyTorch 1.8+ 
 * scikit-image
 
-I find it helpful to not use conda for these:
-* (huggingface) transformers
-* (huggingface) datasets
+I find it helpful to use pip, not conda, for these:
+* transformers (🤗)
+* datasets (🤗, for Wikipedia)
 * timm
 * editdistance
 * einops
 * zss (only needed for GAnTED evaluation)
 
-Also my own module https://github.com/herobd/synthetic_text_gen needs installed for text generation
+Also my own module `synthetic_text_gen` https://github.com/herobd/synthetic_text_gen needs installed for text generation
 
 
 ## Usage
@@ -273,7 +285,7 @@ Here's what the currect tokens that are used in pre-training are for ( "not used
   ├── change_checkpoint_reset_for_training.py - Reset iterations and optimizer for snapshot
   ├── change_checkpoint_cf.py - change the config of a snapshot
   ├── change_checkpoint_rewrite.py - Rearrange state_dict
-  ├── gpt_forms.py - Use GPT2 to generate label-value pair groups
+  ├── gpt_forms.py - This script uses GPT2 to generate label-value pair groups
   │
   ├── base/ - abstract base classes
   │   ├── base_data_loader.py - abstract base class for data loaders
