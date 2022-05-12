@@ -7,14 +7,14 @@ This is the code for End-to-end Document Recognition and Understanding with Dess
 ## Data
 The current config files expect all datasets to be in a `data` directory which is in the same directory the project directory is.
 
-###Pre-training data
-* Synthetic handwriting: https://zenodo.org/record/6536366#.Ynvci3XMKV4
-* Wikipedia is from 🤗 `datasets` (https://huggingface.co/datasets/wikipedia)
-* Fonts. I can't distrubte these, but the script to download can be found here: https://github.com/herobd/synthetic_text_gen
+### Pre-training data
 * IIT-CDIP
   * Images: https://data.nist.gov/od/id/mds2-2531
   * Annotations: https://zenodo.org/record/6540454#.Yn0x73XMKV4
-* GPT2 generated label-value pairs: (or you can generate more with `gpt_forms.py`)
+* Synthetic handwriting: https://zenodo.org/record/6536366#.Ynvci3XMKV4
+* Fonts. I can't distrbute these, but the script to download the set I used can be found here: https://github.com/herobd/synthetic_text_gen
+* GPT2 generated label-value pairs: https://zenodo.org/record/6544101#.Yn1X4XXMKV4 (or you can generate more with `gpt_forms.py`)
+* Wikipedia is from 🤗 `datasets` (https://huggingface.co/datasets/wikipedia)
 
 ## Requirements
 * Python 3 
@@ -36,7 +36,7 @@ Also my own module `synthetic_text_gen` https://github.com/herobd/synthetic_text
 
 ### train.py
 
-This is the script that executes training based on a configuration file. The training code is found in `trainer/`. The config file specifies which trainer is used.
+This is the script that executes training based on a configuration file. The training code is found in `trainer/`.
 
 The usage is: `python train.py -c CONFIG.json`  (see below for example config file)
 
