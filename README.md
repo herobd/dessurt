@@ -51,13 +51,6 @@ This resets the iteration count and optimizer and automatically names the output
 
 If you resume training from a snapshot with different shaped weight tensors (or extra or missing weight tensors) the base_trainer will cut and paste weights to make things work (with random initialization for new weights). This is particularly useful in defining new tokens (no problem) or resizing the input image (if it's smaller you may not even need to fine-tune).
 
-### qa_eval.py
-
-For evaluating Dessurt on datasets other than FUNSD and NAF.
-It takes many of the same arguments as new_eval.py, but also requires the (different) '-d' argument specifying the dataset (so you can easily evaluate a model on dataset it wasn't trained on). However, this has no drawing capabilities (hence the '-d' is different).
-
-Usage: `python qa_eval.py -c CHECKPOINT.pth -d DATASETNAME [-g GPU#]  [-T (do test set)] [-a THINGSTOADD]
-
 
 ### run.py
 
@@ -75,6 +68,27 @@ It will prompt you for the image path (if not provided) and for the queries. You
 * Parse to JSON: `json>`
 * Parse to JSON, starting from: `json~JSON": "to start from"}`
 * Link down/up (just replace "down" with "up"):  `linkdown-both~text of element` or `linkdown-box~` or `linkdown-text~text of element`
+
+### qa_eval.py
+
+For evaluating Dessurt on datasets other than FUNSD and NAF.
+It takes many of the same arguments as new_eval.py, but also requires the (different) '-d' argument specifying the dataset (so you can easily evaluate a model on dataset it wasn't trained on). However, this has no drawing capabilities (hence the '-d' is different).
+
+Usage: `python qa_eval.py -c CHECKPOINT.pth -d DATASETNAME [-g GPU#]  [-T (do test set)] [-a THINGSTOADD]
+
+### Evaluating on FUNSD and NAF
+
+To evaluate the FUNSD/NAF datasets we use three scripts
+
+`funsd_eval_json.py`/`naf_eval_json.py` generates the output JSON and produces the Entity Fm and Relationship Fm.
+`get_GAnTED_for_Dessurt.py` produces the GAnTED score.
+
+Usage: 
+
+`python funsd_eval_json.py -c the/checkpoint.pth [-T (do testset) -g GPU# -w the/predictions.json -E entityMatchThresh-default0.6 -L linkMatchThresh-default0.6 -b doBeamSearchWithThisNumberBeams)`  (the same usage for `naf_eval_json.py`]
+
+`python get_GAnTED_for_Dessurt.py -p the/predictions.json -d FUNSD/NAF (dataset name) [-T (do testset) -P doParallelThisManyThreads -2 (run twice) -s (shuffle order before)]
+
 
 ## I want to fine-tune Dessurt on my own data
 
@@ -114,8 +128,8 @@ If you use the 'qa.json' format, it has a map from each image path to that image
 
 First you need to define a dataset object. You can see mine in the `data_sets` directory. Most are children of the QADataset (`qa.py`) and that is probably going to be the easiest route for you.
 
-Your child class will need to populate `self.images` as an array or dicts with
-* `'imagePath'`: the path to the image, can also be None and the image is returned in metadatafrom `self.parseAnn`
+Your child class will need to populate `self.images` as an array of dicts with
+* `'imagePath'`: the path to the image, can also be None if the image is returned from `self.parseAnn`
 * `'imageName'`: Optional, defaults to path
 * `'annotationPath`: If this is a path to a json, the json will be read and passed to `self.parseAnn`, otherwise whatever this is is passed to `self.parseAnn`
 
@@ -133,10 +147,12 @@ To make getting the Query-Answer pairs ready, use the self.qaAdd function. It ca
 Task tokens are always at the begining of the query string and end with either "~" or ">".
 They are defined in `model/special_token_embedder.py`. If you need to add some of your own, just add them at the **end** of the "tokens" list, and that's all you need to do (I guess you can also replace a "not used" token as well).
 
+Most tasks have the model add '‡' to the end of what it's ready to make it obvious it has reached the end.
+
 If you are doing the same thing as a pre-training task, it would be helpful to reuse the same task token.
 
-Here's what the currect tokens that are used in pre-training are for ( "not used" tokens are defined as tasks in the code, but weren't used in final training):
-* 'kb~': Given a text snippet with a blanked word in it () return the correct word
+Here's what the current tokens that are used in pre-training are for ( "not used" tokens are defined as tasks in the code, but weren't used in final training):
+* 'kb~': Given a text snippet with a blanked word in it ('ø') return the correct word
 * 'k0~': Same as above but, also gets text highlighted
 * 'su~': Given a text snippet, but with a word randomly replaced, return the correct word
 * 's0~': Same as above, but also gets text highlighted
