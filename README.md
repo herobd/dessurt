@@ -38,18 +38,20 @@ Also my own module `synthetic_text_gen` https://github.com/herobd/synthetic_text
 
 This is the script that executes training based on a configuration file. The training code is found in `trainer/`.
 
-The usage is: `python train.py -c CONFIG.json`  (see below for example config file)
+The usage is: `python train.py -c CONFIG.json`  (see `configs/` for example configuation files and below for an explaination)
 
 A training session can be resumed with: `python train.py -r CHECKPOINT.pth`
 
-If you want to override the config file on a resume, just use the `-c` flag as well and be sure the config has `"override": true`
+If you want to override the config file on a resume, just use the `-c` flag in addition to `-r` and be sure the config has `"override": true`
 
 The `configs` directory has configs for doing the pretraining and finetuning of Dessurt.
 
-When finetuning, I reset the pre-trained checkpoint using this: `python change_checkpoint_reset_for_training.py -c pretrained/checkpoint.pth -o output/directory(or_checkpoint.pth)`
+When fine-tuning, I reset the pre-trained checkpoint using this: `python change_checkpoint_reset_for_training.py -c pretrained/checkpoint.pth -o output/directory(or_checkpoint.pth)`
 This resets the iteration count and optimizer and automatically names the output "checkpoint-latest.pth" so you can start training from it with the `-r` flag.
 
 If you resume training from a snapshot with different shaped weight tensors (or extra or missing weight tensors) the base_trainer will cut and paste weights to make things work (with random initialization for new weights). This is particularly useful in defining new tokens (no problem) or resizing the input image (if it's smaller you may not even need to fine-tune).
+
+You can override the GPU specified in the config file using the `-g` flag (including a`-g -1` to use CPU).
 
 
 ### run.py
@@ -92,7 +94,8 @@ Usage:
 
 ## I want to fine-tune Dessurt on my own data
 
-You have two options. If you can define your dataset as images with a set of queries and text answers, you can use the MyDataset class. If you need something fancier, you can define your own dataset class.
+You first need to setup the data and then a config file. You can see `configs/` for a number of example fine-tuning config files.
+For setting up the data you have two options. If you can define your dataset as images with a set of queries and text answers, you can use the MyDataset class. If you need something fancier, you can define your own dataset class.
 
 ### MyDataset
 
@@ -114,7 +117,7 @@ Answers can also be a list of strings, such as how DocVQA has multiple right ans
 
 If you use the 'qa.json' format, it has a map from each image path to that image's list of Q-A pairs
 ```
-{"imagefile.png":      [ {"question": "TOK~context text",
+{"an/imagefile.png":   [ {"question": "TOK~context text",
                            "answer": "response text"},
                           {"question": "TOK2>",
                            "answer": "other response text"},
@@ -126,28 +129,31 @@ If you use the 'qa.json' format, it has a map from each image path to that image
 
 ### Defining your own dataset class
 
-First you need to define a dataset object. You can see mine in the `data_sets` directory. Most are children of the QADataset (`qa.py`) and that is probably going to be the easiest route for you.
+All of the datasets used in training and evaluating Dessurt are defined as their own class, so you have many examples in `data_sets/`
+ Most are descendants of the QADataset (`qa.py`) and that is probably going to be the easiest route for you.
 
-Your child class will need to populate `self.images` as an array of dicts with
+The constructor of your child class will need to populate `self.images` as an array of dicts with
 * `'imagePath'`: the path to the image, can also be None if the image is returned from `self.parseAnn`
 * `'imageName'`: Optional, defaults to path
-* `'annotationPath`: If this is a path to a json, the json will be read and passed to `self.parseAnn`, otherwise whatever this is is passed to `self.parseAnn`
+* `'annotationPath`: If this is a path to a json, the json will be read and passed to `self.parseAnn`, otherwise whatever this is will be passed to `self.parseAnn`
 
 Your child class will also need to implement the `parseAnn` function, which takes as input the "annotation" and returns: 
 * bounding boxes for form elements, can be None
 * IDs for the bounding boxes, can be None
 * generated image, if there is one, else None
 * metadata (particularly if there are multiple right answers like DocVQA), can be None
-* the Query-Answer pairs
+* the Query-Answer pairs (the only one you really need)
 
-To make getting the Query-Answer pairs ready, use the self.qaAdd function. It can take the lists of box coordinates (either for highlighting or masking) and QADataset will handle everyting for these.
+The bounding boxes/IDs are to allow the QADataset to crop the image and then remove possible QA pairs that have been cropped off of the image. If you aren't cropping, you don't need to worry about it.
+
+To make getting the Query-Answer pairs ready, use the `self.qaAdd` function. It can take the lists of box coordinates (either for highlighting or masking) and QADataset will handle everyting for these.
 
 ## Task Tokens
 
 Task tokens are always at the begining of the query string and end with either "~" or ">".
 They are defined in `model/special_token_embedder.py`. If you need to add some of your own, just add them at the **end** of the "tokens" list, and that's all you need to do (I guess you can also replace a "not used" token as well).
 
-Most tasks have the model add '‡' to the end of what it's ready to make it obvious it has reached the end.
+Most tasks have the model add '‡' to the end of what it's reading to make it obvious it has reached the end.
 
 If you are doing the same thing as a pre-training task, it would be helpful to reuse the same task token.
 
@@ -428,7 +434,6 @@ Example:
     },
 
     
-    "lr_scheduler_type": "none",
  
     "optimizer_type": "AdamW",
     "optimizer": {                          # Any parameters of the optimizer object go here
@@ -468,14 +473,16 @@ Example:
         "monitor_mode": "max",              # Whether bigger or smaller is better for metric
         "retry_count": 0,
         
-        "use_learning_schedule": "multi_rise then ramp_to_lower", # use "multi_rise" is not LR drop is needed (ramps the LR from 0 over warmup_steps iterations)
+        "use_learning_schedule": "multi_rise then ramp_to_lower", # use "multi_rise" if LR drop is not needed (ramps the LR from 0 over warmup_steps iterations)
         "warmup_steps": [
             1000
         ],
-        "lr_down_start": 350000,            # when LR drop happes for ramp_to_lower
-        "ramp_down_steps": 10000,           # How many iterations to lower LR
-        "lr_mul": 0.1                       # How much to lower LR
+        "lr_down_start": 350000,            # when LR drop happens for ramp_to_lower
+        "ramp_down_steps": 10000,           # How many iterations to lower LR over
+        "lr_mul": 0.1                       # How much LR is dropped at the end of ramp_down_steps
     },
+
+
     "arch": "Dessurt",
     "model": {
         "image_size": [
@@ -529,7 +536,7 @@ The checkpoints will be saved in `save_dir/name`.
 The config file is saved in the same folder. (as a reference only, the config is loaded from the checkpoint)
 
 **Note**: checkpoints contain:
-  ```pythonvim
+  ```
   {
     'arch': arch,
     'epoch': epoch,
@@ -539,7 +546,7 @@ The config file is saved in the same folder. (as a reference only, the config is
     'monitor_best': self.monitor_best,
     'config': self.config
     #and optionally
-    'swa_state_dict': self.swa_model.state_dict()
+    'swa_state_dict': self.swa_model.state_dict() #I didn't find SWA help Dessurt
   }
   ```
 

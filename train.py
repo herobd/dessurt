@@ -79,7 +79,7 @@ def main(rank,config, resume,world_size=None):
 
         else:
             dist.init_process_group("gloo", rank=rank, world_size=world_size)
-    if config['super_computer']:
+    if config.get('super_computer',False):
         config['super_computer'] = '{}_{}'.format(config['name'],rank)
 
     model = eval(config['arch'])(config['model'])
@@ -99,12 +99,16 @@ def main(rank,config, resume,world_size=None):
             loss[name]=eval(l)
     else:
         loss = eval(config['loss'])
-    if type(config['metrics'])==dict:
-        metrics={}
-        for name,m in config['metrics'].items():
-            metrics[name]=[eval(metric) for metric in m]
+
+    if 'metrics' in config:
+        if type(config['metrics'])==dict:
+            metrics={}
+            for name,m in config['metrics'].items():
+                metrics[name]=[eval(metric) for metric in m]
+        else:
+            metrics = [eval(metric) for metric in config['metrics']]
     else:
-        metrics = [eval(metric) for metric in config['metrics']]
+        metrics = []
 
     if 'class' in config['trainer']:
         trainerClass = eval(config['trainer']['class'])

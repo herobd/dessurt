@@ -26,7 +26,7 @@ CHECK_ONLY_EVERY=15
 class Dessurt(BaseModel):
     def __init__(self,config):
         super(Dessurt, self).__init__(config)
-        self.image_size = config['image_size'] #input must be this size
+        self.image_size = config.get('image_size', [768,768]) #input must be this size
         dropout = 0 if config.get('no_dropout',False) else 0.1
         self.conv_patch_emb = config.get('conv_patch_emb',True) #set to False to use original Swin embedding
         lighter_conv_patch_emb = config['lighter_conv_patch_emb'] if 'lighter_conv_patch_emb' in config else False #shallower network for visual embedding
@@ -37,20 +37,20 @@ class Dessurt(BaseModel):
 
         mask_output = config.get('do_mask_output',True) #Turn off to remove CNN mask prediction at the end
 
-        blocks_per_level = config['blocks_per_level'] #Level here relates to the Swin pooling (pooling makes new level)
-        use_swin = config.get('use_swin',[True]*sum(blocks_per_level  )) #boolean array (for each layer), if false, the previous layer's visual features are used instead of making new ones
-        use_auto = config.get('use_auto',[True]*sum(blocks_per_level  )) #boolean array, if false, the previsou layer's textual features are used instead of making new ones
-        swin_cross_attention = config.get('swin_cross_attention',[True]*sum(blocks_per_level)) #boolean array, it false the Swin layers don't cross attend to textural tokens
+        blocks_per_level = config.get('blocks_per_level',[4,6]) #Level here relates to the Swin pooling (pooling automatically added between levels)
+        use_swin = config.get('use_swin',([True]*8)+([False]*2)) #boolean array (for each layer), if false, the previous layer's visual features are used instead of making new ones
+        use_auto = config.get('use_auto',[True]*10) #boolean array, if false, the previsou layer's textual features are used instead of making new ones
+        swin_cross_attention = config.get('swin_cross_attention',([True]*8)+([False]*2)) #boolean array, it false the Swin layers don't cross attend to textural tokens
         if blocks_per_level is not None:
 
-            window_size = config['window_size'] #Swin window size
+            window_size = config.get('window_size',12) #Swin window size
             if type(window_size) is int:
                 window_size = [window_size]*len(blocks_per_level)
-            d_model = config['decode_dim'] #width (num feats) of the textual tokens
-            dim_ff = config['dim_ff'] #features in fully connected layer of textual transformer layers
-            nhead = config['decode_num_heads'] #number of heads in for textual tokens attention
-            swin_nhead = config['swin_nheads'] #number of heads for Swin, per level
-            im_embed_dim = config['im_embed_dim'] #num features of initial visual tokens
+            d_model = config.get('decode_dim',768) #width (num feats) of the textual tokens
+            dim_ff = config.get('dim_ff',3072) #features in fully connected layer of textual transformer layers
+            nhead = config.get('decode_num_heads',8) #number of heads in for textual tokens attention
+            swin_nhead = config.get('swin_nheads',[4,8]) #number of heads for Swin, per level
+            im_embed_dim = config.get('im_embed_dim',128) #num features of initial visual tokens
 
         if isinstance(self.image_size,int):
             self.image_size = (self.image_size,self.image_size)
@@ -119,7 +119,6 @@ class Dessurt(BaseModel):
 
         self.pos_1d_enc = BartLearnedPositionalEmbedding(1026,d_model)
         if init_from_pretrained:
-            import pdb;pdb.set_trace()
             self.pos_1d_enc.weight.data = init_model.decoder.embed_positions.weight.data
         self.q_pos_1d_enc = self.a_pos_1d_enc = None
         self.pos_enc_adapter = nn.Identity() if d_model == 768 else nn.Linear(768,d_model,bias=False)

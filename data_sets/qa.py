@@ -110,7 +110,7 @@ class QADataset(torch.utils.data.Dataset):
         self.aug_params = config['additional_aug_params'] if 'additional_aug_params' in config else {}
 
 
-        self.do_masks=False    
+        self.do_masks=True
 
         #These are based on EasyOCR, which I did some experiments with
         self.ocr_out_dim = 97

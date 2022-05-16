@@ -730,8 +730,8 @@ class QATrainer(BaseTrainer):
 
         #t#self.opt_history['score'].append(timeit.default_timer()-tic)#t#
 
-        if self.print_pred_every>0 and self.iteration%self.print_pred_every==0:
-            self.logger.info('iteration {}'.format(self.iteration))
+        if self.print_pred_every>0 and self.iteration%self.print_pred_every==0 and not valid:
+            self.logger.info('iter {}'.format(self.iteration))
             for b,(b_question,b_answer,b_pred) in enumerate(zip(questions,answers,string_a)):
                 for question,answer,pred in zip(b_question,b_answer,b_pred):
                     self.logger.info('{} [Q]:{}\t[A]:{}\t[P]:{}'.format(b,question,answer,pred))

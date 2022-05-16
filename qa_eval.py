@@ -101,6 +101,8 @@ def main(resume,data_set_name,gpu=None,  config=None, addToConfig=None, test=Fal
             config = checkpoint['config']
         else:
             config = json.load(open(config))
+            if run:
+                config['validation']['batch_size']=1
     else:
         checkpoint = None
         config = json.load(open(config))
@@ -408,9 +410,10 @@ def main(resume,data_set_name,gpu=None,  config=None, addToConfig=None, test=Fal
             model_id = 'facebook/bart-base'
         tokenizer = BartTokenizer.from_pretrained(model_id)
     else:
-        print('ERROR, unknown dataset: {}'.format(data_set_name))
-        print('Implemented datasets: DocVQA, RVL, IAMNER, IAMQA (page recognition), HWSQuAD, SROIE, SynthParaQA (evaluate word infilling), SQuAD (my synthetic version), NAFRead (recognition on NAF)')
-        exit(1)
+        print('unspecified dataset: {}'.format(data_set_name))
+        data_config = config
+        #print('Implemented datasets: DocVQA, RVL, IAMNER, IAMQA (page recognition), HWSQuAD, SROIE, SynthParaQA (evaluate word infilling), SQuAD (my synthetic version), NAFRead (recognition on NAF)')
+        #exit(1)
     
     print('getting data ready')
     data_loader, valid_data_loader = getDataLoader(data_config,'train' if not test else 'test')

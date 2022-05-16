@@ -97,8 +97,14 @@ def getDataLoader(config,split,rank=None,world_size=None):
             from data_sets import my_dataset
             return withCollate(my_dataset.MyDataset,my_dataset.collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
         else:
-            print('Error, dataloader has no set for {}'.format(data_set_name))
-            exit()
+            print('assuming dataset {} is located in data_sets/{}.py'.format(data_set_name,data_set_name.lower()))
+            exec('import data_sets.{}'.format(data_set_name.lower()))
+            dataset = eval('data_sets.{}.{}'.format(data_set_name.lower(),data_set_name))
+            collate = eval('data_sets.{}.collate'.format(data_set_name.lower()))
+
+            return withCollate(dataset,collate,batch_size,valid_batch_size,shuffle,shuffleValid,numDataWorkers,split,data_dir,config)
+            #print('Error, dataloader has no set for {}'.format(data_set_name))
+            #exit()
 
 
 

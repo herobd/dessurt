@@ -39,7 +39,7 @@ class BaseTrainer:
         self.save_step = config['trainer']['save_step']
         self.save_step_minor = config['trainer']['save_step_minor'] if 'save_step_minor' in config['trainer'] else None
         self.log_step = config['trainer']['log_step']
-        self.verbosity = config['trainer']['verbosity']
+        self.verbosity = config['trainer'].get('verbosity',1)
         self.with_cuda = config['cuda'] and torch.cuda.is_available()
         if config['cuda'] and not torch.cuda.is_available():
             self.logger.warning('Warning: There\'s no CUDA support on this machine, '
@@ -295,7 +295,7 @@ class BaseTrainer:
         self.monitor_mode = config['trainer']['monitor_mode']
         #assert self.monitor_mode == 'min' or self.monitor_mode == 'max'
         self.monitor_best = math.inf if self.monitor_mode == 'min' else -math.inf
-        self.retry_count = config['trainer']['retry_count'] if 'retry_count' in config['trainer'] else 1
+        self.retry_count = config['trainer']['retry_count'] if 'retry_count' in config['trainer'] else 0
         self.start_iteration = 1
         self.iteration=self.start_iteration
         self.checkpoint_dir = os.path.join(config['trainer']['save_dir'], self.name)
@@ -507,8 +507,7 @@ class BaseTrainer:
                 state['swa_model'] = self.swa_model.cpu()
         if self.useLearningSchedule:
             state['lr_schedule'] = self.lr_schedule.state_dict()
-        #if self.swa:
-        #    state['swa_n']=self.swa_n
+
         torch.cuda.empty_cache() #weird gpu memory issue when calling torch.save()
         if not minor:
             filename = os.path.join(self.checkpoint_dir, 'checkpoint-iteration{}.pth'
@@ -518,7 +517,6 @@ class BaseTrainer:
             if os.path.exists(filename):
                 os.rename(filename,os.path.join(self.checkpoint_dir, 'checkpoint-prev.pth'))
                                 
-        #print(self.module.state_dict().keys())
         torch.save(state, filename)
         if not minor:
             #remove minor as this is the latest
@@ -528,7 +526,7 @@ class BaseTrainer:
             except FileNotFoundError:
                 pass
             #os.link(filename,filename_late) #this way checkpoint-latest always does have the latest
-            torch.save(state, filename_late) #something is wrong with thel inkgin
+            torch.save(state, filename_late) #something is wrong with the linking
 
         if save_best:
             os.rename(filename, os.path.join(self.checkpoint_dir, 'model_best.pth'))
@@ -546,13 +544,6 @@ class BaseTrainer:
 
 
 
-        ######DEBUG
-        #checkpoint = torch.load(filename)
-        #model_dict=self.model.state_dict()
-        #for name in checkpoint['state_dict']:
-            #if (checkpoint['state_dict'][name]!=model_dict[name]).any():
-                #        print('state not equal at: '+name)
-        #        import pdb; pdb.set_trace()
 
     def _resume_checkpoint(self, resume_path):
         """
@@ -581,41 +572,13 @@ class BaseTrainer:
         #print(checkpoint['state_dict'].keys())
 
         if ('save_mode' not in self.config or self.config['save_mode']=='state_dict') and 'state_dict' in checkpoint:
+
             #Brain surgery, allow restarting with modified model
+
             did_brain_surgery=False
             remove_keys=[]
             checkpoint['state_dict'] = {(k if not k.startswith('module') else k[7:]):v for k,v in checkpoint['state_dict'].items() if 'relative_position_index' not in k}
 
-            ##FIX
-            needs_fix=False
-            max_found_ele = defaultdict(int)
-            for key in checkpoint['state_dict'].keys():
-                r=re.match(r'perciever(.*)\.cross_blocks\.(\d+)\.(\d+)',key)
-                if r is not None:
-                    name = (r[1],r[2])
-                    max_found_ele[name] = max(max_found_ele[name],int(r[3]))
-            to_move={}
-            for name,max_ele in max_found_ele.items():
-                if max_ele<4: #pre-adding rev cross attention, needs fixed
-                    name,level = name
-                    for key in checkpoint['state_dict'].keys():
-                        r=re.match('perciever{}.cross_blocks\.{}\.(\d+)\.(.+)'.format(name,level),key)
-                        if r is not None:
-                            place = r[1]
-                            remainder = r[2]
-                            if place=='2':
-                                newplace=4
-                            elif place=='3':
-                                newplace=5
-                            else:
-                                continue #doesn't need adjusted
-                            to_move[key]='perciever{}.cross_blocks.{}.{}.{}'.format(name,level,newplace,remainder)
-            for old,new in to_move.items():
-                print('renaming {} to {}'.format(old,new))
-                checkpoint['state_dict'][new]=checkpoint['state_dict'][old]
-                del checkpoint['state_dict'][old]
-
-            ##END FIX
 
 
             keys=checkpoint['state_dict'].keys()
@@ -631,28 +594,12 @@ class BaseTrainer:
                             dims=dim
                     if dims>-1:
                         if dims==0:
-                            #if init_size[0]>orig_size[0]:
-                            #    init_state_dict[key][:orig_size[0]] = checkpoint['state_dict'][key]
-                            #else:
-                            #    init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0]]
                             init_state_dict[key][:orig_size[0]] = checkpoint['state_dict'][key][:init_size[0]]
                         elif dims==1:
-                            #if init_size[0]>orig_size[0] or init_size[1]>orig_size[1]:
-                            #    init_state_dict[key][:orig_size[0],:orig_size[1]] = checkpoint['state_dict'][key]
-                            #else:
-                            #    init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0],:init_size[1]]
                             init_state_dict[key][:orig_size[0],:orig_size[1]] = checkpoint['state_dict'][key][:init_size[0],:init_size[1]]
                         elif dims==2:
-                            #if init_size[0]>=orig_size[0] and init_size[1]>=orig_size[1] and init_size[2]>=orig_size[2]:
-                            #    init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2]] = checkpoint['state_dict'][key]
-                            #elif init_size[0]<=orig_size[0] and init_size[1]<=orig_size[1] and init_size[2]<=orig_size[2]:
-                            #     init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0],:init_size[1],:init_size[2]]
                             init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2]] = checkpoint['state_dict'][key][:init_size[0],:init_size[1],:init_size[2]]
                         elif dims==3:
-                            #if init_size[0]>orig_size[0] or init_size[1]>orig_size[1] or init_size[2]>orig_size[2] or init_size[3]>orig_size[3]:
-                            #    init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2],:orig_size[3]] = checkpoint['state_dict'][key]
-                            #else:
-                            #    init_state_dict[key] = checkpoint['state_dict'][key][:init_size[0],:init_size[1],:init_size[2],:init_size[3]]
                             init_state_dict[key][:orig_size[0],:orig_size[1],:orig_size[2],:orig_size[3]] = checkpoint['state_dict'][key][:init_size[0],:init_size[1],:init_size[2],:init_size[3]]
                         else:
                             raise NotImplementedError('no Brain Surgery above 4 dims')
