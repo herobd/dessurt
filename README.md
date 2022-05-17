@@ -1,23 +1,13 @@
 # Dessurt: **D**ocument **e**nd-to-end **s**elf-**s**upervised **u**nderstanding and **r**ecognition **t**ransformer
 
-This is the code for End-to-end Document Recognition and Understanding with Dessurt (https://arxiv.org/abs/2203.16618).
+This is the code for the paper: **End-to-end Document Recognition and Understanding with Dessurt** (https://arxiv.org/abs/2203.16618).
 
 "We introduce Dessurt, a relatively simple document understanding transformer capable of being fine-tuned on a greater variety of document tasks than prior methods. It receives a document image and task string as input and generates arbitrary text autoregressively as output. Because Dessurt is an end-to-end architecture that performs text recognition in addition to the document understanding, it does not require an external recognition model as prior methods do, making it easier to fine-tune to new visual domains. We show that this model is effective at 9 different dataset-task combinations."
 
-##Colab demos
-* Running  DocDessurt
+## Colab demos
+* Running Dessurt fine-tuned on DocVQA interactively: TODO add url
+* Fine-tuning Dessurt on MNIST: TODO add url
 
-## Data
-The current config files expect all datasets to be in a `data` directory which is in the same directory the project directory is.
-
-### Pre-training data
-* IIT-CDIP
-  * Images: https://data.nist.gov/od/id/mds2-2531
-  * Annotations: https://zenodo.org/record/6540454#.Yn0x73XMKV4
-* Synthetic handwriting: https://zenodo.org/record/6536366#.Ynvci3XMKV4
-* Fonts. I can't distrbute these, but the script to download the set I used can be found here: https://github.com/herobd/synthetic_text_gen
-* GPT2 generated label-value pairs: https://zenodo.org/record/6544101#.Yn1X4XXMKV4 (or you can generate more with `gpt_forms.py`)
-* Wikipedia is from 🤗 `datasets` (https://huggingface.co/datasets/wikipedia)
 
 ## Requirements
 * Python 3 
@@ -26,13 +16,13 @@ The current config files expect all datasets to be in a `data` directory which i
 
 I find it helpful to use pip, not conda, for these:
 * transformers (🤗)
-* datasets (🤗, for Wikipedia)
 * timm
-* editdistance
 * einops
+* editdistance
+* datasets (🤗, only needed for Wikipedia)
 * zss (only needed for GAnTED evaluation)
 
-Also my own module `synthetic_text_gen` https://github.com/herobd/synthetic_text_gen needs installed for text generation
+Also my own module `synthetic_text_gen` https://github.com/herobd/synthetic_text_gen needs installed for text generation.
 
 
 ## Usage
@@ -41,13 +31,13 @@ Also my own module `synthetic_text_gen` https://github.com/herobd/synthetic_text
 
 This is the script that executes training based on a configuration file. The training code is found in `trainer/`.
 
-The usage is: `python train.py -c CONFIG.json`  (see `configs/` for example configuation files and below for an explaination)
+The usage is: `python train.py -c CONFIG.json [-r CHECKPOINT.pth]`  (see `configs/` for example configuation files and below for an explaination)
 
-A training session can be resumed with: `python train.py -r CHECKPOINT.pth`
+A training session can be resumed with the `-r` flag (using the "checkpoint-latest.pth"). This is also the flag for starting from a pre-trained model.
 
-If you want to override the config file on a resume, just use the `-c` flag in addition to `-r` and be sure the config has `"override": true`
+If you want to override the config file on a resume, just use the `-c` flag in addition to `-r` and be sure the config has `"override": true` (all mine do)
 
-The `configs` directory has configs for doing the pretraining and finetuning of Dessurt.
+The `configs` directory has configs for doing the pre-training and fine-tuning of Dessurt.
 
 When fine-tuning, I reset the pre-trained checkpoint using this: `python change_checkpoint_reset_for_training.py -c pretrained/checkpoint.pth -o output/directory(or_checkpoint.pth)`
 This resets the iteration count and optimizer and automatically names the output "checkpoint-latest.pth" so you can start training from it with the `-r` flag.
@@ -76,29 +66,50 @@ It will prompt you for the image path (if not provided) and for the queries. You
 
 ### qa_eval.py
 
-For evaluating Dessurt on datasets other than FUNSD and NAF.
-It takes many of the same arguments as new_eval.py, but also requires the (different) '-d' argument specifying the dataset (so you can easily evaluate a model on dataset it wasn't trained on). However, this has no drawing capabilities (hence the '-d' is different).
+For evaluating Dessurt on all datasets other than FUNSD and NAF.
 
-Usage: `python qa_eval.py -c CHECKPOINT.pth -d DATASETNAME [-g GPU#]  [-T (do test set)] [-a THINGSTOADD]
+Usage: `python qa_eval.py -c CHECKPOINT.pth -d DATASETNAME [-g GPU#]  [-T (do test set)] 
+
+The `-d` flag is to allow running running a model on a dataset it was not fine-tuned for.
 
 ### Evaluating on FUNSD and NAF
 
-To evaluate the FUNSD/NAF datasets we use three scripts
+To evaluate the FUNSD/NAF datasets we use three scripts.
 
 `funsd_eval_json.py`/`naf_eval_json.py` generates the output JSON and produces the Entity Fm and Relationship Fm.
 `get_GAnTED_for_Dessurt.py` produces the GAnTED score.
 
+The `*_eval_json.py` files handle correcting Dessurt's output into valid JSON and aligning the output to the GT for entity detection and linking.
+
 Usage: 
 
-`python funsd_eval_json.py -c the/checkpoint.pth [-T (do testset) -g GPU# -w the/predictions.json -E entityMatchThresh-default0.6 -L linkMatchThresh-default0.6 -b doBeamSearchWithThisNumberBeams)`  (the same usage for `naf_eval_json.py`]
+`python funsd_eval_json.py -c the/checkpoint.pth [-T (do testset)] [-g GPU#] [-w the/output/predictions.json] [-E entityMatchThresh-default0.6] [-L linkMatchThresh-default0.6] [-b doBeamSearchWithThisNumberBeams]`  (the same usage for `naf_eval_json.py`)
 
-`python get_GAnTED_for_Dessurt.py -p the/predictions.json -d FUNSD/NAF (dataset name) [-T (do testset) -P doParallelThisManyThreads -2 (run twice) -s (shuffle order before)]
+`python get_GAnTED_for_Dessurt.py -p the/predictions.json -d FUNSD/NAF (dataset name) [-T (do testset)] [-P doParallelThisManyThreads] [-2 (run twice)] [-s (shuffle order before)]
 
 
 ### graph.py
 
-TODO
+This will display with graphs statistics logged during training.
 
+`python graph.py -c the/checkpoint.pth -o metric_name`
+
+The `-o` flag can accept part of the name. Generally the key validation metrics always start with "val_E", the exception being full-page recognition ("val_read_block>") and NER ("val_F_Measure_MACRO").
+If you omit the `-o` flag it will try to draw all the metrics, but there are too many.
+
+You can also use graph.py to export and checkpoint so it doesn't have the model with the `-e output.pth` option.
+
+## Data
+The current config files expect all datasets to be in a `data` directory which is in the same directory the project directory is.
+
+### Pre-training data
+* IIT-CDIP
+  * Images: https://data.nist.gov/od/id/mds2-2531
+  * Annotations: https://zenodo.org/record/6540454#.Yn0x73XMKV4
+* Synthetic handwriting: https://zenodo.org/record/6536366#.Ynvci3XMKV4
+* Fonts. I can't distrbute these, but the script to download the set I used can be found here: https://github.com/herobd/synthetic_text_gen
+* GPT2 generated label-value pairs: https://zenodo.org/record/6544101#.Yn1X4XXMKV4 (or you can generate more with `gpt_forms.py`)
+* Wikipedia is from 🤗 `datasets` (https://huggingface.co/datasets/wikipedia)
 
 ## I want to fine-tune Dessurt on my own data
 
@@ -110,7 +121,7 @@ For setting up the data you have two options. If you can define your dataset as 
 See `configs/cf_test_cats_each_finetune.json` and `configs/cf_test_cats_qa_finetune.json` and their respective data in `example_data` for an example of how to use MyDataset.
 
 MyDataset expects `data_dir` to be a directory with a "train", "valid", and possibly "test" subdirectory.
-Each of these is to have the images (potentially nested in subdirectories). Then there either needs to be a json for each image ('this/image.png' and 'this/image.json') or a single 'qa.json'
+Each of these are to have the images (nested in subdirectories allowed). Then there either needs to be a json for each image ('this/image.png' and 'this/image.json') or a single 'qa.json'
 
 'this/image.json' has the list of Q-A pairs:
 ```
@@ -120,7 +131,7 @@ Each of these is to have the images (potentially nested in subdirectories). Then
     ...
 ]
 ```
-"TOK~" is the special token string. See the Task Tokens section. 
+"TOK~" will be the special task token string. See the Task Tokens section. 
 Answers can also be a list of strings, such as how DocVQA has multiple right answers.
 
 If you use the 'qa.json' format, it has a map from each image path to that image's list of Q-A pairs
@@ -139,6 +150,8 @@ If you use the 'qa.json' format, it has a map from each image path to that image
 
 All of the datasets used in training and evaluating Dessurt are defined as their own class, so you have many examples in `data_sets/`
  Most are descendants of the QADataset (`qa.py`) and that is probably going to be the easiest route for you.
+
+A demo colab on using a custom dataset class to train Dessurt on MNIST is available here: TODO add url
 
 The constructor of your child class will need to populate `self.images` as an array of dicts with
 * `'imagePath'`: the path to the image, can also be None if the image is returned from `self.parseAnn`
@@ -400,9 +413,9 @@ Here's what the current tokens that are used in pre-training are for ( "not used
       └── util.py - misc functions
   ```
 
-### Config file format
+## Config file format
 Config files are in `.json` format. 
-Note that I force the naming convention to be "cf_NAME.json", where NAME is the name in the json. This was to catch various naming errors I often made.
+Note that in train.py I force the naming convention to be "cf_NAME.json", where NAME is the name in the json. This was to catch various naming errors I often made.
 
 Example:
   ```

@@ -89,7 +89,7 @@ def wer_from_list_str(str_gt, str_pred):
     return cer
 
 
-def main(resume,data_set_name,gpu=None,  config=None, addToConfig=None, test=False,verbose=2,run=False,smaller_set=False,eval_full=None,ner_do_before=False):
+def main(resume,data_set_name,gpu=None,  config=None, addToConfig=None, test=False,verbose=1,run=False,smaller_set=False,eval_full=None,ner_do_before=False):
     assert run
     random.seed(1234)
     np.random.seed(1234)
@@ -563,7 +563,7 @@ if __name__ == '__main__':
     parser.add_argument('-S', '--smaller_set', default=False, action='store_const', const=True,
                         help='Use less of val set, ONLY FOR SQUAD')
     parser.add_argument('-v', '--verbosity', default=1, type=int,
-                        help='How much stuff to print [0,1,2] (default: 2)')
+                        help='How much stuff to print [0,1,2] (default: 1)')
     parser.add_argument('-F', '--eval_full', default=None, type=bool,
                         help='for iamNER, whether to do whole doc (instead of lines)')
     parser.add_argument('-N', '--ner_do_before', default=False, action='store_const', const=True,
