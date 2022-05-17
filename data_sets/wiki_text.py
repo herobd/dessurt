@@ -8,12 +8,6 @@ from utils.util import ensure_dir
 import re
 #import unicodedata
 
-if os.path.exists('DIR'):
-    with open('DIR') as f:
-        cache_path = f.readline().strip()
-else:
-    cache_path = '../data/wiki_cache' #/Data6/davis/data_cache
-    ensure_dir(cache_path)
 
 #if 'myVar' in locals():
 #_text_data = []#load_dataset('wikipedia', '20200501.en', cache_dir=cache_path)['train']
@@ -26,7 +20,13 @@ def getWikiDataset():
     global _text_data
     #Returns a list of text paragraphs from a randome wikipedia article
     if '_text_data' not in globals():
-        import traceback; traceback.print_exc()
+        if os.path.exists('DIR'):
+            with open('DIR') as f:
+                cache_path = f.readline().strip()
+        else:
+            cache_path = '../data/wiki_cache' 
+            ensure_dir(cache_path)
+
         if not os.path.exists(os.path.join(cache_path,'dataset_info.json')):
             _text_data = load_dataset('wikipedia', '20200501.en', cache_dir=cache_path)['train']
             _text_data.save_to_disk(cache_path)
