@@ -101,11 +101,11 @@ def main(resume,data_set_name,gpu=None,  config=None, addToConfig=None, test=Fal
             config = checkpoint['config']
         else:
             config = json.load(open(config))
-            if run:
-                config['validation']['batch_size']=1
     else:
         checkpoint = None
         config = json.load(open(config))
+    if run:
+        config['validation']['batch_size']=1
 
     if gpu is None:
         config['cuda']=False

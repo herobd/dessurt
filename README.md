@@ -4,6 +4,9 @@ This is the code for End-to-end Document Recognition and Understanding with Dess
 
 "We introduce Dessurt, a relatively simple document understanding transformer capable of being fine-tuned on a greater variety of document tasks than prior methods. It receives a document image and task string as input and generates arbitrary text autoregressively as output. Because Dessurt is an end-to-end architecture that performs text recognition in addition to the document understanding, it does not require an external recognition model as prior methods do, making it easier to fine-tune to new visual domains. We show that this model is effective at 9 different dataset-task combinations."
 
+##Colab demos
+* Running  DocDessurt
+
 ## Data
 The current config files expect all datasets to be in a `data` directory which is in the same directory the project directory is.
 
@@ -90,6 +93,11 @@ Usage:
 `python funsd_eval_json.py -c the/checkpoint.pth [-T (do testset) -g GPU# -w the/predictions.json -E entityMatchThresh-default0.6 -L linkMatchThresh-default0.6 -b doBeamSearchWithThisNumberBeams)`  (the same usage for `naf_eval_json.py`]
 
 `python get_GAnTED_for_Dessurt.py -p the/predictions.json -d FUNSD/NAF (dataset name) [-T (do testset) -P doParallelThisManyThreads -2 (run twice) -s (shuffle order before)]
+
+
+### graph.py
+
+TODO
 
 
 ## I want to fine-tune Dessurt on my own data
