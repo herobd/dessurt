@@ -75,7 +75,7 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 300099,
+        "iterations": 200099,
         "accum_grad_steps": 64,
         
         
@@ -95,7 +95,7 @@
         "warmup_steps": [
             1000
         ],
-        "lr_down_start": 200000,
+        "lr_down_start": 100000,
         "ramp_down_steps": 10000,
         "lr_mul": 0.1
     },
@@ -105,10 +105,6 @@
             1152,
             768
         ],
-        
-        
-        
-        
         
         "max_a_tokens": 730,
         

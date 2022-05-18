@@ -72,7 +72,7 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 300000,
+        "iterations": 250000,
         "accum_grad_steps": 64,
         
         
@@ -92,8 +92,8 @@
         "warmup_steps": [
             1000
         ],
-        "lr_down_start": 250000,
-        "ramp_down_steps": 10000,
+        "lr_down_start": 185000,
+        "ramp_down_steps": 5000,
         "lr_mul": 0.1
     },
     "arch": "Dessurt",

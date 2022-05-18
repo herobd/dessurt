@@ -73,7 +73,7 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 421056,
+        "iterations": 621056,
         "accum_grad_steps": 64,
         
         

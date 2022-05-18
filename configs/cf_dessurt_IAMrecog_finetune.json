@@ -74,12 +74,12 @@
     "metrics": [],
     "trainer": {
         "class": "QATrainer",
-        "iterations": 91200,
+        "iterations": 61200,
         "accum_grad_steps": 64,
         
         
         "save_dir": "saved/",
-        "val_step": 10000,
+        "val_step": 5000,
         "save_step": 1400000000,
         "save_step_minor": 1024,
         "log_step": 1024,
@@ -94,8 +94,8 @@
         "warmup_steps": [
             1000
         ],
-        "lr_down_start": 60000,
-        "ramp_down_steps": 10000,
+        "lr_down_start": 42000,
+        "ramp_down_steps": 2000,
         "lr_mul": 0.1
     },
     "arch": "Dessurt",
