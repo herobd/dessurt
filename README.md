@@ -8,6 +8,13 @@ This is the code for the paper: **End-to-end Document Recognition and Understand
 * Running Dessurt fine-tuned on DocVQA interactively: TODO add url
 * Fine-tuning Dessurt on MNIST: TODO add url
 
+## Model snapshots
+* Pre-trained and reset: https://drive.google.com/file/d/1Pk2-hQQvKGmNbnzA4ljbAXk_HanNacOa/view?usp=sharing (This will generally be the one to fine-tune from. This is the one the final experiments were fine-tuned from)
+* Pre-trained a little longer and not reset: https://drive.google.com/file/d/1qip0DaI182Oeuxlo9-F3dxkLOJk6nCCi/view?usp=sharing (If you wanted to do some additional/modified fine-tuning, this would be the one you want)
+* Fine-tuned on FUNSD: https://drive.google.com/file/d/1mbHyvHoyeMEd9FVpzr06ZpDNZ5TUO-Ga/view?usp=sharing
+* Fine-tuned on DocVQA: https://drive.google.com/file/d/1Lj6xMvQcF9dSCxVQS2nia4SiEoPXbtCv/view?usp=sharing
+* Fine-tuned on IAM page recognition: https://drive.google.com/file/d/1tXm6MmxD3LhdulPSnRCPg7jPZCnaLIHk/view?usp=sharing
+* Pre-trained with historical census data (not reset): https://drive.google.com/file/d/1Q9dp4xFKL_aG98Xk0ybi_DF8MSzcbKKC/view?usp=sharing
 
 ## Requirements
 * Python 3 
