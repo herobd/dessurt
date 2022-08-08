@@ -2,11 +2,13 @@
 
 This is the code for the paper: **End-to-end Document Recognition and Understanding with Dessurt** (https://arxiv.org/abs/2203.16618).
 
+(Accepted to TiE@ECCV 2022)
+
 "We introduce Dessurt, a relatively simple document understanding transformer capable of being fine-tuned on a greater variety of document tasks than prior methods. It receives a document image and task string as input and generates arbitrary text autoregressively as output. Because Dessurt is an end-to-end architecture that performs text recognition in addition to the document understanding, it does not require an external recognition model as prior methods do, making it easier to fine-tune to new visual domains. We show that this model is effective at 9 different dataset-task combinations."
 
 ## Colab demos
-* Running Dessurt fine-tuned on DocVQA interactively: TODO add url
-* Fine-tuning Dessurt on MNIST: TODO add url
+* Running Dessurt fine-tuned on DocVQA interactively: https://colab.research.google.com/drive/1rvjBv70Cguigp5Egay6VnuO-ZYgu24Ax?usp=sharing
+* Fine-tuning Dessurt on MNIST: https://colab.research.google.com/drive/1yMMYpQQX4OTpnH8AP0UBsI8PpxmrmX8U?usp=sharing
 
 ## Model snapshots
 * Pre-trained and reset: https://drive.google.com/file/d/1Pk2-hQQvKGmNbnzA4ljbAXk_HanNacOa/view?usp=sharing (This will generally be the one to fine-tune from. This is the one the final experiments were fine-tuned from)
