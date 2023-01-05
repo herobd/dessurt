@@ -129,10 +129,10 @@ class QATrainer(BaseTrainer):
         #t##t#ticAll=timeit.default_timer()#t##t#
         batch_idx = (iteration-1) % len(self.data_loader)
         try:
-            thisInstance = self.data_loader_iter.next()
+            thisInstance = next(self.data_loader_iter)
         except StopIteration:
             self.data_loader_iter = iter(self.data_loader)
-            thisInstance = self.data_loader_iter.next()
+            thisInstance = next(self.data_loader_iter)
         #t#self.opt_history['get data'].append(timeit.default_timer()-ticAll)#t#
 
         
