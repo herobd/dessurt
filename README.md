@@ -125,6 +125,8 @@ The current config files expect all datasets to be in a `data` directory which i
 You first need to setup the data and then a config file. You can see `configs/` for a number of example fine-tuning config files.
 For setting up the data you have two options. If you can define your dataset as images with a set of queries and text answers, you can use the MyDataset class. If you need something fancier, you can define your own dataset class.
 
+Note: The Swin implementation requires image dimensions to be multiples of 8 and that (dim / 8)%window_size==0. (8 is from 4x downsample from CNN and 2x downsample from Swin downsample. Then needs to able to fit windows evenly)
+
 ### MyDataset
 
 See `configs/cf_test_cats_each_finetune.json` and `configs/cf_test_cats_qa_finetune.json` and their respective data in `example_data` for an example of how to use MyDataset.
